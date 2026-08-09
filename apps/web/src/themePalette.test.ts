@@ -276,6 +276,7 @@ describe("theme files", () => {
   });
 
   it("keeps the T3 Chat palette faithful and readable", () => {
+    expect(T3_CHAT_THEME.label).toBe("Rose");
     expect(T3_CHAT_THEME.colors).toMatchObject({
       canvas: "#fdf7fd",
       chrome: "#fdf7fd",

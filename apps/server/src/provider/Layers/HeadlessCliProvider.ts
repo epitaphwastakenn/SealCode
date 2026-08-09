@@ -49,7 +49,7 @@ const HEADLESS_CLI_CAPABILITIES: ModelCapabilities = createModelCapabilities({
 });
 const PROBE_TIMEOUT_MS = 20_000;
 
-function modelRows(
+export function parseHeadlessCliModelRows(
   definition: HeadlessCliProviderDefinition,
   output: string,
 ): ReadonlyArray<ServerProviderModel> {
@@ -59,7 +59,7 @@ function modelRows(
     const line = rawLine.trim();
     if (
       !line ||
-      /^(?:available models|open source|anthropic|openai|google|sakana|meta|xai|pass the|docs:|fetching)/i.test(
+      /^(?:available models\b.*|open source|anthropic|openai|google|sakana|meta|xai|pass the\b.*|docs:.*|fetching\b.*)$/i.test(
         line,
       )
     ) {
@@ -69,10 +69,17 @@ function modelRows(
       definition.protocol === "antigravity"
         ? line.match(/^([^\s]+)\s+(.+)$/)
         : line.match(/^([^\s]+)\s{2,}(.+)$/);
-    const slug = match?.[1]?.trim();
+    const discoveredSlug = match?.[1]?.trim();
+    const slug =
+      definition.protocol === "antigravity"
+        ? discoveredSlug?.replace(/-(?:low|medium|high)$/i, "")
+        : discoveredSlug;
     if (!slug || !/[a-z0-9]/i.test(slug) || seen.has(slug)) continue;
     seen.add(slug);
-    const name = match?.[2]?.trim() || slug;
+    const name =
+      definition.protocol === "commandcode"
+        ? slug
+        : (match?.[2]?.trim().replace(/\s+\((?:low|medium|high)\)$/i, "") ?? slug);
     parsed.push({ slug, name, isCustom: false, capabilities: HEADLESS_CLI_CAPABILITIES });
   }
   return parsed;
@@ -214,7 +221,10 @@ export function checkHeadlessCliProviderStatus(
       Effect.orElseSucceed(() => Option.none()),
     );
     const discovered = Option.isSome(modelResult)
-      ? modelRows(definition, `${modelResult.value.stdout}\n${modelResult.value.stderr}`)
+      ? parseHeadlessCliModelRows(
+          definition,
+          `${modelResult.value.stdout}\n${modelResult.value.stderr}`,
+        )
       : [];
     const version = parseGenericCliVersion(`${probeResult.stdout}\n${probeResult.stderr}`);
     const ok = probeResult.code === 0;

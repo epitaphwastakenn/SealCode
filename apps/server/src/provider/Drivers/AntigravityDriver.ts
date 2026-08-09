@@ -41,11 +41,7 @@ const DEFINITION: HeadlessCliProviderDefinition = {
   driver: DRIVER_KIND,
   displayName: "Antigravity",
   protocol: "antigravity",
-  defaultModels: [
-    { slug: "gemini-3.6-flash-high", name: "Gemini 3.6 Flash (High)" },
-    { slug: "gemini-3.6-flash-medium", name: "Gemini 3.6 Flash (Medium)" },
-    { slug: "gemini-3.6-flash-low", name: "Gemini 3.6 Flash (Low)" },
-  ],
+  defaultModels: [{ slug: "gemini-3.6-flash", name: "Gemini 3.6 Flash" }],
 };
 const UPDATE = makeStaticProviderMaintenanceResolver(
   makeManualOnlyProviderMaintenanceCapabilities({ provider: DRIVER_KIND, packageName: null }),

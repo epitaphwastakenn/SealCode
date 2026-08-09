@@ -148,6 +148,7 @@ describe("ProviderCommandReactor", () => {
     readonly threadModelSelection?: ModelSelection;
     readonly sessionModelSwitch?: "unsupported" | "in-session";
     readonly requiresNewThreadForModelChange?: boolean;
+    readonly mainModelVision?: boolean;
     readonly titleRegenerationCompletionDispatchFailures?: number;
     readonly titleRegenerationBeforeStart?: "one" | "two";
     readonly startSessionEffect?: (
@@ -298,9 +299,27 @@ describe("ProviderCommandReactor", () => {
         }),
       ),
     );
+    const generateContextTransferSummary = vi.fn<
+      TextGenerationShape["generateContextTransferSummary"]
+    >((_) => Effect.succeed({ summary: "Current objective: Continue the existing task." }));
+    const describeImages = vi.fn<TextGenerationShape["describeImages"]>((_) =>
+      Effect.succeed({ description: "A compact dark composer with violet controls." }),
+    );
     const providerSnapshots = [
       {
         instanceId: modelSelection.instanceId,
+        driver: ProviderDriverKind.make(String(modelSelection.instanceId)),
+        models: [
+          {
+            slug: modelSelection.model,
+            name: modelSelection.model,
+            isCustom: false,
+            capabilities:
+              input?.mainModelVision === true
+                ? { optionDescriptors: [], vision: true }
+                : { optionDescriptors: [], vision: false },
+          },
+        ],
         ...(input?.requiresNewThreadForModelChange === true
           ? { requiresNewThreadForModelChange: true }
           : {}),
@@ -410,6 +429,8 @@ describe("ProviderCommandReactor", () => {
         Layer.mock(TextGeneration, {
           generateBranchName,
           generateThreadTitle,
+          generateContextTransferSummary,
+          describeImages,
         }),
       ),
       Layer.provideMerge(ServerSettingsService.layerTest()),
@@ -502,6 +523,8 @@ describe("ProviderCommandReactor", () => {
       refreshStatus,
       generateBranchName,
       generateThreadTitle,
+      generateContextTransferSummary,
+      describeImages,
       runtimeSessions,
       stateDir,
       drain,
@@ -550,6 +573,74 @@ describe("ProviderCommandReactor", () => {
     expect(thread?.session?.threadId).toBe("thread-1");
     expect(thread?.session?.status).toBe("starting");
     expect(thread?.session?.runtimeMode).toBe("approval-required");
+  });
+
+  it("uses the Codex image viewer when the main model has no vision", async () => {
+    const harness = await createHarness({ mainModelVision: false });
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-image-viewer-fallback"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-image-viewer-fallback"),
+          role: "user",
+          text: "Implement this layout",
+          attachments: [
+            {
+              type: "image",
+              id: "attachment-1",
+              name: "layout.png",
+              mimeType: "image/png",
+              sizeBytes: 1_024,
+            },
+          ],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+    expect(harness.describeImages).toHaveBeenCalledWith(
+      expect.objectContaining({ message: "Implement this layout" }),
+    );
+    expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
+      input: expect.stringContaining("<image-viewer-description>"),
+    });
+    expect(harness.sendTurn.mock.calls[0]?.[0]).not.toHaveProperty("attachments");
+  });
+
+  it("passes image attachments directly to a vision-capable main model", async () => {
+    const harness = await createHarness({ mainModelVision: true });
+    const attachment = {
+      type: "image" as const,
+      id: "attachment-vision-1",
+      name: "layout.png",
+      mimeType: "image/png",
+      sizeBytes: 1_024,
+    };
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-image-direct"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-image-direct"),
+          role: "user",
+          text: "Describe this image",
+          attachments: [attachment],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+    expect(harness.describeImages).not.toHaveBeenCalled();
+    expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({ attachments: [attachment] });
   });
 
   effectIt.effect("projects starting before a slow provider session finishes", () =>
@@ -1963,7 +2054,10 @@ describe("ProviderCommandReactor", () => {
     expect(harness.startSession.mock.calls[1]?.[1]).toMatchObject({
       provider: ProviderDriverKind.make("codex"),
       providerInstanceId: ProviderInstanceId.make("codex_work"),
-      resumeCursor: { opaque: "resume-1" },
+    });
+    expect(harness.startSession.mock.calls[1]?.[1]).not.toHaveProperty("resumeCursor");
+    expect(harness.sendTurn.mock.calls[1]?.[0]).toMatchObject({
+      input: expect.stringContaining("<context-transfer>"),
     });
 
     const readModel = await harness.readModel();
@@ -2310,7 +2404,7 @@ describe("ProviderCommandReactor", () => {
     expect(thread?.session?.runtimeMode).toBe("full-access");
   });
 
-  it("rejects provider changes after a thread is already bound to a session provider", async () => {
+  it("transfers context when a thread switches provider", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
 
@@ -2355,34 +2449,39 @@ describe("ProviderCommandReactor", () => {
       }),
     );
 
-    await waitFor(async () => {
-      const readModel = await harness.readModel();
-      const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
-      return (
-        thread?.activities.some((activity) => activity.kind === "provider.turn.start.failed") ??
-        false
-      );
-    });
+    await waitFor(() => harness.startSession.mock.calls.length === 2);
+    await waitFor(() => harness.sendTurn.mock.calls.length === 2);
 
-    expect(harness.startSession.mock.calls.length).toBe(1);
-    expect(harness.sendTurn.mock.calls.length).toBe(1);
+    expect(harness.startSession.mock.calls[1]?.[1]).toMatchObject({
+      provider: ProviderDriverKind.make("claudeAgent"),
+      providerInstanceId: ProviderInstanceId.make("claudeAgent"),
+    });
+    expect(harness.sendTurn.mock.calls[1]?.[0]).toMatchObject({
+      input: expect.stringMatching(
+        /<context-transfer>[\s\S]*Current objective: Continue the existing task\.[\s\S]*<user-request>\nsecond\n<\/user-request>/,
+      ),
+    });
+    expect(harness.generateContextTransferSummary).toHaveBeenCalledWith(
+      expect.objectContaining({
+        context: expect.stringContaining("USER:\nfirst"),
+        modelSelection: expect.objectContaining({
+          instanceId: ProviderInstanceId.make("codex"),
+        }),
+      }),
+    );
     expect(harness.stopSession.mock.calls.length).toBe(0);
 
     const readModel = await harness.readModel();
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
     expect(thread?.session?.threadId).toBe("thread-1");
-    expect(thread?.session?.providerName).toBe("codex");
+    expect(thread?.session?.providerName).toBe("claudeAgent");
     expect(thread?.session?.runtimeMode).toBe("approval-required");
     expect(
       thread?.activities.find((activity) => activity.kind === "provider.turn.start.failed"),
-    ).toMatchObject({
-      payload: {
-        detail: expect.stringContaining("cannot switch to 'claudeAgent'"),
-      },
-    });
+    ).toBeUndefined();
   });
 
-  it("rejects cross-driver provider changes after the existing thread session has stopped", async () => {
+  it("starts the requested provider without handoff after the previous session stopped", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
 
@@ -2426,26 +2525,20 @@ describe("ProviderCommandReactor", () => {
       }),
     );
 
-    await waitFor(async () => {
-      const readModel = await harness.readModel();
-      const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
-      return (
-        thread?.activities.some((activity) => activity.kind === "provider.turn.start.failed") ??
-        false
-      );
+    await waitFor(() => harness.startSession.mock.calls.length === 1);
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+    expect(harness.startSession.mock.calls[0]?.[1]).toMatchObject({
+      provider: ProviderDriverKind.make("claudeAgent"),
+      providerInstanceId: ProviderInstanceId.make("claudeAgent"),
     });
-
-    expect(harness.startSession.mock.calls.length).toBe(0);
-    expect(harness.sendTurn.mock.calls.length).toBe(0);
+    expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
+      input: "continue with claude",
+    });
     const readModel = await harness.readModel();
     const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
     expect(
       thread?.activities.find((activity) => activity.kind === "provider.turn.start.failed"),
-    ).toMatchObject({
-      payload: {
-        detail: expect.stringContaining("cannot switch to 'claudeAgent'"),
-      },
-    });
+    ).toBeUndefined();
   });
 
   it("reacts to thread.turn.interrupt-requested by calling provider interrupt", async () => {
@@ -2824,7 +2917,7 @@ describe("ProviderCommandReactor", () => {
       }),
     );
 
-    await Effect.runPromise(
+    await harness.runEffect(
       harness.engine.dispatch({
         type: "thread.activity.append",
         commandId: CommandId.make("cmd-user-input-requested"),
@@ -2857,7 +2950,7 @@ describe("ProviderCommandReactor", () => {
       }),
     );
 
-    await Effect.runPromise(
+    await harness.runEffect(
       harness.engine.dispatch({
         type: "thread.user-input.respond",
         commandId: CommandId.make("cmd-user-input-respond-stale"),

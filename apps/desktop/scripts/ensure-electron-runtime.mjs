@@ -2,6 +2,7 @@ import * as NodeFS from "node:fs";
 import * as NodeModule from "node:module";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+import * as NodeURL from "node:url";
 import * as NodeChildProcess from "node:child_process";
 
 const require = NodeModule.createRequire(import.meta.url);
@@ -128,6 +129,10 @@ function installElectronRuntime(electronDir, version) {
     ]);
     if (hostPlatform === "darwin") {
       runChecked("ditto", ["-x", "-k", zipPath, NodePath.join(electronDir, "dist")]);
+    } else if (hostPlatform === "win32") {
+      const distDir = NodePath.join(electronDir, "dist");
+      NodeFS.mkdirSync(distDir, { recursive: true });
+      runChecked("tar", ["-xf", zipPath, "-C", distDir]);
     } else {
       runChecked("python3", [
         "-c",
@@ -176,7 +181,7 @@ export function ensureElectronRuntime() {
   return electronPath;
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+if (NodeURL.fileURLToPath(import.meta.url) === NodePath.resolve(process.argv[1])) {
   const electronPath = ensureElectronRuntime();
   process.stdout.write(`${electronPath}\n`);
 }

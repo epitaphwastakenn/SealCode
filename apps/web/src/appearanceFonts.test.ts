@@ -119,7 +119,7 @@ describe("font size clamping", () => {
 
   it("rounds fractional values and falls back for unusable input", () => {
     expect(clampCodeFontSize(13.4)).toBe(13);
-    expect(clampInterfaceFontSize(Number.NaN)).toBe(16);
+    expect(clampInterfaceFontSize(Number.NaN)).toBe(14);
     expect(clampPromptFontSize(Number.POSITIVE_INFINITY)).toBe(14);
   });
 });

@@ -59,6 +59,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     to: "/settings/appearance",
   },
   {
+    id: "harness-sound-volume",
+    title: "Harness sound volume",
+    to: "/settings/appearance",
+  },
+  {
     id: "environment-identification",
     title: "Environment identification",
     to: "/settings/appearance",
@@ -149,6 +154,11 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "text-generation-model",
     title: "Text generation model",
+    to: "/settings/general",
+  },
+  {
+    id: "image-viewer-model",
+    title: "Image viewer model",
     to: "/settings/general",
   },
   {

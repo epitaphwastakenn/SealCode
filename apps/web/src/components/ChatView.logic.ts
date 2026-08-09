@@ -425,6 +425,9 @@ export function getStartedThreadModelChangeBlockReason(input: {
   ) {
     return null;
   }
+  if (currentModelSelection.instanceId !== input.nextModelSelection.instanceId) {
+    return null;
+  }
   const currentProvider = input.providers.find(
     (snapshot) => snapshot.instanceId === currentModelSelection.instanceId,
   );

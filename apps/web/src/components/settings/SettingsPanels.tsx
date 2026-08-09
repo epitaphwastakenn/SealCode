@@ -22,12 +22,14 @@ import {
   type EnvironmentIdentificationMode,
   MAX_CODE_FONT_SIZE,
   MAX_GLASS_OPACITY,
+  MAX_HARNESS_SOUND_VOLUME,
   MAX_INTERFACE_FONT_SIZE,
   MAX_PROMPT_FONT_SIZE,
   MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
   MAX_TERMINAL_FONT_SIZE,
   MIN_CODE_FONT_SIZE,
   MIN_GLASS_OPACITY,
+  MIN_HARNESS_SOUND_VOLUME,
   MIN_INTERFACE_FONT_SIZE,
   MIN_PROMPT_FONT_SIZE,
   MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
@@ -178,6 +180,7 @@ const ADVANCED_BACKGROUND_ACTIVITY_DESCRIPTION =
   "Uses custom background intervals with the selected shared power policy.";
 
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
+const CODEX_DRIVER_KIND = ProviderDriverKind.make("codex");
 const BACKGROUND_ACTIVITY_BOOLEAN_OVERRIDES: ReadonlyArray<{
   readonly key:
     | "pauseWhenHostLocked"
@@ -444,6 +447,10 @@ export function useSettingsRestore(onRestored?: () => void) {
     settings.textGenerationModelSelection ?? null,
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
   );
+  const isImageViewerModelDirty = !Equal.equals(
+    settings.imageViewerModelSelection ?? null,
+    DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection ?? null,
+  );
   const isBackgroundActivityDirty = hasChangedBackgroundActivitySettings(settings);
 
   const changedSettingLabels = useMemo(
@@ -510,9 +517,11 @@ export function useSettingsRestore(onRestored?: () => void) {
         ? ["Delete confirmation"]
         : []),
       ...(isTextGenerationModelDirty ? ["Text generation model"] : []),
+      ...(isImageViewerModelDirty ? ["Image viewer model"] : []),
     ],
     [
       isTextGenerationModelDirty,
+      isImageViewerModelDirty,
       isBackgroundActivityDirty,
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
@@ -624,6 +633,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       confirmThreadArchive: DEFAULT_UNIFIED_SETTINGS.confirmThreadArchive,
       confirmThreadDelete: DEFAULT_UNIFIED_SETTINGS.confirmThreadDelete,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
+      imageViewerModelSelection: DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection,
       fontFamilySans: DEFAULT_UNIFIED_SETTINGS.fontFamilySans,
       fontFamilyComposer: DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer,
       fontFamilyCode: DEFAULT_UNIFIED_SETTINGS.fontFamilyCode,
@@ -938,6 +948,13 @@ export function AppearanceSettingsPanel() {
     "--settings-slider-progress": `${glassOpacityRatio * 100}%`,
     "--settings-slider-fill-offset": `${0.5 - glassOpacityRatio}rem`,
   } as CSSProperties;
+  const harnessSoundVolumeRatio =
+    (settings.harnessSoundVolume - MIN_HARNESS_SOUND_VOLUME) /
+    (MAX_HARNESS_SOUND_VOLUME - MIN_HARNESS_SOUND_VOLUME);
+  const harnessSoundVolumeSliderStyle = {
+    "--settings-slider-progress": `${harnessSoundVolumeRatio * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - harnessSoundVolumeRatio}rem`,
+  } as CSSProperties;
 
   return (
     <SettingsPageContainer>
@@ -999,6 +1016,54 @@ export function AppearanceSettingsPanel() {
                 style={glassOpacitySliderStyle}
                 type="range"
                 value={settings.glassOpacity}
+              />
+            </div>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("harness-sound-volume")}
+          description="Set the volume for harness errors, permission requests, questions, and completed turns."
+          resetAction={
+            settings.harnessSoundVolume !== DEFAULT_UNIFIED_SETTINGS.harnessSoundVolume ? (
+              <SettingResetButton
+                label="harness sound volume"
+                onClick={() =>
+                  updateSettings({
+                    harnessSoundVolume: DEFAULT_UNIFIED_SETTINGS.harnessSoundVolume,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex w-full items-center gap-3 sm:w-52">
+              <output
+                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                htmlFor="harness-sound-volume-control"
+              >
+                {settings.harnessSoundVolume}%
+              </output>
+              <input
+                aria-label="Harness sound volume"
+                className="settings-slider min-w-0 flex-1"
+                id="harness-sound-volume-control"
+                max={MAX_HARNESS_SOUND_VOLUME}
+                min={MIN_HARNESS_SOUND_VOLUME}
+                onChange={(event) => {
+                  const harnessSoundVolume = Number(event.currentTarget.value);
+                  if (
+                    Number.isInteger(harnessSoundVolume) &&
+                    harnessSoundVolume >= MIN_HARNESS_SOUND_VOLUME &&
+                    harnessSoundVolume <= MAX_HARNESS_SOUND_VOLUME
+                  ) {
+                    updateSettings({ harnessSoundVolume });
+                  }
+                }}
+                step={1}
+                style={harnessSoundVolumeSliderStyle}
+                type="range"
+                value={settings.harnessSoundVolume}
               />
             </div>
           }
@@ -1705,6 +1770,35 @@ export function GeneralSettingsPanel() {
     settings.textGenerationModelSelection ?? null,
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
   );
+  const imageViewerProviders = serverProviders.filter(
+    (provider) => provider.driver === CODEX_DRIVER_KIND,
+  );
+  const imageViewerModelSelection = resolveAppModelSelectionState(
+    {
+      ...settings,
+      textGenerationModelSelection: settings.imageViewerModelSelection,
+    },
+    imageViewerProviders,
+  );
+  const imageViewerInstanceId = imageViewerModelSelection.instanceId;
+  const imageViewerModel = imageViewerModelSelection.model;
+  const imageViewerModelOptions = imageViewerModelSelection.options;
+  const imageViewerInstanceEntries = textGenerationModelInstanceEntries.filter(
+    (entry) => entry.driverKind === CODEX_DRIVER_KIND,
+  );
+  const imageViewerInstanceEntry = imageViewerInstanceEntries.find(
+    (entry) => entry.instanceId === imageViewerInstanceId,
+  );
+  const imageViewerModelOptionsByInstance = getCustomModelOptionsByInstance(
+    settings,
+    imageViewerProviders,
+    imageViewerInstanceId,
+    imageViewerModel,
+  );
+  const isImageViewerModelDirty = !Equal.equals(
+    settings.imageViewerModelSelection ?? null,
+    DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection ?? null,
+  );
   const resolvedBackgroundActivity = resolveServerBackgroundActivitySettings(settings);
   const activeBackgroundActivityProfile = resolvedBackgroundActivity.profile;
   const backgroundActivityProfileOption = resolveBackgroundActivityProfileOption(settings);
@@ -2198,6 +2292,61 @@ export function GeneralSettingsPanel() {
                         ),
                       },
                       serverProviders,
+                    ),
+                  });
+                }}
+              />
+            </div>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("image-viewer-model")}
+          description="Codex model used to interpret images for main models without vision support."
+          resetAction={
+            isImageViewerModelDirty ? (
+              <SettingResetButton
+                label="image viewer model"
+                onClick={() =>
+                  updateSettings({
+                    imageViewerModelSelection: DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <ProviderModelPicker
+                activeInstanceId={imageViewerInstanceId}
+                model={imageViewerModel}
+                lockedProvider={CODEX_DRIVER_KIND}
+                instanceEntries={imageViewerInstanceEntries}
+                modelOptionsByInstance={imageViewerModelOptionsByInstance}
+                triggerVariant="outline"
+                triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
+                onInstanceModelChange={(instanceId, model) => {
+                  updateSettings({
+                    imageViewerModelSelection: createModelSelection(instanceId, model),
+                  });
+                }}
+              />
+              <TraitsPicker
+                provider={CODEX_DRIVER_KIND}
+                models={imageViewerInstanceEntry?.models ?? []}
+                model={imageViewerModel}
+                prompt=""
+                onPromptChange={() => {}}
+                modelOptions={imageViewerModelOptions}
+                allowPromptInjectedEffort={false}
+                triggerVariant="outline"
+                triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
+                onModelOptionsChange={(nextOptions) => {
+                  updateSettings({
+                    imageViewerModelSelection: createModelSelection(
+                      imageViewerInstanceId,
+                      imageViewerModel,
+                      nextOptions,
                     ),
                   });
                 }}

@@ -15,6 +15,7 @@ import * as TextGeneration from "./TextGeneration.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
+  buildContextTransferSummaryPrompt,
   buildPrContentPrompt,
   buildThreadTitlePrompt,
 } from "./TextGenerationPrompts.ts";
@@ -52,7 +53,8 @@ export const makeGrokTextGeneration = Effect.fn("makeGrokTextGeneration")(functi
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateThreadTitle"
+      | "generateContextTransferSummary";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -251,10 +253,33 @@ export const makeGrokTextGeneration = Effect.fn("makeGrokTextGeneration")(functi
       } satisfies TextGeneration.ThreadTitleGenerationResult;
     });
 
+  const describeImages: TextGeneration.TextGeneration["Service"]["describeImages"] = () =>
+    Effect.fail(
+      new TextGenerationError({
+        operation: "describeImages",
+        detail: "Only Codex instances can be selected as SealCode image viewers.",
+      }),
+    );
+
+  const generateContextTransferSummary: TextGeneration.TextGeneration["Service"]["generateContextTransferSummary"] =
+    Effect.fn("GrokTextGeneration.generateContextTransferSummary")(function* (input) {
+      const { prompt, outputSchema } = buildContextTransferSummaryPrompt(input.context);
+      const generated = yield* runGrokJson({
+        operation: "generateContextTransferSummary",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+      return { summary: generated.summary.trim() };
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    describeImages,
+    generateContextTransferSummary,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

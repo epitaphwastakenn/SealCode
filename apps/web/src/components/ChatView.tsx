@@ -181,6 +181,7 @@ import {
   useEnvironmentSettings,
 } from "../hooks/useSettings";
 import { useNowMinute } from "../hooks/useNowMinute";
+import { useHarnessSounds } from "../hooks/useHarnessSounds";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { resolveAppModelSelectionForInstance } from "../modelSelection";
 import { getTerminalFocusOwner } from "../lib/terminalFocus";
@@ -2224,6 +2225,24 @@ function ChatViewContent(props: ChatViewProps) {
     latestTurnSettled &&
     hasActionableProposedPlan(activeProposedPlan);
   const activePendingApproval = pendingApprovals[0] ?? null;
+  const harnessSoundVolume = useClientSettings((value) => value.harnessSoundVolume);
+  const harnessSoundSnapshot = useMemo(
+    () => ({
+      threadKey: activeThreadKey,
+      completedAt: activeLatestTurn?.completedAt ?? null,
+      error: threadError ?? null,
+      approvalRequestId: activePendingApproval?.requestId ?? null,
+      questionRequestId: activePendingUserInput?.requestId ?? null,
+    }),
+    [
+      activeLatestTurn?.completedAt,
+      activePendingApproval?.requestId,
+      activePendingUserInput?.requestId,
+      activeThreadKey,
+      threadError,
+    ],
+  );
+  useHarnessSounds(harnessSoundSnapshot, harnessSoundVolume);
   const {
     beginLocalDispatch,
     resetLocalDispatch,

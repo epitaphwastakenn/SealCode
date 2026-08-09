@@ -293,6 +293,9 @@ function createTextGeneration(
       Effect.succeed({
         title: "Update workflow",
       }),
+    describeImages: () => Effect.die("describeImages is not used by GitManager tests"),
+    generateContextTransferSummary: () =>
+      Effect.die("generateContextTransferSummary is not used by GitManager tests"),
     ...overrides,
   };
 
@@ -336,6 +339,28 @@ function createTextGeneration(
           (cause) =>
             new TextGenerationError({
               operation: "generateThreadTitle",
+              detail: "fake text generation failed",
+              ...(cause !== undefined ? { cause } : {}),
+            }),
+        ),
+      ),
+    describeImages: (input) =>
+      implementation.describeImages(input).pipe(
+        Effect.mapError(
+          (cause) =>
+            new TextGenerationError({
+              operation: "describeImages",
+              detail: "fake text generation failed",
+              ...(cause !== undefined ? { cause } : {}),
+            }),
+        ),
+      ),
+    generateContextTransferSummary: (input) =>
+      implementation.generateContextTransferSummary(input).pipe(
+        Effect.mapError(
+          (cause) =>
+            new TextGenerationError({
+              operation: "generateContextTransferSummary",
               detail: "fake text generation failed",
               ...(cause !== undefined ? { cause } : {}),
             }),

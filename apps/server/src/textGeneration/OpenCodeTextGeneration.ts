@@ -21,6 +21,7 @@ import { resolveAttachmentPath } from "../attachmentStore.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
+  buildContextTransferSummaryPrompt,
   buildPrContentPrompt,
   buildThreadTitlePrompt,
 } from "./TextGenerationPrompts.ts";
@@ -39,6 +40,7 @@ const OpenCodeTextGenerationOperation = Schema.Literals([
   "generatePrContent",
   "generateBranchName",
   "generateThreadTitle",
+  "generateContextTransferSummary",
 ]);
 
 type OpenCodeTextGenerationOperation = typeof OpenCodeTextGenerationOperation.Type;
@@ -253,7 +255,8 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateThreadTitle"
+      | "generateContextTransferSummary";
   }) =>
     sharedServerMutex.withPermit(
       Effect.gen(function* () {
@@ -392,7 +395,7 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
         const session = yield* Effect.tryPromise({
           try: () =>
             client.session.create({
-              title: `T3 Code ${input.operation}`,
+              title: `SealCode ${input.operation}`,
               permission: [{ permission: "*", pattern: "*", action: "deny" }],
             }),
           catch: (cause) =>
@@ -615,10 +618,33 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
       };
     });
 
+  const describeImages: TextGeneration.TextGeneration["Service"]["describeImages"] = () =>
+    Effect.fail(
+      new TextGenerationError({
+        operation: "describeImages",
+        detail: "Only Codex instances can be selected as SealCode image viewers.",
+      }),
+    );
+
+  const generateContextTransferSummary: TextGeneration.TextGeneration["Service"]["generateContextTransferSummary"] =
+    Effect.fn("OpenCodeTextGeneration.generateContextTransferSummary")(function* (input) {
+      const { prompt, outputSchema } = buildContextTransferSummaryPrompt(input.context);
+      const generated = yield* runOpenCodeJson({
+        operation: "generateContextTransferSummary",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+      return { summary: generated.summary.trim() };
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    describeImages,
+    generateContextTransferSummary,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

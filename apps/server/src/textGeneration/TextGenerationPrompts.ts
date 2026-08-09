@@ -203,6 +203,23 @@ export function buildBranchNamePrompt(input: BranchNamePromptInput) {
   return { prompt, outputSchema };
 }
 
+export function buildContextTransferSummaryPrompt(context: string) {
+  return {
+    prompt: [
+      "Create an internal handoff for another coding agent.",
+      "Return JSON with exactly one key: summary.",
+      "Do not edit files, execute commands, call tools, or continue the task.",
+      "The summary must be compact and use these labeled sections:",
+      "Current objective; Decisions; Relevant files; Changes made; Commands and tools; Important results; Errors and limitations; Pending tasks; Recommended next action; Project state; Source provider and model.",
+      "Use only the evidence below. Do not invent missing facts.",
+      "",
+      "Session evidence:",
+      limitSection(context, 32_000),
+    ].join("\n"),
+    outputSchema: Schema.Struct({ summary: Schema.String }),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Thread title
 // ---------------------------------------------------------------------------
@@ -216,7 +233,7 @@ export interface ThreadTitlePromptInput {
 
 // Keep shared editorial rules in these two prompts in sync. Regeneration
 // intentionally adds guidance for thread history and the previous title.
-const INITIAL_THREAD_TITLE_PROMPT = `Generate a title that will help the user recognize this T3 Code thread weeks later.
+const INITIAL_THREAD_TITLE_PROMPT = `Generate a title that will help the user recognize this SealCode thread weeks later.
 Return JSON with exactly one key: title.
 
 Before answering, silently reduce the request to:
@@ -241,7 +258,7 @@ Editorial rules:
 - When a URL or attachment is the only source of the subject, use available tools to inspect it. If it cannot be resolved, remain accurate rather than guessing.`;
 
 function regenerateThreadTitlePrompt(previousTitle: string): string {
-  return `Regenerate the title for an existing T3 Code thread so the user can recognize it weeks later.
+  return `Regenerate the title for an existing SealCode thread so the user can recognize it weeks later.
 The previous title was ${JSON.stringify(previousTitle)}.
 Return JSON with exactly one key: title.
 

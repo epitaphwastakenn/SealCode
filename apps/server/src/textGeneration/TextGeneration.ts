@@ -73,6 +73,27 @@ export interface ThreadTitleGenerationResult {
   title: string;
 }
 
+export interface ImageDescriptionInput {
+  cwd: string;
+  message: string;
+  attachments: ReadonlyArray<ChatAttachment>;
+  modelSelection: ModelSelection;
+}
+
+export interface ImageDescriptionResult {
+  description: string;
+}
+
+export interface ContextTransferSummaryInput {
+  cwd: string;
+  context: string;
+  modelSelection: ModelSelection;
+}
+
+export interface ContextTransferSummaryResult {
+  summary: string;
+}
+
 export interface TextGenerationService {
   generateCommitMessage(
     input: CommitMessageGenerationInput,
@@ -80,6 +101,10 @@ export interface TextGenerationService {
   generatePrContent(input: PrContentGenerationInput): Promise<PrContentGenerationResult>;
   generateBranchName(input: BranchNameGenerationInput): Promise<BranchNameGenerationResult>;
   generateThreadTitle(input: ThreadTitleGenerationInput): Promise<ThreadTitleGenerationResult>;
+  describeImages(input: ImageDescriptionInput): Promise<ImageDescriptionResult>;
+  generateContextTransferSummary(
+    input: ContextTransferSummaryInput,
+  ): Promise<ContextTransferSummaryResult>;
 }
 
 /**
@@ -113,6 +138,16 @@ export class TextGeneration extends Context.Service<
     readonly generateThreadTitle: (
       input: ThreadTitleGenerationInput,
     ) => Effect.Effect<ThreadTitleGenerationResult, TextGenerationError>;
+
+    /** Describe image attachments through a dedicated vision-capable model. */
+    readonly describeImages: (
+      input: ImageDescriptionInput,
+    ) => Effect.Effect<ImageDescriptionResult, TextGenerationError>;
+
+    /** Generate an invisible, read-only handoff from the source provider. */
+    readonly generateContextTransferSummary: (
+      input: ContextTransferSummaryInput,
+    ) => Effect.Effect<ContextTransferSummaryResult, TextGenerationError>;
   }
 >()("t3/textGeneration/TextGeneration") {}
 
@@ -123,7 +158,9 @@ type TextGenerationOp =
   | "generateCommitMessage"
   | "generatePrContent"
   | "generateBranchName"
-  | "generateThreadTitle";
+  | "generateThreadTitle"
+  | "describeImages"
+  | "generateContextTransferSummary";
 
 const resolveInstance = (
   registry: ProviderInstanceRegistry.ProviderInstanceRegistry["Service"],
@@ -162,6 +199,18 @@ export const makeTextGenerationFromRegistry = (
     generateThreadTitle: (input) =>
       resolveInstance(registry, "generateThreadTitle", input.modelSelection.instanceId).pipe(
         Effect.flatMap((textGeneration) => textGeneration.generateThreadTitle(input)),
+      ),
+    describeImages: (input) =>
+      resolveInstance(registry, "describeImages", input.modelSelection.instanceId).pipe(
+        Effect.flatMap((textGeneration) => textGeneration.describeImages(input)),
+      ),
+    generateContextTransferSummary: (input) =>
+      resolveInstance(
+        registry,
+        "generateContextTransferSummary",
+        input.modelSelection.instanceId,
+      ).pipe(
+        Effect.flatMap((textGeneration) => textGeneration.generateContextTransferSummary(input)),
       ),
   });
 

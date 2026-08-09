@@ -22,6 +22,7 @@ import * as TextGeneration from "./TextGeneration.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
+  buildContextTransferSummaryPrompt,
   buildPrContentPrompt,
   buildThreadTitlePrompt,
 } from "./TextGenerationPrompts.ts";
@@ -85,7 +86,8 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle",
+      | "generateThreadTitle"
+      | "generateContextTransferSummary",
     value: unknown,
     detail: string,
   ): Effect.Effect<string, TextGenerationError> =>
@@ -115,7 +117,8 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateThreadTitle"
+      | "generateContextTransferSummary";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -359,10 +362,33 @@ export const makeClaudeTextGeneration = Effect.fn("makeClaudeTextGeneration")(fu
       };
     });
 
+  const describeImages: TextGeneration.TextGeneration["Service"]["describeImages"] = () =>
+    Effect.fail(
+      new TextGenerationError({
+        operation: "describeImages",
+        detail: "Only Codex instances can be selected as SealCode image viewers.",
+      }),
+    );
+
+  const generateContextTransferSummary: TextGeneration.TextGeneration["Service"]["generateContextTransferSummary"] =
+    Effect.fn("ClaudeTextGeneration.generateContextTransferSummary")(function* (input) {
+      const { prompt, outputSchema } = buildContextTransferSummaryPrompt(input.context);
+      const generated = yield* runClaudeJson({
+        operation: "generateContextTransferSummary",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        modelSelection: input.modelSelection,
+      });
+      return { summary: generated.summary.trim() };
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    describeImages,
+    generateContextTransferSummary,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

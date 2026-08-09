@@ -24,6 +24,7 @@ import * as TextGeneration from "./TextGeneration.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
+  buildContextTransferSummaryPrompt,
   buildPrContentPrompt,
   buildThreadTitlePrompt,
 } from "./TextGenerationPrompts.ts";
@@ -101,7 +102,9 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle",
+      | "generateThreadTitle"
+      | "describeImages"
+      | "generateContextTransferSummary",
     value: unknown,
   ): Effect.Effect<string, TextGenerationError> =>
     encodeJsonString(value).pipe(
@@ -120,7 +123,9 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle",
+      | "generateThreadTitle"
+      | "describeImages"
+      | "generateContextTransferSummary",
     attachments: TextGeneration.BranchNameGenerationInput["attachments"],
   ): Effect.fn.Return<MaterializedImageAttachments, TextGenerationError> {
     if (!attachments || attachments.length === 0) {
@@ -162,7 +167,9 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       | "generateCommitMessage"
       | "generatePrContent"
       | "generateBranchName"
-      | "generateThreadTitle";
+      | "generateThreadTitle"
+      | "describeImages"
+      | "generateContextTransferSummary";
     cwd: string;
     prompt: string;
     outputSchemaJson: S;
@@ -405,10 +412,57 @@ export const makeCodexTextGeneration = Effect.fn("makeCodexTextGeneration")(func
       } satisfies TextGeneration.ThreadTitleGenerationResult;
     });
 
+  const describeImages: TextGeneration.TextGeneration["Service"]["describeImages"] = Effect.fn(
+    "CodexTextGeneration.describeImages",
+  )(function* (input) {
+    const { imagePaths } = yield* materializeImageAttachments("describeImages", input.attachments);
+    if (imagePaths.length === 0) {
+      return yield* new TextGenerationError({
+        operation: "describeImages",
+        detail: "No readable image attachments were supplied.",
+      });
+    }
+    const outputSchema = Schema.Struct({ description: Schema.String });
+    const prompt = [
+      "Interpret the attached image or images for another coding agent.",
+      "Return JSON with exactly one key: description.",
+      "Describe visible UI structure, text, colors, spacing, states, annotations, errors, and implementation-relevant details.",
+      "Be precise and compact. Do not edit files or run tools.",
+      "",
+      "User request:",
+      input.message,
+    ].join("\n");
+    const generated = yield* runCodexJson({
+      operation: "describeImages",
+      cwd: input.cwd,
+      prompt,
+      outputSchemaJson: outputSchema,
+      imagePaths,
+      modelSelection: input.modelSelection,
+    });
+    return { description: generated.description.trim() };
+  });
+
+  const generateContextTransferSummary: TextGeneration.TextGeneration["Service"]["generateContextTransferSummary"] =
+    Effect.fn("CodexTextGeneration.generateContextTransferSummary")(function* (input) {
+      const { prompt, outputSchema } = buildContextTransferSummaryPrompt(input.context);
+      const generated = yield* runCodexJson({
+        operation: "generateContextTransferSummary",
+        cwd: input.cwd,
+        prompt,
+        outputSchemaJson: outputSchema,
+        imagePaths: [],
+        modelSelection: input.modelSelection,
+      });
+      return { summary: generated.summary.trim() };
+    });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
+    describeImages,
+    generateContextTransferSummary,
   } satisfies TextGeneration.TextGeneration["Service"];
 });

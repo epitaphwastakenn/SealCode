@@ -45,6 +45,15 @@ import {
 } from "../../serverSettings.ts";
 import { VcsStatusBroadcaster } from "../../vcs/VcsStatusBroadcaster.ts";
 import { GitWorkflowService } from "../../git/GitWorkflowService.ts";
+import {
+  buildImageViewerPrompt,
+  buildContextTransferPrompt,
+  buildContextTransferSourceContext,
+  ContextTransferStore,
+  NativeProviderSessionStore,
+  requiresContextTransfer,
+} from "../ContextTransferCoordinator.ts";
+import { ServerConfig } from "../../config.ts";
 const isProviderAdapterRequestError = Schema.is(ProviderAdapterRequestError);
 const isProviderDriverKind = Schema.is(ProviderDriverKind);
 
@@ -320,6 +329,7 @@ const make = Effect.gen(function* () {
   const vcsStatusBroadcaster = yield* VcsStatusBroadcaster;
   const textGeneration = yield* TextGeneration;
   const serverSettingsService = yield* ServerSettingsService;
+  const serverConfig = yield* ServerConfig;
   const serverCommandId = (tag: string) =>
     crypto.randomUUIDv4.pipe(Effect.map((uuid) => CommandId.make(`server:${tag}:${uuid}`)));
   const serverEventId = () => crypto.randomUUIDv4.pipe(Effect.map(EventId.make));
@@ -337,6 +347,8 @@ const make = Effect.gen(function* () {
     );
 
   const threadModelSelections = new Map<string, ModelSelection>();
+  const nativeProviderSessions = new NativeProviderSessionStore(serverConfig.stateDir);
+  const contextTransfers = new ContextTransferStore(serverConfig.stateDir);
 
   const appendProviderFailureActivity = (input: {
     readonly threadId: ThreadId;
@@ -459,6 +471,12 @@ const make = Effect.gen(function* () {
     ) {
       return;
     }
+    // Crossing provider instances is handled by ContextTransferCoordinator and
+    // starts or resumes a separate native session. This guard only applies to
+    // in-place model changes on the same native session.
+    if (input.currentModelSelection.instanceId !== requestedModelSelection.instanceId) {
+      return;
+    }
     const providers = yield* providerRegistry.getProviders;
     const requiresNewThread =
       providers.find((snapshot) => snapshot.instanceId === input.currentModelSelection.instanceId)
@@ -523,20 +541,6 @@ const make = Effect.gen(function* () {
         : thread.modelSelection.instanceId;
     const desiredModelSelection = requestedModelSelection ?? thread.modelSelection;
     const desiredInstanceId = desiredModelSelection.instanceId;
-    const currentInfo = yield* providerService.getInstanceInfo(currentInstanceId).pipe(
-      Effect.mapError(
-        () =>
-          new ProviderAdapterRequestError({
-            provider: providerErrorLabelFromInstanceHint({
-              instanceId: String(currentInstanceId),
-              modelSelectionInstanceId: String(thread.modelSelection.instanceId),
-              sessionProvider: thread.session?.providerName ?? undefined,
-            }),
-            method: "thread.turn.start",
-            detail: `Thread '${threadId}' references unknown provider instance '${currentInstanceId}'. The instance is not configured in this build.`,
-          }),
-      ),
-    );
     const desiredInfo = yield* providerService.getInstanceInfo(desiredInstanceId).pipe(
       Effect.mapError(
         () =>
@@ -588,29 +592,6 @@ const make = Effect.gen(function* () {
         requestedModelSelection,
       });
     }
-    if (
-      thread.session !== null &&
-      requestedModelSelection !== undefined &&
-      requestedModelSelection.instanceId !== currentInstanceId
-    ) {
-      if (currentInfo.driverKind !== desiredInfo.driverKind) {
-        return yield* new ProviderAdapterRequestError({
-          provider: preferredProvider,
-          method: "thread.turn.start",
-          detail: `Thread '${threadId}' is bound to driver '${currentInfo.driverKind}' and cannot switch to '${desiredInfo.driverKind}'.`,
-        });
-      }
-      if (
-        currentInfo.continuationIdentity.continuationKey !==
-        desiredInfo.continuationIdentity.continuationKey
-      ) {
-        return yield* new ProviderAdapterRequestError({
-          provider: preferredProvider,
-          method: "thread.turn.start",
-          detail: `Thread '${threadId}' cannot switch from instance '${currentInstanceId}' to '${desiredInstanceId}' because their provider resume state is incompatible.`,
-        });
-      }
-    }
     const project = yield* resolveProject(thread.projectId);
     const effectiveCwd = resolveThreadWorkspaceCwd({
       thread,
@@ -639,6 +620,14 @@ const make = Effect.gen(function* () {
             method: "thread.turn.start",
             detail: `Provider session '${session.threadId}' started without a provider instance id.`,
           });
+        }
+        if (session.resumeCursor !== undefined) {
+          nativeProviderSessions.set(
+            threadId,
+            session.providerInstanceId,
+            session.resumeCursor,
+            session.updatedAt,
+          );
         }
         yield* setThreadSession({
           threadId,
@@ -690,9 +679,23 @@ const make = Effect.gen(function* () {
         return existingSessionThreadId;
       }
 
-      const resumeCursor = shouldRestartForModelChange
-        ? undefined
-        : (activeSession?.resumeCursor ?? undefined);
+      if (
+        instanceChanged &&
+        activeSession?.providerInstanceId !== undefined &&
+        activeSession.resumeCursor !== undefined
+      ) {
+        nativeProviderSessions.set(
+          threadId,
+          activeSession.providerInstanceId,
+          activeSession.resumeCursor,
+          activeSession.updatedAt,
+        );
+      }
+      const resumeCursor = instanceChanged
+        ? nativeProviderSessions.get(threadId, desiredInstanceId)
+        : shouldRestartForModelChange
+          ? undefined
+          : (activeSession?.resumeCursor ?? undefined);
       yield* Effect.logInfo("provider command reactor restarting provider session", {
         threadId,
         existingSessionThreadId,
@@ -734,6 +737,7 @@ const make = Effect.gen(function* () {
 
   const buildSendTurnRequestForThread = Effect.fnUntraced(function* (input: {
     readonly threadId: ThreadId;
+    readonly transferId: string;
     readonly messageText: string;
     readonly attachments?: ReadonlyArray<ChatAttachment>;
     readonly modelSelection?: ModelSelection;
@@ -746,6 +750,123 @@ const make = Effect.gen(function* () {
         new Error(`Thread '${input.threadId}' was not found in read model.`),
       );
     }
+    const requestedModelSelection =
+      input.modelSelection ?? threadModelSelections.get(input.threadId) ?? thread.modelSelection;
+    const project = yield* resolveProject(thread.projectId);
+    const cwd =
+      resolveThreadWorkspaceCwd({
+        thread,
+        projects: project ? [project] : [],
+      }) ?? process.cwd();
+    const providers = yield* providerRegistry.getProviders;
+    const requestedProvider = providers.find(
+      (provider) => provider.instanceId === requestedModelSelection.instanceId,
+    );
+    const requestedModel = requestedProvider?.models.find(
+      (model) => model.slug === requestedModelSelection.model,
+    );
+    let promptForTarget = input.messageText;
+    let attachmentsForTarget = input.attachments ?? [];
+    if (attachmentsForTarget.length > 0 && requestedModel?.capabilities?.vision !== true) {
+      const settings = yield* serverSettingsService.getSettings;
+      const viewerSelection = settings.imageViewerModelSelection;
+      const viewerProvider = providers.find(
+        (provider) => provider.instanceId === viewerSelection.instanceId,
+      );
+      if (viewerProvider?.driver !== ProviderDriverKind.make("codex")) {
+        return yield* new ProviderAdapterRequestError({
+          provider: providerErrorLabel(requestedProvider?.driver),
+          method: "thread.turn.start",
+          detail:
+            "The selected model cannot interpret images. Selecione um modelo visualizador para dar capacidades de visÃ£o Ã  este modelo.",
+        });
+      }
+      const imageDescription = yield* textGeneration
+        .describeImages({
+          cwd,
+          message: input.messageText,
+          attachments: attachmentsForTarget,
+          modelSelection: viewerSelection,
+        })
+        .pipe(
+          Effect.mapError(
+            (error) =>
+              new ProviderAdapterRequestError({
+                provider: providerErrorLabel(requestedProvider?.driver),
+                method: "thread.turn.start",
+                detail: `${error.detail} Selecione um modelo visualizador para dar capacidades de visÃ£o Ã  este modelo.`,
+              }),
+          ),
+        );
+      promptForTarget = buildImageViewerPrompt({
+        originalPrompt: input.messageText,
+        description: imageDescription.description,
+      });
+      attachmentsForTarget = [];
+    }
+    const sourceSession = yield* providerService
+      .listSessions()
+      .pipe(
+        Effect.map((sessions) => sessions.find((session) => session.threadId === input.threadId)),
+      );
+    const transferRequired = requiresContextTransfer({
+      sourceInstanceId: sourceSession?.providerInstanceId,
+      targetInstanceId: requestedModelSelection.instanceId,
+    });
+    let transferInput = promptForTarget;
+    if (transferRequired) {
+      const request = {
+        sourceProvider: sourceSession!.provider,
+        sourceInstanceId: sourceSession!.providerInstanceId!,
+        sourceModel: sourceSession?.model,
+        targetProvider: (yield* providerService.getInstanceInfo(requestedModelSelection.instanceId))
+          .driverKind,
+        targetInstanceId: requestedModelSelection.instanceId,
+        targetModel: requestedModelSelection.model,
+        originalPrompt: input.messageText,
+      };
+      const transferKey = `${input.transferId}:${requestedModelSelection.instanceId}:${requestedModelSelection.model}`;
+      const existing = contextTransfers.begin(
+        transferKey,
+        input.threadId,
+        request,
+        input.createdAt,
+      );
+      const summary =
+        existing.state === "completed" && existing.summary
+          ? existing.summary
+          : yield* Effect.gen(function* () {
+              contextTransfers.markRunning(transferKey, new Date().toISOString());
+              const sourceContext = buildContextTransferSourceContext(thread, request);
+              const generated = yield* textGeneration.generateContextTransferSummary({
+                cwd,
+                context: sourceContext,
+                modelSelection: {
+                  instanceId: sourceSession!.providerInstanceId!,
+                  model: sourceSession!.model ?? thread.modelSelection.model,
+                },
+              });
+              contextTransfers.complete(transferKey, generated.summary, new Date().toISOString());
+              return generated.summary;
+            }).pipe(
+              Effect.tapError((error) =>
+                Effect.logWarning("context transfer summary generation failed", {
+                  transferKey,
+                  sourceProvider: request.sourceProvider,
+                  targetProvider: request.targetProvider,
+                  detail: error.detail,
+                }).pipe(
+                  Effect.andThen(
+                    Effect.sync(() => {
+                      contextTransfers.fail(transferKey, error.detail, new Date().toISOString());
+                    }),
+                  ),
+                ),
+              ),
+            );
+      transferInput = buildContextTransferPrompt(summary, promptForTarget);
+    }
+
     yield* ensureSessionForThread(input.threadId, input.createdAt, {
       ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
       pendingTurnStart: true,
@@ -753,8 +874,8 @@ const make = Effect.gen(function* () {
     if (input.modelSelection !== undefined) {
       threadModelSelections.set(input.threadId, input.modelSelection);
     }
-    const normalizedInput = toNonEmptyProviderInput(input.messageText);
-    const normalizedAttachments = input.attachments ?? [];
+    const normalizedInput = toNonEmptyProviderInput(transferInput);
+    const normalizedAttachments = attachmentsForTarget;
     const activeSession = yield* providerService
       .listSessions()
       .pipe(
@@ -771,8 +892,6 @@ const make = Effect.gen(function* () {
             })
           : (yield* providerService.getCapabilities(activeSession.providerInstanceId))
               .sessionModelSwitch;
-    const requestedModelSelection =
-      input.modelSelection ?? threadModelSelections.get(input.threadId) ?? thread.modelSelection;
     const modelForTurn =
       sessionModelSwitch === "unsupported" && input.modelSelection === undefined
         ? activeSession?.model !== undefined
@@ -1163,6 +1282,7 @@ const make = Effect.gen(function* () {
 
     const sendTurnRequest = yield* buildSendTurnRequestForThread({
       threadId: event.payload.threadId,
+      transferId: String(event.payload.messageId),
       messageText: message.text,
       ...(message.attachments !== undefined ? { attachments: message.attachments } : {}),
       ...(event.payload.modelSelection !== undefined

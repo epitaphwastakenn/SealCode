@@ -48,6 +48,24 @@ describe("parseHeadlessCliModelRows", () => {
       { slug: "gemini-3.6-flash", name: "Gemini 3.6 Flash" },
     ]);
   });
+
+  it("discovers bare and bullet-prefixed Antigravity model rows", () => {
+    const models = parseHeadlessCliModelRows(
+      antigravity,
+      [
+        "Available models:",
+        "- gemini-3.6-flash",
+        "  gemini-3.6-pro Gemini 3.6 Pro",
+        "ERROR: logging before google.Init",
+        "Fetching available models...",
+      ].join("\n"),
+    );
+
+    expect(models.map(({ slug, name }) => ({ slug, name }))).toEqual([
+      { slug: "gemini-3.6-flash", name: "gemini-3.6-flash" },
+      { slug: "gemini-3.6-pro", name: "Gemini 3.6 Pro" },
+    ]);
+  });
 });
 
 describe("normalizeHeadlessCliModel", () => {

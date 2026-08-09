@@ -64,7 +64,7 @@ export function parseHeadlessCliModelRows(
   const parsed: ServerProviderModel[] = [];
   const seen = new Set<string>();
   for (const rawLine of output.split(/\r?\n/)) {
-    const line = rawLine.trim();
+    const line = rawLine.trim().replace(/^(?:[-*•>]\s+)/, "");
     if (
       !line ||
       /^(?:available models\b.*|open source|anthropic|openai|google|sakana|meta|xai|pass the\b.*|docs:.*|fetching\b.*)$/i.test(
@@ -75,14 +75,16 @@ export function parseHeadlessCliModelRows(
     }
     const match =
       definition.protocol === "antigravity"
-        ? line.match(/^([^\s]+)\s+(.+)$/)
+        ? line.match(/^([^\s]+)(?:\s+(.+))?$/)
         : line.match(/^([^\s]+)\s{2,}(.+)$/);
     const discoveredSlug = match?.[1]?.trim();
     const slug =
       definition.protocol === "antigravity"
         ? discoveredSlug?.replace(/-(?:low|medium|high)$/i, "")
         : discoveredSlug;
-    if (!slug || !/[a-z0-9]/i.test(slug) || seen.has(slug)) continue;
+    if (!slug || !/^[a-z0-9][a-z0-9._:/-]*$/.test(slug) || /[:/]$/.test(slug) || seen.has(slug)) {
+      continue;
+    }
     seen.add(slug);
     const name =
       definition.protocol === "commandcode"

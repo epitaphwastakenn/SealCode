@@ -16,6 +16,16 @@ const decodeProviderStatusCache = Schema.decodeUnknownEffect(
   Schema.fromJsonString(ServerProviderSchema),
 );
 
+const LEGACY_ANTIGRAVITY_EFFORT_MODEL = /-(?:low|medium|high)$/i;
+
+const cachedModelsForProvider = (
+  provider: ProviderDriverKind,
+  models: ReadonlyArray<ServerProvider["models"][number]>,
+): ReadonlyArray<ServerProvider["models"][number]> =>
+  provider === "antigravity"
+    ? models.filter((model) => model.isCustom || !LEGACY_ANTIGRAVITY_EFFORT_MODEL.test(model.slug))
+    : models;
+
 const mergeProviderModels = (
   fallbackModels: ReadonlyArray<ServerProvider["models"][number]>,
   cachedModels: ReadonlyArray<ServerProvider["models"][number]>,
@@ -59,7 +69,10 @@ export const hydrateCachedProvider = (input: {
   const { message: _fallbackMessage, ...fallbackWithoutMessage } = input.fallbackProvider;
   const hydratedProvider: ServerProvider = {
     ...fallbackWithoutMessage,
-    models: mergeProviderModels(input.fallbackProvider.models, input.cachedProvider.models),
+    models: mergeProviderModels(
+      input.fallbackProvider.models,
+      cachedModelsForProvider(input.fallbackProvider.driver, input.cachedProvider.models),
+    ),
     installed: input.cachedProvider.installed,
     version: input.cachedProvider.version,
     status: input.cachedProvider.status,

@@ -23,6 +23,7 @@ const emptyCapabilities = createModelCapabilities({ optionDescriptors: [] });
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
 const CLAUDE_AGENT_DRIVER = ProviderDriverKind.make("claudeAgent");
 const OPENCODE_DRIVER = ProviderDriverKind.make("opencode");
+const ANTIGRAVITY_DRIVER = ProviderDriverKind.make("antigravity");
 
 const makeProvider = (
   provider: ProviderDriverKind,
@@ -179,6 +180,61 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
         skills: cachedCodex.skills,
         message: cachedCodex.message,
       },
+    );
+  });
+
+  it("drops cached Antigravity effort variants while preserving the base model", () => {
+    const cachedAntigravity = makeProvider(ANTIGRAVITY_DRIVER, {
+      models: [
+        {
+          slug: "gemini-3.6-flash",
+          name: "Gemini 3.6 Flash",
+          isCustom: false,
+          capabilities: emptyCapabilities,
+        },
+        {
+          slug: "gemini-3.6-flash-high",
+          name: "Gemini 3.6 Flash (High)",
+          isCustom: false,
+          capabilities: emptyCapabilities,
+        },
+        {
+          slug: "gemini-3.6-flash-medium",
+          name: "Gemini 3.6 Flash (Medium)",
+          isCustom: false,
+          capabilities: emptyCapabilities,
+        },
+        {
+          slug: "gemini-3.6-flash-low",
+          name: "Gemini 3.6 Flash (Low)",
+          isCustom: false,
+          capabilities: emptyCapabilities,
+        },
+        {
+          slug: "my-antigravity-model-high",
+          name: "my-antigravity-model-high",
+          isCustom: true,
+          capabilities: emptyCapabilities,
+        },
+      ],
+    });
+    const fallbackAntigravity = makeProvider(ANTIGRAVITY_DRIVER, {
+      models: [
+        {
+          slug: "gemini-3.6-flash",
+          name: "Gemini 3.6 Flash",
+          isCustom: false,
+          capabilities: emptyCapabilities,
+        },
+      ],
+    });
+
+    assert.deepStrictEqual(
+      hydrateCachedProvider({
+        cachedProvider: cachedAntigravity,
+        fallbackProvider: fallbackAntigravity,
+      }).models.map((model) => model.slug),
+      ["gemini-3.6-flash", "my-antigravity-model-high"],
     );
   });
 

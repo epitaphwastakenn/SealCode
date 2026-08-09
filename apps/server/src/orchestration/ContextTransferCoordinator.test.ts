@@ -17,17 +17,29 @@ import {
 } from "./ContextTransferCoordinator.ts";
 
 describe("ContextTransferCoordinator", () => {
-  it("transfers only when the native provider instance changes", () => {
+  it("transfers when the native provider instance or model changes", () => {
     expect(
       requiresContextTransfer({
         sourceInstanceId: ProviderInstanceId.make("codex"),
+        sourceModel: "gpt-5.6-sol",
         targetInstanceId: ProviderInstanceId.make("codex"),
+        targetModel: "gpt-5.6-sol",
       }),
     ).toBe(false);
     expect(
       requiresContextTransfer({
         sourceInstanceId: ProviderInstanceId.make("codex"),
+        sourceModel: "gpt-5.6-sol",
+        targetInstanceId: ProviderInstanceId.make("codex"),
+        targetModel: "gpt-5.6-terra",
+      }),
+    ).toBe(true);
+    expect(
+      requiresContextTransfer({
+        sourceInstanceId: ProviderInstanceId.make("codex"),
+        sourceModel: "gpt-5.6-sol",
         targetInstanceId: ProviderInstanceId.make("claudeAgent"),
+        targetModel: "claude-opus-4-6",
       }),
     ).toBe(true);
   });

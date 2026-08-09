@@ -1833,11 +1833,14 @@ describe("ProviderCommandReactor", () => {
   });
 
   effectIt.effect(
-    "rejects changing models after start when the provider requires a new thread",
+    "transfers context when changing models on a provider that requires a session restart",
     () =>
       Effect.gen(function* () {
         const harness = yield* Effect.promise(() =>
-          createHarness({ requiresNewThreadForModelChange: true }),
+          createHarness({
+            requiresNewThreadForModelChange: true,
+            sessionModelSwitch: "unsupported",
+          }),
         );
         const now = "2026-01-01T00:00:00.000Z";
 
@@ -1877,32 +1880,35 @@ describe("ProviderCommandReactor", () => {
           createdAt: now,
         });
 
-        yield* Effect.promise(() =>
-          waitFor(async () => {
-            const readModel = await harness.readModel();
-            const thread = readModel.threads.find(
-              (entry) => entry.id === ThreadId.make("thread-1"),
-            );
-            return (
-              thread?.activities.some(
-                (activity) => activity.kind === "provider.turn.start.failed",
-              ) ?? false
-            );
-          }),
-        );
+        yield* Effect.promise(() => waitFor(() => harness.startSession.mock.calls.length === 2));
+        yield* Effect.promise(() => waitFor(() => harness.sendTurn.mock.calls.length === 2));
 
-        expect(harness.sendTurn).toHaveBeenCalledTimes(1);
-        const readModel = yield* Effect.promise(() => harness.readModel());
-        const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
-        expect(
-          thread?.activities.find((activity) => activity.kind === "provider.turn.start.failed"),
-        ).toMatchObject({
-          payload: {
-            detail: expect.stringContaining(
-              "cannot switch models after the conversation has started",
-            ),
+        expect(harness.startSession.mock.calls[1]?.[1]).toMatchObject({
+          modelSelection: {
+            instanceId: ProviderInstanceId.make("codex"),
+            model: "gpt-5.1-codex",
           },
         });
+        expect(harness.sendTurn.mock.calls[1]?.[0]).toMatchObject({
+          input: expect.stringMatching(
+            /<context-transfer>[\s\S]*Current objective: Continue the existing task\.[\s\S]*<user-request>\nsecond\n<\/user-request>/,
+          ),
+        });
+        expect(harness.generateContextTransferSummary).toHaveBeenCalledWith(
+          expect.objectContaining({
+            context: expect.stringContaining("USER:\nfirst"),
+            modelSelection: {
+              instanceId: ProviderInstanceId.make("codex"),
+              model: "gpt-5-codex",
+            },
+          }),
+        );
+        const readModel = yield* Effect.promise(() => harness.readModel());
+        const thread = readModel.threads.find((entry) => entry.id === ThreadId.make("thread-1"));
+        expect(thread?.session?.threadId).toBe("thread-1");
+        expect(
+          thread?.activities.find((activity) => activity.kind === "provider.turn.start.failed"),
+        ).toBeUndefined();
       }),
   );
 

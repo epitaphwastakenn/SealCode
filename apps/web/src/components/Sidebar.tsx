@@ -151,7 +151,6 @@ import { ProjectFavicon } from "./ProjectFavicon";
 import { ProviderInstanceIcon } from "./chat/ProviderInstanceIcon";
 import { getTriggerDisplayModelLabel } from "./chat/providerIconUtils";
 import { deriveProviderInstanceEntries, type ProviderInstanceEntry } from "../providerInstances";
-import { primaryServerProvidersAtom } from "../state/server";
 import { useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { stackedThreadToast, toastManager } from "./ui/toast";
 import { Button } from "./ui/button";
@@ -551,7 +550,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   }, [onChangeRequestState, prState, threadKey]);
 
   const modelInstanceId = thread.session?.providerInstanceId ?? thread.modelSelection.instanceId;
-  const providerEntry = props.providerEntryByInstanceId.get(modelInstanceId) ?? null;
+  const providerEntry =
+    props.providerEntryByInstanceId.get(`${thread.environmentId}:${modelInstanceId}`) ?? null;
   const driverKind = providerEntry?.driverKind ?? null;
   const selectedModel = providerEntry?.models.find(
     (model) => model.slug === thread.modelSelection.model,
@@ -1164,7 +1164,8 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
     currentGitBranch: gitStatus.data?.refName ?? null,
   });
   const modelInstanceId = thread.session?.providerInstanceId ?? thread.modelSelection.instanceId;
-  const providerEntry = props.providerEntryByInstanceId.get(modelInstanceId) ?? null;
+  const providerEntry =
+    props.providerEntryByInstanceId.get(`${thread.environmentId}:${modelInstanceId}`) ?? null;
   const driverKind = providerEntry?.driverKind ?? null;
   const selectedModel = providerEntry?.models.find(
     (model) => model.slug === thread.modelSelection.model,
@@ -1212,6 +1213,13 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
             fallbackIcon={MessageSquareIcon}
           />
           <span className="min-w-0 flex-1 truncate">{thread.title}</span>
+          {driverKind ? (
+            <ProviderInstanceIcon
+              driverKind={driverKind}
+              displayName={thread.session?.providerName ?? modelInstanceId}
+              iconClassName="size-3.5 opacity-60"
+            />
+          ) : null}
           <span className="shrink-0 text-xs text-muted-foreground/55 tabular-nums">
             {threadTimeLabel(thread)}
           </span>
@@ -1376,15 +1384,17 @@ export default function Sidebar() {
     () => sortLogicalProjectsForSidebar(unsortedProjectGroups, threads, sidebarProjectSortOrder),
     [sidebarProjectSortOrder, threads, unsortedProjectGroups],
   );
-  const serverProviders = useAtomValue(primaryServerProvidersAtom);
+  const serverConfigs = useAtomValue(environmentServerConfigsAtom);
   const providerEntryByInstanceId = useMemo(
     () =>
       new Map(
-        deriveProviderInstanceEntries(serverProviders).map(
-          (entry) => [entry.instanceId as string, entry] as const,
+        Array.from(serverConfigs.entries()).flatMap(([environmentId, config]) =>
+          deriveProviderInstanceEntries(config.providers).map(
+            (entry) => [`${environmentId}:${entry.instanceId}`, entry] as const,
+          ),
         ),
       ),
-    [serverProviders],
+    [serverConfigs],
   );
   const projectCwdByKey = useMemo(
     () =>
@@ -1491,7 +1501,6 @@ export default function Sidebar() {
   // the partition works directly off live shells: no archived-snapshot
   // merging, no optimistic holds. Archived threads remain hidden here —
   // archive keeps its original "remove from sidebar" meaning.
-  const serverConfigs = useAtomValue(environmentServerConfigsAtom);
   const {
     pinnedThreads,
     reorderablePinnedKeys,

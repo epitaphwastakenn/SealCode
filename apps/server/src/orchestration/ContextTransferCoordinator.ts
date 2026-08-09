@@ -158,9 +158,15 @@ export function buildImageViewerPrompt(input: {
 
 export function requiresContextTransfer(input: {
   readonly sourceInstanceId: ProviderInstanceId | undefined;
+  readonly sourceModel: string | undefined;
   readonly targetInstanceId: ProviderInstanceId;
+  readonly targetModel: string;
 }): boolean {
-  return input.sourceInstanceId !== undefined && input.sourceInstanceId !== input.targetInstanceId;
+  return (
+    input.sourceInstanceId !== undefined &&
+    (input.sourceInstanceId !== input.targetInstanceId ||
+      (input.sourceModel !== undefined && input.sourceModel !== input.targetModel))
+  );
 }
 
 function renderActivity(activity: OrchestrationThread["activities"][number]): string {

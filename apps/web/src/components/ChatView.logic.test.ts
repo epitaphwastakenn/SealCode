@@ -24,6 +24,7 @@ import {
   hasServerAcknowledgedLocalDispatch,
   isBranchMismatchDismissedForSession,
   reconcileMountedTerminalThreadIds,
+  requiresContextTransferForSelection,
   reconcileRetainedMountedThreadIds,
   resolveThreadMetadataUpdateForNextTurn,
   resolveSendEnvMode,
@@ -311,6 +312,61 @@ describe("resolveSendEnvMode", () => {
   it("keeps worktree mode only for git repositories", () => {
     expect(resolveSendEnvMode({ requestedEnvMode: "worktree", isGitRepo: true })).toBe("worktree");
     expect(resolveSendEnvMode({ requestedEnvMode: "worktree", isGitRepo: false })).toBe("local");
+  });
+});
+
+describe("requiresContextTransferForSelection", () => {
+  const thread = {
+    modelSelection: {
+      instanceId: ProviderInstanceId.make("codex"),
+      model: "gpt-5-codex",
+    },
+    session: {
+      status: "ready",
+      providerInstanceId: ProviderInstanceId.make("codex"),
+    },
+  } as Thread;
+
+  it("detects a provider handoff", () => {
+    expect(
+      requiresContextTransferForSelection({
+        thread,
+        nextModelSelection: {
+          instanceId: ProviderInstanceId.make("claudeAgent"),
+          model: "claude-opus-4-6",
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("detects a model handoff on the same provider", () => {
+    expect(
+      requiresContextTransferForSelection({
+        thread,
+        nextModelSelection: {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5.6-sol",
+        },
+      }),
+    ).toBe(true);
+  });
+
+  it("ignores unchanged or stopped sessions", () => {
+    expect(
+      requiresContextTransferForSelection({
+        thread,
+        nextModelSelection: thread.modelSelection,
+      }),
+    ).toBe(false);
+    expect(
+      requiresContextTransferForSelection({
+        thread: { ...thread, session: { ...thread.session, status: "stopped" } } as Thread,
+        nextModelSelection: {
+          instanceId: ProviderInstanceId.make("claudeAgent"),
+          model: "claude-opus-4-6",
+        },
+      }),
+    ).toBe(false);
   });
 });
 

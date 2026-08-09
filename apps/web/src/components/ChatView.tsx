@@ -158,6 +158,7 @@ import {
   CheckCircle2Icon,
   ChevronDownIcon,
   GitBranchIcon,
+  LoaderCircleIcon,
   WifiOffIcon,
 } from "lucide-react";
 import { cn, randomHex } from "~/lib/utils";
@@ -298,6 +299,7 @@ import {
   reconcileMountedTerminalThreadIds,
   resolveThreadMetadataUpdateForNextTurn,
   resolveSendEnvMode,
+  requiresContextTransferForSelection,
   revokeBlobPreviewUrl,
   revokeUserMessagePreviewUrls,
   shouldWriteThreadErrorToCurrentServerThread,
@@ -339,6 +341,12 @@ const EMPTY_ACTIVITIES: OrchestrationThreadActivity[] = [];
 const EMPTY_PROVIDERS: ServerProvider[] = [];
 const EMPTY_PROVIDER_SKILLS: ServerProvider["skills"] = [];
 const EMPTY_PENDING_USER_INPUT_ANSWERS: Record<string, PendingUserInputDraftAnswer> = {};
+
+type ContextTransferProgress = {
+  readonly target: ModelSelection;
+  readonly previousTurnId: TurnId | null;
+};
+
 function useDraftHeroLayoutTransition(isDraftHeroState: boolean) {
   const transitionGroupRef = useRef<HTMLDivElement | null>(null);
   const composerAnchorRef = useRef<HTMLDivElement | null>(null);
@@ -2256,6 +2264,43 @@ function ChatViewContent(props: ChatViewProps) {
     activeThread?.session ?? null,
     localDispatchStartedAt,
   );
+  const [contextTransferProgress, setContextTransferProgress] =
+    useState<ContextTransferProgress | null>(null);
+  useEffect(() => {
+    if (contextTransferProgress === null) {
+      return;
+    }
+    const turnStarted =
+      activeLatestTurn !== null &&
+      activeLatestTurn.turnId !== contextTransferProgress.previousTurnId;
+    const targetSessionRunning =
+      phase === "running" &&
+      activeThread?.session?.providerInstanceId === contextTransferProgress.target.instanceId;
+    const turnEnded = turnStarted && activeLatestTurn?.state !== "running";
+    if (threadError || targetSessionRunning || turnEnded) {
+      setContextTransferProgress(null);
+    }
+  }, [
+    activeLatestTurn,
+    activeThread?.session?.providerInstanceId,
+    contextTransferProgress,
+    phase,
+    threadError,
+  ]);
+
+  const contextTransferBannerItem = useMemo<ComposerBannerStackItem | null>(() => {
+    if (contextTransferProgress === null) {
+      return null;
+    }
+    return {
+      id: `context-transfer:${activeThread?.id ?? "unknown"}`,
+      variant: "default",
+      urgent: true,
+      icon: <LoaderCircleIcon className="animate-spin" aria-hidden="true" />,
+      title: "Transferring context",
+      description: "Preparing the previous model's context for this model.",
+    };
+  }, [activeThread?.id, contextTransferProgress]);
   useEffect(() => {
     attachmentPreviewHandoffByMessageIdRef.current = attachmentPreviewHandoffByMessageId;
   }, [attachmentPreviewHandoffByMessageId]);
@@ -4437,6 +4482,8 @@ function ChatViewContent(props: ChatViewProps) {
       item.urgent === true || item.variant === "error" || item.variant === "warning";
     const urgentSystemItems = systemComposerBannerItems.filter(isUrgentSystemItem);
     const calmSystemItems = systemComposerBannerItems.filter((item) => !isUrgentSystemItem(item));
+    const contextTransferItems =
+      contextTransferBannerItem === null ? [] : [contextTransferBannerItem];
     const backgroundLivenessItems =
       backgroundLivenessBannerItem === null ? [] : [backgroundLivenessBannerItem];
     const wokeThreadItems = wokeThreadBannerItem === null ? [] : [wokeThreadBannerItem];
@@ -4444,6 +4491,7 @@ function ChatViewContent(props: ChatViewProps) {
     if (!localCheckoutBranchMismatch || !showBranchMismatchBanner || !activeBranchMismatchKey) {
       return [
         ...urgentSystemItems,
+        ...contextTransferItems,
         ...backgroundLivenessItems,
         ...calmSystemItems,
         ...wokeThreadItems,
@@ -4452,6 +4500,7 @@ function ChatViewContent(props: ChatViewProps) {
     }
     return [
       ...urgentSystemItems,
+      ...contextTransferItems,
       ...backgroundLivenessItems,
       ...calmSystemItems,
       ...wokeThreadItems,
@@ -4499,6 +4548,7 @@ function ChatViewContent(props: ChatViewProps) {
   }, [
     activeBranchMismatchKey,
     backgroundLivenessBannerItem,
+    contextTransferBannerItem,
     handleRestoreThreadBranch,
     isRestoringThreadBranch,
     localCheckoutBranchMismatch,
@@ -4951,6 +5001,11 @@ function ChatViewContent(props: ChatViewProps) {
       return;
     }
     const threadIdForSend = activeThread.id;
+    const contextTransferRequired = requiresContextTransferForSelection({
+      thread: activeThread,
+      nextModelSelection: ctxSelectedModelSelection,
+    });
+    const previousTurnId = activeLatestTurn?.turnId ?? null;
     const isFirstMessage = !isServerThread || activeThread.messages.length === 0;
     const baseBranchForWorktree =
       isFirstMessage && sendEnvMode === "worktree" && !activeThread.worktreePath
@@ -5191,6 +5246,12 @@ function ChatViewContent(props: ChatViewProps) {
       } else {
         turnStartSucceeded = true;
         acknowledgeActiveThreadWoke();
+        if (contextTransferRequired) {
+          setContextTransferProgress({
+            target: ctxSelectedModelSelection,
+            previousTurnId,
+          });
+        }
       }
     }
 

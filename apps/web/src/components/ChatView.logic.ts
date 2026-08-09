@@ -367,6 +367,22 @@ export function threadHasStarted(thread: Thread | null | undefined): boolean {
   );
 }
 
+export function requiresContextTransferForSelection(input: {
+  thread: Thread | null | undefined;
+  nextModelSelection: ModelSelection;
+}): boolean {
+  const thread = input.thread;
+  const session = thread?.session;
+  if (!session || session.status === "stopped") {
+    return false;
+  }
+  const currentInstanceId = session.providerInstanceId ?? thread.modelSelection.instanceId;
+  return (
+    currentInstanceId !== input.nextModelSelection.instanceId ||
+    thread.modelSelection.model !== input.nextModelSelection.model
+  );
+}
+
 export async function waitForStartedServerThread(
   threadRef: ScopedThreadRef,
   timeoutMs = 1_000,

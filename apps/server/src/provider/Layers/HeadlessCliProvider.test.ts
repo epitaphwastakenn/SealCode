@@ -2,6 +2,7 @@ import { describe, expect, it } from "@effect/vitest";
 import { ProviderDriverKind } from "@t3tools/contracts";
 
 import {
+  normalizeHeadlessCliModel,
   parseHeadlessCliModelRows,
   type HeadlessCliProviderDefinition,
 } from "./HeadlessCliProvider.ts";
@@ -46,5 +47,20 @@ describe("parseHeadlessCliModelRows", () => {
     expect(models.map(({ slug, name }) => ({ slug, name }))).toEqual([
       { slug: "gemini-3.6-flash", name: "Gemini 3.6 Flash" },
     ]);
+  });
+});
+
+describe("normalizeHeadlessCliModel", () => {
+  it("removes legacy Antigravity effort suffixes before invoking the CLI", () => {
+    expect(normalizeHeadlessCliModel("antigravity", "gemini-3.6-flash-high")).toBe(
+      "gemini-3.6-flash",
+    );
+    expect(normalizeHeadlessCliModel("antigravity", "gemini-3.6-flash")).toBe("gemini-3.6-flash");
+  });
+
+  it("preserves CommandCode model IDs", () => {
+    expect(normalizeHeadlessCliModel("commandcode", "gpt-5.3-codex-high")).toBe(
+      "gpt-5.3-codex-high",
+    );
   });
 });

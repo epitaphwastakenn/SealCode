@@ -28,6 +28,7 @@ import {
   ProviderAdapterValidationError,
 } from "../Errors.ts";
 import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
+import { normalizeHeadlessCliModel } from "./HeadlessCliProvider.ts";
 
 export interface HeadlessCliSettings {
   readonly binaryPath: string;
@@ -86,7 +87,10 @@ function commandArgs(input: {
   readonly send: ProviderSendTurnInput;
   readonly session: ProviderSession;
 }): ReadonlyArray<string> {
-  const model = input.send.modelSelection?.model ?? input.session.model;
+  const model = normalizeHeadlessCliModel(
+    input.protocol,
+    input.send.modelSelection?.model ?? input.session.model,
+  );
   const effort = resolveReasoningEffort(input.send);
   if (input.protocol === "antigravity") {
     return [

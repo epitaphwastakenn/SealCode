@@ -33,6 +33,14 @@ export interface HeadlessCliProviderDefinition {
   readonly defaultModels: ReadonlyArray<{ readonly slug: string; readonly name: string }>;
 }
 
+export function normalizeHeadlessCliModel(
+  protocol: HeadlessCliProviderDefinition["protocol"],
+  model: string | undefined,
+): string | undefined {
+  if (!model || protocol !== "antigravity") return model;
+  return model.replace(/-(?:low|medium|high)$/i, "");
+}
+
 const HEADLESS_CLI_CAPABILITIES: ModelCapabilities = createModelCapabilities({
   optionDescriptors: [
     buildSelectOptionDescriptor({

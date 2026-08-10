@@ -2,6 +2,7 @@ import {
   type ModelCapabilities,
   type OpenCodeSettings,
   type ServerProviderModel,
+  type SubscriptionUsage,
 } from "@t3tools/contracts";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
@@ -22,6 +23,7 @@ import {
   openCodeRuntimeErrorDetail,
   type OpenCodeInventory,
 } from "../opencodeRuntime.ts";
+import { mapOpenCodeStats } from "../openCodeUsage.ts";
 import type { Agent, ProviderListResponse } from "@opencode-ai/sdk/v2";
 
 const OPENCODE_PRESENTATION = {
@@ -306,7 +308,11 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
   const customModels = openCodeSettings.customModels;
   const isExternalServer = openCodeSettings.serverUrl.trim().length > 0;
 
-  const fallback = (cause: unknown, version: string | null = null) => {
+  const fallback = (
+    cause: unknown,
+    version: string | null = null,
+    subscriptionUsage?: SubscriptionUsage,
+  ) => {
     const failure = formatOpenCodeProbeError({
       cause,
       isExternalServer,
@@ -322,6 +328,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
         version,
         status: "error",
         auth: { status: "unknown" },
+        ...(subscriptionUsage ? { subscriptionUsage } : {}),
         message: failure.message,
       },
     });
@@ -345,6 +352,35 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
     });
   }
 
+  // Local activity is independent of model inventory and the version probe.
+  // Collect it first so a broken inventory/version check cannot hide valid
+  // `opencode stats` data from the Usage screen.
+  const subscriptionUsage = isExternalServer
+    ? undefined
+    : yield* Effect.exit(
+        openCodeRuntime
+          .runOpenCodeCommand({
+            binaryPath: openCodeSettings.binaryPath,
+            args: ["stats", "--days", "30"],
+            environment: resolvedEnvironment,
+          })
+          .pipe(
+            Effect.mapError(
+              (cause) =>
+                new OpenCodeProbeError({ cause, detail: openCodeRuntimeErrorDetail(cause) }),
+            ),
+          ),
+      ).pipe(
+        Effect.map((statsExit) =>
+          statsExit._tag === "Success" && statsExit.value.code === 0
+            ? mapOpenCodeStats({
+                stdout: `${statsExit.value.stdout}\n${statsExit.value.stderr}`,
+                checkedAt,
+              })
+            : undefined,
+        ),
+      );
+
   let version: string | null = null;
   if (!isExternalServer) {
     const versionExit = yield* Effect.exit(
@@ -361,7 +397,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
         ),
     );
     if (versionExit._tag === "Failure") {
-      return fallback(Cause.squash(versionExit.cause));
+      return fallback(Cause.squash(versionExit.cause), null, subscriptionUsage);
     }
     version = parseGenericCliVersion(versionExit.value.stdout) ?? null;
 
@@ -371,6 +407,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
           `Unable to determine OpenCode version from \`opencode --version\` output. SealCode requires OpenCode v${MINIMUM_OPENCODE_VERSION} or newer.`,
         ),
         null,
+        subscriptionUsage,
       );
     }
     if (compareSemverVersions(version, MINIMUM_OPENCODE_VERSION) < 0) {
@@ -384,6 +421,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
           version,
           status: "error",
           auth: { status: "unknown" },
+          ...(subscriptionUsage ? { subscriptionUsage } : {}),
           message: `OpenCode v${version} is too old. Upgrade to v${MINIMUM_OPENCODE_VERSION} or newer.`,
         },
       });
@@ -421,7 +459,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
     ),
   );
   if (inventoryExit._tag === "Failure") {
-    return fallback(Cause.squash(inventoryExit.cause), version);
+    return fallback(Cause.squash(inventoryExit.cause), version, subscriptionUsage);
   }
 
   const models = providerModelsFromSettings(
@@ -443,6 +481,7 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
         status: connectedCount > 0 ? "authenticated" : "unknown",
         type: "opencode",
       },
+      ...(subscriptionUsage ? { subscriptionUsage } : {}),
       message:
         connectedCount > 0
           ? `${connectedCount} upstream provider${connectedCount === 1 ? "" : "s"} connected through ${isExternalServer ? "the configured OpenCode server" : "OpenCode"}.`

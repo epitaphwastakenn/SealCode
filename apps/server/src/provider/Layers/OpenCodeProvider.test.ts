@@ -33,6 +33,7 @@ const runtimeMock = {
   state: {
     runVersionError: null as Error | null,
     versionStdout: DEFAULT_VERSION_STDOUT,
+    statsStdout: "",
     inventoryError: null as Error | null,
     closeCalls: 0,
     inventory: {
@@ -43,6 +44,7 @@ const runtimeMock = {
   reset() {
     this.state.runVersionError = null;
     this.state.versionStdout = DEFAULT_VERSION_STDOUT;
+    this.state.statsStdout = "";
     this.state.inventoryError = null;
     this.state.closeCalls = 0;
     this.state.inventory = {
@@ -73,7 +75,7 @@ const OpenCodeRuntimeTestDouble: OpenCodeRuntimeShape = {
         external: Boolean(serverUrl),
       };
     }),
-  runOpenCodeCommand: () =>
+  runOpenCodeCommand: ({ args }) =>
     runtimeMock.state.runVersionError
       ? Effect.fail(
           new OpenCodeRuntimeError({
@@ -82,7 +84,12 @@ const OpenCodeRuntimeTestDouble: OpenCodeRuntimeShape = {
             cause: runtimeMock.state.runVersionError,
           }),
         )
-      : Effect.succeed({ stdout: runtimeMock.state.versionStdout, stderr: "", code: 0 }),
+      : Effect.succeed({
+          stdout:
+            args[0] === "stats" ? runtimeMock.state.statsStdout : runtimeMock.state.versionStdout,
+          stderr: "",
+          code: 0,
+        }),
   createOpenCodeSdkClient: () =>
     ({}) as unknown as ReturnType<OpenCodeRuntimeShape["createOpenCodeSdkClient"]>,
   loadOpenCodeInventory: () =>
@@ -227,6 +234,40 @@ it.layer(testLayer)("checkOpenCodeProviderStatus", (it) => {
         snapshot.message,
         "Failed to execute OpenCode CLI health check: opencode models failed",
       );
+    }),
+  );
+
+  it.effect("keeps local stats available when model inventory fails", () =>
+    Effect.gen(function* () {
+      runtimeMock.state.statsStdout = "Sessions 4\nMessages 9\nDays 2\n";
+      runtimeMock.state.inventoryError = new Error("opencode models failed");
+      const snapshot = yield* checkOpenCodeProviderStatus(makeOpenCodeSettings(), process.cwd());
+
+      NodeAssert.deepEqual(snapshot.subscriptionUsage, {
+        plan: "OpenCode local activity",
+        windows: [],
+        metrics: [
+          { id: "sessions", label: "Sessions", value: "4" },
+          { id: "messages", label: "Messages", value: "9" },
+          { id: "days", label: "Days", value: "2" },
+        ],
+        checkedAt: snapshot.subscriptionUsage?.checkedAt,
+      });
+    }),
+  );
+
+  it.effect("keeps local stats available when the version probe is invalid", () =>
+    Effect.gen(function* () {
+      runtimeMock.state.statsStdout = "Sessions 3\nMessages 7\nDays 1\n";
+      runtimeMock.state.versionStdout = "not-a-version\n";
+      const snapshot = yield* checkOpenCodeProviderStatus(makeOpenCodeSettings(), process.cwd());
+
+      NodeAssert.equal(snapshot.status, "error");
+      NodeAssert.deepEqual(snapshot.subscriptionUsage?.metrics, [
+        { id: "sessions", label: "Sessions", value: "3" },
+        { id: "messages", label: "Messages", value: "7" },
+        { id: "days", label: "Days", value: "1" },
+      ]);
     }),
   );
 });

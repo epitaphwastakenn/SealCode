@@ -40,7 +40,11 @@ const makeProjectionThreadSessionRepository = Effect.gen(function* () {
           ${row.lastError},
           ${row.updatedAt}
         )
-        ON CONFLICT (thread_id)
+        -- Existing installations may use either the original single-column
+        -- thread key or the multi-provider composite key.  Leaving the
+        -- conflict target implicit lets SQLite update the row for both
+        -- schemas while preserving the provider-specific rows.
+        ON CONFLICT
         DO UPDATE SET
           status = excluded.status,
           provider_name = excluded.provider_name,
@@ -68,6 +72,8 @@ const makeProjectionThreadSessionRepository = Effect.gen(function* () {
           updated_at AS "updatedAt"
         FROM projection_thread_sessions
         WHERE thread_id = ${threadId}
+        ORDER BY updated_at DESC
+        LIMIT 1
       `,
   });
 

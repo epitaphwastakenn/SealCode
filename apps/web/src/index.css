@@ -1408,6 +1408,28 @@ body {
   --desktop-window-right-resize-inset: 6px;
 }
 
+/* Electron's Windows 11 Acrylic backdrop is visible only through transparent
+   renderer surfaces. Keep the main workspace panels opaque, but let the
+   navigation panel reveal the desktop behind its tinted glass surface. */
+html.electron-windows,
+html.electron-windows body {
+  background-color: transparent;
+}
+
+html.electron-windows body {
+  background-image: none;
+}
+
+html.electron-windows [data-app-sidebar] {
+  background-color: color-mix(in srgb, var(--sidebar) 72%, transparent);
+  backdrop-filter: blur(28px) saturate(140%);
+  -webkit-backdrop-filter: blur(28px) saturate(140%);
+}
+
+html.electron-windows [data-app-sidebar] [data-slot="sidebar-inner"] {
+  background-color: color-mix(in srgb, var(--sidebar) 72%, transparent);
+}
+
 /* App-chrome grain. Baked into each surface's own background (behind
    content) rather than a fixed overlay on top: a full-viewport overlay
    forces the compositor to re-blend every frame any animation produces,

@@ -173,7 +173,9 @@ export const make = Effect.gen(function* () {
           ${runtime.resumeCursor},
           ${runtime.runtimePayload}
         )
-        ON CONFLICT (thread_id)
+        -- Support both the original one-row-per-thread schema and the
+        -- multi-provider composite key used by existing installations.
+        ON CONFLICT
         DO UPDATE SET
           provider_name = excluded.provider_name,
           provider_instance_id = excluded.provider_instance_id,
@@ -203,6 +205,8 @@ export const make = Effect.gen(function* () {
           runtime_payload_json AS "runtimePayload"
         FROM provider_session_runtime
         WHERE thread_id = ${threadId}
+        ORDER BY last_seen_at DESC
+        LIMIT 1
       `,
   });
 

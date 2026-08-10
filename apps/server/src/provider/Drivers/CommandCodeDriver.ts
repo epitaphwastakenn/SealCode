@@ -2,6 +2,7 @@ import { CommandCodeSettings, ProviderDriverKind, type ServerProvider } from "@t
 import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { ChildProcessSpawner } from "effect/unstable/process";
@@ -14,8 +15,10 @@ import { makeHeadlessCliAdapter } from "../Layers/HeadlessCliAdapter.ts";
 import {
   buildInitialHeadlessCliProvider,
   checkHeadlessCliProviderStatus,
+  makeHeadlessCliModelCapabilityRegistry,
   type HeadlessCliProviderDefinition,
 } from "../Layers/HeadlessCliProvider.ts";
+import { probeCommandCodeSubscriptionUsage } from "../commandCodeUsage.ts";
 import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
 import {
   defaultProviderContinuationIdentity,
@@ -46,6 +49,7 @@ const DEFINITION: HeadlessCliProviderDefinition = {
     { slug: "claude-sonnet-5", name: "Claude Sonnet 5" },
     { slug: "gpt-5.6-terra", name: "GPT-5.6 Terra" },
   ],
+  subscriptionUsage: probeCommandCodeSubscriptionUsage,
 };
 const UPDATE = makeStaticProviderMaintenanceResolver(
   makeManualOnlyProviderMaintenanceCapabilities({
@@ -60,6 +64,49 @@ export type CommandCodeDriverEnv =
   | FileSystem.FileSystem
   | Path.Path
   | ServerSettingsService;
+
+function resolveBinaryPath(
+  path: Path.Path,
+  config: CommandCodeSettings,
+  environment: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+) {
+  if (config.binaryPath !== "commandcode" || platform !== "win32") return config.binaryPath;
+  const appData = environment.APPDATA;
+  return appData ? path.join(appData, "npm", "commandcode.cmd") : config.binaryPath;
+}
+
+const COMMAND_CODE_MODEL_REFERENCE = [
+  "dist",
+  "bundled",
+  "command-code-knowledge",
+  "reference",
+  "models.md",
+] as const;
+
+function commandCodeModelCatalogPaths(path: Path.Path, binaryPath: string): ReadonlyArray<string> {
+  const directory = path.dirname(binaryPath);
+  return [
+    path.join(directory, "node_modules", "command-code", ...COMMAND_CODE_MODEL_REFERENCE),
+    path.join(directory, "..", "command-code", ...COMMAND_CODE_MODEL_REFERENCE),
+    path.join(directory, "bundled", ...COMMAND_CODE_MODEL_REFERENCE.slice(1)),
+    path.join(directory, ...COMMAND_CODE_MODEL_REFERENCE),
+  ];
+}
+
+function readCommandCodeModelCatalog(
+  fileSystem: FileSystem.FileSystem,
+  path: Path.Path,
+  binaryPath: string,
+) {
+  return Effect.gen(function* () {
+    for (const candidate of commandCodeModelCatalogPaths(path, binaryPath)) {
+      const contents = yield* fileSystem.readFileString(candidate).pipe(Effect.option);
+      if (Option.isSome(contents)) return contents.value;
+    }
+    return "";
+  });
+}
 
 const stampIdentity =
   (input: {
@@ -83,11 +130,23 @@ export const CommandCodeDriver: ProviderDriver<CommandCodeSettings, CommandCodeD
   defaultConfig: () => decodeSettings({}),
   create: ({ instanceId, displayName, accentColor, environment, enabled, config }) =>
     Effect.gen(function* () {
+      const path = yield* Path.Path;
+      const fileSystem = yield* FileSystem.FileSystem;
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const hostPlatform = yield* HostProcessPlatform;
       const serverSettings = yield* ServerSettingsService;
       const processEnv = mergeProviderInstanceEnvironment(environment);
-      const effectiveConfig = { ...config, enabled } satisfies CommandCodeSettings;
+      const effectiveConfig = {
+        ...config,
+        enabled,
+        binaryPath: resolveBinaryPath(path, config, processEnv, hostPlatform),
+      } satisfies CommandCodeSettings;
+      const capabilityRegistry = makeHeadlessCliModelCapabilityRegistry();
+      const modelCatalog = yield* readCommandCodeModelCatalog(
+        fileSystem,
+        path,
+        effectiveConfig.binaryPath,
+      );
       const stamp = stampIdentity({ instanceId, displayName, accentColor });
       const maintenanceCapabilities = yield* resolveProviderMaintenanceCapabilitiesEffect(UPDATE, {
         binaryPath: effectiveConfig.binaryPath,
@@ -98,6 +157,7 @@ export const CommandCodeDriver: ProviderDriver<CommandCodeSettings, CommandCodeD
         instanceId,
         environment: processEnv,
         protocol: "commandcode",
+        modelCapabilities: capabilityRegistry.resolve,
       });
       const snapshotSettings = makeProviderSnapshotSettingsSource(effectiveConfig, serverSettings);
       const snapshot = yield* makeManagedServerProvider<
@@ -108,8 +168,13 @@ export const CommandCodeDriver: ProviderDriver<CommandCodeSettings, CommandCodeD
         streamSettings: snapshotSettings.streamSettings,
         haveSettingsChanged: haveProviderSnapshotSettingsChanged,
         initialSnapshot: (settings) =>
-          buildInitialHeadlessCliProvider(DEFINITION, settings.provider).pipe(Effect.map(stamp)),
-        checkProvider: checkHeadlessCliProviderStatus(DEFINITION, effectiveConfig, processEnv).pipe(
+          buildInitialHeadlessCliProvider(DEFINITION, settings.provider, capabilityRegistry).pipe(
+            Effect.map(stamp),
+          ),
+        checkProvider: checkHeadlessCliProviderStatus(DEFINITION, effectiveConfig, processEnv, {
+          capabilityRegistry,
+          modelCatalog,
+        }).pipe(
           Effect.map(stamp),
           Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         ),

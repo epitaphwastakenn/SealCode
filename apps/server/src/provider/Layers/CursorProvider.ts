@@ -7,6 +7,7 @@ import type {
   ServerProviderAuth,
   ServerProviderModel,
   ServerProviderState,
+  SubscriptionUsage,
 } from "@t3tools/contracts";
 import type * as EffectAcpSchema from "effect-acp/schema";
 import { causeErrorTag } from "@t3tools/shared/observability";
@@ -46,6 +47,7 @@ import {
 } from "../providerMaintenance.ts";
 import * as AcpSessionRuntime from "../acp/AcpSessionRuntime.ts";
 import { CursorListAvailableModelsResponse } from "../acp/CursorAcpExtension.ts";
+import { probeCursorSubscriptionUsage } from "../cursorUsage.ts";
 
 const decodeCursorListAvailableModelsResponse = Schema.decodeUnknownEffect(
   CursorListAvailableModelsResponse,
@@ -628,6 +630,7 @@ export function buildCursorProviderSnapshot(input: {
   readonly parsed: CursorAboutResult;
   readonly discoveredModels?: ReadonlyArray<ServerProviderModel>;
   readonly discoveryWarning?: string;
+  readonly subscriptionUsage?: SubscriptionUsage;
 }): ServerProviderDraft {
   const message = joinProviderMessages(input.parsed.message, input.discoveryWarning);
   return buildServerProvider({
@@ -645,6 +648,7 @@ export function buildCursorProviderSnapshot(input: {
       status:
         input.discoveryWarning && input.parsed.status === "ready" ? "warning" : input.parsed.status,
       auth: input.parsed.auth,
+      ...(input.subscriptionUsage ? { subscriptionUsage: input.subscriptionUsage } : {}),
       ...(message ? { message } : {}),
     },
   });
@@ -1101,6 +1105,10 @@ export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(
       discoveredModels = discoveryExit.value;
     }
   }
+  const subscriptionUsage = yield* probeCursorSubscriptionUsage({
+    environment: environment ?? process.env,
+    checkedAt,
+  });
   return buildCursorProviderSnapshot({
     checkedAt,
     cursorSettings,
@@ -1110,6 +1118,7 @@ export const checkCursorProviderStatus = Effect.fn("checkCursorProviderStatus")(
       () => [] as const,
     ),
     ...(discoveryWarning ? { discoveryWarning } : {}),
+    ...(subscriptionUsage ? { subscriptionUsage } : {}),
   });
 });
 

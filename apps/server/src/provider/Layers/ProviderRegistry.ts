@@ -131,6 +131,14 @@ export const mergeProviderSnapshot = (
     ? nextProvider
     : {
         ...nextProvider,
+        // A provider status refresh can succeed while its account-usage
+        // endpoint is temporarily unavailable. Keep the last valid usage
+        // snapshot in that case so the UI never regresses to a blank or
+        // indefinitely pending card.
+        ...(nextProvider.subscriptionUsage === undefined &&
+        previousProvider.subscriptionUsage !== undefined
+          ? { subscriptionUsage: previousProvider.subscriptionUsage }
+          : {}),
         models: mergeProviderModels(nextProvider, previousProvider.models, nextProvider.models),
       };
 

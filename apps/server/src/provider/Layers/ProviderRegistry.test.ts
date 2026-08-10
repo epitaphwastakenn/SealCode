@@ -1,4 +1,5 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodePath from "node:path";
 import { describe, it, assert } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -598,6 +599,38 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
         assert.deepStrictEqual(mergeProviderSnapshot(previousProvider, refreshedProvider).models, [
           ...previousProvider.models,
         ]);
+      });
+
+      it("preserves the last valid subscription usage when a refresh omits it", () => {
+        const previousProvider = {
+          instanceId: ProviderInstanceId.make("cursor"),
+          driver: ProviderDriverKind.make("cursor"),
+          status: "ready",
+          enabled: true,
+          installed: true,
+          auth: { status: "authenticated" },
+          checkedAt: "2026-04-14T00:00:00.000Z",
+          version: "1.0.0",
+          subscriptionUsage: {
+            plan: "Cursor team usage",
+            windows: [],
+            metrics: [{ id: "team-members", label: "Team members", value: "4" }],
+            checkedAt: "2026-04-14T00:00:00.000Z",
+          },
+          models: [],
+          slashCommands: [],
+          skills: [],
+        } as const satisfies ServerProvider;
+        const { subscriptionUsage: _previousUsage, ...refreshedProviderBase } = previousProvider;
+        const refreshedProvider = {
+          ...refreshedProviderBase,
+          checkedAt: "2026-04-14T00:01:00.000Z",
+        } satisfies ServerProvider;
+
+        assert.deepStrictEqual(
+          mergeProviderSnapshot(previousProvider, refreshedProvider).subscriptionUsage,
+          previousProvider.subscriptionUsage,
+        );
       });
 
       it("drops stale OpenCode models missing from a successful refresh", () => {
@@ -1550,8 +1583,10 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
             decodeServerSettings(
               deepMerge(encodedDefaultServerSettings, {
                 providers: {
+                  antigravity: { enabled: false },
                   codex: { enabled: true, binaryPath: firstMissing },
                   claudeAgent: { enabled: false },
+                  commandcode: { enabled: false },
                   cursor: { enabled: false },
                   grok: { enabled: false },
                   opencode: { enabled: false },
@@ -1803,8 +1838,10 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               );
 
               assert.deepStrictEqual(providers.map((provider) => provider.instanceId).toSorted(), [
+                "antigravity",
                 "claudeAgent",
                 "codex",
+                "commandcode",
                 "cursor",
                 "grok",
                 "opencode",
@@ -2194,7 +2231,7 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
           assert.strictEqual(status.status, "ready");
           assert.deepStrictEqual(
             recorded.commands.map((command) => command.env?.CLAUDE_CONFIG_DIR),
-            [claudeConfigDir],
+            [NodePath.resolve(claudeConfigDir)],
           );
         }).pipe(Effect.provide(recorded.layer));
       });

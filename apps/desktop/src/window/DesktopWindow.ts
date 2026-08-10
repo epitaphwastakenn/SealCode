@@ -47,6 +47,12 @@ type WindowTitleBarOptions = Pick<
   "titleBarOverlay" | "titleBarStyle" | "trafficLightPosition"
 >;
 
+function getWindowBackdropOptions(
+  platform: NodeJS.Platform,
+): Pick<Electron.BrowserWindowConstructorOptions, "backgroundMaterial"> {
+  return platform === "win32" ? { backgroundMaterial: "acrylic" } : {};
+}
+
 type DesktopWindowRuntimeServices =
   | DesktopEnvironment.DesktopEnvironment
   | DesktopAssets.DesktopAssets
@@ -228,6 +234,9 @@ function syncWindowAppearance(
     }
 
     window.setBackgroundColor(getInitialWindowBackgroundColor(shouldUseDarkColors));
+    if (platform === "win32") {
+      window.setBackgroundMaterial("acrylic");
+    }
     const { titleBarOverlay } = getWindowTitleBarOptions(shouldUseDarkColors, platform);
     if (typeof titleBarOverlay === "object") {
       window.setTitleBarOverlay(titleBarOverlay);
@@ -341,6 +350,7 @@ export const make = Effect.gen(function* () {
       autoHideMenuBar: true,
       ...(environment.platform === "darwin" ? { disableAutoHideCursor: true } : {}),
       backgroundColor: getInitialWindowBackgroundColor(shouldUseDarkColors),
+      ...getWindowBackdropOptions(environment.platform),
       ...iconOption,
       title: environment.displayName,
       ...getWindowTitleBarOptions(shouldUseDarkColors, environment.platform),

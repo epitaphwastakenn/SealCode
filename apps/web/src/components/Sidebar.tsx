@@ -28,7 +28,7 @@ import {
   scopeThreadRef,
   scopedThreadKey,
 } from "@t3tools/client-runtime/environment";
-import type { ScopedThreadRef } from "@t3tools/contracts";
+import type { ModelSelection, ScopedThreadRef } from "@t3tools/contracts";
 import {
   AlarmClockIcon,
   AlarmClockOffIcon,
@@ -40,6 +40,7 @@ import {
   FolderIcon,
   FolderPlusIcon,
   GitBranchIcon,
+  GripVerticalIcon,
   EllipsisIcon,
   MessageSquareIcon,
   PinIcon,
@@ -90,7 +91,11 @@ import {
   buildSidebarProjectSnapshots,
   type SidebarProjectSnapshot,
 } from "../sidebarProjectGrouping";
-import { legacyProjectCwdPreferenceKey, useUiStateStore } from "../uiStateStore";
+import {
+  legacyProjectCwdPreferenceKey,
+  resolveProjectExpanded,
+  useUiStateStore,
+} from "../uiStateStore";
 import { useThreadSelectionStore } from "../threadSelectionStore";
 import { useThreadActions } from "../hooks/useThreadActions";
 import { useHandleNewThread } from "../hooks/useHandleNewThread";
@@ -176,6 +181,26 @@ function threadTimeLabel(thread: SidebarThreadSummary): string {
   return compactSidebarTimeLabel(formatRelativeTimeLabel(timestamp));
 }
 
+function projectExpansionPreferenceKeys(project: SidebarProjectSnapshot): string[] {
+  return [
+    project.projectKey,
+    ...project.memberProjects.map((member) => member.physicalProjectKey),
+    ...project.memberProjects.map((member) => legacyProjectCwdPreferenceKey(member.workspaceRoot)),
+  ];
+}
+
+function folderDragId(projectKey: string): string {
+  return `folder:${projectKey}`;
+}
+
+function threadDragId(threadKey: string): string {
+  return `thread:${threadKey}`;
+}
+
+function unprefixedDragId(id: string, prefix: "folder:" | "thread:"): string | null {
+  return id.startsWith(prefix) ? id.slice(prefix.length) : null;
+}
+
 // Settled rows read "how long ago did this wrap up", matching their sort
 // key: both go through resolveSettledTimestamp so label and order can't
 // disagree.
@@ -222,14 +247,85 @@ function terminalProcessLabel(count: number): string {
   return `${count} terminal ${count === 1 ? "process" : "processes"} running`;
 }
 
+type SidebarModelUsage = {
+  selection: ModelSelection;
+  providerEntry: ProviderInstanceEntry | null;
+  modelLabel: string;
+};
+
+function sidebarModelSelectionKey(selection: ModelSelection): string {
+  return `${selection.instanceId}\u0000${selection.model}\u0000${JSON.stringify(selection.options ?? [])}`;
+}
+
+function resolveSidebarModelUsages(
+  thread: SidebarThreadSummary,
+  providerEntryByInstanceId: ReadonlyMap<string, ProviderInstanceEntry>,
+): ReadonlyArray<SidebarModelUsage> {
+  const selections = [...(thread.modelsUsed ?? []), thread.modelSelection];
+  const seen = new Set<string>();
+  const usages: SidebarModelUsage[] = [];
+
+  for (const selection of selections) {
+    const key = sidebarModelSelectionKey(selection);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const providerEntry =
+      providerEntryByInstanceId.get(`${thread.environmentId}:${selection.instanceId}`) ?? null;
+    const model = providerEntry?.models.find((candidate) => candidate.slug === selection.model);
+    usages.push({
+      selection,
+      providerEntry,
+      modelLabel: model ? getTriggerDisplayModelLabel(model) : selection.model,
+    });
+  }
+
+  return usages;
+}
+
+function SidebarModelUsageSummary(props: { usages: ReadonlyArray<SidebarModelUsage> }) {
+  if (props.usages.length === 0) return null;
+  const labels = props.usages.map((usage) => usage.modelLabel);
+  const description = `Models used: ${labels.join(", ")}`;
+  const iconUsages = props.usages.filter(
+    (usage): usage is SidebarModelUsage & { providerEntry: ProviderInstanceEntry } =>
+      usage.providerEntry !== null,
+  );
+  const providerIconUsages = iconUsages.filter((usage, index) => {
+    const firstIndex = iconUsages.findIndex(
+      (candidate) => candidate.providerEntry.driverKind === usage.providerEntry.driverKind,
+    );
+    return firstIndex === index;
+  });
+
+  return (
+    <span
+      data-testid="sidebar-model-usage-summary"
+      aria-label={description}
+      title={description}
+      className="inline-flex shrink-0 items-center gap-1 text-sidebar-muted-foreground/70"
+    >
+      {providerIconUsages.slice(0, 3).map((usage) => (
+        <span key={usage.providerEntry.driverKind} className="inline-flex">
+          <ProviderInstanceIcon
+            driverKind={usage.providerEntry.driverKind}
+            displayName={usage.providerEntry.displayName}
+            iconClassName="size-3.5"
+          />
+        </span>
+      ))}
+      {props.usages.length > 1 ? (
+        <span className="ml-0.5 text-[10px] font-medium tabular-nums">{props.usages.length}</span>
+      ) : null}
+    </span>
+  );
+}
+
 function SidebarThreadTooltip({
   thread,
   projectTitle,
   projectCwd,
   environmentLabel,
-  driverKind,
-  modelInstanceId,
-  modelLabel,
+  modelUsages,
   branchMismatch,
   terminalStatus,
   terminalProcessCount,
@@ -238,9 +334,7 @@ function SidebarThreadTooltip({
   projectTitle: string | null;
   projectCwd: string | null;
   environmentLabel: string | null;
-  driverKind: ProviderInstanceEntry["driverKind"] | null;
-  modelInstanceId: string;
-  modelLabel: string;
+  modelUsages: ReadonlyArray<SidebarModelUsage>;
   branchMismatch: {
     threadBranch: string;
     currentBranch: string;
@@ -291,14 +385,25 @@ function SidebarThreadTooltip({
               </div>
             </div>
           ) : null}
-          {driverKind ? (
-            <div className="flex min-w-0 items-center gap-2">
-              <ProviderInstanceIcon
-                driverKind={driverKind}
-                displayName={thread.session?.providerName ?? modelInstanceId}
-                iconClassName="size-3 shrink-0 grayscale opacity-60"
-              />
-              <div className="min-w-0 truncate text-foreground/75">{modelLabel}</div>
+          {modelUsages.length > 0 ? (
+            <div className="grid min-w-0 gap-1">
+              {modelUsages.map((usage) => (
+                <div
+                  key={sidebarModelSelectionKey(usage.selection)}
+                  className="flex min-w-0 items-center gap-2"
+                >
+                  {usage.providerEntry ? (
+                    <ProviderInstanceIcon
+                      driverKind={usage.providerEntry.driverKind}
+                      displayName={usage.providerEntry.displayName}
+                      iconClassName="size-3 shrink-0 grayscale opacity-60"
+                    />
+                  ) : (
+                    <span className="size-3 shrink-0 rounded-full bg-muted-foreground/40" />
+                  )}
+                  <div className="min-w-0 truncate text-foreground/75">{usage.modelLabel}</div>
+                </div>
+              ))}
             </div>
           ) : null}
           {terminalStatus ? (
@@ -344,6 +449,76 @@ function SortablePinnedThreadRow(props: {
   return props.children({ listeners, setNodeRef, transform, transition, isDragging });
 }
 
+function SortableSidebarFolder(props: {
+  id: string;
+  label: string;
+  expanded: boolean;
+  pinned: boolean;
+  onToggle: () => void;
+  onTogglePinned: () => void;
+  children: ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: props.id,
+  });
+  return (
+    <li
+      ref={setNodeRef}
+      style={{
+        transform: CSS.Translate.toString(transform),
+        transition,
+      }}
+      className={cn("list-none", isDragging && "z-20 opacity-80")}
+    >
+      <div className="group/sidebar-folder flex min-w-0 items-center gap-1 rounded-md hover:bg-sidebar-row-hover">
+        <button
+          type="button"
+          aria-expanded={props.expanded}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-left text-xs font-medium text-sidebar-muted-foreground/85 hover:text-sidebar-foreground"
+          onClick={props.onToggle}
+        >
+          <ChevronDownIcon
+            aria-hidden
+            className={cn("size-3 shrink-0 transition-transform", !props.expanded && "-rotate-90")}
+          />
+          <FolderIcon aria-hidden className="size-3.5 shrink-0" />
+          <span className="min-w-0 flex-1 truncate">{props.label}</span>
+        </button>
+        <button
+          type="button"
+          aria-label={`${props.pinned ? "Unpin" : "Pin"} project ${props.label}`}
+          aria-pressed={props.pinned}
+          title={`${props.pinned ? "Unpin" : "Pin"} project`}
+          className={cn(
+            "inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-opacity hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring",
+            props.pinned
+              ? "text-primary"
+              : "text-sidebar-muted-foreground/45 opacity-0 group-hover/sidebar-folder:opacity-100",
+          )}
+          onClick={(event) => {
+            event.stopPropagation();
+            props.onTogglePinned();
+          }}
+        >
+          <PinIcon aria-hidden className="size-3.5" />
+        </button>
+        <button
+          type="button"
+          aria-label={`Reorder folder ${props.label}`}
+          title="Drag to reorder folder"
+          className="mr-1 inline-flex size-6 shrink-0 cursor-grab items-center justify-center rounded-md text-sidebar-muted-foreground/45 opacity-0 transition-opacity hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring active:cursor-grabbing group-hover/sidebar-folder:opacity-100"
+          {...attributes}
+          {...listeners}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <GripVerticalIcon aria-hidden className="size-3.5" />
+        </button>
+      </div>
+      {props.expanded ? <ul className="flex flex-col gap-px pl-3">{props.children}</ul> : null}
+    </li>
+  );
+}
+
 const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   thread: SidebarThreadSummary;
   variant: "card" | "slim";
@@ -368,6 +543,9 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   // sortable bag applied to the card root so the whole card drags (the
   // pointer sensor's distance constraint keeps plain clicks working).
   sortable?: SortablePinnedRowBag | undefined;
+  // Folder-grouped inbox rows use a single-line presentation so the sidebar
+  // stays dense without changing the full pinned/shelf card treatment.
+  compact?: boolean;
   // Compact wake countdown ("2h") for rows in the snoozed shelf.
   snoozeWakeLabelText: string | null;
   // When a snooze ended (timer or early wake); drives the Woke pill until
@@ -549,16 +727,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
     onChangeRequestState(threadKey, prState);
   }, [onChangeRequestState, prState, threadKey]);
 
-  const modelInstanceId = thread.session?.providerInstanceId ?? thread.modelSelection.instanceId;
-  const providerEntry =
-    props.providerEntryByInstanceId.get(`${thread.environmentId}:${modelInstanceId}`) ?? null;
-  const driverKind = providerEntry?.driverKind ?? null;
-  const selectedModel = providerEntry?.models.find(
-    (model) => model.slug === thread.modelSelection.model,
+  const modelUsages = useMemo(
+    () => resolveSidebarModelUsages(thread, props.providerEntryByInstanceId),
+    [props.providerEntryByInstanceId, thread],
   );
-  const modelLabel = selectedModel
-    ? getTriggerDisplayModelLabel(selectedModel)
-    : thread.modelSelection.model;
 
   const isRemote =
     props.currentEnvironmentId !== null && thread.environmentId !== props.currentEnvironmentId;
@@ -569,9 +741,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
       projectTitle={props.projectTitle}
       projectCwd={props.projectCwd}
       environmentLabel={props.environmentLabel}
-      driverKind={driverKind}
-      modelInstanceId={modelInstanceId}
-      modelLabel={modelLabel}
+      modelUsages={modelUsages}
       branchMismatch={branchMismatch}
       terminalStatus={terminalStatus}
       terminalProcessCount={terminalProcessCount}
@@ -721,7 +891,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
   ) : (
     <span
       className={cn(
-        "min-w-0 flex-1 text-sm transition-opacity motion-reduce:transition-none",
+        "min-w-0 flex-1 transition-opacity motion-reduce:transition-none",
+        props.compact ? "text-[13px] leading-4" : "text-sm",
         shouldRecede ? "font-normal" : "font-medium",
         variant === "card"
           ? cn(
@@ -818,6 +989,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 fallbackIcon={MessageSquareIcon}
               />
             </span>
+            <SidebarModelUsageSummary usages={modelUsages} />
             {title}
             {terminalStatusIcon}
             {isRegeneratingTitle ? (
@@ -911,6 +1083,116 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
     );
   }
 
+  if (props.compact) {
+    const compactStatus = topStatus ? (
+      isWokeStatus ? (
+        <button
+          type="button"
+          aria-label="Dismiss Woke notification"
+          title="Dismiss Woke notification"
+          onClick={handleAcknowledgeWokeClick}
+          className={cn(
+            "inline-flex max-w-32 cursor-pointer items-center gap-1 truncate text-[10px] font-medium outline-none hover:underline focus-visible:ring-2 focus-visible:ring-ring",
+            topStatus.className,
+          )}
+        >
+          <AlarmClockIcon aria-hidden className="size-3 shrink-0" />
+          <span role="status" className="truncate">
+            {topStatus.label}
+          </span>
+        </button>
+      ) : (
+        <span
+          className={cn(
+            "inline-flex max-w-32 items-center gap-1 truncate text-[10px] font-medium",
+            topStatus.className,
+          )}
+        >
+          {topStatus.icon === "working" ? (
+            <CircleDashedIcon aria-hidden className="size-3 shrink-0" />
+          ) : topStatus.icon === "done" ? (
+            <CircleCheckIcon aria-hidden className="size-3 shrink-0" />
+          ) : null}
+          <span role="status" className="truncate">
+            {topStatus.label}
+          </span>
+          {status === "working" ? (
+            <span aria-hidden className="shrink-0">
+              <WorkingDuration startedAt={resolveWorkingStartedAt(thread)} />
+            </span>
+          ) : null}
+        </span>
+      )
+    ) : (
+      <span className="text-[10px] tabular-nums text-secondary-label">
+        {threadTimeLabel(thread)}
+      </span>
+    );
+    const sortable = props.sortable;
+
+    return (
+      <li
+        data-thread-item
+        ref={sortable?.setNodeRef}
+        style={
+          sortable
+            ? {
+                transform: CSS.Translate.toString(sortable.transform),
+                transition: sortable.transition,
+              }
+            : undefined
+        }
+        {...(sortable?.listeners ?? {})}
+        className={cn(
+          "list-none [content-visibility:auto] [contain-intrinsic-size:auto_32px]",
+          sortable?.isDragging && "z-20 opacity-80",
+        )}
+      >
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <div
+                role="button"
+                tabIndex={0}
+                data-testid="sidebar-row-compact"
+                aria-busy={isRegeneratingTitle || undefined}
+                className={cn(rowSurfaceClassName, "flex h-8 items-center gap-2 px-2")}
+                onClick={handleClick}
+                onDoubleClick={handleDoubleClick}
+                onKeyDown={handleKeyDown}
+                onContextMenu={handleContextMenu}
+              />
+            }
+          >
+            <SidebarModelUsageSummary usages={modelUsages} />
+            {title}
+            {isRegeneratingTitle ? (
+              <span role="status" className="sr-only">
+                Regenerating title
+              </span>
+            ) : null}
+            {terminalStatusIcon}
+            <span className="ml-auto flex min-w-0 shrink-0 items-center gap-1.5">
+              {compactStatus}
+              {props.settlementSupported ? (
+                <button
+                  type="button"
+                  aria-label="Settle thread"
+                  title="Settle thread"
+                  onClick={handleSettleClick}
+                  className="inline-flex size-5 cursor-pointer items-center justify-center rounded-md text-muted-foreground opacity-0 transition-opacity hover:text-foreground focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-ring group-hover/sidebar-row:opacity-100"
+                >
+                  <CheckIcon aria-hidden className="size-3" />
+                </button>
+              ) : null}
+            </span>
+          </TooltipTrigger>
+          {detailsTooltip}
+        </Tooltip>
+      </li>
+    );
+  }
+
   const diff = latestTurnDiff(thread);
 
   const sortable = props.sortable;
@@ -950,20 +1232,22 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
         >
           <div className="relative z-10 h-[4.875rem] px-[var(--sidebar-row-content-inset)] py-[var(--sidebar-content-inset)]">
             <div className="flex h-5 min-w-0 items-center gap-1.5">
-              <ProjectFavicon
-                environmentId={thread.environmentId}
-                cwd={props.projectCwd ?? ""}
-                className="size-4 shrink-0"
-              />
               {props.projectTitle ? (
-                <span
-                  className={cn(
-                    "min-w-0 flex-1 truncate text-secondary-label text-xs",
-                    shouldRecede ? "font-normal" : "font-medium",
-                  )}
-                >
-                  {props.projectTitle}
-                </span>
+                <>
+                  <ProjectFavicon
+                    environmentId={thread.environmentId}
+                    cwd={props.projectCwd ?? ""}
+                    className="size-4 shrink-0"
+                  />
+                  <span
+                    className={cn(
+                      "min-w-0 flex-1 truncate text-secondary-label text-xs",
+                      shouldRecede ? "font-normal" : "font-medium",
+                    )}
+                  >
+                    {props.projectTitle}
+                  </span>
+                </>
               ) : (
                 <span className="flex-1" />
               )}
@@ -1070,7 +1354,8 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 ) : null}
               </span>
             </div>
-            <div className="mt-1 flex min-w-0">
+            <div className="mt-1 flex min-w-0 items-center gap-1.5">
+              <SidebarModelUsageSummary usages={modelUsages} />
               {title}
               {isRegeneratingTitle ? (
                 <span role="status" className="sr-only">
@@ -1102,15 +1387,6 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                 {isRemote ? (
                   <span className="inline-flex shrink-0 items-center text-sidebar-muted-foreground/70">
                     <ServerIcon aria-hidden className="size-3.5" />
-                  </span>
-                ) : null}
-                {driverKind ? (
-                  <span className="inline-flex shrink-0 items-center opacity-60">
-                    <ProviderInstanceIcon
-                      driverKind={driverKind}
-                      displayName={thread.session?.providerName ?? modelInstanceId}
-                      iconClassName="size-3.5"
-                    />
                   </span>
                 ) : null}
               </span>
@@ -1163,16 +1439,10 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
     activeThreadBranch: thread.branch,
     currentGitBranch: gitStatus.data?.refName ?? null,
   });
-  const modelInstanceId = thread.session?.providerInstanceId ?? thread.modelSelection.instanceId;
-  const providerEntry =
-    props.providerEntryByInstanceId.get(`${thread.environmentId}:${modelInstanceId}`) ?? null;
-  const driverKind = providerEntry?.driverKind ?? null;
-  const selectedModel = providerEntry?.models.find(
-    (model) => model.slug === thread.modelSelection.model,
+  const modelUsages = useMemo(
+    () => resolveSidebarModelUsages(thread, props.providerEntryByInstanceId),
+    [props.providerEntryByInstanceId, thread],
   );
-  const modelLabel = selectedModel
-    ? getTriggerDisplayModelLabel(selectedModel)
-    : thread.modelSelection.model;
   const runningTerminalIds = useThreadRunningTerminalIds({
     environmentId: thread.environmentId,
     threadId: thread.id,
@@ -1212,14 +1482,8 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
             className="size-4 shrink-0"
             fallbackIcon={MessageSquareIcon}
           />
+          <SidebarModelUsageSummary usages={modelUsages} />
           <span className="min-w-0 flex-1 truncate">{thread.title}</span>
-          {driverKind ? (
-            <ProviderInstanceIcon
-              driverKind={driverKind}
-              displayName={thread.session?.providerName ?? modelInstanceId}
-              iconClassName="size-3.5 opacity-60"
-            />
-          ) : null}
           <span className="shrink-0 text-xs text-muted-foreground/55 tabular-nums">
             {threadTimeLabel(thread)}
           </span>
@@ -1229,9 +1493,7 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
           projectTitle={props.projectTitle}
           projectCwd={props.projectCwd}
           environmentLabel={props.environmentLabel}
-          driverKind={driverKind}
-          modelInstanceId={modelInstanceId}
-          modelLabel={modelLabel}
+          modelUsages={modelUsages}
           branchMismatch={branchMismatch}
           terminalStatus={terminalStatus}
           terminalProcessCount={runningTerminalIds.length}
@@ -1244,6 +1506,13 @@ const SidebarSearchResultRow = memo(function SidebarSearchResultRow(props: {
 export default function Sidebar() {
   const projects = useProjects();
   const projectOrder = useUiStateStore((store) => store.projectOrder);
+  const pinnedProjectKeys = useUiStateStore((store) => store.pinnedProjectKeys);
+  const projectExpandedById = useUiStateStore((store) => store.projectExpandedById);
+  const threadOrderByGroup = useUiStateStore((store) => store.threadOrderByGroup);
+  const setProjectExpanded = useUiStateStore((store) => store.setProjectExpanded);
+  const setProjectPinned = useUiStateStore((store) => store.setProjectPinned);
+  const reorderProjects = useUiStateStore((store) => store.reorderProjects);
+  const reorderThreads = useUiStateStore((store) => store.reorderThreads);
   const threads = useThreadShells();
   const router = useRouter();
   const { isMobile, setOpenMobile } = useSidebar();
@@ -1383,6 +1652,41 @@ export default function Sidebar() {
   const projectGroups = useMemo(
     () => sortLogicalProjectsForSidebar(unsortedProjectGroups, threads, sidebarProjectSortOrder),
     [sidebarProjectSortOrder, threads, unsortedProjectGroups],
+  );
+  const projectGroupKeyByPreferenceId = useMemo(() => {
+    const mapping = new Map<string, string>();
+    for (const group of projectGroups) {
+      mapping.set(group.projectKey, group.projectKey);
+      for (const member of group.memberProjects) {
+        mapping.set(member.physicalProjectKey, group.projectKey);
+        mapping.set(legacyProjectCwdPreferenceKey(member.workspaceRoot), group.projectKey);
+      }
+    }
+    return mapping;
+  }, [projectGroups]);
+  const orderedProjectGroups = useMemo(
+    () =>
+      orderItemsByPreferredIds({
+        items: projectGroups,
+        preferredIds: projectOrder.flatMap((id) => {
+          const groupKey = projectGroupKeyByPreferenceId.get(id);
+          return groupKey ? [groupKey] : [];
+        }),
+        getId: (group) => group.projectKey,
+      }),
+    [projectGroupKeyByPreferenceId, projectGroups, projectOrder],
+  );
+  const projectGroupKeyByScopedRef = useMemo(
+    () =>
+      new Map(
+        projectGroups.flatMap((group) =>
+          group.memberProjectRefs.map(
+            (projectRef) =>
+              [`${projectRef.environmentId}:${projectRef.projectId}`, group.projectKey] as const,
+          ),
+        ),
+      ),
+    [projectGroups],
   );
   const serverConfigs = useAtomValue(environmentServerConfigsAtom);
   const providerEntryByInstanceId = useMemo(
@@ -1705,9 +2009,102 @@ export default function Sidebar() {
     return routeThread === undefined ? [] : [routeThread];
   }, [routeThreadKey, snoozedShelfExpanded, snoozedThreads]);
 
+  const activeThreadsByProjectGroup = useMemo(() => {
+    const grouped = new Map<string, EnvironmentThreadShell[]>();
+    for (const thread of activeThreads) {
+      const groupKey = projectGroupKeyByScopedRef.get(
+        `${thread.environmentId}:${thread.projectId}`,
+      );
+      if (!groupKey) continue;
+      const existing = grouped.get(groupKey);
+      if (existing) {
+        existing.push(thread);
+      } else {
+        grouped.set(groupKey, [thread]);
+      }
+    }
+    return grouped;
+  }, [activeThreads, projectGroupKeyByScopedRef]);
+  const activeThreadGroups = useMemo(
+    () =>
+      orderedProjectGroups.flatMap((group) => {
+        const threadsForGroup = activeThreadsByProjectGroup.get(group.projectKey) ?? [];
+        if (threadsForGroup.length === 0) return [];
+        return [
+          {
+            group,
+            threads: orderItemsByPreferredIds({
+              items: threadsForGroup,
+              preferredIds: threadOrderByGroup[group.projectKey] ?? [],
+              getId: (thread) => scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+            }),
+          },
+        ];
+      }),
+    [activeThreadsByProjectGroup, orderedProjectGroups, threadOrderByGroup],
+  );
+  const pinnedProjectKeySet = useMemo(() => new Set(pinnedProjectKeys), [pinnedProjectKeys]);
+  const pinnedActiveThreadGroups = useMemo(
+    () => activeThreadGroups.filter((entry) => pinnedProjectKeySet.has(entry.group.projectKey)),
+    [activeThreadGroups, pinnedProjectKeySet],
+  );
+  const regularActiveThreadGroups = useMemo(
+    () => activeThreadGroups.filter((entry) => !pinnedProjectKeySet.has(entry.group.projectKey)),
+    [activeThreadGroups, pinnedProjectKeySet],
+  );
+  const visibleActiveThreadGroups = useMemo(
+    () => [...pinnedActiveThreadGroups, ...regularActiveThreadGroups],
+    [pinnedActiveThreadGroups, regularActiveThreadGroups],
+  );
+  const groupedActiveThreadKeys = useMemo(
+    () =>
+      new Set(
+        activeThreadGroups.flatMap((entry) =>
+          entry.threads.map((thread) =>
+            scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+          ),
+        ),
+      ),
+    [activeThreadGroups],
+  );
+  const ungroupedActiveThreads = useMemo(
+    () =>
+      activeThreads.filter(
+        (thread) =>
+          !groupedActiveThreadKeys.has(
+            scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+          ) && !projectGroupKeyByScopedRef.has(`${thread.environmentId}:${thread.projectId}`),
+      ),
+    [activeThreads, groupedActiveThreadKeys, projectGroupKeyByScopedRef],
+  );
+  const activeThreadGroupKeyByThreadKey = useMemo(() => {
+    const mapping = new Map<string, string>();
+    for (const entry of activeThreadGroups) {
+      for (const thread of entry.threads) {
+        mapping.set(
+          scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+          entry.group.projectKey,
+        );
+      }
+    }
+    return mapping;
+  }, [activeThreadGroups]);
+
   const orderedThreads = useMemo(
-    () => [...pinnedThreads, ...activeThreads, ...visibleSnoozedThreads, ...renderedSettledThreads],
-    [pinnedThreads, activeThreads, visibleSnoozedThreads, renderedSettledThreads],
+    () => [
+      ...pinnedThreads,
+      ...activeThreadGroups.flatMap((entry) => entry.threads),
+      ...ungroupedActiveThreads,
+      ...visibleSnoozedThreads,
+      ...renderedSettledThreads,
+    ],
+    [
+      activeThreadGroups,
+      pinnedThreads,
+      renderedSettledThreads,
+      ungroupedActiveThreads,
+      visibleSnoozedThreads,
+    ],
   );
   const orderedThreadKeys = useMemo(
     () =>
@@ -2026,6 +2423,59 @@ export default function Sidebar() {
   // and holding it would launder a stale order into later drags.
   const pinnedDndSensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+  const sidebarDndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+  );
+  const handleSidebarDragEnd = useCallback(
+    (event: DragEndEvent) => {
+      const activeId = String(event.active.id);
+      const overId = event.over === null ? null : String(event.over.id);
+      if (overId === null || activeId === overId) return;
+
+      const draggedFolderKey = unprefixedDragId(activeId, "folder:");
+      if (draggedFolderKey !== null) {
+        const targetFolderKey = unprefixedDragId(overId, "folder:");
+        if (targetFolderKey === null) return;
+        const draggedFolder = orderedProjectGroups.find(
+          (group) => group.projectKey === draggedFolderKey,
+        );
+        const targetFolder = orderedProjectGroups.find(
+          (group) => group.projectKey === targetFolderKey,
+        );
+        if (!draggedFolder || !targetFolder) return;
+        reorderProjects(
+          orderedProjects.map(getProjectOrderKey),
+          draggedFolder.memberProjects.map((member) => member.physicalProjectKey),
+          targetFolder.memberProjects.map((member) => member.physicalProjectKey),
+        );
+        return;
+      }
+
+      const draggedThreadKey = unprefixedDragId(activeId, "thread:");
+      const targetThreadKey = unprefixedDragId(overId, "thread:");
+      if (draggedThreadKey === null || targetThreadKey === null) return;
+      const groupKey = activeThreadGroupKeyByThreadKey.get(draggedThreadKey);
+      if (!groupKey || activeThreadGroupKeyByThreadKey.get(targetThreadKey) !== groupKey) return;
+      const group = activeThreadGroups.find((entry) => entry.group.projectKey === groupKey);
+      if (!group) return;
+      reorderThreads(
+        groupKey,
+        group.threads.map((thread) =>
+          scopedThreadKey(scopeThreadRef(thread.environmentId, thread.id)),
+        ),
+        draggedThreadKey,
+        targetThreadKey,
+      );
+    },
+    [
+      activeThreadGroupKeyByThreadKey,
+      activeThreadGroups,
+      orderedProjectGroups,
+      orderedProjects,
+      reorderProjects,
+      reorderThreads,
+    ],
   );
   const [optimisticPinnedOrder, setOptimisticPinnedOrder] = useState<{
     readonly order: readonly string[];
@@ -3030,6 +3480,8 @@ export default function Sidebar() {
                     thread: EnvironmentThreadShell,
                     section: "pinned" | "active" | "snoozed" | "settled",
                     sortable?: SortablePinnedRowBag,
+                    hideProjectContext = false,
+                    compact = false,
                   ) => {
                     const threadKey = scopedThreadKey(
                       scopeThreadRef(thread.environmentId, thread.id),
@@ -3095,10 +3547,13 @@ export default function Sidebar() {
                           projectCwdByKey.get(`${thread.environmentId}:${thread.projectId}`) ?? null
                         }
                         projectTitle={
-                          projectDisplayNameByKey.get(
-                            `${thread.environmentId}:${thread.projectId}`,
-                          ) ?? null
+                          hideProjectContext
+                            ? null
+                            : (projectDisplayNameByKey.get(
+                                `${thread.environmentId}:${thread.projectId}`,
+                              ) ?? null)
                         }
+                        compact={compact}
                         providerEntryByInstanceId={providerEntryByInstanceId}
                         onThreadClick={handleThreadClick}
                         onThreadActivate={navigateToThread}
@@ -3166,7 +3621,95 @@ export default function Sidebar() {
                       />,
                     );
                   }
-                  for (const thread of activeThreads) {
+                  if (activeThreadGroups.length > 0) {
+                    items.push(
+                      <DndContext
+                        key="active-folder-dnd"
+                        sensors={sidebarDndSensors}
+                        collisionDetection={closestCenter}
+                        modifiers={[restrictToVerticalAxis, restrictToFirstScrollableAncestor]}
+                        onDragEnd={handleSidebarDragEnd}
+                      >
+                        <SortableContext
+                          items={visibleActiveThreadGroups.map((entry) =>
+                            folderDragId(entry.group.projectKey),
+                          )}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          {visibleActiveThreadGroups.flatMap((entry, index) => {
+                            const preferenceKeys = projectExpansionPreferenceKeys(entry.group);
+                            const expanded = resolveProjectExpanded(
+                              projectExpandedById,
+                              preferenceKeys,
+                            );
+                            const sectionHeader =
+                              index === 0 && pinnedActiveThreadGroups.length > 0 ? (
+                                <li
+                                  key="pinned-projects-header"
+                                  className="mb-0.5 mt-1 list-none px-2 text-[10px] font-semibold uppercase tracking-wide text-sidebar-muted-foreground/60"
+                                >
+                                  Pinned
+                                </li>
+                              ) : index === pinnedActiveThreadGroups.length &&
+                                pinnedActiveThreadGroups.length > 0 &&
+                                regularActiveThreadGroups.length > 0 ? (
+                                <li
+                                  key="projects-header"
+                                  className="mb-0.5 mt-2 list-none border-t border-sidebar-border/50 px-2 pt-2 text-[10px] font-semibold uppercase tracking-wide text-sidebar-muted-foreground/60"
+                                >
+                                  Threads
+                                </li>
+                              ) : null;
+                            const folder = (
+                              <SortableSidebarFolder
+                                key={entry.group.projectKey}
+                                id={folderDragId(entry.group.projectKey)}
+                                label={entry.group.displayName}
+                                expanded={expanded}
+                                pinned={pinnedProjectKeySet.has(entry.group.projectKey)}
+                                onToggle={() => setProjectExpanded(preferenceKeys, !expanded)}
+                                onTogglePinned={() =>
+                                  setProjectPinned(
+                                    entry.group.projectKey,
+                                    !pinnedProjectKeySet.has(entry.group.projectKey),
+                                  )
+                                }
+                              >
+                                <SortableContext
+                                  items={entry.threads.map((thread) =>
+                                    threadDragId(
+                                      scopedThreadKey(
+                                        scopeThreadRef(thread.environmentId, thread.id),
+                                      ),
+                                    ),
+                                  )}
+                                  strategy={verticalListSortingStrategy}
+                                >
+                                  {entry.threads.map((thread) => {
+                                    const threadKey = scopedThreadKey(
+                                      scopeThreadRef(thread.environmentId, thread.id),
+                                    );
+                                    return (
+                                      <SortablePinnedThreadRow
+                                        key={threadKey}
+                                        id={threadDragId(threadKey)}
+                                      >
+                                        {(bag) =>
+                                          renderThreadRow(thread, "active", bag, true, true)
+                                        }
+                                      </SortablePinnedThreadRow>
+                                    );
+                                  })}
+                                </SortableContext>
+                              </SortableSidebarFolder>
+                            );
+                            return sectionHeader ? [sectionHeader, folder] : [folder];
+                          })}
+                        </SortableContext>
+                      </DndContext>,
+                    );
+                  }
+                  for (const thread of ungroupedActiveThreads) {
                     items.push(renderThreadRow(thread, "active"));
                   }
                   // Snoozed shelf: between the inbox and Settled — out of the

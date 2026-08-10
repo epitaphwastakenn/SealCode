@@ -10,9 +10,11 @@ import {
   type PersistedUiState,
   persistState,
   reorderProjects,
+  reorderThreads,
   resolveProjectExpanded,
   setDefaultAdvertisedEndpointKey,
   setProjectExpanded,
+  setProjectPinned,
   setThreadChangedFilesExpanded,
   type UiState,
 } from "./uiStateStore";
@@ -21,6 +23,8 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
     projectExpandedById: {},
     projectOrder: [],
+    pinnedProjectKeys: [],
+    threadOrderByGroup: {},
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
     defaultAdvertisedEndpointKey: null,
@@ -81,6 +85,14 @@ describe("uiStateStore pure functions", () => {
     expect(setProjectExpanded(next, keys, false)).toBe(next);
   });
 
+  it("pins and unpins logical project groups", () => {
+    const pinned = setProjectPinned(makeUiState(), "logical-project", true);
+
+    expect(pinned.pinnedProjectKeys).toEqual(["logical-project"]);
+    expect(setProjectPinned(pinned, "logical-project", true)).toBe(pinned);
+    expect(setProjectPinned(pinned, "logical-project", false).pinnedProjectKeys).toEqual([]);
+  });
+
   it("reorders from the current atom-derived project order", () => {
     const project1 = ProjectId.make("project-1");
     const project2 = ProjectId.make("project-2");
@@ -114,6 +126,25 @@ describe("uiStateStore pure functions", () => {
     expect(reorderProjects(state, currentOrder, ["env-local:proj-a"], ["env-local:proj-a"])).toBe(
       state,
     );
+  });
+
+  it("persists thread order within a project group", () => {
+    const state = makeUiState();
+
+    const next = reorderThreads(
+      state,
+      "repo",
+      ["thread-a", "thread-b", "thread-c"],
+      "thread-c",
+      "thread-a",
+    );
+
+    expect(next.threadOrderByGroup).toEqual({
+      repo: ["thread-c", "thread-a", "thread-b"],
+    });
+    expect(
+      reorderThreads(next, "repo", ["thread-c", "thread-a", "thread-b"], "thread-c", "thread-c"),
+    ).toBe(next);
   });
 
   it("stores explicit changed-file expansion choices", () => {
@@ -154,6 +185,7 @@ describe("parsePersistedState", () => {
         invalid: "no" as unknown as boolean,
       },
       projectOrder: ["physical-b", "", "physical-a", "physical-b"],
+      pinnedProjectKeys: ["logical-b", "", "logical-a", "logical-b"],
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
         invalid: "not-a-date",
@@ -173,6 +205,8 @@ describe("parsePersistedState", () => {
         logical: false,
       },
       projectOrder: ["physical-b", "physical-a"],
+      pinnedProjectKeys: ["logical-b", "logical-a"],
+      threadOrderByGroup: {},
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
@@ -270,6 +304,8 @@ describe("uiStateStore persistence", () => {
         logical: false,
       },
       projectOrder: ["physical-b", "physical-a"],
+      pinnedProjectKeys: ["logical-b"],
+      threadOrderByGroup: {},
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
@@ -292,6 +328,8 @@ describe("uiStateStore persistence", () => {
         logical: false,
       },
       projectOrder: ["physical-b", "physical-a"],
+      pinnedProjectKeys: ["logical-b"],
+      threadOrderByGroup: {},
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },

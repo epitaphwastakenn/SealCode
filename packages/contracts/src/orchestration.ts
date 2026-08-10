@@ -358,6 +358,9 @@ export const OrchestrationThread = Schema.Struct({
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
   modelSelection: ModelSelection,
+  // Ordered, de-duplicated model selections used by this thread. Optional
+  // on decode so older servers can still hydrate newer clients.
+  modelsUsed: Schema.optional(Schema.Array(ModelSelection)),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),
@@ -426,6 +429,9 @@ export const OrchestrationThreadShell = Schema.Struct({
   projectId: ProjectId,
   title: TrimmedNonEmptyString,
   modelSelection: ModelSelection,
+  // Ordered, de-duplicated model selections used by this thread. Optional
+  // on decode so older servers can still hydrate newer clients.
+  modelsUsed: Schema.optional(Schema.Array(ModelSelection)),
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PROVIDER_INTERACTION_MODE)),

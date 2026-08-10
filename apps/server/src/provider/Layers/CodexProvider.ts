@@ -21,6 +21,7 @@ import type {
   ProviderOptionDescriptor,
   ServerProviderModel,
   ServerProviderSkill,
+  SubscriptionUsage,
 } from "@t3tools/contracts";
 import { PREFERRED_DEFAULT_CODEX_MODELS, ServerSettingsError } from "@t3tools/contracts";
 
@@ -45,6 +46,7 @@ const CODEX_PRESENTATION = {
 
 export interface CodexAppServerProviderSnapshot {
   readonly account: CodexSchema.V2GetAccountResponse;
+  readonly rateLimits?: CodexSchema.V2GetAccountRateLimitsResponse;
   readonly version: string | undefined;
   readonly models: ReadonlyArray<ServerProviderModel>;
   readonly skills: ReadonlyArray<ServerProviderSkill>;
@@ -110,6 +112,81 @@ function codexAccountAuthLabel(account: CodexSchema.V2GetAccountResponse["accoun
 function codexAccountEmail(account: CodexSchema.V2GetAccountResponse["account"]) {
   if (!account || account.type !== "chatgpt") return undefined;
   return account.email;
+}
+
+function codexWindowLabel(durationMins: number | null | undefined, fallback: string): string {
+  if (durationMins === 300) return "5 hour";
+  if (durationMins === 7 * 24 * 60) return "Weekly";
+  if (durationMins !== null && durationMins !== undefined) {
+    if (durationMins >= 27 * 24 * 60 && durationMins <= 32 * 24 * 60) {
+      return "Monthly";
+    }
+    if (durationMins % (24 * 60) === 0) {
+      const days = durationMins / (24 * 60);
+      return `${days} day${days === 1 ? "" : "s"}`;
+    }
+    if (durationMins % 60 === 0) {
+      const hours = durationMins / 60;
+      return `${hours} hour${hours === 1 ? "" : "s"}`;
+    }
+    return `${durationMins} min`;
+  }
+  return fallback;
+}
+
+function unixSecondsToIso(value: number | null | undefined): string | null {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null;
+  return new Date(value * 1_000).toISOString();
+}
+
+function codexPlanLabel(
+  planType: CodexSchema.V2GetAccountRateLimitsResponse["rateLimits"]["planType"],
+): string | null {
+  if (!planType || planType === "unknown") return null;
+  const label = planType
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+  return `ChatGPT ${label}`;
+}
+
+/** Normalize Codex's primary/secondary windows for the shared Usage surface. */
+export function mapCodexSubscriptionUsage(
+  rateLimits: CodexSchema.V2GetAccountRateLimitsResponse | undefined,
+  checkedAt: string,
+): SubscriptionUsage | undefined {
+  if (!rateLimits) return undefined;
+
+  const snapshots =
+    rateLimits.rateLimitsByLimitId && Object.keys(rateLimits.rateLimitsByLimitId).length > 0
+      ? Object.entries(rateLimits.rateLimitsByLimitId)
+      : [[rateLimits.rateLimits.limitId ?? "codex", rateLimits.rateLimits] as const];
+  const windows: Array<SubscriptionUsage["windows"][number]> = [];
+
+  for (const [limitId, snapshot] of snapshots) {
+    for (const [slot, window] of [
+      ["primary", snapshot.primary],
+      ["secondary", snapshot.secondary],
+    ] as const) {
+      if (!window) continue;
+      const durationMins = window.windowDurationMins ?? null;
+      windows.push({
+        id: `${limitId}:${slot}`,
+        label: codexWindowLabel(durationMins, slot === "primary" ? "Primary" : "Secondary"),
+        usedPercent: Math.min(100, Math.max(0, window.usedPercent)),
+        windowDurationMins: durationMins,
+        resetsAt: unixSecondsToIso(window.resetsAt),
+      });
+    }
+  }
+
+  if (windows.length === 0) return undefined;
+  return {
+    plan: codexPlanLabel(rateLimits.rateLimits.planType),
+    windows,
+    metrics: [],
+    checkedAt,
+  };
 }
 
 export function mapCodexModelCapabilities(
@@ -396,6 +473,11 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
     } satisfies CodexAppServerProviderSnapshot;
   }
 
+  const rateLimits =
+    accountResponse.account?.type === "chatgpt"
+      ? yield* client.request("account/rateLimits/read", undefined).pipe(Effect.option)
+      : Option.none<CodexSchema.V2GetAccountRateLimitsResponse>();
+
   const [skillsResponse, models] = yield* Effect.all(
     [
       client.request("skills/list", {
@@ -408,6 +490,7 @@ const probeCodexAppServerProvider = Effect.fn("probeCodexAppServerProvider")(fun
 
   return {
     account: accountResponse,
+    ...(Option.isSome(rateLimits) ? { rateLimits: rateLimits.value } : {}),
     version,
     models: applyPreferredCodexDefaultModel(
       appendCustomCodexModels(models, input.customModels ?? []),
@@ -595,6 +678,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
 
   const snapshot = probeResult.success.value;
   const accountStatus = accountProbeStatus(snapshot.account);
+  const subscriptionUsage = mapCodexSubscriptionUsage(snapshot.rateLimits, checkedAt);
 
   return buildServerProvider({
     presentation: CODEX_PRESENTATION,
@@ -607,6 +691,7 @@ export const checkCodexProviderStatus = Effect.fn("checkCodexProviderStatus")(fu
       version: snapshot.version ?? null,
       status: accountStatus.status,
       auth: accountStatus.auth,
+      ...(subscriptionUsage ? { subscriptionUsage } : {}),
       ...(accountStatus.message ? { message: accountStatus.message } : {}),
     },
   });

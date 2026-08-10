@@ -14,8 +14,10 @@ import { makeHeadlessCliAdapter } from "../Layers/HeadlessCliAdapter.ts";
 import {
   buildInitialHeadlessCliProvider,
   checkHeadlessCliProviderStatus,
+  makeHeadlessCliModelCapabilityRegistry,
   type HeadlessCliProviderDefinition,
 } from "../Layers/HeadlessCliProvider.ts";
+import { probeAntigravitySubscriptionUsage } from "../antigravityUsage.ts";
 import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
 import {
   defaultProviderContinuationIdentity,
@@ -42,6 +44,8 @@ const DEFINITION: HeadlessCliProviderDefinition = {
   displayName: "Antigravity",
   protocol: "antigravity",
   defaultModels: [{ slug: "gemini-3.6-flash", name: "Gemini 3.6 Flash" }],
+  subscriptionUsage: probeAntigravitySubscriptionUsage,
+  probeSubscriptionUsageBeforeCliHealth: true,
 };
 const UPDATE = makeStaticProviderMaintenanceResolver(
   makeManualOnlyProviderMaintenanceCapabilities({ provider: DRIVER_KIND, packageName: null }),
@@ -97,6 +101,7 @@ export const AntigravityDriver: ProviderDriver<AntigravitySettings, AntigravityD
         enabled,
         binaryPath: resolveBinaryPath(path, config, processEnv, hostPlatform),
       } satisfies AntigravitySettings;
+      const capabilityRegistry = makeHeadlessCliModelCapabilityRegistry();
       const stamp = stampIdentity({ instanceId, displayName, accentColor });
       const maintenanceCapabilities = yield* resolveProviderMaintenanceCapabilitiesEffect(UPDATE, {
         binaryPath: effectiveConfig.binaryPath,
@@ -107,6 +112,7 @@ export const AntigravityDriver: ProviderDriver<AntigravitySettings, AntigravityD
         instanceId,
         environment: processEnv,
         protocol: "antigravity",
+        modelCapabilities: capabilityRegistry.resolve,
       });
       const snapshotSettings = makeProviderSnapshotSettingsSource(effectiveConfig, serverSettings);
       const snapshot = yield* makeManagedServerProvider<
@@ -117,8 +123,12 @@ export const AntigravityDriver: ProviderDriver<AntigravitySettings, AntigravityD
         streamSettings: snapshotSettings.streamSettings,
         haveSettingsChanged: haveProviderSnapshotSettingsChanged,
         initialSnapshot: (settings) =>
-          buildInitialHeadlessCliProvider(DEFINITION, settings.provider).pipe(Effect.map(stamp)),
-        checkProvider: checkHeadlessCliProviderStatus(DEFINITION, effectiveConfig, processEnv).pipe(
+          buildInitialHeadlessCliProvider(DEFINITION, settings.provider, capabilityRegistry).pipe(
+            Effect.map(stamp),
+          ),
+        checkProvider: checkHeadlessCliProviderStatus(DEFINITION, effectiveConfig, processEnv, {
+          capabilityRegistry,
+        }).pipe(
           Effect.map(stamp),
           Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
         ),

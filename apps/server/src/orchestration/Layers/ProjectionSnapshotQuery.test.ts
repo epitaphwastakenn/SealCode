@@ -469,6 +469,142 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
     }),
   );
 
+  it.effect("derives the ordered unique model history for a thread shell", () =>
+    Effect.gen(function* () {
+      const snapshotQuery = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+
+      yield* sql`DELETE FROM orchestration_events`;
+      yield* sql`DELETE FROM projection_projects`;
+      yield* sql`DELETE FROM projection_threads`;
+      yield* sql`DELETE FROM projection_state`;
+
+      yield* sql`
+        INSERT INTO projection_projects (
+          project_id,
+          title,
+          workspace_root,
+          default_model_selection_json,
+          scripts_json,
+          created_at,
+          updated_at,
+          deleted_at
+        )
+        VALUES (
+          'project-model-history',
+          'Model history',
+          '/tmp/model-history',
+          '{"instanceId":"codex","model":"gpt-5.3-codex"}',
+          '[]',
+          '2026-04-07T00:00:00.000Z',
+          '2026-04-07T00:00:01.000Z',
+          NULL
+        )
+      `;
+
+      yield* sql`
+        INSERT INTO projection_threads (
+          thread_id,
+          project_id,
+          title,
+          model_selection_json,
+          runtime_mode,
+          interaction_mode,
+          branch,
+          worktree_path,
+          latest_turn_id,
+          latest_user_message_at,
+          pending_approval_count,
+          pending_user_input_count,
+          has_actionable_proposed_plan,
+          created_at,
+          updated_at,
+          archived_at,
+          deleted_at
+        )
+        VALUES (
+          'thread-model-history',
+          'project-model-history',
+          'Model history thread',
+          '{"instanceId":"antigravity","model":"gemini-3.6-flash"}',
+          'full-access',
+          'default',
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          0,
+          0,
+          0,
+          '2026-04-07T00:00:02.000Z',
+          '2026-04-07T00:00:03.000Z',
+          NULL,
+          NULL
+        )
+      `;
+
+      yield* sql`
+        INSERT INTO orchestration_events (
+          event_id,
+          aggregate_kind,
+          stream_id,
+          stream_version,
+          event_type,
+          occurred_at,
+          actor_kind,
+          payload_json,
+          metadata_json
+        )
+        VALUES
+          (
+            'event-model-history-created',
+            'thread',
+            'thread-model-history',
+            0,
+            'thread.created',
+            '2026-04-07T00:00:02.000Z',
+            'server',
+            '{"modelSelection":{"instanceId":"codex","model":"gpt-5.3-codex"}}',
+            '{}'
+          ),
+          (
+            'event-model-history-codex',
+            'thread',
+            'thread-model-history',
+            1,
+            'thread.turn-start-requested',
+            '2026-04-07T00:00:04.000Z',
+            'client',
+            '{"modelSelection":{"instanceId":"codex","model":"gpt-5.3-codex"}}',
+            '{}'
+          ),
+          (
+            'event-model-history-antigravity',
+            'thread',
+            'thread-model-history',
+            2,
+            'thread.turn-start-requested',
+            '2026-04-07T00:00:05.000Z',
+            'client',
+            '{"modelSelection":{"instanceId":"antigravity","model":"gemini-3.6-flash"}}',
+            '{}'
+          )
+      `;
+
+      const snapshot = yield* snapshotQuery.getShellSnapshot();
+      assert.deepEqual(snapshot.threads[0]?.modelsUsed, [
+        {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5.3-codex",
+        },
+        {
+          instanceId: ProviderInstanceId.make("antigravity"),
+          model: "gemini-3.6-flash",
+        },
+      ]);
+    }),
+  );
+
   it.effect("keeps archived threads out of the main shell snapshot", () =>
     Effect.gen(function* () {
       const snapshotQuery = yield* ProjectionSnapshotQuery;

@@ -1,9 +1,11 @@
 import { assert, it } from "@effect/vitest";
+import type * as CodexSchema from "effect-codex-app-server/schema";
 
 import {
   applyPreferredCodexDefaultModel,
   isLegacyCodexModel,
   mapCodexModelCapabilities,
+  mapCodexSubscriptionUsage,
 } from "./CodexProvider.ts";
 
 it("keeps only the GPT-5.6 Codex family out of legacy models", () => {
@@ -153,6 +155,41 @@ it("keeps Codex's own default when no preferred model is available", () => {
   ]);
 
   assert.deepStrictEqual(models.find((model) => model.isDefault)?.slug, "gpt-5.4");
+});
+
+it("normalizes Codex subscription windows for the Usage tab", () => {
+  const usage = mapCodexSubscriptionUsage(
+    {
+      rateLimits: {
+        planType: "pro",
+        primary: { usedPercent: 38, windowDurationMins: 300, resetsAt: 1_800_000_000 },
+        secondary: { usedPercent: 12, windowDurationMins: 10_080, resetsAt: 1_800_604_800 },
+      },
+    } as CodexSchema.V2GetAccountRateLimitsResponse,
+    "2026-08-09T12:00:00.000Z",
+  );
+
+  assert.deepStrictEqual(usage, {
+    plan: "ChatGPT Pro",
+    metrics: [],
+    checkedAt: "2026-08-09T12:00:00.000Z",
+    windows: [
+      {
+        id: "codex:primary",
+        label: "5 hour",
+        usedPercent: 38,
+        windowDurationMins: 300,
+        resetsAt: "2027-01-15T08:00:00.000Z",
+      },
+      {
+        id: "codex:secondary",
+        label: "Weekly",
+        usedPercent: 12,
+        windowDurationMins: 10_080,
+        resetsAt: "2027-01-22T08:00:00.000Z",
+      },
+    ],
+  });
 });
 
 it("ignores custom models that shadow a preferred slug", () => {

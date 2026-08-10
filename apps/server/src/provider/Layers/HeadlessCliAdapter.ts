@@ -8,6 +8,7 @@ import {
   ProviderInstanceId,
   RuntimeItemId,
   type ProviderApprovalDecision,
+  type ModelCapabilities,
   type ProviderRuntimeEvent,
   type ProviderSendTurnInput,
   type ProviderSession,
@@ -17,7 +18,7 @@ import {
   TurnId,
 } from "@t3tools/contracts";
 import { getModelSelectionStringOptionValue } from "@t3tools/shared/model";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import * as Effect from "effect/Effect";
 import * as PubSub from "effect/PubSub";
 import * as Stream from "effect/Stream";
@@ -39,6 +40,7 @@ export interface HeadlessCliAdapterOptions {
   readonly instanceId: ProviderInstanceId;
   readonly environment: NodeJS.ProcessEnv;
   readonly protocol: "antigravity" | "commandcode";
+  readonly modelCapabilities?: (model: string | undefined) => ModelCapabilities;
 }
 
 interface SessionContext {
@@ -80,18 +82,46 @@ function resolveReasoningEffort(input: ProviderSendTurnInput): string | undefine
   );
 }
 
-function commandArgs(input: {
+function resolveHeadlessCliEffort(
+  protocol: HeadlessCliAdapterOptions["protocol"],
+  model: string | undefined,
+  input: ProviderSendTurnInput,
+  capabilities: ModelCapabilities | undefined,
+): string | undefined {
+  const effortDescriptor = capabilities?.optionDescriptors?.find(
+    (descriptor) =>
+      descriptor.id.trim().toLowerCase() === "effort" ||
+      descriptor.id.trim().toLowerCase() === "reasoning" ||
+      descriptor.id.trim().toLowerCase() === "reasoningeffort",
+  );
+  if (protocol === "commandcode" && (!model || !effortDescriptor)) {
+    return undefined;
+  }
+  if (capabilities && !effortDescriptor) {
+    return undefined;
+  }
+  const effort = resolveReasoningEffort(input)?.trim();
+  if (!effort) return undefined;
+  if (effortDescriptor?.type !== "select" || effortDescriptor.options.length === 0) {
+    return effort;
+  }
+  return effortDescriptor.options.find((option) => option.id.toLowerCase() === effort.toLowerCase())
+    ?.id;
+}
+
+export function commandArgs(input: {
   readonly protocol: HeadlessCliAdapterOptions["protocol"];
   readonly prompt: string;
   readonly resumeCursor?: string;
   readonly send: ProviderSendTurnInput;
   readonly session: ProviderSession;
+  readonly capabilities?: ModelCapabilities;
 }): ReadonlyArray<string> {
   const model = normalizeHeadlessCliModel(
     input.protocol,
     input.send.modelSelection?.model ?? input.session.model,
   );
-  const effort = resolveReasoningEffort(input.send);
+  const effort = resolveHeadlessCliEffort(input.protocol, model, input.send, input.capabilities);
   if (input.protocol === "antigravity") {
     return [
       "--print",
@@ -147,7 +177,6 @@ export const makeHeadlessCliAdapter = Effect.fn("makeHeadlessCliAdapter")(functi
   options: HeadlessCliAdapterOptions,
 ) {
   const runtimeEvents = yield* PubSub.unbounded<ProviderRuntimeEvent>();
-  const hostPlatform = yield* HostProcessPlatform;
   const adapterScope = yield* Effect.scope;
   const sessions = new Map<ThreadId, SessionContext>();
 
@@ -235,6 +264,17 @@ export const makeHeadlessCliAdapter = Effect.fn("makeHeadlessCliAdapter")(functi
         ...(input.modelSelection?.model ? { model: input.modelSelection.model } : {}),
         updatedAt: nowIso(),
       };
+      const turnModel = normalizeHeadlessCliModel(
+        options.protocol,
+        input.modelSelection?.model ?? context.session.model,
+      );
+      const turnCapabilities = options.modelCapabilities?.(turnModel);
+      const turnEffort = resolveHeadlessCliEffort(
+        options.protocol,
+        turnModel,
+        input,
+        turnCapabilities,
+      );
       publish({
         type: "turn.started",
         ...stamp(),
@@ -244,23 +284,27 @@ export const makeHeadlessCliAdapter = Effect.fn("makeHeadlessCliAdapter")(functi
         turnId,
         payload: {
           ...(input.modelSelection?.model ? { model: input.modelSelection.model } : {}),
-          ...(resolveReasoningEffort(input) ? { effort: resolveReasoningEffort(input) } : {}),
+          ...(turnEffort ? { effort: turnEffort } : {}),
         },
       });
 
+      const args = commandArgs({
+        protocol: options.protocol,
+        prompt,
+        ...(resumeCursor ? { resumeCursor } : {}),
+        send: input,
+        session: context.session,
+        ...(turnCapabilities ? { capabilities: turnCapabilities } : {}),
+      });
+      const spawnCommand = yield* resolveSpawnCommand(settings.binaryPath, args, {
+        env: options.environment,
+      });
       const run = Effect.callback<void>((resume) => {
-        const args = commandArgs({
-          protocol: options.protocol,
-          prompt,
-          ...(resumeCursor ? { resumeCursor } : {}),
-          send: input,
-          session: context.session,
-        });
-        const child = NodeChildProcess.spawn(settings.binaryPath, args, {
+        const child = NodeChildProcess.spawn(spawnCommand.command, spawnCommand.args, {
           cwd: context.session.cwd,
           env: options.environment,
           windowsHide: true,
-          shell: hostPlatform === "win32" && /\.(?:cmd|bat)$/i.test(settings.binaryPath),
+          shell: spawnCommand.shell,
         });
         context.process = child;
         let stdoutBuffer = "";

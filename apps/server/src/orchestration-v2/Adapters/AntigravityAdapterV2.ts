@@ -162,6 +162,11 @@ export function makeAntigravityAcpAdapterFlavor(
     // Loading history replays every tool call; resume restores the session
     // without the replay and is what the official client does.
     preferResumeSession: true,
+    // Antigravity applies session/cancel only once its current step ends, and a
+    // stalled model call never ends, so Stop and steering restart the runtime
+    // instead; the next turn resumes the session.
+    restartRuntimeOnEveryInterrupt: true,
+    terminateRuntimeProcessGroupOnInterrupt: true,
     subagentsIdleOnTurnCompletion: true,
     ...(options.onSessionEvent === undefined ? {} : { onSessionEvent: options.onSessionEvent }),
     consumedOptionIds: ANTIGRAVITY_MODEL_OPTION_IDS,

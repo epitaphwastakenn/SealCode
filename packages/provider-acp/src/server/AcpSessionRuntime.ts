@@ -1476,7 +1476,11 @@ export const make = (
           extendEnv: options.spawn.extendEnv ?? true,
           ...(options.ownDetachedProcessGroup === undefined
             ? {}
-            : { detached: options.ownDetachedProcessGroup }),
+            : {
+                detached: options.ownDetachedProcessGroup,
+                // Node gives a detached Windows child its own visible console.
+                windowsHide: true,
+              }),
           shell: containedSpawnCommand.shell,
         }),
       )

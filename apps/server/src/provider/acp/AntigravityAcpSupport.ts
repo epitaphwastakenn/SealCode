@@ -7,6 +7,7 @@ import {
   type ProviderSendTurnInput,
   type RuntimeMode,
 } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -64,6 +65,10 @@ export const makeAntigravityAcpRuntime = Effect.fn("makeAntigravityAcpRuntime")(
       authenticateEagerly: true,
       resumeMethod: "resume",
       cancelBehavior: "wait-for-prompt",
+      // Owning the process tree is what lets Stop tear it down at once (see the
+      // adapter flavor): Antigravity's own cancel waits for the current step.
+      ownDetachedProcessGroup: true,
+      processGroupPlatform: input.processGroupPlatform ?? (yield* HostProcess.Platform),
       clientCapabilities: {
         fs: {
           readTextFile: input.clientFileSystem === true,

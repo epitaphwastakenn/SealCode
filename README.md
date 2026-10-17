@@ -2,7 +2,7 @@
 
 SealCode is a local-first desktop and web control surface for coding-agent harnesses. It keeps projects, tools, diffs, terminals, usage, and multiple provider sessions in one visual thread.
 
-The current restored harness supports Codex, Antigravity, Claude Code, Cursor, Grok Build, OpenCode, and CommandCode when their CLIs are installed and authenticated on your computer.
+The current restored harness supports Codex, Antigravity, Claude Code, Cursor, Grok Build, OpenCode, and CommandCode when their runtimes are installed and authenticated on your computer.
 
 ## "Wait, what are you selling me?"
 
@@ -16,7 +16,7 @@ We wanted something performant, remote-ready, and truly open. If we ever go the 
 > SealCode currently supports Codex, Antigravity, Claude, Cursor, Grok Build, OpenCode, and CommandCode. Install and authenticate at least one provider before use:
 >
 > - Codex: install [Codex CLI](https://developers.openai.com/codex/cli) and run `codex login`
-> - Antigravity: install its native `agy` CLI and authenticate it
+> - Antigravity: use **Settings > Providers** to install the official ACP runtime and sign in with Google, or use the Python SDK runtime (`google-antigravity==0.1.12` with `GEMINI_API_KEY` or Vertex AI ADC)
 > - Claude: install [Claude Code](https://claude.com/product/claude-code) and run `claude auth login`
 > - Cursor: install [Cursor CLI](https://cursor.com/cli) and run `agent login`
 > - Grok Build: install [Grok Build CLI](https://x.ai/cli) and run `grok login`

@@ -17,18 +17,31 @@ const LEGACY_PERSISTED_STATE_KEYS = [
   "codething:renderer-state:v1",
 ] as const;
 
+export type LastOpenThreadRoute =
+  | {
+      readonly kind: "server";
+      readonly environmentId: string;
+      readonly threadId: string;
+    }
+  | {
+      readonly kind: "draft";
+      readonly draftId: string;
+    };
+
 export interface PersistedUiState {
   projectExpandedById?: Record<string, boolean>;
   projectOrder?: string[];
   pinnedProjectKeys?: string[];
   threadOrderByGroup?: Record<string, string[]>;
   threadLastVisitedAtById?: Record<string, string>;
+  lastOpenThreadRoute?: LastOpenThreadRoute | null;
   collapsedProjectCwds?: string[];
   expandedProjectCwds?: string[];
   projectOrderCwds?: string[];
   defaultAdvertisedEndpointKey?: string | null;
   threadChangedFilesExpansionVersion?: typeof THREAD_CHANGED_FILES_EXPANSION_VERSION;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
+  timelineExpandedTurnIdsByThread?: Record<string, string[]>;
 }
 
 export interface UiProjectState {
@@ -41,13 +54,19 @@ export interface UiProjectState {
 export interface UiThreadState {
   threadLastVisitedAtById: Record<string, string>;
   threadChangedFilesExpandedById: Record<string, Record<string, boolean>>;
+  timelineExpandedTurnIdsByThread: Record<string, string[]>;
 }
 
 export interface UiEndpointState {
   defaultAdvertisedEndpointKey: string | null;
 }
 
-export interface UiState extends UiProjectState, UiThreadState, UiEndpointState {}
+export interface UiLastOpenThreadState {
+  lastOpenThreadRoute: LastOpenThreadRoute | null;
+}
+
+export interface UiState
+  extends UiProjectState, UiThreadState, UiEndpointState, UiLastOpenThreadState {}
 
 const initialState: UiState = {
   projectExpandedById: {},
@@ -56,7 +75,9 @@ const initialState: UiState = {
   threadOrderByGroup: {},
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},
+  timelineExpandedTurnIdsByThread: {},
   defaultAdvertisedEndpointKey: null,
+  lastOpenThreadRoute: null,
 };
 
 const LEGACY_PROJECT_CWD_PREFERENCE_PREFIX = "legacy-project-cwd:";
@@ -149,11 +170,15 @@ export function parsePersistedState(parsed: PersistedUiState): UiState {
       parsed.threadChangedFilesExpansionVersion === THREAD_CHANGED_FILES_EXPANSION_VERSION
         ? sanitizePersistedThreadChangedFilesExpanded(parsed.threadChangedFilesExpandedById)
         : {},
+    timelineExpandedTurnIdsByThread: sanitizeStringArrayRecord(
+      parsed.timelineExpandedTurnIdsByThread,
+    ),
     defaultAdvertisedEndpointKey:
       typeof parsed.defaultAdvertisedEndpointKey === "string" &&
       parsed.defaultAdvertisedEndpointKey.length > 0
         ? parsed.defaultAdvertisedEndpointKey
         : null,
+    lastOpenThreadRoute: sanitizeLastOpenThreadRoute(parsed.lastOpenThreadRoute),
   };
 }
 
@@ -207,6 +232,70 @@ function sanitizePersistedThreadChangedFilesExpanded(
   return nextState;
 }
 
+function sanitizeLastOpenThreadRoute(value: unknown): LastOpenThreadRoute | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const candidate = value as Partial<LastOpenThreadRoute> & { kind?: unknown };
+  if (candidate.kind === "server") {
+    const environmentId =
+      "environmentId" in candidate && typeof candidate.environmentId === "string"
+        ? candidate.environmentId.trim()
+        : "";
+    const threadId =
+      "threadId" in candidate && typeof candidate.threadId === "string"
+        ? candidate.threadId.trim()
+        : "";
+    if (environmentId.length === 0 || threadId.length === 0) {
+      return null;
+    }
+    return { kind: "server", environmentId, threadId };
+  }
+  if (candidate.kind === "draft") {
+    const draftId =
+      "draftId" in candidate && typeof candidate.draftId === "string" ? candidate.draftId.trim() : "";
+    if (draftId.length === 0) {
+      return null;
+    }
+    return { kind: "draft", draftId };
+  }
+  return null;
+}
+
+export function lastOpenThreadRoutesEqual(
+  left: LastOpenThreadRoute | null,
+  right: LastOpenThreadRoute | null,
+): boolean {
+  if (left === right) {
+    return true;
+  }
+  if (left === null || right === null || left.kind !== right.kind) {
+    return false;
+  }
+  if (left.kind === "draft" && right.kind === "draft") {
+    return left.draftId === right.draftId;
+  }
+  return (
+    left.kind === "server" &&
+    right.kind === "server" &&
+    left.environmentId === right.environmentId &&
+    left.threadId === right.threadId
+  );
+}
+
+export function setLastOpenThreadRoute(
+  state: UiState,
+  route: LastOpenThreadRoute | null,
+): UiState {
+  if (lastOpenThreadRoutesEqual(state.lastOpenThreadRoute, route)) {
+    return state;
+  }
+  return {
+    ...state,
+    lastOpenThreadRoute: route,
+  };
+}
+
 export function persistState(state: UiState): void {
   if (typeof window === "undefined") {
     return;
@@ -228,6 +317,8 @@ export function persistState(state: UiState): void {
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
         threadChangedFilesExpansionVersion: THREAD_CHANGED_FILES_EXPANSION_VERSION,
         threadChangedFilesExpandedById: state.threadChangedFilesExpandedById,
+        timelineExpandedTurnIdsByThread: state.timelineExpandedTurnIdsByThread,
+        lastOpenThreadRoute: state.lastOpenThreadRoute,
       } satisfies PersistedUiState),
     );
     if (!legacyKeysCleanedUp) {
@@ -311,6 +402,31 @@ export function setThreadChangedFilesExpanded(
         [turnId]: expanded,
       },
     },
+  };
+}
+
+export function setTimelineTurnExpanded(
+  state: UiState,
+  threadId: string,
+  turnId: string,
+  expanded: boolean,
+): UiState {
+  const current = state.timelineExpandedTurnIdsByThread[threadId] ?? [];
+  const hasTurn = current.includes(turnId);
+  if (hasTurn === expanded) {
+    return state;
+  }
+
+  const next = expanded ? [...current, turnId] : current.filter((id) => id !== turnId);
+  const timelineExpandedTurnIdsByThread = { ...state.timelineExpandedTurnIdsByThread };
+  if (next.length > 0) {
+    timelineExpandedTurnIdsByThread[threadId] = next.slice(-100);
+  } else {
+    delete timelineExpandedTurnIdsByThread[threadId];
+  }
+  return {
+    ...state,
+    timelineExpandedTurnIdsByThread,
   };
 }
 
@@ -457,6 +573,7 @@ interface UiStateStore extends UiState {
   markThreadVisited: (threadId: string, visitedAt: string) => void;
   markThreadUnread: (threadId: string, latestTurnCompletedAt: string | null | undefined) => void;
   setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
+  setTimelineTurnExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
   setProjectExpanded: (projectIds: string | readonly string[], expanded: boolean) => void;
   setProjectPinned: (projectKey: string, pinned: boolean) => void;
@@ -471,6 +588,7 @@ interface UiStateStore extends UiState {
     draggedThreadId: string,
     targetThreadId: string,
   ) => void;
+  setLastOpenThreadRoute: (route: LastOpenThreadRoute | null) => void;
 }
 
 export const useUiStateStore = create<UiStateStore>((set) => ({
@@ -481,6 +599,8 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => markThreadUnread(state, threadId, latestTurnCompletedAt)),
   setThreadChangedFilesExpanded: (threadId, turnId, expanded) =>
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
+  setTimelineTurnExpanded: (threadId, turnId, expanded) =>
+    set((state) => setTimelineTurnExpanded(state, threadId, turnId, expanded)),
   setDefaultAdvertisedEndpointKey: (key) =>
     set((state) => setDefaultAdvertisedEndpointKey(state, key)),
   setProjectExpanded: (projectIds, expanded) =>
@@ -495,6 +615,7 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) =>
       reorderThreads(state, groupKey, currentThreadOrder, draggedThreadId, targetThreadId),
     ),
+  setLastOpenThreadRoute: (route) => set((state) => setLastOpenThreadRoute(state, route)),
 }));
 
 useUiStateStore.subscribe((state) => debouncedPersistState.maybeExecute(state));

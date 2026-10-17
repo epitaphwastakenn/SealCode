@@ -270,6 +270,16 @@ function itemTitle(itemType: CanonicalItemType, item?: CodexLifecycleItem): stri
   }
 }
 
+function mcpActivityMetadataForItem(item: CodexLifecycleItem) {
+  if (item.type !== "mcpToolCall") return undefined;
+  return McpProviderSession.makeMcpToolActivityMetadata({
+    providerToolName: item.tool,
+    serverId: item.server,
+    upstreamToolName: item.tool,
+    callId: item.id,
+  });
+}
+
 function itemDetail(itemType: CanonicalItemType, item: CodexLifecycleItem): string | undefined {
   const itemRecord = item as Record<string, unknown>;
   const action = itemRecord.action as Record<string, unknown> | undefined;
@@ -471,6 +481,7 @@ function mapItemLifecycle(
     return undefined;
   }
   const itemType = toCanonicalItemType(item.type);
+  const mcp = mcpActivityMetadataForItem(item);
   if (itemType === "unknown" && lifecycle !== "item.updated") {
     return undefined;
   }
@@ -487,11 +498,12 @@ function mapItemLifecycle(
     ...runtimeEventBase(event, canonicalThreadId),
     type: lifecycle,
     payload: {
-      itemType,
+      itemType: mcp ? "mcp_tool_call" : itemType,
       ...(status ? { status } : {}),
       ...(itemTitle(itemType, item) ? { title: itemTitle(itemType, item) } : {}),
       ...(detail ? { detail } : {}),
       ...(event.payload !== undefined ? { data: event.payload } : {}),
+      ...(mcp ? { mcp } : {}),
     },
   };
 }
@@ -1684,12 +1696,17 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
                 environment: {
                   ...(options?.environment ?? process.env),
                   T3_MCP_BEARER_TOKEN: mcpSession.authorizationHeader.replace(/^Bearer\s+/, ""),
+                  SEALCODE_GLOBAL_MCP_BEARER_TOKEN: mcpSession.authorizationHeader.replace(/^Bearer\s+/, ""),
                 },
                 appServerArgs: [
                   "-c",
                   `mcp_servers.t3-code.url=${mcpSession.endpoint}`,
                   "-c",
                   'mcp_servers.t3-code.bearer_token_env_var="T3_MCP_BEARER_TOKEN"',
+                  "-c",
+                  `mcp_servers.sealcode-global.url=${mcpSession.globalEndpoint}`,
+                  "-c",
+                  'mcp_servers.sealcode-global.bearer_token_env_var="SEALCODE_GLOBAL_MCP_BEARER_TOKEN"',
                 ],
               }
             : {}),
@@ -1765,7 +1782,6 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     );
 
   const resolveAttachment = Effect.fn("resolveAttachment")(function* (
-    input: ProviderSendTurnInput,
     attachment: NonNullable<ProviderSendTurnInput["attachments"]>[number],
   ) {
     const attachmentPath = resolveAttachmentPath({
@@ -1799,7 +1815,7 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
   const sendTurn: CodexAdapterShape["sendTurn"] = Effect.fn("sendTurn")(function* (input) {
     const codexAttachments = yield* Effect.forEach(
       input.attachments ?? [],
-      (attachment) => resolveAttachment(input, attachment),
+      (attachment) => resolveAttachment(attachment),
       { concurrency: 1 },
     );
 
@@ -1971,6 +1987,11 @@ export const makeCodexAdapter = Effect.fn("makeCodexAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      stablePromptPrefix: false,
+      contextCompaction: "provider-native",
+      promptCaching: "provider-managed",
+      toolTransport: "mcp",
+      detachedDelegation: false,
     },
     startSession,
     sendTurn,

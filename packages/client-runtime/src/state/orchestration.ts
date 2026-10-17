@@ -23,6 +23,12 @@ export function createOrchestrationEnvironmentAtoms<R, E>(
       label: "environment-data:orchestration:full-thread-diff",
       tag: ORCHESTRATION_WS_METHODS.getFullThreadDiff,
     }),
+    projectDiffIndex: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:orchestration:project-diff-index",
+      tag: ORCHESTRATION_WS_METHODS.getProjectDiffIndex,
+      staleTimeMs: 15_000,
+      idleTtlMs: 60_000,
+    }),
     threadSearch: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:orchestration:thread-search",
       tag: ORCHESTRATION_WS_METHODS.searchThreads,

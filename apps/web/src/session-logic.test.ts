@@ -1929,3 +1929,13 @@ describe("rerun workflows", () => {
     expect(spawnRows.map((row) => row.turnId)).toEqual(["turn-1", "turn-2"]);
   });
 });
+
+
+describe("Antigravity native choices", () => {
+  it("keeps native approval decisions and fixed question choices in the client read model", () => {
+    const approval = derivePendingApprovals([makeActivity({ kind: "approval.requested", payload: { requestId: "native-approval", requestType: "dynamic_tool_call", availableDecisions: ["accept", "decline", "cancel"] } })]);
+    expect(approval[0]?.availableDecisions).toEqual(["accept", "decline", "cancel"]);
+    const pending = derivePendingUserInputs([makeActivity({ kind: "user-input.requested", payload: { requestId: "native-question", questions: [{ id: "interaction_1", header: "Question", question: "Pick one", options: [{ label: "A", description: "A" }], allowCustomAnswer: false }] } })]);
+    expect(pending[0]?.questions[0]?.allowCustomAnswer).toBe(false);
+  });
+});

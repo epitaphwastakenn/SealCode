@@ -117,7 +117,7 @@ export function SourceControlWritingSettingsSection() {
         }
       >
         {style.mode === "custom" ? (
-          <div className="mt-3 max-w-2xl pb-3.5">
+          <div className="mt-3 w-full pb-3.5">
             <Textarea
               key={style.customInstructions}
               ref={customInstructionsRef}

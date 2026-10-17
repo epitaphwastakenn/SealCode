@@ -1,6 +1,7 @@
 import * as Schema from "effect/Schema";
 import * as Rpc from "effect/unstable/rpc/Rpc";
 import * as RpcGroup from "effect/unstable/rpc/RpcGroup";
+import { ProviderSetupInput, ProviderSetupState, ProviderSetupError } from "./providerSetup.ts";
 
 import { ExternalLauncherError, LaunchEditorInput } from "./editor.ts";
 import {
@@ -58,6 +59,7 @@ import {
   OrchestrationDispatchCommandError,
   OrchestrationGetFullThreadDiffError,
   OrchestrationGetFullThreadDiffInput,
+  OrchestrationGetProjectDiffIndexInput,
   OrchestrationGetSnapshotError,
   OrchestrationSearchThreadsError,
   OrchestrationSearchThreadsInput,
@@ -155,6 +157,11 @@ import {
 import { UsageReadError, UsageSummary, UsageSummaryInput } from "./usage.ts";
 import { ServerSettings, ServerSettingsError, ServerSettingsPatch } from "./settings.ts";
 import {
+  GlobalMcpStatus,
+  GlobalMcpStatusUpdatedEvent,
+  McpServerId,
+} from "./mcp.ts";
+import {
   SourceControlCloneRepositoryInput,
   SourceControlCloneRepositoryResult,
   SourceControlDiscoveryResult,
@@ -165,6 +172,11 @@ import {
   SourceControlRepositoryLookupInput,
 } from "./sourceControl.ts";
 import { VcsError } from "./vcs.ts";
+import {
+  ServerVoiceTranscriptionInput,
+  ServerVoiceTranscriptionResult,
+  VoiceTranscriptionError,
+} from "./voice.ts";
 
 export const WS_METHODS = {
   // Project registry methods
@@ -183,6 +195,7 @@ export const WS_METHODS = {
   // Filesystem methods
   filesystemBrowse: "filesystem.browse",
   assetsCreateUrl: "assets.createUrl",
+  voiceTranscribe: "voice.transcribe",
 
   // VCS methods
   vcsPull: "vcs.pull",
@@ -228,6 +241,7 @@ export const WS_METHODS = {
   serverProbe: "server.probe",
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
+  serverSetupProvider: "server.setupProvider",
   serverUpdateProvider: "server.updateProvider",
   serverUpdateServer: "server.updateServer",
   serverUpdateServerWithProgress: "server.updateServerWithProgress",
@@ -235,6 +249,8 @@ export const WS_METHODS = {
   serverRemoveKeybinding: "server.removeKeybinding",
   serverGetSettings: "server.getSettings",
   serverUpdateSettings: "server.updateSettings",
+  serverGetMcpStatuses: "server.getMcpStatuses",
+  serverReconnectMcp: "server.reconnectMcp",
   serverDiscoverSourceControl: "server.discoverSourceControl",
   serverGetTraceDiagnostics: "server.getTraceDiagnostics",
   serverGetProcessDiagnostics: "server.getProcessDiagnostics",
@@ -263,6 +279,7 @@ export const WS_METHODS = {
   subscribePreviewEvents: "subscribePreviewEvents",
   subscribeDiscoveredLocalServers: "subscribeDiscoveredLocalServers",
   subscribeServerConfig: "subscribeServerConfig",
+  subscribeMcpStatus: "subscribeMcpStatus",
   subscribeServerLifecycle: "subscribeServerLifecycle",
   subscribeAuthAccess: "subscribeAuthAccess",
   subscribeBackgroundPolicy: "subscribeBackgroundPolicy",
@@ -307,6 +324,12 @@ export const WsServerRefreshProvidersRpc = Rpc.make(WS_METHODS.serverRefreshProv
   error: EnvironmentAuthorizationError,
 });
 
+export const WsServerSetupProviderRpc = Rpc.make(WS_METHODS.serverSetupProvider, {
+  payload: ProviderSetupInput,
+  success: ProviderSetupState,
+  error: Schema.Union([ProviderSetupError, EnvironmentAuthorizationError]),
+});
+
 export const WsServerUpdateProviderRpc = Rpc.make(WS_METHODS.serverUpdateProvider, {
   payload: ServerProviderUpdateInput,
   success: ServerProviderUpdatedPayload,
@@ -339,6 +362,18 @@ export const WsServerUpdateSettingsRpc = Rpc.make(WS_METHODS.serverUpdateSetting
   payload: Schema.Struct({ patch: ServerSettingsPatch }),
   success: ServerSettings,
   error: Schema.Union([ServerSettingsError, EnvironmentAuthorizationError]),
+});
+
+export const WsServerGetMcpStatusesRpc = Rpc.make(WS_METHODS.serverGetMcpStatuses, {
+  payload: Schema.Struct({}),
+  success: Schema.Array(GlobalMcpStatus),
+  error: EnvironmentAuthorizationError,
+});
+
+export const WsServerReconnectMcpRpc = Rpc.make(WS_METHODS.serverReconnectMcp, {
+  payload: Schema.Struct({ id: McpServerId }),
+  success: Schema.Array(GlobalMcpStatus),
+  error: EnvironmentAuthorizationError,
 });
 
 export const WsServerDiscoverSourceControlRpc = Rpc.make(WS_METHODS.serverDiscoverSourceControl, {
@@ -493,6 +528,12 @@ export const WsAssetsCreateUrlRpc = Rpc.make(WS_METHODS.assetsCreateUrl, {
   payload: AssetCreateUrlInput,
   success: AssetCreateUrlResult,
   error: Schema.Union([AssetAccessError, EnvironmentAuthorizationError]),
+});
+
+export const WsVoiceTranscribeRpc = Rpc.make(WS_METHODS.voiceTranscribe, {
+  payload: ServerVoiceTranscriptionInput,
+  success: ServerVoiceTranscriptionResult,
+  error: Schema.Union([VoiceTranscriptionError, EnvironmentAuthorizationError]),
 });
 
 export const WsSubscribeVcsStatusRpc = Rpc.make(WS_METHODS.subscribeVcsStatus, {
@@ -729,6 +770,15 @@ export const WsOrchestrationGetFullThreadDiffRpc = Rpc.make(
   },
 );
 
+export const WsOrchestrationGetProjectDiffIndexRpc = Rpc.make(
+  ORCHESTRATION_WS_METHODS.getProjectDiffIndex,
+  {
+    payload: OrchestrationGetProjectDiffIndexInput,
+    success: OrchestrationRpcSchemas.getProjectDiffIndex.output,
+    error: Schema.Union([OrchestrationGetSnapshotError, EnvironmentAuthorizationError]),
+  },
+);
+
 export const WsOrchestrationSearchThreadsRpc = Rpc.make(ORCHESTRATION_WS_METHODS.searchThreads, {
   payload: OrchestrationSearchThreadsInput,
   success: OrchestrationRpcSchemas.searchThreads.output,
@@ -782,6 +832,13 @@ export const WsSubscribeServerConfigRpc = Rpc.make(WS_METHODS.subscribeServerCon
   stream: true,
 });
 
+export const WsSubscribeMcpStatusRpc = Rpc.make(WS_METHODS.subscribeMcpStatus, {
+  payload: Schema.Struct({}),
+  success: GlobalMcpStatusUpdatedEvent,
+  error: EnvironmentAuthorizationError,
+  stream: true,
+});
+
 export const WsSubscribeServerLifecycleRpc = Rpc.make(WS_METHODS.subscribeServerLifecycle, {
   payload: Schema.Struct({}),
   success: ServerLifecycleStreamEvent,
@@ -814,6 +871,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,
+  WsServerSetupProviderRpc,
   WsServerUpdateProviderRpc,
   WsServerUpdateServerRpc,
   WsServerUpdateServerWithProgressRpc,
@@ -821,6 +879,8 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerRemoveKeybindingRpc,
   WsServerGetSettingsRpc,
   WsServerUpdateSettingsRpc,
+  WsServerGetMcpStatusesRpc,
+  WsServerReconnectMcpRpc,
   WsServerDiscoverSourceControlRpc,
   WsServerGetTraceDiagnosticsRpc,
   WsServerGetProcessDiagnosticsRpc,
@@ -845,6 +905,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsShellOpenInEditorRpc,
   WsFilesystemBrowseRpc,
   WsAssetsCreateUrlRpc,
+  WsVoiceTranscribeRpc,
   WsSubscribeVcsStatusRpc,
   WsVcsPullRpc,
   WsVcsRefreshStatusRpc,
@@ -881,6 +942,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsSubscribePreviewEventsRpc,
   WsSubscribeDiscoveredLocalServersRpc,
   WsSubscribeServerConfigRpc,
+  WsSubscribeMcpStatusRpc,
   WsSubscribeServerLifecycleRpc,
   WsSubscribeAuthAccessRpc,
   WsSubscribeBackgroundPolicyRpc,
@@ -889,6 +951,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationGetWorkflowScriptRpc,
   WsOrchestrationGetTurnDiffRpc,
   WsOrchestrationGetFullThreadDiffRpc,
+  WsOrchestrationGetProjectDiffIndexRpc,
   WsOrchestrationSearchThreadsRpc,
   WsOrchestrationGetArchivedShellSnapshotRpc,
   WsOrchestrationSubscribeShellRpc,

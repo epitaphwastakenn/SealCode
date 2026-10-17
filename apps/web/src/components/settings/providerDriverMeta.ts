@@ -82,7 +82,7 @@ export const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = 
     value: ProviderDriverKind.make("antigravity"),
     label: "Antigravity",
     icon: AntigravityIcon,
-    badgeLabel: "Native CLI",
+    badgeLabel: "ACP / SDK",
     settingsSchema: AntigravitySettings,
   },
   {

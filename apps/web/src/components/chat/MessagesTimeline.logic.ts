@@ -1,6 +1,7 @@
 import * as Equal from "effect/Equal";
 import {
   formatDuration,
+  workEntryIndicatesToolFailure,
   workEntryIndicatesToolNeutralStatus,
   workLogEntryIsToolLike,
   type TimelineEntry,
@@ -8,6 +9,7 @@ import {
   type WorkLogEntry,
 } from "../../session-logic";
 import { type ChatMessage, type ProposedPlan, type TurnDiffSummary } from "../../types";
+import { resolveCheckpointChangedFileCount } from "../../lib/checkpointAttribution";
 import { type MessageId, type OrchestrationLatestTurn, type TurnId } from "@t3tools/contracts";
 
 export const MAX_VISIBLE_WORK_LOG_ENTRIES = 1;
@@ -160,6 +162,16 @@ export type TimelineLatestTurn = Pick<
   "turnId" | "state" | "startedAt" | "completedAt"
 >;
 
+export interface TurnActivitySummary {
+  readonly state: "completed" | "interrupted" | "failed";
+  readonly duration: string | null;
+  readonly activityCount: number;
+  readonly toolCallCount: number;
+  readonly assistantResponseCount: number;
+  readonly agentCount: number;
+  readonly changedFileCount: number | null;
+}
+
 export type MessagesTimelineRow =
   | {
       kind: "work";
@@ -183,6 +195,7 @@ export type MessagesTimelineRow =
       turnId: TurnId;
       label: string;
       expanded: boolean;
+      summary: TurnActivitySummary;
     }
   | {
       kind: "message";
@@ -286,6 +299,7 @@ interface TurnFold {
   createdAt: string;
   hiddenEntryIds: ReadonlySet<string>;
   label: string;
+  summary: TurnActivitySummary;
 }
 
 /**
@@ -320,6 +334,8 @@ function deriveTurnFolds(input: {
   terminalAssistantMessageIds: ReadonlySet<string>;
   latestTurn: TimelineLatestTurn | null;
   unsettledTurnId: TurnId | null;
+  preserveAssistantCommentary: boolean;
+  turnDiffSummaryByTurnId: ReadonlyMap<TurnId, TurnDiffSummary>;
 }): ReadonlyMap<string, TurnFold> {
   interface TurnGroup {
     entries: Array<TimelineEntry>;
@@ -388,6 +404,13 @@ function deriveTurnFolds(input: {
       if (entry.id === group.terminalEntry?.id) {
         continue;
       }
+      if (
+        input.preserveAssistantCommentary &&
+        entry.kind === "message" &&
+        entry.message.role === "assistant"
+      ) {
+        continue;
+      }
       // Agent-spawn CTA rows never fold: workflows outlive their launching
       // turn (dynamic spawns, background execution), and folding the CTA
       // when the turn settles makes a still-running fleet invisible.
@@ -402,7 +425,8 @@ function deriveTurnFolds(input: {
 
     const firstEntry = group.entries[0];
     const lastEntry = group.entries.at(-1);
-    if (!firstEntry || !lastEntry) {
+    const firstHiddenEntry = group.entries.find((entry) => hiddenEntryIds.has(entry.id));
+    if (!firstEntry || !firstHiddenEntry || !lastEntry) {
       continue;
     }
 
@@ -423,6 +447,34 @@ function deriveTurnFolds(input: {
               lastEntryEnd,
           );
     const duration = elapsedMs !== null ? formatDuration(elapsedMs) : null;
+    const workEntries = group.entries.flatMap((entry) =>
+      entry.kind === "work" ? [entry.entry] : [],
+    );
+    const failed = workEntries.some((entry) => workEntryIndicatesToolFailure(entry));
+    const latestState = input.latestTurn?.turnId === turnId ? input.latestTurn.state : null;
+    const state: TurnActivitySummary["state"] =
+      latestState === "error" || failed
+        ? "failed"
+        : latestState === "interrupted"
+          ? "interrupted"
+          : "completed";
+    const diffSummary = input.turnDiffSummaryByTurnId.get(turnId);
+    const summary: TurnActivitySummary = {
+      state,
+      duration,
+      activityCount: workEntries.length,
+      toolCallCount: workEntries.filter((entry) => workLogEntryIsToolLike(entry)).length,
+      assistantResponseCount: group.entries.filter(
+        (entry) => entry.kind === "message" && entry.message.role === "assistant",
+      ).length,
+      agentCount: workEntries.reduce(
+        (count, entry) =>
+          count +
+          (entry.agentSpawn?.agentTaskIds.length ?? (entry.taskId !== undefined ? 1 : 0)),
+        0,
+      ),
+      changedFileCount: diffSummary ? resolveCheckpointChangedFileCount(diffSummary) : null,
+    };
     const label = isLatestInterruptedTurn
       ? duration
         ? `You stopped after ${duration}`
@@ -431,12 +483,13 @@ function deriveTurnFolds(input: {
         ? `Worked for ${duration}`
         : "Worked";
 
-    foldsByAnchorEntryId.set(firstEntry.id, {
+    foldsByAnchorEntryId.set(firstHiddenEntry.id, {
       turnId,
-      anchorEntryId: firstEntry.id,
-      createdAt: firstEntry.createdAt,
+      anchorEntryId: firstHiddenEntry.id,
+      createdAt: firstHiddenEntry.createdAt,
       hiddenEntryIds,
       label,
+      summary,
     });
   }
   return foldsByAnchorEntryId;
@@ -451,7 +504,9 @@ export function deriveMessagesTimelineRows(input: {
   isWorking: boolean;
   activeTurnStartedAt: string | null;
   turnDiffSummaryByAssistantMessageId: ReadonlyMap<MessageId, TurnDiffSummary>;
+  turnDiffSummaryByTurnId?: ReadonlyMap<TurnId, TurnDiffSummary>;
   revertTurnCountByUserMessageId: ReadonlyMap<MessageId, number>;
+  preserveAssistantCommentary?: boolean;
 }): MessagesTimelineRow[] {
   const nextRows: MessagesTimelineRow[] = [];
   const durationStartByMessageId = computeMessageDurationStart(
@@ -467,6 +522,8 @@ export function deriveMessagesTimelineRows(input: {
     terminalAssistantMessageIds,
     latestTurn: input.latestTurn ?? null,
     unsettledTurnId,
+    preserveAssistantCommentary: input.preserveAssistantCommentary ?? false,
+    turnDiffSummaryByTurnId: input.turnDiffSummaryByTurnId ?? new Map(),
   });
   const collapsedEntryIds = new Set<string>();
   for (const fold of foldsByAnchorEntryId.values()) {
@@ -492,6 +549,7 @@ export function deriveMessagesTimelineRows(input: {
         turnId: turnFold.turnId,
         label: turnFold.label,
         expanded: input.expandedTurnIds?.has(turnFold.turnId) ?? false,
+        summary: turnFold.summary,
       });
     }
 
@@ -620,7 +678,11 @@ export function deriveMessagesTimelineRows(input: {
       assistantCopyStreaming: timelineEntry.message.streaming || assistantTurnStillInProgress,
       assistantTurnDiffSummary:
         timelineEntry.message.role === "assistant"
-          ? input.turnDiffSummaryByAssistantMessageId.get(timelineEntry.message.id)
+          ? (input.turnDiffSummaryByAssistantMessageId.get(timelineEntry.message.id) ??
+            (timelineEntry.message.turnId === null ||
+            !terminalAssistantMessageIds.has(timelineEntry.message.id)
+              ? undefined
+              : input.turnDiffSummaryByTurnId?.get(timelineEntry.message.turnId)))
           : undefined,
       revertTurnCount:
         timelineEntry.message.role === "user"
@@ -670,7 +732,12 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
 
     case "turn-fold": {
       const bf = b as typeof a;
-      return a.createdAt === bf.createdAt && a.label === bf.label && a.expanded === bf.expanded;
+      return (
+        a.createdAt === bf.createdAt &&
+        a.label === bf.label &&
+        a.expanded === bf.expanded &&
+        Equal.equals(a.summary, bf.summary)
+      );
     }
 
     case "proposed-plan":

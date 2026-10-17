@@ -22,7 +22,7 @@ export function isExplicitRelativePath(value: string): boolean {
 }
 
 function isRootPath(value: string): boolean {
-  return value === "/" || value === "\\" || /^[a-zA-Z]:[/\\]?$/.test(value);
+  return value === "/" || value === "\\" || /^[a-zA-Z]:[/\\]$/.test(value);
 }
 
 function trimTrailingPathSeparators(value: string): string {

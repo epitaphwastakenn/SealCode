@@ -41,7 +41,10 @@ import * as TextGeneration from "./textGeneration/TextGeneration.ts";
 import { ProviderInstanceRegistryHydrationLive } from "./provider/Layers/ProviderInstanceRegistryHydration.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as McpHttpServer from "./mcp/McpHttpServer.ts";
+import * as GlobalMcpManager from "./mcp/GlobalMcpManager.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
+import * as McpHarnessStore from "./mcp/McpHarnessStore.ts";
+import * as McpInteractionBroker from "./mcp/McpInteractionBroker.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
 import * as PreviewManager from "./preview/Manager.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
@@ -365,7 +368,7 @@ const ProviderRuntimeLayerLive = ProviderSessionReaperLive.pipe(
 const RuntimeCoreDependenciesLive = ReactorLayerLive.pipe(
   // Core Services
   Layer.provideMerge(ServerSettingsLayerLive),
-  Layer.provideMerge(CheckpointingLayerLive),
+  Layer.provideMerge(Layer.mergeAll(GlobalMcpManager.layer, CheckpointingLayerLive)),
   Layer.provideMerge(SourceControlProviderRegistryLayerLive),
   Layer.provideMerge(GitLayerLive),
   Layer.provideMerge(VcsLayerLive),
@@ -443,8 +446,17 @@ export const makeRoutesLayer = Layer.mergeAll(
     staticAndDevRouteLayer,
     websocketRpcRouteLayer,
   ),
-  McpHttpServer.layer.pipe(Layer.provide(McpSessionRegistry.layer)),
+  McpHttpServer.layer.pipe(
+    Layer.provide(McpSessionRegistry.layer),
+    Layer.provide(
+      McpHarnessStore.McpHarnessStoreLive.pipe(
+        Layer.provide(PersistenceLayerLive),
+        Layer.provide(WorkspaceLayerLive),
+      ),
+    ),
+  ),
 ).pipe(
+  Layer.provide(McpInteractionBroker.layer),
   Layer.provide(PreviewAutomationBroker.layer),
   Layer.provide(ServerSelfUpdate.layer),
   Layer.provide(commandReadinessLayer),

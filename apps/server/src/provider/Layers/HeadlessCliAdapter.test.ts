@@ -1,3 +1,4 @@
+import * as NodePath from "node:path";
 import { describe, expect, it } from "@effect/vitest";
 import {
   ProviderDriverKind,
@@ -6,8 +7,7 @@ import {
   type ProviderSendTurnInput,
   type ProviderSession,
 } from "@t3tools/contracts";
-
-import { commandArgs } from "./HeadlessCliAdapter.ts";
+import { commandArgs, missingFinalAssistantText } from "./HeadlessCliAdapter.ts";
 import { capabilitiesForEffortLevels } from "./HeadlessCliProvider.ts";
 
 const threadId = ThreadId.make("thread-headless-cli");
@@ -22,7 +22,6 @@ const session: ProviderSession = {
   createdAt: "2026-08-10T00:00:00.000Z",
   updatedAt: "2026-08-10T00:00:00.000Z",
 };
-
 function sendTurn(model: string): ProviderSendTurnInput {
   return {
     threadId,
@@ -96,5 +95,44 @@ describe("CommandCode headless CLI arguments", () => {
 
     expect(args).toContain("--effort");
     expect(args).toContain("medium");
+  });
+
+  it("does not pass --add-dir even when the session has a cwd", () => {
+    const args = commandArgs({
+      protocol: "commandcode",
+      prompt: "hello",
+      send: sendTurn("qwen/qwen3.7-flash"),
+      session: { ...session, cwd: NodePath.resolve("/tmp/commandcode-project") },
+    });
+
+    expect(args).not.toContain("--add-dir");
+  });
+});
+
+describe("headless final response reconciliation", () => {
+  it("does not duplicate a final response already at the end of the stream", () => {
+    expect(
+      missingFinalAssistantText("thinking\nfinal answer", "final answer", "final answer"),
+    ).toBe("");
+  });
+
+  it("returns the missing suffix when a result frame contains the complete response", () => {
+    expect(missingFinalAssistantText("partial", "partial", "partial response")).toBe(" response");
+  });
+
+  it("does not suppress a final response that only appeared in commentary", () => {
+    expect(
+      missingFinalAssistantText("thinking mentions final answer here", "", "final answer"),
+    ).toBe("final answer");
+  });
+
+  it("backfills a result.response that never appeared as text_delta", () => {
+    expect(
+      missingFinalAssistantText(
+        "",
+        "",
+        "Git rebase destructively rewrites a branch's commit history.\n",
+      ),
+    ).toBe("Git rebase destructively rewrites a branch's commit history.\n");
   });
 });

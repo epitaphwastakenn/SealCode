@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import { HttpServer } from "effect/unstable/http";
 
 import * as ServerEnvironment from "../environment/ServerEnvironment.ts";
+import * as McpProviderSession from "./McpProviderSession.ts";
 import * as McpSessionRegistry from "./McpSessionRegistry.ts";
 
 const environmentId = EnvironmentId.make("environment-1");
@@ -41,11 +42,20 @@ it.effect("stores only a token hash, resolves the bearer token, and revokes by t
       providerInstanceId: ProviderInstanceId.make("codex"),
     });
     expect(issued.config.endpoint).toBe("http://127.0.0.1:43123/mcp");
+    expect(issued.config.globalEndpoint).toBe("http://127.0.0.1:43123/mcp/global");
+    expect(issued.config.interactionEndpoint).toBe("http://127.0.0.1:43123/mcp/interaction");
+    expect(
+      McpProviderSession.makeSealCodeMcpEndpoints(issued.config).map((endpoint) => endpoint.name),
+    ).toEqual(["t3-code", "sealcode-global"]);
     const token = issued.config.authorizationHeader.replace(/^Bearer\s+/, "");
     expect(token.length).toBeGreaterThan(20);
 
     const resolved = yield* registry.resolve(token);
     expect(resolved?.threadId).toBe(threadId);
+    expect(resolved?.capabilities.has("global-mcp")).toBe(true);
+
+    yield* registry.setActiveTurn(threadId, "turn-1");
+    expect((yield* registry.resolve(token))?.activeTurnId).toBe("turn-1");
 
     yield* registry.revokeThread(threadId);
     expect(yield* registry.resolve(token)).toBeUndefined();
@@ -73,6 +83,21 @@ it.effect("builds MCP endpoints from the bound server host", () =>
     }
   }),
 );
+
+it("normalizes provider-qualified global MCP tool names", () => {
+  expect(
+    McpProviderSession.makeMcpToolActivityMetadata({
+      providerToolName: "mcp__sealcode_global__mcp__roblox_studio__get_state",
+      callId: "call-1",
+    }),
+  ).toEqual({
+    serverId: "roblox_studio",
+    upstreamToolName: "get_state",
+    canonicalToolName: "mcp__roblox_studio__get_state",
+    providerToolName: "mcp__sealcode_global__mcp__roblox_studio__get_state",
+    callId: "call-1",
+  });
+});
 
 it.effect("expires credentials once their session stops showing signs of life", () =>
   Effect.gen(function* () {

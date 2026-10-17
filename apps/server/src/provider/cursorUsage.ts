@@ -54,6 +54,33 @@ function clampPercent(value: number): number {
   return Math.min(100, Math.max(0, value));
 }
 
+function readSpendRatioPercent(used: unknown, limit: unknown): number | undefined {
+  const usedValue = asFiniteNumber(used);
+  const limitValue = asFiniteNumber(limit);
+  if (usedValue === undefined || limitValue === undefined || limitValue <= 0) {
+    return undefined;
+  }
+  return clampPercent((usedValue / limitValue) * 100);
+}
+
+function readNestedSpendPercent(
+  record: Record<string, unknown> | undefined,
+  poolKeys: ReadonlyArray<string>,
+): number | undefined {
+  if (!record) return undefined;
+  const direct = readSpendRatioPercent(record.used ?? record.spend, record.limit);
+  if (direct !== undefined) return direct;
+  for (const key of poolKeys) {
+    const nested = asRecord(record[key]);
+    const value = readSpendRatioPercent(
+      nested?.used ?? nested?.spend ?? nested?.includedSpend,
+      nested?.limit,
+    );
+    if (value !== undefined) return value;
+  }
+  return undefined;
+}
+
 function readPercentValue(value: unknown, remaining: boolean): number | undefined {
   const numeric = asFiniteNumber(value);
   if (numeric === undefined || !Number.isFinite(numeric)) return undefined;
@@ -197,6 +224,24 @@ function collectLegacyQuotaWindows(
   }
 }
 
+function readIncludedSpendPercent(
+  planUsage: Record<string, unknown> | undefined,
+  planInfo: Record<string, unknown> | undefined,
+): number | undefined {
+  const spend = asFiniteNumber(planUsage?.includedSpend);
+  if (spend === undefined) return undefined;
+  const limit =
+    asFiniteNumber(planUsage?.limit) ?? asFiniteNumber(planInfo?.includedAmountCents);
+  if (limit !== undefined && limit > 0) {
+    return clampPercent((spend / limit) * 100);
+  }
+  const remaining = asFiniteNumber(planUsage?.remaining);
+  if (remaining !== undefined && spend + remaining > 0) {
+    return clampPercent((spend / (spend + remaining)) * 100);
+  }
+  return undefined;
+}
+
 /** Normalize Cursor's personal period-usage response into real quota bars. */
 export function mapCursorPersonalUsage(input: {
   readonly dashboard?: unknown;
@@ -217,23 +262,29 @@ export function mapCursorPersonalUsage(input: {
   addWindow(windows, {
     id: "cursor-api",
     label: "API",
-    usedPercent: readPoolPercent(
-      planUsage,
-      ["api", "apiUsage", "apiPool"],
-      ["apiPercentUsed", "apiUsagePercent", "apiUsedPercent"],
-      ["apiPercentRemaining", "apiUsagePercentRemaining", "apiRemainingPercent"],
-    ),
+    usedPercent:
+      readPoolPercent(
+        planUsage,
+        ["api", "apiUsage", "apiPool"],
+        ["apiPercentUsed", "apiUsagePercent", "apiUsedPercent"],
+        ["apiPercentRemaining", "apiUsagePercentRemaining", "apiRemainingPercent"],
+      ) ??
+      readSpendRatioPercent(planUsage?.apiSpend, planUsage?.apiLimit) ??
+      readNestedSpendPercent(planUsage, ["api", "apiUsage", "apiPool"]),
     resetsAt,
   });
   addWindow(windows, {
     id: "cursor-included",
     label: "Included",
-    usedPercent: readPoolPercent(
-      planUsage,
-      ["included", "includedUsage", "includedPool"],
-      ["totalPercentUsed", "includedPercentUsed", "includedUsagePercent"],
-      ["totalPercentRemaining", "includedPercentRemaining", "includedUsagePercentRemaining"],
-    ),
+    usedPercent:
+      readPoolPercent(
+        planUsage,
+        ["included", "includedUsage", "includedPool"],
+        ["totalPercentUsed", "autoPercentUsed", "includedPercentUsed", "includedUsagePercent"],
+        ["totalPercentRemaining", "includedPercentRemaining", "includedUsagePercentRemaining"],
+      ) ??
+      readIncludedSpendPercent(planUsage, planInfo) ??
+      readNestedSpendPercent(planUsage, ["included", "includedUsage", "includedPool"]),
     resetsAt,
   });
 

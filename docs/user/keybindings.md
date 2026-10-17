@@ -46,6 +46,9 @@ again to clear the spotlight. The swatch and hex field keep that color selected 
 Use **Inspect** to pick an element in the app and reveal its color token. Inspect disarms after one
 successful pick; its hover glow and badge preview the element and token that click will select.
 **Cancel** or `Escape` exits Inspect and clears its selection and spotlight.
+`composer.voice` starts or stops a voice note in the composer and defaults to `mod+shift+v`. The
+transcript is inserted into the prompt so you can edit it before sending. See
+[Speech to text](./speech-to-text.md).
 
 The command palette searches active thread titles, projects, branches, user messages, and final
 agent responses across connected environments. Message matches show one labeled excerpt while

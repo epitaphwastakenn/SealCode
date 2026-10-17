@@ -1,7 +1,17 @@
 import * as Encoding from "effect/Encoding";
+import * as NodePath from "node:path";
 import { CheckpointRef, ProjectId, type ThreadId } from "@t3tools/contracts";
 
 export const CHECKPOINT_REFS_PREFIX = "refs/t3/checkpoints";
+
+export function workspacePathKey(path: string): string {
+  const normalized = NodePath.resolve(path).replaceAll("\\", "/").replace(/\/+$/, "");
+  return process.platform === "win32" ? normalized.toLowerCase() : normalized;
+}
+
+export function sameWorkspacePath(left: string, right: string): boolean {
+  return workspacePathKey(left) === workspacePathKey(right);
+}
 
 export function checkpointRefForThreadTurn(threadId: ThreadId, turnCount: number): CheckpointRef {
   return CheckpointRef.make(

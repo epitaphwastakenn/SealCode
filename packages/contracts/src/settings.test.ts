@@ -3,6 +3,7 @@ import * as Schema from "effect/Schema";
 
 import { ProviderInstanceId } from "./providerInstance.ts";
 import {
+  AntigravitySettings,
   ClientSettingsSchema,
   ClientSettingsPatch,
   DEFAULT_SERVER_SETTINGS,
@@ -15,6 +16,16 @@ const decodeClientSettingsPatch = Schema.decodeUnknownSync(ClientSettingsPatch);
 const decodeServerSettings = Schema.decodeUnknownSync(ServerSettings);
 const decodeServerSettingsPatch = Schema.decodeUnknownSync(ServerSettingsPatch);
 const encodeServerSettings = Schema.encodeSync(ServerSettings);
+
+describe("Antigravity ACP migration", () => {
+  it("rewrites saved CLI settings to ACP without using the old executable", () => {
+    const config = Schema.decodeSync(AntigravitySettings)({ runtime: "cli", binaryPath: "C:/old/agy.exe" });
+    expect(config.runtime).toBe("acp");
+    expect(config.acpBinaryPath).toBe("");
+    expect(Schema.encodeSync(AntigravitySettings)(config).runtime).toBe("acp");
+    expect(Schema.decodeSync(AntigravitySettings)({ runtime: "sdk" }).runtime).toBe("sdk");
+  });
+});
 
 describe("ClientSettings word wrap", () => {
   it("defaults word wrap on", () => {
@@ -100,6 +111,22 @@ describe("ClientSettings sidebar", () => {
   it.each([-1, 0, 91])("rejects an auto-settle threshold outside 1..90: %s", (value) => {
     expect(() => decodeClientSettings({ sidebarAutoSettleAfterDays: value })).toThrow();
     expect(() => decodeClientSettingsPatch({ sidebarAutoSettleAfterDays: value })).toThrow();
+  });
+});
+
+describe("ClientSettings diff presentation", () => {
+  it("defaults to the changed-files summary", () => {
+    expect(decodeClientSettings({}).diffPresentation).toBe("summary");
+  });
+
+  it.each(["summary", "inline", "panel"] as const)("accepts %s", (value) => {
+    expect(decodeClientSettings({ diffPresentation: value }).diffPresentation).toBe(value);
+    expect(decodeClientSettingsPatch({ diffPresentation: value }).diffPresentation).toBe(value);
+  });
+
+  it("rejects unsupported presentation modes", () => {
+    expect(() => decodeClientSettings({ diffPresentation: "both" })).toThrow();
+    expect(() => decodeClientSettingsPatch({ diffPresentation: "both" })).toThrow();
   });
 });
 
@@ -189,6 +216,8 @@ describe("ServerSettings.sourceControlWritingStyle", () => {
       followChangeRequestTemplates: true,
     });
     expect(settings.sourceControlWriterModelSelection).toBeNull();
+    expect(settings.diffReviewModelSelection).toBeNull();
+    expect(settings.sealsInstructions).toBe("");
   });
 
   it("trims partial style updates", () => {
@@ -295,5 +324,23 @@ describe("ServerSettingsPatch string normalization", () => {
     expect(encoded.addProjectBaseDirectory).toBe("~/Development");
     expect(encoded.providers?.codex?.binaryPath).toBe("/opt/homebrew/bin/codex");
     expect(encoded.providers?.codex?.launchArgs).toBe("--strict-config");
+  });
+
+  it("decodes and patches Antigravity runtime settings correctly", () => {
+    const defaultSettings = decodeServerSettings({});
+    expect(defaultSettings.providers.antigravity.runtime).toBe("acp");
+    expect(defaultSettings.providers.antigravity.acpBinaryPath).toBe("");
+    expect(defaultSettings.providers.antigravity.sdkPythonPath).toBe("");
+
+    const patch = decodeServerSettingsPatch({
+      providers: {
+        antigravity: {
+          runtime: "sdk",
+          sdkPythonPath: "  /usr/bin/python3.12  ",
+        },
+      },
+    });
+    expect(patch.providers?.antigravity?.runtime).toBe("sdk");
+    expect(patch.providers?.antigravity?.sdkPythonPath).toBe("/usr/bin/python3.12");
   });
 });

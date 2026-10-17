@@ -1,9 +1,17 @@
 import * as Effect from "effect/Effect";
 import { Command, GlobalFlag } from "effect/unstable/cli";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
 import { ServerConfig, type StartupPresentation } from "../config.ts";
 import { runServer } from "../server.ts";
 import { type CliServerFlags, resolveServerConfig, sharedServerCommandFlags } from "./config.ts";
+
+export const desktopOwnerDisconnected = Effect.callback<void>((resume) => {
+  const onEnd = () => resume(Effect.void);
+  process.stdin.once("end", onEnd);
+  process.stdin.resume();
+  return Effect.sync(() => process.stdin.off("end", onEnd));
+});
 
 export const runServerCommand = (
   flags: CliServerFlags,
@@ -15,7 +23,10 @@ export const runServerCommand = (
   Effect.gen(function* () {
     const logLevel = yield* GlobalFlag.LogLevel;
     const config = yield* resolveServerConfig(flags, logLevel, options);
-    return yield* runServer.pipe(Effect.provideService(ServerConfig, config));
+    const platform = yield* HostProcessPlatform;
+    const server = runServer.pipe(Effect.provideService(ServerConfig, config));
+    if (platform !== "win32" || !config.desktopBootstrapToken) return yield* server;
+    return yield* Effect.raceFirst(server, desktopOwnerDisconnected);
   });
 
 export const startCommand = Command.make("start", { ...sharedServerCommandFlags }).pipe(

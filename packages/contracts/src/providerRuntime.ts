@@ -14,6 +14,7 @@ import {
   TurnId,
 } from "./baseSchemas.ts";
 import { ProviderInstanceId, ProviderDriverKind } from "./providerInstance.ts";
+import { EfficiencySnapshot } from "./harnessEfficiency.ts";
 
 const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
 const UnknownRecordSchema = Schema.Record(Schema.String, Schema.Unknown);
@@ -117,6 +118,16 @@ export type ToolLifecycleItemType = typeof ToolLifecycleItemType.Type;
 export function isToolLifecycleItemType(value: string): value is ToolLifecycleItemType {
   return TOOL_LIFECYCLE_ITEM_TYPES.includes(value as ToolLifecycleItemType);
 }
+
+export const McpToolActivityMetadata = Schema.Struct({
+  serverId: Schema.String,
+  serverDisplayName: Schema.optional(Schema.String),
+  upstreamToolName: Schema.String,
+  canonicalToolName: Schema.String,
+  providerToolName: Schema.optional(Schema.String),
+  callId: Schema.optional(Schema.String),
+});
+export type McpToolActivityMetadata = typeof McpToolActivityMetadata.Type;
 
 export const CanonicalItemType = Schema.Literals([
   "user_message",
@@ -322,6 +333,8 @@ export const ThreadTokenUsageSnapshot = Schema.Struct({
   toolUses: Schema.optional(NonNegativeInt),
   durationMs: Schema.optional(NonNegativeInt),
   compactsAutomatically: Schema.optional(Schema.Boolean),
+  /** Harness measurements are optional and never replace provider usage. */
+  efficiency: Schema.optional(EfficiencySnapshot),
 });
 export type ThreadTokenUsageSnapshot = typeof ThreadTokenUsageSnapshot.Type;
 
@@ -416,6 +429,7 @@ export const ItemLifecyclePayload = Schema.Struct({
    */
   agentId: Schema.optional(TrimmedNonEmptyStringSchema),
   parentToolUseId: Schema.optional(TrimmedNonEmptyStringSchema),
+  mcp: Schema.optional(McpToolActivityMetadata),
 });
 export type ItemLifecyclePayload = typeof ItemLifecyclePayload.Type;
 
@@ -429,8 +443,10 @@ export type ContentDeltaPayload = typeof ContentDeltaPayload.Type;
 
 const RequestOpenedPayload = Schema.Struct({
   requestType: CanonicalRequestType,
+  availableDecisions: Schema.optional(Schema.Array(Schema.Literals(["accept", "acceptForSession", "decline", "cancel"]))),
   detail: Schema.optional(TrimmedNonEmptyStringSchema),
   args: Schema.optional(Schema.Unknown),
+  mcp: Schema.optional(McpToolActivityMetadata),
 });
 export type RequestOpenedPayload = typeof RequestOpenedPayload.Type;
 
@@ -452,6 +468,7 @@ export const UserInputQuestion = Schema.Struct({
   header: TrimmedNonEmptyStringSchema,
   question: TrimmedNonEmptyStringSchema,
   options: Schema.Array(UserInputQuestionOption),
+  allowCustomAnswer: Schema.optional(Schema.Boolean),
   multiSelect: Schema.optional(Schema.Boolean).pipe(
     Schema.withConstructorDefault(Effect.succeed(false)),
   ),

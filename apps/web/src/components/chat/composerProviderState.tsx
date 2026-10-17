@@ -27,6 +27,17 @@ export type ComposerProviderStateInput = {
 
 export type ComposerPromptInjectionState = "none" | "ultrathink";
 
+const COMPOSER_ULTRATHINK_FRAME = {
+  composerFrameClassName: "ultrathink-frame",
+  composerSurfaceClassName: "shadow-[0_0_0_1px_rgba(255,255,255,0.07)_inset]",
+  modelPickerIconClassName: "ultrathink-chroma",
+} as const;
+
+const COMPOSER_MAX_EFFORT_FRAME = {
+  composerFrameClassName: "max-effort-frame",
+  composerSurfaceClassName: "shadow-[0_0_0_1px_rgba(255,255,255,0.07)_inset]",
+} as const;
+
 export type ComposerProviderState = {
   provider: ProviderDriverKind;
   promptEffort: string | null;
@@ -65,18 +76,21 @@ export function getComposerProviderState(input: ComposerProviderStateInput): Com
   const ultrathinkActive =
     (primarySelectDescriptor?.promptInjectedValues?.length ?? 0) > 0 &&
     promptInjectionState === "ultrathink";
+  const lastEffortOption = primarySelectDescriptor?.options.at(-1);
+  const isMaximumEffort =
+    (primarySelectDescriptor?.options.length ?? 0) > 1 &&
+    promptEffort !== null &&
+    promptEffort === lastEffortOption?.id;
 
   return {
     provider,
     promptEffort,
     modelOptionsForDispatch: buildProviderOptionSelectionsFromDescriptors(descriptors),
     ...(ultrathinkActive
-      ? {
-          composerFrameClassName: "ultrathink-frame",
-          composerSurfaceClassName: "shadow-[0_0_0_1px_rgba(255,255,255,0.07)_inset]",
-          modelPickerIconClassName: "ultrathink-chroma",
-        }
-      : {}),
+      ? COMPOSER_ULTRATHINK_FRAME
+      : isMaximumEffort
+        ? COMPOSER_MAX_EFFORT_FRAME
+        : {}),
   };
 }
 

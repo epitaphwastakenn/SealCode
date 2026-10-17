@@ -1,6 +1,102 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { mapOpenCodeStats } from "./openCodeUsage.ts";
+import {
+  mapOpenCodeGoSubscriptionUsage,
+  mapOpenCodeStats,
+  mergeOpenCodeSubscriptionUsage,
+} from "./openCodeUsage.ts";
+
+describe("OpenCode GO subscription usage", () => {
+  it("maps the rolling, weekly, and monthly account quotas", () => {
+    const usage = mapOpenCodeGoSubscriptionUsage({
+      checkedAt: "2026-08-12T19:00:00.000Z",
+      payload: {
+        usage: {
+          rolling: {
+            status: "ok",
+            percent: 18.5,
+            resetsAt: "2026-08-12T21:56:18.573Z",
+          },
+          weekly: {
+            status: "ok",
+            percent: 42,
+            resetsAt: "2026-08-17T00:00:00.573Z",
+          },
+          monthly: {
+            status: "ok",
+            percent: 73,
+            resetsAt: "2026-09-02T18:45:48.573Z",
+          },
+        },
+      },
+    });
+
+    expect(usage).toEqual({
+      plan: "OpenCode GO",
+      windows: [
+        {
+          id: "opencode-go-five-hour",
+          label: "5 Hour",
+          usedPercent: 18.5,
+          windowDurationMins: 300,
+          resetsAt: "2026-08-12T21:56:18.573Z",
+        },
+        {
+          id: "opencode-go-weekly",
+          label: "Weekly",
+          usedPercent: 42,
+          windowDurationMins: 10_080,
+          resetsAt: "2026-08-17T00:00:00.573Z",
+        },
+        {
+          id: "opencode-go-monthly",
+          label: "Monthly",
+          usedPercent: 73,
+          windowDurationMins: null,
+          resetsAt: "2026-09-02T18:45:48.573Z",
+        },
+      ],
+      metrics: [],
+      checkedAt: "2026-08-12T19:00:00.000Z",
+    });
+  });
+
+  it("rejects partial payloads instead of displaying incomplete quotas", () => {
+    expect(
+      mapOpenCodeGoSubscriptionUsage({
+        checkedAt: "2026-08-12T19:00:00.000Z",
+        payload: {
+          usage: {
+            rolling: { percent: 10, resetsAt: "2026-08-12T21:00:00.000Z" },
+            weekly: { percent: 20, resetsAt: "2026-08-17T00:00:00.000Z" },
+          },
+        },
+      }),
+    ).toBeUndefined();
+  });
+
+  it("keeps local activity as metadata when GO quotas are available", () => {
+    const goUsage = mapOpenCodeGoSubscriptionUsage({
+      checkedAt: "2026-08-12T19:00:00.000Z",
+      payload: {
+        usage: {
+          rolling: { percent: 10, resetsAt: "2026-08-12T21:00:00.000Z" },
+          weekly: { percent: 20, resetsAt: "2026-08-17T00:00:00.000Z" },
+          monthly: { percent: 30, resetsAt: "2026-09-02T18:00:00.000Z" },
+        },
+      },
+    });
+    const localActivity = mapOpenCodeStats({
+      checkedAt: "2026-08-12T19:00:00.000Z",
+      stdout: "Sessions 12\nMessages 48",
+    });
+
+    expect(mergeOpenCodeSubscriptionUsage(goUsage, localActivity)?.metrics).toEqual([
+      { id: "sessions", label: "Sessions", value: "12" },
+      { id: "messages", label: "Messages", value: "48" },
+    ]);
+  });
+});
 
 describe("OpenCode stats usage", () => {
   it("maps the CLI overview section without inventing a quota percentage", () => {

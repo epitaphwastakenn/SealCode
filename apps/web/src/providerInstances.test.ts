@@ -257,7 +257,6 @@ describe("resolveProviderDriverKindForInstanceSelection", () => {
     expect(
       resolveProviderDriverKindForInstanceSelection(
         entries,
-        providers,
         ProviderInstanceId.make("claude_openrouter"),
       ),
     ).toBe("claudeAgent");
@@ -273,7 +272,6 @@ describe("resolveProviderDriverKindForInstanceSelection", () => {
     expect(
       resolveProviderDriverKindForInstanceSelection(
         entries,
-        providers,
         ProviderInstanceId.make("removed_instance"),
       ),
     ).toBeUndefined();

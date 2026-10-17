@@ -2710,6 +2710,89 @@ describe("ProviderRuntimeIngestion", () => {
     expect(thread.session?.lastError).toBe("runtime exploded");
   });
 
+  it("reroutes an Antigravity quota failure to the configured fallback instance", async () => {
+    const harness = await createHarness({
+      serverSettings: {
+        providerInstances: {
+          [ProviderInstanceId.make("antigravity_primary")]: {
+            driver: ProviderDriverKind.make("antigravity"),
+            fallbackInstanceId: ProviderInstanceId.make("antigravity_backup"),
+          },
+          [ProviderInstanceId.make("antigravity_backup")]: {
+            driver: ProviderDriverKind.make("antigravity"),
+          },
+        },
+      },
+    });
+    const now = "2026-08-15T00:00:00.000Z";
+    const threadId = ThreadId.make("thread-1");
+    const messageId = MessageId.make("quota-message");
+
+    await harness.dispatch({
+      type: "thread.meta.update",
+      commandId: CommandId.make("cmd-antigravity-model"),
+      threadId,
+      modelSelection: {
+        instanceId: ProviderInstanceId.make("antigravity_primary"),
+        model: "gemini-3.7-flash",
+      },
+    });
+    await harness.dispatch({
+      type: "thread.turn.start",
+      commandId: CommandId.make("cmd-antigravity-turn"),
+      threadId,
+      message: {
+        messageId,
+        role: "user",
+        text: "Finish the task",
+        attachments: [],
+      },
+      runtimeMode: "approval-required",
+      interactionMode: "default",
+      createdAt: now,
+    });
+
+    harness.emit({
+      type: "turn.started",
+      eventId: asEventId("evt-antigravity-turn-started"),
+      provider: ProviderDriverKind.make("antigravity"),
+      providerInstanceId: ProviderInstanceId.make("antigravity_primary"),
+      threadId,
+      createdAt: now,
+      turnId: asTurnId("turn-quota"),
+      payload: {},
+    });
+    harness.emit({
+      type: "runtime.error",
+      eventId: asEventId("evt-antigravity-quota"),
+      provider: ProviderDriverKind.make("antigravity"),
+      providerInstanceId: ProviderInstanceId.make("antigravity_primary"),
+      threadId,
+      createdAt: now,
+      turnId: asTurnId("turn-quota"),
+      payload: { message: "You've reached your 5-hour usage limit." },
+    });
+    harness.emit({
+      type: "turn.completed",
+      eventId: asEventId("evt-antigravity-quota-completed"),
+      provider: ProviderDriverKind.make("antigravity"),
+      providerInstanceId: ProviderInstanceId.make("antigravity_primary"),
+      threadId,
+      createdAt: now,
+      turnId: asTurnId("turn-quota"),
+      payload: { state: "failed", errorMessage: "You've reached your 5-hour usage limit." },
+    });
+
+    const thread = await waitForThread(
+      harness.readModel,
+      (entry) => entry.modelSelection.instanceId === "antigravity_backup",
+    );
+    expect(thread.messages.filter((message) => message.id === messageId)).toHaveLength(1);
+    expect(thread.activities.some((activity) => activity.id === "evt-antigravity-quota")).toBe(
+      false,
+    );
+  });
+
   it("records runtime.error activities from the typed payload message", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
@@ -2837,7 +2920,7 @@ describe("ProviderRuntimeIngestion", () => {
     ).toBe(true);
   });
 
-  it("consumes P1 runtime events into thread metadata, diff checkpoints, and activities", async () => {
+  it("consumes P1 runtime events into thread metadata and activities", async () => {
     const harness = await createHarness();
     const now = "2026-01-01T00:00:00.000Z";
 
@@ -2924,9 +3007,6 @@ describe("ProviderRuntimeIngestion", () => {
         ) &&
         entry.activities.some(
           (activity: ProviderRuntimeTestActivity) => activity.kind === "runtime.warning",
-        ) &&
-        entry.checkpoints.some(
-          (checkpoint: ProviderRuntimeTestCheckpoint) => checkpoint.turnId === "turn-p1",
         ),
     );
 
@@ -2963,12 +3043,9 @@ describe("ProviderRuntimeIngestion", () => {
     expect(warning?.kind).toBe("runtime.warning");
     expect(warningPayload?.message).toBe("Provider got slow");
 
-    const checkpoint = thread.checkpoints.find(
-      (entry: ProviderRuntimeTestCheckpoint) => entry.turnId === "turn-p1",
-    );
-    expect(checkpoint?.status).toBe("missing");
-    expect(checkpoint?.assistantMessageId).toBe("assistant:item-p1-assistant");
-    expect(checkpoint?.checkpointRef).toBe("provider-diff:evt-turn-diff-updated");
+    expect(
+      thread.checkpoints.some((entry: ProviderRuntimeTestCheckpoint) => entry.turnId === "turn-p1"),
+    ).toBe(false);
   });
 
   it("projects context window updates into normalized thread activities", async () => {

@@ -49,6 +49,7 @@ describe("buildTraitsTriggerDisplay", () => {
     expect(display([EFFORT, fastModeDescriptor(false), CONTEXT_WINDOW])).toEqual({
       label: "High · 1M",
       showFastModeIcon: false,
+      isMaximumEffort: false,
     });
   });
 
@@ -56,6 +57,7 @@ describe("buildTraitsTriggerDisplay", () => {
     expect(display([EFFORT, fastModeDescriptor(true), CONTEXT_WINDOW])).toEqual({
       label: "High · 1M",
       showFastModeIcon: true,
+      isMaximumEffort: false,
     });
   });
 
@@ -72,10 +74,12 @@ describe("buildTraitsTriggerDisplay", () => {
     expect(display([EFFORT, serviceTier])).toEqual({
       label: "High",
       showFastModeIcon: false,
+      isMaximumEffort: false,
     });
     expect(display([EFFORT, { ...serviceTier, currentValue: "priority" }])).toEqual({
       label: "High",
       showFastModeIcon: true,
+      isMaximumEffort: false,
     });
   });
 
@@ -89,6 +93,7 @@ describe("buildTraitsTriggerDisplay", () => {
     expect(display([EFFORT, thinking])).toEqual({
       label: "High · Thinking On",
       showFastModeIcon: false,
+      isMaximumEffort: false,
     });
   });
 
@@ -96,10 +101,12 @@ describe("buildTraitsTriggerDisplay", () => {
     expect(display([fastModeDescriptor(true)])).toEqual({
       label: "Fast",
       showFastModeIcon: false,
+      isMaximumEffort: false,
     });
     expect(display([fastModeDescriptor(false)])).toEqual({
       label: "Normal",
       showFastModeIcon: false,
+      isMaximumEffort: false,
     });
   });
 
@@ -116,7 +123,7 @@ describe("buildTraitsTriggerDisplay", () => {
         { id: "high", label: "High" },
       ],
     };
-    expect(display([unresolved])).toEqual({ label: "", showFastModeIcon: false });
+    expect(display([unresolved])).toEqual({ label: "", showFastModeIcon: false, isMaximumEffort: false });
   });
 
   it("still renders the prompt-controlled ultrathink label alongside the bolt", () => {
@@ -127,6 +134,37 @@ describe("buildTraitsTriggerDisplay", () => {
         primarySelectDescriptorId: "reasoningEffort",
         ultrathinkPromptControlled: true,
       }),
-    ).toEqual({ label: "Ultrathink", showFastModeIcon: true });
+    ).toEqual({ label: "Ultrathink", showFastModeIcon: true, isMaximumEffort: true });
+  });
+
+  it("detects isMaximumEffort when option is the last/highest option for that model", () => {
+    // Gemini model where "high" is the maximum option
+    const geminiEffort = selectDescriptor(
+      "reasoningEffort",
+      [
+        { id: "low", label: "Low" },
+        { id: "medium", label: "Medium" },
+        { id: "high", label: "High" },
+      ],
+      "high",
+    );
+    expect(
+      buildTraitsTriggerDisplay({
+        provider: CODEX,
+        descriptors: [geminiEffort],
+        primarySelectDescriptorId: "reasoningEffort",
+        ultrathinkPromptControlled: false,
+      }),
+    ).toEqual({ label: "High", showFastModeIcon: false, isMaximumEffort: true });
+
+    // When Gemini effort is medium (not max)
+    expect(
+      buildTraitsTriggerDisplay({
+        provider: CODEX,
+        descriptors: [{ ...geminiEffort, currentValue: "medium" }],
+        primarySelectDescriptorId: "reasoningEffort",
+        ultrathinkPromptControlled: false,
+      }),
+    ).toEqual({ label: "Medium", showFastModeIcon: false, isMaximumEffort: false });
   });
 });

@@ -8,6 +8,9 @@ import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
+import { HttpClient } from "effect/unstable/http";
 
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { compareSemverVersions } from "@t3tools/shared/semver";
@@ -23,7 +26,11 @@ import {
   openCodeRuntimeErrorDetail,
   type OpenCodeInventory,
 } from "../opencodeRuntime.ts";
-import { mapOpenCodeStats } from "../openCodeUsage.ts";
+import {
+  mapOpenCodeStats,
+  mergeOpenCodeSubscriptionUsage,
+  probeOpenCodeGoSubscriptionUsage,
+} from "../openCodeUsage.ts";
 import type { Agent, ProviderListResponse } from "@opencode-ai/sdk/v2";
 
 const OPENCODE_PRESENTATION = {
@@ -301,7 +308,11 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
   openCodeSettings: OpenCodeSettings,
   cwd: string,
   environment?: NodeJS.ProcessEnv,
-): Effect.fn.Return<ServerProviderDraft, never, OpenCodeRuntime> {
+): Effect.fn.Return<
+  ServerProviderDraft,
+  never,
+  FileSystem.FileSystem | HttpClient.HttpClient | OpenCodeRuntime | Path.Path
+> {
   const openCodeRuntime = yield* OpenCodeRuntime;
   const resolvedEnvironment = environment ?? process.env;
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
@@ -352,32 +363,44 @@ export const checkOpenCodeProviderStatus = Effect.fn("checkOpenCodeProviderStatu
     });
   }
 
-  // Local activity is independent of model inventory and the version probe.
-  // Collect it first so a broken inventory/version check cannot hide valid
-  // `opencode stats` data from the Usage screen.
+  // Usage is independent of model inventory and the version probe. Collect it
+  // first so a broken health check cannot hide valid account data.
   const subscriptionUsage = isExternalServer
     ? undefined
-    : yield* Effect.exit(
-        openCodeRuntime
-          .runOpenCodeCommand({
-            binaryPath: openCodeSettings.binaryPath,
-            args: ["stats", "--days", "30"],
-            environment: resolvedEnvironment,
-          })
-          .pipe(
-            Effect.mapError(
-              (cause) =>
-                new OpenCodeProbeError({ cause, detail: openCodeRuntimeErrorDetail(cause) }),
+    : yield* Effect.all(
+        [
+          Effect.exit(
+            openCodeRuntime
+              .runOpenCodeCommand({
+                binaryPath: openCodeSettings.binaryPath,
+                args: ["stats", "--days", "30"],
+                environment: resolvedEnvironment,
+              })
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new OpenCodeProbeError({ cause, detail: openCodeRuntimeErrorDetail(cause) }),
+                ),
+              ),
+          ).pipe(
+            Effect.map((statsExit) =>
+              statsExit._tag === "Success" && statsExit.value.code === 0
+                ? mapOpenCodeStats({
+                    stdout: `${statsExit.value.stdout}\n${statsExit.value.stderr}`,
+                    checkedAt,
+                  })
+                : undefined,
             ),
           ),
+          probeOpenCodeGoSubscriptionUsage({
+            environment: resolvedEnvironment,
+            checkedAt,
+          }),
+        ],
+        { concurrency: "unbounded" },
       ).pipe(
-        Effect.map((statsExit) =>
-          statsExit._tag === "Success" && statsExit.value.code === 0
-            ? mapOpenCodeStats({
-                stdout: `${statsExit.value.stdout}\n${statsExit.value.stderr}`,
-                checkedAt,
-              })
-            : undefined,
+        Effect.map(([localActivity, goUsage]) =>
+          mergeOpenCodeSubscriptionUsage(goUsage, localActivity),
         ),
       );
 

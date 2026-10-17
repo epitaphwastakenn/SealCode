@@ -166,6 +166,7 @@ export function ThemeEditorPanel({
   const [name, setName] = useState("");
   const [activeAppearance, setActiveAppearance] = useState<ThemeAppearance>(initialAppearance);
   const [sidebarArtwork, setSidebarArtwork] = useState(false);
+  const [gradient, setGradient] = useState(false);
   const [isAdvanced, setIsAdvanced] = useState(false);
   const [colorsByAppearance, setColorsByAppearance] = useState<ThemeEditorColorsByAppearance>(() =>
     getThemeEditorColorsByAppearance(),
@@ -264,6 +265,7 @@ export function ThemeEditorPanel({
       // Artwork is opt-in for new themes, including duplicates. Editing keeps
       // the theme's existing choice.
       setSidebarArtwork(editingTheme?.sidebarArtwork === true);
+      setGradient(editingTheme?.gradient === true);
       // Themes saved by the guided editor carry the managed flag; anything
       // else (imports, hand-edited files, older saves) opens in advanced mode
       // so guided regeneration cannot silently discard hand-tuned colors. A
@@ -330,6 +332,7 @@ export function ThemeEditorPanel({
     setSidebarArtwork(
       mergeTarget ? mergeTarget.sidebarArtwork === true : editingTheme?.sidebarArtwork === true,
     );
+    setGradient(mergeTarget ? mergeTarget.gradient === true : editingTheme?.gradient === true);
   }, [editingTheme, mergeTarget, mergeTargetId]);
 
   useEffect(() => {
@@ -347,8 +350,13 @@ export function ThemeEditorPanel({
   // comes back when the editor closes, including on cancel.
   useEffect(() => {
     if (!open || !isDraftSeeded) return;
-    applyThemeColorPreview(colorsByAppearance[activeAppearance], activeAppearance, sidebarArtwork);
-  }, [activeAppearance, colorsByAppearance, isDraftSeeded, open, sidebarArtwork]);
+    applyThemeColorPreview(
+      colorsByAppearance[activeAppearance],
+      activeAppearance,
+      sidebarArtwork,
+      gradient,
+    );
+  }, [activeAppearance, colorsByAppearance, gradient, isDraftSeeded, open, sidebarArtwork]);
 
   useEffect(() => {
     if (!open) return;
@@ -675,6 +683,7 @@ export function ThemeEditorPanel({
               ...Object.fromEntries(editedModes.map((mode) => [mode, colorsForSave[mode]])),
             },
             ...(sidebarArtwork ? { sidebarArtwork: true } : {}),
+            ...(gradient ? { gradient: true } : {}),
             ...(mergeTarget.managed === true && !isAdvanced ? { managed: true } : {}),
           }),
         );
@@ -706,6 +715,7 @@ export function ThemeEditorPanel({
               ? { variants: { [variantAppearance]: colorsForSave[variantAppearance] } }
               : {}),
             ...(sidebarArtwork ? { sidebarArtwork: true } : {}),
+            ...(gradient ? { gradient: true } : {}),
             ...(isAdvanced ? {} : { managed: true }),
           }),
         );
@@ -733,6 +743,7 @@ export function ThemeEditorPanel({
               [activeAppearance]: colorsForSave[activeAppearance],
             },
             ...(sidebarArtwork ? { sidebarArtwork: true } : {}),
+            ...(gradient ? { gradient: true } : {}),
             ...(mergeTarget.managed === true && !isAdvanced ? { managed: true } : {}),
           }),
         );
@@ -744,6 +755,7 @@ export function ThemeEditorPanel({
             appearance: activeAppearance,
             colors: colorsForSave[activeAppearance],
             ...(sidebarArtwork ? { sidebarArtwork: true } : {}),
+            ...(gradient ? { gradient: true } : {}),
             ...(isAdvanced ? {} : { managed: true }),
           }),
         );
@@ -863,6 +875,20 @@ export function ThemeEditorPanel({
           aria-label="Allow sidebar artwork with this theme"
           checked={sidebarArtwork}
           onCheckedChange={(checked) => setSidebarArtwork(Boolean(checked))}
+        />
+      </span>
+    </label>
+  );
+
+  const renderGradientToggle = () => (
+    <label className="grid cursor-pointer grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-center gap-3">
+      <span className="text-sm font-medium">Canvas gradient</span>
+      <span className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span>Blend background into the accent color</span>
+        <Switch
+          aria-label="Use a canvas gradient"
+          checked={gradient}
+          onCheckedChange={(checked) => setGradient(Boolean(checked))}
         />
       </span>
     </label>
@@ -1125,6 +1151,7 @@ export function ThemeEditorPanel({
             ) : null}
             {renderAppearanceButtons()}
             {renderSidebarArtworkToggle()}
+            {renderGradientToggle()}
             <div className="space-y-3">
               {renderColorsHeader()}
               {renderColorFields()}

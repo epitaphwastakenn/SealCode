@@ -19,6 +19,7 @@ import {
   buildThreadActionMenuItems,
   type ThreadActionMenuId,
 } from "../components/threadActionMenu.logic";
+import { useThreadDeleteConfirmation } from "../components/threadActionMenu";
 import { stackedThreadToast, toastManager } from "../components/ui/toast";
 import { threadEnvironment } from "../state/threads";
 import { useAtomCommand } from "../state/use-atom-command";
@@ -65,6 +66,8 @@ export function useThreadActionMenu(input: {
   readonly onStartRename: () => void;
 }) {
   const { threadRef, projectCwd, changeRequestState, onStartRename } = input;
+  const { requestDeleteConfirmation, requestConfirmation, deleteConfirmDialog } =
+    useThreadDeleteConfirmation();
   const {
     settleThread,
     unsettleThread,
@@ -243,28 +246,43 @@ export function useThreadActionMenu(input: {
             }
             return;
           case "delete": {
+            const deleteNow = async () => {
+              const deleted = await deleteThread(threadRef, {
+                confirmWorktreeDeletion: ({ path }) =>
+                  requestConfirmation({
+                    title: "linked worktree",
+                    count: 1,
+                    single: true,
+                    heading: "Delete linked worktree?",
+                    description: [
+                      "This thread is the only one linked to this worktree:",
+                      path,
+                      "",
+                      "Delete the worktree too?",
+                    ].join("\n"),
+                  }),
+              });
+              if (
+                deleted._tag === "Failure" &&
+                !isAtomCommandInterrupted(deleted) &&
+                // A failure with the thread already gone is worktree cleanup
+                // failing after a successful delete — deleteThread has toasted
+                // that itself, and "Failed to delete thread" would be a lie.
+                readThreadShell(threadRef) !== null
+              ) {
+                failureToast("Failed to delete thread", squashAtomCommandFailure(deleted));
+              }
+            };
             if (confirmThreadDelete) {
-              const confirmed = await settlePromise(() =>
-                api.dialogs.confirm(
-                  [
-                    `Delete thread "${thread.title}"?`,
-                    "This permanently clears conversation history for this thread.",
-                  ].join("\n"),
-                ),
-              );
-              if (confirmed._tag === "Failure" || !confirmed.value) return;
+              requestDeleteConfirmation({
+                title: thread.title,
+                count: 1,
+                single: true,
+                onConfirm: deleteNow,
+              });
+              return;
             }
-            const deleted = await deleteThread(threadRef);
-            if (
-              deleted._tag === "Failure" &&
-              !isAtomCommandInterrupted(deleted) &&
-              // A failure with the thread already gone is worktree cleanup
-              // failing after a successful delete — deleteThread has toasted
-              // that itself, and "Failed to delete thread" would be a lie.
-              readThreadShell(threadRef) !== null
-            ) {
-              failureToast("Failed to delete thread", squashAtomCommandFailure(deleted));
-            }
+            await deleteNow();
             return;
           }
           default:
@@ -284,6 +302,8 @@ export function useThreadActionMenu(input: {
       onStartRename,
       pinThread,
       projectCwd,
+      requestDeleteConfirmation,
+      requestConfirmation,
       settleThread,
       snoozeThread,
       threadRef,
@@ -295,5 +315,5 @@ export function useThreadActionMenu(input: {
     ],
   );
 
-  return { openMenu };
+  return { openMenu, deleteConfirmDialog };
 }

@@ -57,6 +57,20 @@ describe("detectSourceControlProviderFromRemoteUrl", () => {
     ).toBe("bitbucket");
   });
 
+  it("detects Azure DevOps SSH remotes", () => {
+    expect(
+      detectSourceControlProviderFromRemoteUrl("git@ssh.dev.azure.com:v3/org/project/repo")?.kind,
+    ).toBe("azure-devops");
+    expect(
+      detectSourceControlProviderFromRemoteUrl("ssh://git@ssh.dev.azure.com:22/v3/org/project/repo")
+        ?.kind,
+    ).toBe("azure-devops");
+    expect(
+      detectSourceControlProviderFromRemoteUrl("git@vs-ssh.visualstudio.com:v3/org/project/repo")
+        ?.kind,
+    ).toBe("azure-devops");
+  });
+
   it("preserves ports while classifying by hostname", () => {
     expect(
       detectSourceControlProviderFromRemoteUrl("https://gitlab.com:8443/group/repo.git"),

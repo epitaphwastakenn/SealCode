@@ -580,10 +580,21 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
             ...(mcpSession
               ? {
                   mcpServers: [
+                      {
+                        type: "http" as const,
+                        name: "t3-code",
+                        url: mcpSession.endpoint,
+                        headers: [
+                        {
+                          name: "Authorization",
+                          value: mcpSession.authorizationHeader,
+                        },
+                      ],
+                    },
                     {
                       type: "http" as const,
-                      name: "t3-code",
-                      url: mcpSession.endpoint,
+                      name: "sealcode-global",
+                      url: mcpSession.globalEndpoint,
                       headers: [
                         {
                           name: "Authorization",
@@ -876,7 +887,7 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
             Effect.catch((cause) =>
               Effect.logError("Failed to process Grok runtime notification.", { cause }),
             ),
-            Effect.forkChild,
+            Effect.forkIn(sessionScope),
           );
 
           ctx.notificationFiber = nf;
@@ -1446,7 +1457,14 @@ export function makeGrokAdapter(grokSettings: GrokSettings, options?: GrokAdapte
 
     return {
       provider: PROVIDER,
-      capabilities: { sessionModelSwitch: "in-session" },
+      capabilities: {
+        sessionModelSwitch: "in-session",
+        stablePromptPrefix: false,
+        contextCompaction: "unsupported",
+        promptCaching: "unsupported",
+        toolTransport: "mcp",
+        detachedDelegation: false,
+      },
       startSession,
       sendTurn,
       interruptTurn,

@@ -49,6 +49,7 @@ import {
   type DesktopTelemetryControlMessage as DesktopTelemetryControlMessageValue,
 } from "@t3tools/contracts";
 import { waitForHttpReady as waitForHttpReadyShared } from "@t3tools/shared/httpReadiness";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
 import * as DesktopObservability from "../app/DesktopObservability.ts";
 import * as DesktopTelemetryPublisher from "../telemetry/DesktopTelemetryPublisher.ts";
@@ -468,13 +469,19 @@ export const runBackendProcess = Effect.fn("runBackendProcess")(function* (
       };
     }
   }
+  const platform = yield* HostProcessPlatform;
   const command = ChildProcess.make(options.executablePath, options.args, {
     cwd: options.cwd,
     env: options.env,
     extendEnv: options.extendEnv,
     // In Electron main, process.execPath points to the Electron binary.
     // Run the child in Node mode so this backend process does not become a GUI app instance.
-    stdin: options.bootstrapDelivery === "stdin" ? bootstrapStream : "ignore",
+    stdin:
+      options.bootstrapDelivery === "stdin"
+        ? bootstrapStream
+        : platform === "win32"
+          ? "pipe"
+          : "ignore",
     stdout: options.captureOutput ? "pipe" : "inherit",
     stderr: options.captureOutput ? "pipe" : "inherit",
     killSignal: "SIGTERM",
@@ -498,6 +505,22 @@ export const runBackendProcess = Effect.fn("runBackendProcess")(function* (
     ),
   );
   const outputFibers: Array<Fiber.Fiber<void, never>> = [];
+
+  if (platform === "win32" && options.bootstrapDelivery === "fd3") {
+    yield* Effect.addFinalizer(() =>
+      Effect.gen(function* () {
+        if (!(yield* handle.isRunning)) return;
+        // Windows SIGTERM is a forced tree kill. EOF asks the backend to release
+        // provider scopes first, including PyInstaller's extraction cleanup.
+        yield* Stream.run(Stream.empty, handle.stdin);
+        yield* handle.exitCode.pipe(Effect.timeout("120 seconds"));
+      }).pipe(
+        Effect.catchCause((cause) =>
+          logBackendProcessWarning("backend graceful shutdown failed", { cause }),
+        ),
+      ),
+    );
+  }
 
   yield* options.onStarted?.(handle.pid) ?? Effect.void;
   if (

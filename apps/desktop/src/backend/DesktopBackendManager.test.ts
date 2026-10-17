@@ -21,6 +21,7 @@ import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
 
 import * as DesktopBackendManager from "./DesktopBackendManager.ts";
 import * as DesktopObservability from "../app/DesktopObservability.ts";
@@ -72,6 +73,8 @@ function makeProcess(options?: {
   readonly exitCode?: Effect.Effect<ChildProcessSpawner.ExitCode, PlatformError.PlatformError>;
   readonly kill?: ChildProcessSpawner.ChildProcessHandle["kill"];
   readonly getOutputFd?: ChildProcessSpawner.ChildProcessHandle["getOutputFd"];
+  readonly stdin?: ChildProcessSpawner.ChildProcessHandle["stdin"];
+  readonly isRunning?: ChildProcessSpawner.ChildProcessHandle["isRunning"];
 }): ChildProcessSpawner.ChildProcessHandle {
   return ChildProcessSpawner.makeHandle({
     pid: ChildProcessSpawner.ProcessId(123),
@@ -79,9 +82,9 @@ function makeProcess(options?: {
     stderr: options?.stderr ?? Stream.empty,
     all: Stream.merge(options?.stdout ?? Stream.empty, options?.stderr ?? Stream.empty),
     exitCode: options?.exitCode ?? Effect.succeed(ChildProcessSpawner.ExitCode(0)),
-    isRunning: Effect.succeed(false),
+    isRunning: options?.isRunning ?? Effect.succeed(false),
     kill: options?.kill ?? (() => Effect.void),
-    stdin: Sink.drain,
+    stdin: options?.stdin ?? Sink.drain,
     getInputFd: () => Sink.drain,
     getOutputFd: options?.getOutputFd ?? (() => Stream.empty),
     unref: Effect.succeed(Effect.void),
@@ -182,6 +185,45 @@ function makeTestInstance(input: MakeInstanceInput) {
 }
 
 describe("DesktopBackendManager", () => {
+  it.effect("closes backend stdin and awaits cleanup before forced scope release", () =>
+    Effect.gen(function* () {
+      const ready = yield* Deferred.make<void>();
+      const exited = yield* Deferred.make<ChildProcessSpawner.ExitCode>();
+      let eof = false;
+      let released = false;
+      const spawnerLayer = Layer.succeed(
+        ChildProcessSpawner.ChildProcessSpawner,
+        ChildProcessSpawner.make(() =>
+          Effect.gen(function* () {
+            yield* Effect.addFinalizer(() =>
+              Effect.sync(() => {
+                assert.equal(eof, true);
+                released = true;
+              }),
+            );
+            return makeProcess({
+              isRunning: Effect.succeed(true),
+              exitCode: Deferred.await(exited),
+              stdin: Sink.onExit(Sink.drain, () =>
+                Effect.sync(() => {
+                  eof = true;
+                }).pipe(Effect.andThen(Deferred.succeed(exited, ChildProcessSpawner.ExitCode(0)))),
+              ),
+            });
+          }),
+        ),
+      );
+      const instance = yield* makeTestInstance({
+        spawnerLayer,
+        onReady: Deferred.succeed(ready, undefined).pipe(Effect.asVoid),
+      });
+      yield* instance.start;
+      yield* Deferred.await(ready);
+      yield* instance.stop();
+      assert.equal(released, true);
+    }).pipe(Effect.scoped, Effect.provideService(HostProcessPlatform, "win32")),
+  );
+
   it.effect("spawns the backend with fd3 bootstrap and fd4 telemetry", () =>
     Effect.scoped(
       Effect.gen(function* () {

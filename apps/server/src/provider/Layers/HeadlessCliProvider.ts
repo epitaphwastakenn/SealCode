@@ -18,7 +18,6 @@ import {
   parseGenericCliVersion,
   providerModelsFromSettings,
   spawnAndCollect,
-  type CommandResult,
   type ServerProviderDraft,
 } from "../providerSnapshot.ts";
 
@@ -31,28 +30,19 @@ export interface HeadlessCliProviderConfig {
 export interface HeadlessCliProviderDefinition {
   readonly driver: ProviderDriverKind;
   readonly displayName: string;
-  readonly protocol: "antigravity" | "commandcode";
+  readonly protocol: "commandcode";
   readonly defaultModels: ReadonlyArray<{ readonly slug: string; readonly name: string }>;
   readonly subscriptionUsage?: (input: {
     readonly environment: NodeJS.ProcessEnv;
+    readonly binaryPath: string;
     readonly checkedAt: string;
+    readonly platform: NodeJS.Platform;
   }) => Effect.Effect<SubscriptionUsage | undefined>;
   /**
-   * Some providers expose account state through a separate local service.
-   * Probe that service even when their CLI health check is unavailable.
+   * Some providers expose account usage independently of CLI health.
+   * Probe that usage even when their CLI health check is unavailable.
    */
   readonly probeSubscriptionUsageBeforeCliHealth?: boolean;
-}
-
-export function normalizeHeadlessCliModel(
-  protocol: HeadlessCliProviderDefinition["protocol"],
-  model: string | undefined,
-): string | undefined {
-  if (!model || protocol !== "antigravity") return model;
-  return model.replace(
-    /(?:-(?:minimal|low|medium|high|xhigh|max|thinking)|\s+\((?:minimal|low|medium|high|xhigh|max|thinking)\))$/i,
-    "",
-  );
 }
 
 const HEADLESS_CLI_NO_EFFORT_CAPABILITIES: ModelCapabilities = createModelCapabilities({
@@ -62,13 +52,9 @@ const HEADLESS_CLI_NO_EFFORT_CAPABILITIES: ModelCapabilities = createModelCapabi
 const PROBE_TIMEOUT_MS = 20_000;
 
 export function headlessCliHealthProbeArgs(
-  protocol: HeadlessCliProviderDefinition["protocol"],
+  _protocol: HeadlessCliProviderDefinition["protocol"],
 ): ReadonlyArray<string> {
-  return protocol === "commandcode"
-    ? ["--no-auto-update", "--version"]
-    : protocol === "antigravity"
-      ? ["--version"]
-      : ["--help"];
+  return ["--no-auto-update", "--version"];
 }
 
 const EFFORT_ORDER = new Map([
@@ -96,6 +82,20 @@ function normalizeEffortValues(values: ReadonlyArray<string>): ReadonlyArray<str
 
 function titleCaseEffort(value: string): string {
   return value === "xhigh" ? "Extra high" : value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+function sanitizeHeadlessCliCatalogOutput(output: string): string {
+  return output
+    .replace(/\x1b\[[0-9;?]*H/g, "\n")
+    .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "")
+    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
+    .replaceAll("\r", "");
+}
+
+function isHeadlessCliCatalogNoise(line: string): boolean {
+  return /^(?:(?:[\u2800-\u28ff]\s*)?fetching\b.*|available models\b.*|open source|anthropic|openai|google|sakana|meta|xai|pass the\b.*|docs:.*)$/i.test(
+    line,
+  );
 }
 
 export function capabilitiesForEffortLevels(
@@ -170,85 +170,27 @@ export function parseCommandCodeModelCatalog(
 }
 
 export function parseHeadlessCliModelRows(
-  definition: HeadlessCliProviderDefinition,
+  _definition: HeadlessCliProviderDefinition,
   output: string,
   effortsByModel: ReadonlyMap<string, ReadonlyArray<string>> = new Map(),
 ): ReadonlyArray<ServerProviderModel> {
   const parsed: Array<{ slug: string; name: string }> = [];
   const discoveredEfforts = new Map(effortsByModel);
   const seen = new Set<string>();
-  const terminalOutput = output
-    .replace(/\x1b\[[0-9;?]*H/g, "\n")
-    .replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, "")
-    .replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")
-    .replaceAll("\r", "");
-  for (const rawLine of terminalOutput.split("\n")) {
+  for (const rawLine of sanitizeHeadlessCliCatalogOutput(output).split("\n")) {
     const line = rawLine
       .replace(/\x1b\[[0-9;]*m/g, "")
       .trim()
       .replace(/^(?:[-*•>]\s+)+/u, "");
-    const normalizedLine = line;
-    if (
-      !normalizedLine ||
-      /^(?:(?:[\u2800-\u28ff]\s*)?fetching\b.*|available models\b.*|open source|anthropic|openai|google|sakana|meta|xai|pass the\b.*|docs:.*)$/i.test(
-        normalizedLine,
-      )
-    ) {
-      continue;
-    }
-    if (definition.protocol === "antigravity") {
-      const displayMatch = normalizedLine.match(/^(?<model>.+?)(?:\s+\((?<effort>[^()]+)\))?$/u);
-      const displayModel = displayMatch?.groups?.model?.trim();
-      const displayEffort = displayMatch?.groups?.effort?.trim();
-      const displayHasSlugPrefix = Boolean(
-        displayModel && /^[a-z0-9][a-z0-9._:/-]+\s+[A-Z]/.test(displayModel),
-      );
-      if (
-        displayModel &&
-        !displayHasSlugPrefix &&
-        (displayEffort || /^(?:Gemini|Claude|GPT-OSS)\b/.test(displayModel))
-      ) {
-        const model = displayModel;
-        const effort = displayEffort;
-        if (effort) {
-          const key = normalizeModelKey(model)!;
-          discoveredEfforts.set(key, [...(discoveredEfforts.get(key) ?? []), effort]);
-        }
-        if (!seen.has(model)) {
-          seen.add(model);
-          parsed.push({ slug: model, name: model });
-        }
-        continue;
-      }
-    }
-    const match =
-      definition.protocol === "antigravity"
-        ? normalizedLine.match(/^([^\s]+)(?:\s+(.+))?$/)
-        : normalizedLine.match(/^([^\s]+)\s{2,}(.+)$/);
-    const discoveredSlug = match?.[1]?.trim();
-    const rawName = match?.[2]?.trim();
-    const effort =
-      definition.protocol === "antigravity"
-        ? (discoveredSlug?.match(/-(?<effort>minimal|low|medium|high|xhigh|max|thinking)$/i)?.groups
-            ?.effort ?? rawName?.match(/\((?<effort>[^()]+)\)$/u)?.groups?.effort)
-        : undefined;
-    const slug =
-      definition.protocol === "antigravity"
-        ? discoveredSlug?.replace(/-(?:minimal|low|medium|high|xhigh|max|thinking)$/i, "")
-        : discoveredSlug;
+    if (!line || isHeadlessCliCatalogNoise(line)) continue;
+    const match = line.match(/^([^\s]+)\s{2,}(.+)$/);
+    const slug = match?.[1]?.trim();
     if (!slug || !/^[a-z0-9][a-z0-9._:/-]*$/.test(slug) || /[:/]$/.test(slug)) {
       continue;
     }
-    if (effort) {
-      discoveredEfforts.set(slug, [...(discoveredEfforts.get(slug) ?? []), effort]);
-    }
     if (seen.has(slug)) continue;
     seen.add(slug);
-    const name =
-      definition.protocol === "commandcode"
-        ? slug
-        : (rawName?.replace(/\s+\([^()]+\)$/u, "") ?? slug);
-    parsed.push({ slug, name });
+    parsed.push({ slug, name: slug });
   }
   return parsed.map((model) => ({
     ...model,
@@ -297,47 +239,6 @@ function runCommand(
   });
 }
 
-function runWindowsPtyCommand(
-  binaryPath: string,
-  args: ReadonlyArray<string>,
-  environment: NodeJS.ProcessEnv,
-): Effect.Effect<CommandResult> {
-  return Effect.tryPromise(() => import("node-pty")).pipe(
-    Effect.orDie,
-    Effect.flatMap((nodePty) =>
-      Effect.callback<CommandResult>((resume) => {
-        let output = "";
-        let child: import("node-pty").IPty;
-        try {
-          child = nodePty.spawn(binaryPath, [...args], {
-            cwd: process.cwd(),
-            cols: 160,
-            rows: 40,
-            env: environment,
-            name: "xterm-color",
-          });
-        } catch (cause) {
-          resume(Effect.die(cause));
-          return;
-        }
-        const dataSubscription = child.onData((chunk) => {
-          output += chunk;
-        });
-        const exitSubscription = child.onExit(({ exitCode }) => {
-          dataSubscription.dispose();
-          exitSubscription.dispose();
-          resume(Effect.succeed({ stdout: output, stderr: "", code: exitCode }));
-        });
-        return Effect.sync(() => {
-          dataSubscription.dispose();
-          exitSubscription.dispose();
-          child.kill();
-        });
-      }),
-    ),
-  );
-}
-
 export function buildInitialHeadlessCliProvider(
   definition: HeadlessCliProviderDefinition,
   config: HeadlessCliProviderConfig,
@@ -381,7 +282,8 @@ export function checkHeadlessCliProviderStatus(
   options: {
     readonly capabilityRegistry?: HeadlessCliModelCapabilityRegistry;
     readonly modelCatalog?: string;
-  } = {},
+    readonly platform: NodeJS.Platform;
+  },
 ): Effect.Effect<
   ServerProviderDraft,
   never,
@@ -397,7 +299,12 @@ export function checkHeadlessCliProviderStatus(
     const preflightSubscriptionUsage =
       definition.probeSubscriptionUsageBeforeCliHealth && definition.subscriptionUsage
         ? yield* definition
-            .subscriptionUsage({ environment, checkedAt })
+            .subscriptionUsage({
+              environment,
+              binaryPath: config.binaryPath,
+              checkedAt,
+              platform: options.platform,
+            })
             .pipe(Effect.orElseSucceed(() => undefined))
         : undefined;
 
@@ -453,9 +360,7 @@ export function checkHeadlessCliProviderStatus(
     const modelArgs =
       definition.protocol === "commandcode" ? ["--no-auto-update", "--list-models"] : ["models"];
     const modelResult = yield* Effect.suspend(() =>
-      definition.protocol === "antigravity" && process.platform === "win32"
-        ? runWindowsPtyCommand(config.binaryPath, modelArgs, environment)
-        : runCommand(config.binaryPath, modelArgs, environment),
+      runCommand(config.binaryPath, modelArgs, environment),
     ).pipe(
       Effect.timeoutOption(PROBE_TIMEOUT_MS),
       Effect.orElseSucceed(() => Option.none()),
@@ -482,7 +387,12 @@ export function checkHeadlessCliProviderStatus(
       preflightSubscriptionUsage ??
       (ok && definition.subscriptionUsage
         ? yield* definition
-            .subscriptionUsage({ environment, checkedAt })
+            .subscriptionUsage({
+              environment,
+              binaryPath: config.binaryPath,
+              checkedAt,
+              platform: options.platform,
+            })
             .pipe(Effect.orElseSucceed(() => undefined))
         : undefined);
     return buildServerProvider({

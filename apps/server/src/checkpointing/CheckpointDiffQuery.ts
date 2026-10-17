@@ -152,10 +152,10 @@ export const make = Effect.gen(function* () {
         });
       }
 
-      const toCheckpointRef = threadContext.value.checkpoints.find(
+      const toCheckpoint = threadContext.value.checkpoints.find(
         (checkpoint) => checkpoint.checkpointTurnCount === input.toTurnCount,
-      )?.checkpointRef;
-      if (!toCheckpointRef) {
+      );
+      if (!toCheckpoint) {
         return yield* new CheckpointRefUnavailableError({
           operation,
           threadId: input.threadId,
@@ -168,9 +168,12 @@ export const make = Effect.gen(function* () {
         .diffCheckpoints({
           cwd: workspaceCwd,
           fromCheckpointRef,
-          toCheckpointRef,
+          toCheckpointRef: toCheckpoint.checkpointRef,
           fallbackFromToHead: false,
           ignoreWhitespace,
+          ...(toCheckpoint.fileAttribution === "known"
+            ? { paths: toCheckpoint.files.map((file) => file.path) }
+            : {}),
         })
         .pipe(Effect.withSpan("checkpoint.turnDiff.diffCheckpoints"));
 
@@ -254,6 +257,24 @@ export const make = Effect.gen(function* () {
       });
     }
 
+    const checkpointContext = yield* projectionSnapshotQuery
+      .getThreadCheckpointContext(input.threadId)
+      .pipe(Effect.withSpan("checkpoint.fullThread.lookupCheckpointFiles"));
+    const paths = Option.match(checkpointContext, {
+      onNone: () => undefined,
+      onSome: (context) => {
+        const checkpoints = context.checkpoints.filter(
+          (checkpoint) => checkpoint.checkpointTurnCount <= input.toTurnCount,
+        );
+        if (checkpoints.some((checkpoint) => checkpoint.fileAttribution !== "known")) {
+          return undefined;
+        }
+        return Array.from(
+          new Set(checkpoints.flatMap((checkpoint) => checkpoint.files.map((file) => file.path))),
+        ).toSorted();
+      },
+    });
+
     const diff = yield* checkpointStore
       .diffCheckpoints({
         cwd: workspaceCwd,
@@ -261,6 +282,7 @@ export const make = Effect.gen(function* () {
         toCheckpointRef: threadContext.value.toCheckpointRef as CheckpointRef,
         fallbackFromToHead: false,
         ignoreWhitespace,
+        ...(paths === undefined ? {} : { paths }),
       })
       .pipe(Effect.withSpan("checkpoint.fullThread.diffCheckpoints"));
 

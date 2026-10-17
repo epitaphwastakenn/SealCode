@@ -601,10 +601,14 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
         ]);
       });
 
-      it("preserves the last valid subscription usage when a refresh omits it", () => {
+      it.each([
+        ["cursor", "authenticated", true],
+        ["antigravity", "unknown", true],
+        ["antigravity", "unauthenticated", false],
+      ] as const)("retains usage for %s with auth %s: %s", (driver, authStatus, retainUsage) => {
         const previousProvider = {
-          instanceId: ProviderInstanceId.make("cursor"),
-          driver: ProviderDriverKind.make("cursor"),
+          instanceId: ProviderInstanceId.make(driver),
+          driver: ProviderDriverKind.make(driver),
           status: "ready",
           enabled: true,
           installed: true,
@@ -624,12 +628,13 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
         const { subscriptionUsage: _previousUsage, ...refreshedProviderBase } = previousProvider;
         const refreshedProvider = {
           ...refreshedProviderBase,
+          auth: { status: authStatus },
           checkedAt: "2026-04-14T00:01:00.000Z",
         } satisfies ServerProvider;
 
         assert.deepStrictEqual(
           mergeProviderSnapshot(previousProvider, refreshedProvider).subscriptionUsage,
-          previousProvider.subscriptionUsage,
+          retainUsage ? previousProvider.subscriptionUsage : undefined,
         );
       });
 
@@ -670,6 +675,57 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
               slug: "github/gpt-5",
               name: "GPT-5",
               subProvider: "GitHub",
+              isCustom: false,
+              capabilities: null,
+            },
+          ],
+        } satisfies ServerProvider;
+
+        assert.deepStrictEqual(mergeProviderSnapshot(previousProvider, refreshedProvider).models, [
+          ...refreshedProvider.models,
+        ]);
+      });
+
+      it("drops stale Antigravity models missing from a successful refresh", () => {
+        const previousProvider = {
+          instanceId: ProviderInstanceId.make("antigravity"),
+          driver: ProviderDriverKind.make("antigravity"),
+          status: "ready",
+          enabled: true,
+          installed: true,
+          auth: { status: "unknown" },
+          checkedAt: "2026-08-12T00:00:00.000Z",
+          version: "1.0.0",
+          models: [
+            {
+              slug: "claude-opus-4-6",
+              name: "Claude Opus 4.6",
+              isCustom: false,
+              capabilities: null,
+            },
+            {
+              slug: "Claude Opus 4.6",
+              name: "Claude Opus 4.6",
+              isCustom: false,
+              capabilities: null,
+            },
+            {
+              slug: "claude-opus-4-6-thinking",
+              name: "Claude Opus 4.6",
+              isCustom: false,
+              capabilities: null,
+            },
+          ],
+          slashCommands: [],
+          skills: [],
+        } as const satisfies ServerProvider;
+        const refreshedProvider = {
+          ...previousProvider,
+          checkedAt: "2026-08-12T00:01:00.000Z",
+          models: [
+            {
+              slug: "claude-opus-4-6-thinking",
+              name: "Claude Opus 4.6",
               isCustom: false,
               capabilities: null,
             },

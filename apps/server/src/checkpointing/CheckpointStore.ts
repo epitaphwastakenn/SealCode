@@ -31,6 +31,8 @@ export interface RestoreCheckpointInput {
   readonly cwd: string;
   readonly checkpointRef: CheckpointRef;
   readonly fallbackToHead?: boolean;
+  /** Restore only these checkpoint-attributed paths; an empty list is a no-op. */
+  readonly paths?: ReadonlyArray<string>;
 }
 
 export interface DiffCheckpointsInput {
@@ -39,6 +41,8 @@ export interface DiffCheckpointsInput {
   readonly toCheckpointRef: CheckpointRef;
   readonly fallbackFromToHead?: boolean;
   readonly ignoreWhitespace: boolean;
+  /** Restrict the diff to paths attributed to the completed turn. */
+  readonly paths?: ReadonlyArray<string>;
 }
 
 export interface DeleteCheckpointRefsInput {
@@ -64,7 +68,7 @@ export class CheckpointStore extends Context.Service<
 
     /** Check whether a checkpoint ref exists. */
     readonly hasCheckpointRef: (
-      input: Omit<RestoreCheckpointInput, "fallbackToHead">,
+      input: Omit<RestoreCheckpointInput, "fallbackToHead" | "paths">,
     ) => Effect.Effect<boolean, CheckpointStoreError>;
 
     /**

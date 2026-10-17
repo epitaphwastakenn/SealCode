@@ -82,8 +82,8 @@ export function UsagePage() {
   }, [configs, handleRefresh]);
 
   return (
-    <ScrollArea className="h-full">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-6">
+    <ScrollArea className="h-full bg-background">
+      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 bg-background px-6 py-6">
         <header className="flex flex-wrap items-start justify-between gap-4">
           <div className="flex items-start gap-3">
             <button
@@ -218,7 +218,9 @@ function unavailableUsageMessage(provider: ServerProvider): string {
   }
   switch (provider.driver) {
     case "antigravity":
-      return "Antigravity's local language-server quota service is not running. Open the Antigravity desktop app, then refresh; a CLI-only session does not expose this quota service.";
+      return provider.auth.status === "unauthenticated"
+        ? "Sign in with Google in Settings > Providers, then refresh account usage."
+        : "Antigravity did not return account quota data. Refresh to try again.";
     case "commandcode":
       return "CommandCode quota is unavailable. Sign in through the CommandCode CLI and refresh.";
     case "opencode":

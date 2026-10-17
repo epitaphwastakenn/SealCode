@@ -1429,4 +1429,79 @@ cursorAdapterTestLayer("CursorAdapterLive", (it) => {
       }).pipe(Effect.provide(customAdapterLayer));
     },
   );
+
+  it.effect("force-fails a silent hung Cursor prompt so the thread can send again", () => {
+    const idleAdapterLayer = Layer.effect(
+      CursorAdapter,
+      Effect.gen(function* () {
+        const cursorConfig = decodeCursorSettings({});
+        const resolveSettings = yield* makeResolveCursorSettings;
+        return yield* makeCursorAdapter(cursorConfig, {
+          resolveSettings,
+          turnIdleTimeoutMs: 50,
+          turnIdleCheckIntervalMs: 10,
+        });
+      }),
+    ).pipe(
+      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(
+        ServerConfig.layerTest(process.cwd(), {
+          prefix: "t3code-cursor-adapter-idle-",
+        }),
+      ),
+      Layer.provideMerge(NodeServices.layer),
+    );
+
+    return Effect.gen(function* () {
+      const adapter = yield* CursorAdapter;
+      const settings = yield* ServerSettingsService;
+      const threadId = ThreadId.make("cursor-idle-watchdog-thread");
+      const wrapperPath = yield* Effect.promise(() =>
+        makeMockAgentWrapper({ T3_ACP_HANG_PROMPT_FOREVER: "1" }),
+      );
+      yield* settings.updateSettings({ providers: { cursor: { binaryPath: wrapperPath } } });
+
+      const runtimeEventsFiber = yield* adapter.streamEvents.pipe(
+        Stream.filter((event) => event.threadId === threadId),
+        Stream.takeUntil(
+          (event) =>
+            event.type === "turn.completed" &&
+            event.payload.state === "failed" &&
+            typeof event.payload.errorMessage === "string" &&
+            event.payload.errorMessage.includes("silent"),
+        ),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+
+      yield* adapter.startSession({
+        threadId,
+        provider: ProviderDriverKind.make("cursor"),
+        cwd: process.cwd(),
+        runtimeMode: "full-access",
+        modelSelection: { instanceId: ProviderInstanceId.make("cursor"), model: "default" },
+      });
+
+      const sendTurnFiber = yield* adapter
+        .sendTurn({
+          threadId,
+          input: "this prompt will hang",
+          attachments: [],
+        })
+        .pipe(Effect.forkChild);
+
+      yield* TestClock.adjust("200 millis");
+      const runtimeEvents = Array.from(yield* Fiber.join(runtimeEventsFiber));
+      const failedTurn = runtimeEvents.find(
+        (event) => event.type === "turn.completed" && event.payload.state === "failed",
+      );
+      assert.isDefined(failedTurn);
+      if (failedTurn?.type === "turn.completed") {
+        assert.match(failedTurn.payload.errorMessage ?? "", /silent/i);
+      }
+
+      yield* Fiber.await(sendTurnFiber);
+      yield* adapter.stopSession(threadId);
+    }).pipe(Effect.provide(idleAdapterLayer));
+  });
 });

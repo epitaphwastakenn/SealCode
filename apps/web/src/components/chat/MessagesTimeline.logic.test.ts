@@ -440,6 +440,65 @@ describe("deriveMessagesTimelineRows", () => {
     expect(assistantRow?.assistantTurnDiffSummary).toBe(assistantTurnDiffSummary);
   });
 
+  it("attaches a legacy turn-level diff summary only to the terminal assistant message", () => {
+    const turnDiffSummary = {
+      turnId: "turn-1" as never,
+      completedAt: "2026-01-01T00:00:30Z",
+      assistantMessageId: null,
+      checkpointTurnCount: 1,
+      checkpointRef: "checkpoint-1" as never,
+      status: "ready" as const,
+      files: [{ path: "src/index.ts", kind: "modified", additions: 3, deletions: 1 }],
+    };
+
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        {
+          id: "assistant-commentary-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:10Z",
+          message: {
+            id: "assistant-commentary" as never,
+            role: "assistant",
+            text: "Thinking",
+            turnId: "turn-1" as never,
+            createdAt: "2026-01-01T00:00:10Z",
+            updatedAt: "2026-01-01T00:00:11Z",
+            streaming: false,
+          },
+        },
+        {
+          id: "assistant-final-entry",
+          kind: "message",
+          createdAt: "2026-01-01T00:00:20Z",
+          message: {
+            id: "assistant-final" as never,
+            role: "assistant",
+            text: "Done",
+            turnId: "turn-1" as never,
+            createdAt: "2026-01-01T00:00:20Z",
+            updatedAt: "2026-01-01T00:00:30Z",
+            streaming: false,
+          },
+        },
+      ],
+      isWorking: false,
+      activeTurnStartedAt: null,
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      turnDiffSummaryByTurnId: new Map([["turn-1" as never, turnDiffSummary]]),
+      revertTurnCountByUserMessageId: new Map(),
+      preserveAssistantCommentary: true,
+    });
+
+    const assistantRows = rows.filter(
+      (row): row is Extract<(typeof rows)[number], { kind: "message" }> =>
+        row.kind === "message" && row.message.role === "assistant",
+    );
+
+    expect(assistantRows[0]?.assistantTurnDiffSummary).toBeUndefined();
+    expect(assistantRows[1]?.assistantTurnDiffSummary).toBe(turnDiffSummary);
+  });
+
   it("folds settled-turn commentary and work behind a Worked-for row", () => {
     const timelineEntries = [
       {
@@ -539,6 +598,22 @@ describe("deriveMessagesTimelineRows", () => {
     expect(
       expandedRows.find((row) => row.kind === "turn-fold" && row.expanded === true),
     ).toBeDefined();
+
+    const commentaryVisibleRows = deriveMessagesTimelineRows({
+      timelineEntries,
+      isWorking: false,
+      activeTurnStartedAt: null,
+      preserveAssistantCommentary: true,
+      turnDiffSummaryByAssistantMessageId: new Map(),
+      revertTurnCountByUserMessageId: new Map(),
+    });
+
+    expect(commentaryVisibleRows.map((row) => row.id)).toEqual([
+      "user-entry",
+      "assistant-thought-entry",
+      "turn-fold:turn-1",
+      "assistant-final-entry",
+    ]);
   });
 
   it("derives a sane duration for a steer-superseded turn with one instant commentary message", () => {

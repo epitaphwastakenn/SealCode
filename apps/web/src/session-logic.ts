@@ -8,6 +8,7 @@ import {
   type OrchestrationThreadActivity,
   type OrchestrationProposedPlanId,
   ProviderDriverKind,
+  type McpToolActivityMetadata,
   type ToolLifecycleItemType,
   type UserInputQuestion,
   type ThreadId,
@@ -84,6 +85,7 @@ export interface WorkLogEntry {
   changedFiles?: ReadonlyArray<string>;
   tone: "thinking" | "tool" | "info" | "error";
   toolTitle?: string;
+  mcp?: McpToolActivityMetadata;
   toolData?: unknown;
   itemType?: ToolLifecycleItemType;
   requestKind?: PendingApproval["requestKind"];
@@ -118,6 +120,7 @@ interface DerivedWorkLogEntry extends WorkLogEntry {
 }
 
 export interface PendingApproval {
+  availableDecisions?: ReadonlyArray<string>;
   requestId: ApprovalRequestId;
   requestKind: "command" | "file-read" | "file-change";
   createdAt: string;
@@ -419,10 +422,15 @@ export function derivePendingApprovals(
         : payload
           ? requestKindFromRequestType(payload.requestType)
           : null;
-    const detail = payload && typeof payload.detail === "string" ? payload.detail : undefined;
+    const mcp = extractMcpMetadata(payload);
+    const rawDetail = payload && typeof payload.detail === "string" ? payload.detail : undefined;
+    const detail = mcp
+      ? `${mcp.serverDisplayName ?? mcp.serverId} → ${mcp.upstreamToolName}${rawDetail ? `: ${rawDetail}` : ""}`
+      : rawDetail;
 
     if (activity.kind === "approval.requested" && requestId && requestKind) {
       openByRequestId.set(requestId, {
+        ...(Array.isArray(payload?.availableDecisions) ? { availableDecisions: payload.availableDecisions.filter((value): value is string => typeof value === "string") } : {}),
         requestId,
         requestKind,
         createdAt: activity.createdAt,
@@ -495,6 +503,7 @@ function parseUserInputQuestions(
         question: question.question,
         options,
         multiSelect: question.multiSelect === true,
+        ...(question.allowCustomAnswer === false ? { allowCustomAnswer: false } : {}),
       };
     })
     .filter((question): question is UserInputQuestion => question !== null);
@@ -859,6 +868,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   };
   const itemType = extractWorkLogItemType(payload);
   const requestKind = extractWorkLogRequestKind(payload);
+  const mcp = extractMcpMetadata(payload);
   if (detail) {
     entry.detail = detail;
   }
@@ -872,12 +882,17 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
     entry.changedFiles = changedFiles;
   }
   if (title) {
-    entry.toolTitle = title;
+    entry.toolTitle = mcp
+      ? `${mcp.serverDisplayName ?? mcp.serverId} → ${mcp.upstreamToolName}`
+      : title;
+  }
+  if (mcp) {
+    entry.mcp = mcp;
   }
   if (itemType === "mcp_tool_call") {
     const data = asRecord(payload?.data);
-    if (data?.item !== undefined) {
-      entry.toolData = data.item;
+    if (data !== null) {
+      entry.toolData = data.item !== undefined ? data.item : data;
     }
   }
   if (itemType) {
@@ -1019,6 +1034,15 @@ function shouldCollapseToolLifecycleEntries(
   previous: DerivedWorkLogEntry,
   next: DerivedWorkLogEntry,
 ): boolean {
+  const sameMcpCall =
+    previous.mcp?.callId !== undefined &&
+    next.mcp?.callId !== undefined &&
+    previous.mcp.serverId === next.mcp.serverId &&
+    previous.mcp.callId === next.mcp.callId &&
+    previous.turnId === next.turnId;
+  if (sameMcpCall) {
+    return true;
+  }
   if (previous.activityKind !== "tool.updated" && previous.activityKind !== "tool.completed") {
     return false;
   }
@@ -1055,6 +1079,7 @@ function mergeDerivedWorkLogEntries(
   const toolCallId = next.toolCallId ?? previous.toolCallId;
   const toolLifecycleStatus = next.toolLifecycleStatus ?? previous.toolLifecycleStatus;
   const toolData = next.toolData ?? previous.toolData;
+  const mcp = next.mcp ?? previous.mcp;
   return {
     ...previous,
     ...next,
@@ -1069,6 +1094,7 @@ function mergeDerivedWorkLogEntries(
     ...(toolCallId ? { toolCallId } : {}),
     ...(toolLifecycleStatus !== undefined ? { toolLifecycleStatus } : {}),
     ...(toolData !== undefined ? { toolData } : {}),
+    ...(mcp !== undefined ? { mcp } : {}),
   };
 }
 
@@ -1326,9 +1352,30 @@ function extractToolTitle(payload: Record<string, unknown> | null): string | nul
   return asTrimmedString(payload?.title);
 }
 
+function extractMcpMetadata(
+  payload: Record<string, unknown> | null,
+): McpToolActivityMetadata | null {
+  const value = asRecord(payload?.mcp);
+  const serverId = asTrimmedString(value?.serverId);
+  const upstreamToolName = asTrimmedString(value?.upstreamToolName);
+  const canonicalToolName = asTrimmedString(value?.canonicalToolName);
+  if (!serverId || !upstreamToolName || !canonicalToolName) return null;
+  const serverDisplayName = asTrimmedString(value?.serverDisplayName);
+  const providerToolName = asTrimmedString(value?.providerToolName);
+  const callId = asTrimmedString(value?.callId);
+  return {
+    serverId,
+    upstreamToolName,
+    canonicalToolName,
+    ...(serverDisplayName ? { serverDisplayName } : {}),
+    ...(providerToolName ? { providerToolName } : {}),
+    ...(callId ? { callId } : {}),
+  };
+}
+
 function extractToolCallId(payload: Record<string, unknown> | null): string | null {
   const data = asRecord(payload?.data);
-  return asTrimmedString(data?.toolCallId);
+  return asTrimmedString(data?.toolCallId) ?? extractMcpMetadata(payload)?.callId ?? null;
 }
 
 function normalizeInlinePreview(value: string): string {

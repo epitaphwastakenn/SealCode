@@ -23,6 +23,9 @@ const emitXAiPromptCompleteThenHang = process.env.T3_ACP_EMIT_XAI_PROMPT_COMPLET
 const emitForeignSessionUpdates = process.env.T3_ACP_EMIT_FOREIGN_SESSION_UPDATES === "1";
 const hangPromptForever = process.env.T3_ACP_HANG_PROMPT_FOREVER === "1";
 const hangFirstPromptForever = process.env.T3_ACP_HANG_FIRST_PROMPT_FOREVER === "1";
+const hangInitializeForever = process.env.T3_ACP_HANG_INITIALIZE_FOREVER === "1";
+const hangAuthenticateForever = process.env.T3_ACP_HANG_AUTHENTICATE_FOREVER === "1";
+const hangCreateSessionForever = process.env.T3_ACP_HANG_CREATE_SESSION_FOREVER === "1";
 const emitLateUpdateAfterCancel = process.env.T3_ACP_EMIT_LATE_UPDATE_AFTER_CANCEL === "1";
 const omitXAiPromptCompleteStopReason =
   process.env.T3_ACP_OMIT_XAI_PROMPT_COMPLETE_STOP_REASON === "1";
@@ -297,25 +300,31 @@ const program = Effect.gen(function* () {
   const agent = yield* EffectAcpAgent.AcpAgent;
 
   yield* agent.handleInitialize((request) =>
-    Effect.sync(() => {
-      parameterizedModelPicker =
-        request.clientCapabilities?._meta?.parameterizedModelPicker === true;
-      return {
-        protocolVersion: 1,
-        agentCapabilities: { loadSession: true },
-      };
-    }),
+    hangInitializeForever
+      ? Effect.never
+      : Effect.sync(() => {
+          parameterizedModelPicker =
+            request.clientCapabilities?._meta?.parameterizedModelPicker === true;
+          return {
+            protocolVersion: 1,
+            agentCapabilities: { loadSession: true },
+          };
+        }),
   );
 
-  yield* agent.handleAuthenticate(() => Effect.succeed({}));
+  yield* agent.handleAuthenticate(() =>
+    hangAuthenticateForever ? Effect.never : Effect.succeed({}),
+  );
 
   yield* agent.handleCreateSession(() =>
-    Effect.succeed({
-      sessionId,
-      modes: modeState(),
-      models: modelState(),
-      configOptions: configOptions(),
-    }),
+    hangCreateSessionForever
+      ? Effect.never
+      : Effect.succeed({
+          sessionId,
+          modes: modeState(),
+          models: modelState(),
+          configOptions: configOptions(),
+        }),
   );
 
   const emitLoadReplayNotifications = (requestedSessionId: string) => {

@@ -160,7 +160,7 @@ const getDefaultArch = Effect.fn("getDefaultArch")(function* (platform: typeof B
     return "x64";
   }
 
-  return yield* getDefaultBuildArch(platform, config);
+  return yield* getDefaultBuildArch(config);
 });
 
 export class MacPasskeySigningConfigurationResolutionError extends Schema.TaggedErrorClass<MacPasskeySigningConfigurationResolutionError>()(

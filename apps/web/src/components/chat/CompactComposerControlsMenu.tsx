@@ -64,10 +64,18 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
             props.onRuntimeModeChange(value as RuntimeMode);
           }}
         >
-          <MenuRadioItem value="approval-required">Supervised</MenuRadioItem>
-          <MenuRadioItem value="auto-accept-edits">Auto-accept edits</MenuRadioItem>
-          <MenuRadioItem value="auto">Auto</MenuRadioItem>
-          <MenuRadioItem value="full-access">Full access</MenuRadioItem>
+          <MenuRadioItem value="approval-required" className="text-foreground dark:text-white">
+            Supervised
+          </MenuRadioItem>
+          <MenuRadioItem value="auto-accept-edits" className="text-emerald-500 dark:text-emerald-400">
+            Auto-accept edits
+          </MenuRadioItem>
+          <MenuRadioItem value="auto" className="text-primary">
+            Auto
+          </MenuRadioItem>
+          <MenuRadioItem value="full-access" className="text-orange-500 dark:text-orange-400">
+            Full access
+          </MenuRadioItem>
         </MenuRadioGroup>
       </MenuPopup>
     </Menu>

@@ -1,7 +1,9 @@
 import {
   type ProviderInstanceId,
   type ProviderDriverKind,
+  type ProviderOptionSelection,
   type ResolvedKeybindingsConfig,
+  type ServerProviderModel,
 } from "@t3tools/contracts";
 import { memo, useEffect, useMemo, useState } from "react";
 import type { VariantProps } from "class-variance-authority";
@@ -37,6 +39,14 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   disabled?: boolean;
   terminalOpen?: boolean;
   open?: boolean;
+  effortLabel?: string | null;
+  isMaximumEffort?: boolean;
+  showFastModeIcon?: boolean;
+  models?: ReadonlyArray<ServerProviderModel>;
+  modelOptions?: ReadonlyArray<ProviderOptionSelection> | null | undefined;
+  onModelOptionsChange?: (nextOptions: ReadonlyArray<ProviderOptionSelection> | undefined) => void;
+  prompt?: string;
+  onPromptChange?: (prompt: string) => void;
   triggerVariant?: VariantProps<typeof buttonVariants>["variant"];
   triggerClassName?: string;
   triggerAriaLabel?: string;
@@ -130,8 +140,9 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   const handleInstanceModelChange = (instanceId: ProviderInstanceId, model: string) => {
     if (props.disabled) return;
     props.onInstanceModelChange(instanceId, model);
-    setIsMenuOpen(false);
   };
+
+  const isMaxEffort = props.isMaximumEffort ?? false;
 
   return (
     <Popover
@@ -151,22 +162,22 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             variant={props.triggerVariant ?? "ghost"}
             data-chat-provider-model-picker="true"
             className={cn(
-              "min-w-0 justify-between whitespace-nowrap",
-              props.compact ? "max-w-42 shrink-0" : "max-w-48 shrink sm:max-w-56",
+              "min-w-0 justify-between whitespace-nowrap transition-all duration-300",
+              props.compact ? "max-w-48 shrink-0" : "max-w-64 shrink sm:max-w-72",
               props.triggerClassName,
             )}
             disabled={props.disabled}
           />
         }
       >
-        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+        <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
           {activeEntry ? (
             <ProviderInstanceIcon
               driverKind={activeEntry.driverKind}
               displayName={activeEntry.displayName}
               accentColor={activeEntry.accentColor}
               showBadge={showInstanceBadge}
-              className="size-4"
+              className="size-4 shrink-0"
               iconClassName={cn("size-4", props.activeProviderIconClassName)}
               indicatorBackground="var(--input)"
               badgeClassName={cn(
@@ -176,20 +187,48 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             />
           ) : null}
           <Tooltip>
-            <TooltipTrigger render={<span className="min-w-0 flex-1 overflow-hidden truncate" />}>
-              {triggerTitle}
+            <TooltipTrigger
+              render={
+                <span className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden text-left" />
+              }
+            >
+              <span className="min-w-0 truncate font-medium text-foreground">{triggerTitle}</span>
+              {props.effortLabel ? (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 shrink-0 text-xs font-normal transition-colors",
+                    isMaxEffort ? "font-semibold text-primary" : "text-muted-foreground/80",
+                  )}
+                >
+                  {isMaxEffort && (
+                    <svg
+                      viewBox="0 0 16 16"
+                      fill="currentColor"
+                      className="animate-reasoning-twinkle size-2.5 shrink-0 text-primary"
+                      aria-hidden="true"
+                    >
+                      <path d="M8 0L9.79 6.21L16 8L9.79 9.79L8 16L6.21 9.79L0 8L6.21 6.21L8 0Z" />
+                    </svg>
+                  )}
+                  {props.effortLabel}
+                </span>
+              ) : null}
             </TooltipTrigger>
-            <TooltipPopup side="top">{triggerLabel}</TooltipPopup>
+            <TooltipPopup side="top">
+              {triggerLabel}
+              {props.effortLabel ? ` · ${props.effortLabel}` : ""}
+            </TooltipPopup>
           </Tooltip>
         </span>
-        <span aria-hidden="true" className="flex items-center">
+        <span aria-hidden="true" className="flex shrink-0 items-center text-muted-foreground">
           <ComposerControlChevron />
         </span>
       </PopoverTrigger>
       <PopoverPopup
-        align="start"
+        align="end"
+        sideOffset={8}
         className="border-0 bg-transparent p-0 shadow-none before:hidden [-webkit-backdrop-filter:none]! [--viewport-inline-padding:0] [backdrop-filter:none]!"
-        viewportClassName="rounded-lg !overflow-hidden p-0"
+        viewportClassName="rounded-xl !overflow-hidden p-0"
       >
         <ModelPickerContent
           activeInstanceId={activeInstanceId}
@@ -205,6 +244,11 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             ? { getModelDisabledReason: props.getModelDisabledReason }
             : {})}
           onInstanceModelChange={handleInstanceModelChange}
+          models={props.models}
+          modelOptions={props.modelOptions}
+          onModelOptionsChange={props.onModelOptionsChange}
+          prompt={props.prompt}
+          onPromptChange={props.onPromptChange}
         />
       </PopoverPopup>
     </Popover>

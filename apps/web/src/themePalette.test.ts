@@ -224,6 +224,19 @@ describe("theme files", () => {
     expect(JSON.parse(serializeThemeFile(withArtwork)).sidebarArtwork).toBe(true);
   });
 
+  it("round-trips the optional canvas gradient", () => {
+    const theme = parseThemeFile({
+      version: THEME_FILE_VERSION,
+      name: "Gradient dusk",
+      appearance: "dark",
+      colors: { canvas: "#120a1f", accent: "#a855f7" },
+      gradient: true,
+    });
+
+    expect(theme.gradient).toBe(true);
+    expect(JSON.parse(serializeThemeFile(theme)).gradient).toBe(true);
+  });
+
   it("publishes sidebar artwork changes from the live theme preview", () => {
     const listener = vi.fn();
     const unsubscribe = subscribeToThemePreview(listener);
@@ -235,8 +248,9 @@ describe("theme files", () => {
       },
     });
 
-    applyThemeColorPreview(T3_CHAT_THEME.colors, "light", true);
+    applyThemeColorPreview(T3_CHAT_THEME.colors, "light", true, true);
     expect(getThemePreviewSidebarArtwork()).toBe(true);
+    expect(document.documentElement.dataset.themeGradient).toBe("true");
     expect(listener).toHaveBeenCalledTimes(1);
 
     applyThemePalette("system");

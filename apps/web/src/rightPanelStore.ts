@@ -16,6 +16,7 @@ import { resolveStorage } from "./lib/storage";
 
 export const RIGHT_PANEL_KINDS = [
   "diff",
+  "diff-center",
   "files",
   "file",
   "preview",
@@ -36,6 +37,7 @@ export type RightPanelSurface =
       splitDirection?: "horizontal" | "vertical";
     }
   | { id: "diff"; kind: "diff" }
+  | { id: "diff-center"; kind: "diff-center" }
   | { id: "files"; kind: "files" }
   | {
       id: `file:${string}`;
@@ -48,7 +50,7 @@ export type RightPanelSurface =
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
 // v9 removed the "plan" surface kind (plans render inline in the transcript).
-const RIGHT_PANEL_STORAGE_VERSION = 9;
+const RIGHT_PANEL_STORAGE_VERSION = 10;
 
 export interface ThreadRightPanelState {
   isOpen: boolean;
@@ -96,6 +98,8 @@ const singletonSurface = (
   switch (kind) {
     case "diff":
       return { id: "diff", kind };
+    case "diff-center":
+      return { id: "diff-center", kind };
     case "files":
       return { id: "files", kind };
     case "agents":

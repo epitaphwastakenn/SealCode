@@ -5,12 +5,13 @@
 - [Install and first run](./user/install.md)
 - [Permission modes](./user/permission-modes.md)
 - [Keyboard shortcuts](./user/keybindings.md)
+- [Speech to text](./user/speech-to-text.md)
 - [Organizing threads](./user/thread-sidebar.md)
 - [Remote access](./user/remote-access.md)
 - [Keeping app and server in sync](./user/updating.md)
 - [Source control integrations](./user/source-control.md)
 - [Background service (Linux)](./user/background-service.md)
-- Providers: [Codex](./user/providers-codex.md) · [Claude](./user/providers-claude.md)
+- Providers: [Codex](./user/providers-codex.md) · [Claude](./user/providers-claude.md) · [Antigravity](./user/providers-antigravity.md)
 
 Mobile app: [apps/mobile/README.md](../apps/mobile/README.md)
 

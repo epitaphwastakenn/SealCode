@@ -177,6 +177,7 @@ interface ToolInFlight {
   /** Owning agent when this tool ran inside a subagent (see attribution note). */
   readonly agentId?: string;
   readonly parentToolUseId?: string;
+  readonly mcp?: import("@t3tools/contracts").McpToolActivityMetadata;
 }
 
 interface ClaudeTaskState {
@@ -663,6 +664,9 @@ function readClaudeResumeState(resumeCursor: unknown): ClaudeResumeState | undef
 
 function classifyToolItemType(toolName: string): CanonicalItemType {
   const normalized = toolName.toLowerCase();
+  if (normalized.includes("mcp__")) {
+    return "mcp_tool_call";
+  }
   if (normalized.includes("agent")) {
     return "collab_agent_tool_call";
   }
@@ -693,9 +697,6 @@ function classifyToolItemType(toolName: string): CanonicalItemType {
   ) {
     return "file_change";
   }
-  if (normalized.includes("mcp")) {
-    return "mcp_tool_call";
-  }
   if (normalized.includes("websearch") || normalized.includes("web search")) {
     return "web_search";
   }
@@ -718,6 +719,9 @@ function isReadOnlyToolName(toolName: string): boolean {
 }
 
 function classifyRequestType(toolName: string): CanonicalRequestType {
+  if (toolName.toLowerCase().includes("mcp__")) {
+    return "dynamic_tool_call";
+  }
   if (isReadOnlyToolName(toolName)) {
     return "file_read_approval";
   }
@@ -727,6 +731,13 @@ function classifyRequestType(toolName: string): CanonicalRequestType {
     : itemType === "file_change"
       ? "file_change_approval"
       : "dynamic_tool_call";
+}
+
+function mcpActivityMetadataForTool(toolName: string, callId: string | undefined) {
+  return McpProviderSession.makeMcpToolActivityMetadata({
+    providerToolName: toolName,
+    callId,
+  });
 }
 
 function isTodoTool(toolName: string): boolean {
@@ -2520,6 +2531,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
             ...(nextTool.detail ? { detail: nextTool.detail } : {}),
             ...(nextTool.agentId ? { agentId: nextTool.agentId } : {}),
             ...(nextTool.parentToolUseId ? { parentToolUseId: nextTool.parentToolUseId } : {}),
+            ...(nextTool.mcp ? { mcp: nextTool.mcp } : {}),
             data: {
               toolName: nextTool.toolName,
               input: nextTool.input,
@@ -2585,6 +2597,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           ? (block.input as Record<string, unknown>)
           : {};
       const itemId = block.id;
+      const mcp = mcpActivityMetadataForTool(toolName, itemId);
       const detail = summarizeToolRequest(toolName, toolInput);
       const inputFingerprint =
         Object.keys(toolInput).length > 0 ? toolInputFingerprint(toolInput) : undefined;
@@ -2608,6 +2621,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ...(inputFingerprint ? { lastEmittedInputFingerprint: inputFingerprint } : {}),
         ...(owningAgentId ? { agentId: owningAgentId } : {}),
         ...(parentToolUseId ? { parentToolUseId } : {}),
+        ...(mcp ? { mcp } : {}),
       };
       context.inFlightTools.set(index, tool);
 
@@ -2627,6 +2641,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           ...(tool.detail ? { detail: tool.detail } : {}),
           ...(tool.agentId ? { agentId: tool.agentId } : {}),
           ...(tool.parentToolUseId ? { parentToolUseId: tool.parentToolUseId } : {}),
+          ...(tool.mcp ? { mcp: tool.mcp } : {}),
           data: {
             toolName: tool.toolName,
             input: toolInput,
@@ -2707,6 +2722,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           ...(tool.detail ? { detail: tool.detail } : {}),
           ...(tool.agentId ? { agentId: tool.agentId } : {}),
           ...(tool.parentToolUseId ? { parentToolUseId: tool.parentToolUseId } : {}),
+          ...(tool.mcp ? { mcp: tool.mcp } : {}),
           data: toolData,
         },
         providerRefs: nativeProviderRefs(context, {
@@ -2761,6 +2777,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
           ...(tool.detail ? { detail: tool.detail } : {}),
           ...(tool.agentId ? { agentId: tool.agentId } : {}),
           ...(tool.parentToolUseId ? { parentToolUseId: tool.parentToolUseId } : {}),
+          ...(tool.mcp ? { mcp: tool.mcp } : {}),
           data: toolData,
         },
         providerRefs: nativeProviderRefs(context, {
@@ -3948,6 +3965,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
 
         const requestId = ApprovalRequestId.make(yield* randomUUIDv4);
         const requestType = classifyRequestType(toolName);
+        const mcp = mcpActivityMetadataForTool(toolName, callbackOptions.toolUseID);
         const detail = summarizeToolRequest(toolName, toolInput);
         const decisionDeferred = yield* Deferred.make<ProviderApprovalDecision>();
         const pendingApproval: PendingApproval = {
@@ -3974,6 +3992,7 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
               input: toolInput,
               ...(callbackOptions.toolUseID ? { toolUseId: callbackOptions.toolUseID } : {}),
             },
+            ...(mcp ? { mcp } : {}),
           },
           providerRefs: nativeProviderRefs(context, {
             providerItemId: callbackOptions.toolUseID,
@@ -4125,15 +4144,16 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
         ...(Object.keys(extraArgs).length > 0 ? { extraArgs } : {}),
         ...(mcpSession
           ? {
-              mcpServers: {
-                "t3-code": {
-                  type: "http",
-                  url: mcpSession.endpoint,
-                  headers: {
-                    Authorization: mcpSession.authorizationHeader,
+              mcpServers: Object.fromEntries(
+                McpProviderSession.makeSealCodeMcpEndpoints(mcpSession).map((endpoint) => [
+                  endpoint.name,
+                  {
+                    type: "http" as const,
+                    url: endpoint.url,
+                    headers: { Authorization: endpoint.authorizationHeader },
                   },
-                },
-              },
+                ]),
+              ),
             }
           : {}),
       };
@@ -4572,6 +4592,11 @@ export const makeClaudeAdapter = Effect.fn("makeClaudeAdapter")(function* (
     provider: PROVIDER,
     capabilities: {
       sessionModelSwitch: "in-session",
+      stablePromptPrefix: false,
+      contextCompaction: "provider-native",
+      promptCaching: "provider-managed",
+      toolTransport: "mcp",
+      detachedDelegation: false,
     },
     startSession,
     sendTurn,

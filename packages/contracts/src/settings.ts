@@ -9,7 +9,9 @@ import {
   DEFAULT_TEXT_GENERATION_REASONING_EFFORT,
   ProviderOptionSelections,
 } from "./model.ts";
-import { ModelSelection } from "./orchestration.ts";
+import { ModelSelection, ProviderInteractionMode } from "./orchestration.ts";
+import { SkillScope } from "./harnessEfficiency.ts";
+import { GlobalMcpServerMap } from "./mcp.ts";
 import { ProviderInstanceConfig, ProviderInstanceId } from "./providerInstance.ts";
 
 // ── Client Settings (local-only) ───────────────────────────────
@@ -111,6 +113,10 @@ export const EnvironmentIdentificationMode = Schema.Literals(["artwork", "pill",
 export type EnvironmentIdentificationMode = typeof EnvironmentIdentificationMode.Type;
 export const DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE: EnvironmentIdentificationMode = "artwork";
 
+export const DiffPresentation = Schema.Literals(["summary", "inline", "panel"]);
+export type DiffPresentation = typeof DiffPresentation.Type;
+export const DEFAULT_DIFF_PRESENTATION: DiffPresentation = "summary";
+
 /**
  * A user-chosen font family (a single name or a comma-separated list). Empty
  * means "use the app default"; clients compose their own fallback stacks.
@@ -125,6 +131,9 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed([])),
   ),
   diffIgnoreWhitespace: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  diffPresentation: DiffPresentation.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_DIFF_PRESENTATION)),
+  ),
   environmentIdentificationMode: EnvironmentIdentificationMode.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE)),
   ),
@@ -182,6 +191,7 @@ export const ClientSettingsSchema = Schema.Struct({
   // default UI; this beta flag restores it (plus the /plan and /default slash
   // commands) for users who still rely on the old workflow.
   planModeEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  glassSidebarEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   // Legacy sidebar (the original per-project tree). Deliberately a fresh key
   // (was `sidebarV2Enabled` + `sidebarV2ConfiguredByUser`): decoding drops the
   // old keys, so everyone, including prior beta opt-outs, resets to the new
@@ -210,6 +220,7 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_TIMESTAMP_FORMAT)),
   ),
   wordWrap: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  showThinkingTraces: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
 });
 export type ClientSettings = typeof ClientSettingsSchema.Type;
 
@@ -431,17 +442,47 @@ export const GrokSettings = makeProviderSettingsSchema(
 );
 export type GrokSettings = typeof GrokSettings.Type;
 
+export const AntigravityRuntimeKind = Schema.Literals(["acp", "sdk"]);
+export type AntigravityRuntimeKind = typeof AntigravityRuntimeKind.Type;
+const AntigravityRuntimeInput = Schema.Literals(["cli", "acp", "sdk"]).pipe(
+  Schema.decodeTo(AntigravityRuntimeKind, SchemaTransformation.transformOrFail({
+    decode: (value) => Effect.succeed(value === "cli" ? "acp" as const : value),
+    encode: (value) => Effect.succeed(value),
+  })),
+);
+
 export const AntigravitySettings = makeProviderSettingsSchema(
   {
     enabled: Schema.Boolean.pipe(
       Schema.withDecodingDefault(Effect.succeed(true)),
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
-    binaryPath: makeBinaryPathSetting("agy").pipe(
+    runtime: AntigravityRuntimeInput.pipe(
+      Schema.withDecodingDefault(Effect.succeed("acp" as const)),
       Schema.annotateKey({
-        title: "Binary path",
-        description: "Path to the Antigravity CLI binary.",
-        providerSettingsForm: { placeholder: "agy", clearWhenEmpty: "omit" },
+        title: "Runtime mode",
+          description: "ACP uses Google account sign-in. SDK mode uses API or Vertex credentials.",
+          providerSettingsForm: { hidden: true },
+      }),
+    ),
+    binaryPath: makeBinaryPathSetting("").pipe(
+      Schema.annotateKey({
+        providerSettingsForm: { hidden: true },
+      }),
+    ),
+    acpBinaryPath: makeBinaryPathSetting("").pipe(
+      Schema.annotateKey({
+        title: "ACP executable",
+        description: "Leave blank for the managed runtime. A manual installation must include localharness_external beside the ACP executable.",
+        providerSettingsForm: { placeholder: "Managed runtime", clearWhenEmpty: "omit" },
+      }),
+    ),
+    sdkPythonPath: makeBinaryPathSetting("").pipe(
+      Schema.annotateKey({
+        title: "Python executable",
+        description:
+          "Path to the Python interpreter with google-antigravity installed (used in SDK mode).",
+        providerSettingsForm: { placeholder: "python3", clearWhenEmpty: "omit" },
       }),
     ),
     customModels: Schema.Array(Schema.String).pipe(
@@ -449,7 +490,7 @@ export const AntigravitySettings = makeProviderSettingsSchema(
       Schema.annotateKey({ providerSettingsForm: { hidden: true } }),
     ),
   },
-  { order: ["binaryPath"] },
+  { order: ["runtime", "acpBinaryPath", "sdkPythonPath"] },
 );
 export type AntigravitySettings = typeof AntigravitySettings.Type;
 
@@ -591,6 +632,30 @@ export const BackgroundActivitySettings = Schema.Struct({
 }).pipe(Schema.withDecodingDefault(Effect.succeed({})));
 export type BackgroundActivitySettings = typeof BackgroundActivitySettings.Type;
 
+export const AgentPresetKind = Schema.Literals(["coding", "review", "research", "custom"]);
+export type AgentPresetKind = typeof AgentPresetKind.Type;
+
+export const AgentPresetSkillRef = Schema.Struct({
+  name: TrimmedNonEmptyString,
+  scope: SkillScope,
+});
+export type AgentPresetSkillRef = typeof AgentPresetSkillRef.Type;
+
+/** A named next-turn workflow selection. Presets never override a provider's capabilities. */
+export const AgentPreset = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString,
+  description: Schema.optional(TrimmedString),
+  kind: AgentPresetKind,
+  modelSelection: ModelSelection,
+  interactionMode: ProviderInteractionMode,
+  skills: Schema.Array(AgentPresetSkillRef).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  updatedAt: Schema.optional(TrimmedNonEmptyString),
+});
+export type AgentPreset = typeof AgentPreset.Type;
+
 export const ServerSettings = Schema.Struct({
   // Legacy token-by-token assistant output. Deliberately a fresh key (was
   // `enableAssistantStreaming`): decoding drops the old key, so everyone,
@@ -656,6 +721,23 @@ export const ServerSettings = Schema.Struct({
   sourceControlWriterModelSelection: Schema.NullOr(ModelSelection).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
+  diffReviewModelSelection: Schema.NullOr(ModelSelection).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  contextCompactorModelSelection: Schema.NullOr(ModelSelection).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  skillCuratorModelSelection: Schema.NullOr(ModelSelection).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  memoryCuratorModelSelection: Schema.NullOr(ModelSelection).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  delegationDefaultModelSelection: Schema.NullOr(ModelSelection).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
+  agentPresets: Schema.Array(AgentPreset).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  sealsInstructions: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
 
   // Legacy single-instance-per-driver settings. Continues to be the source
   // of truth until `providerInstances` (below) lands per-driver migration
@@ -680,6 +762,7 @@ export const ServerSettings = Schema.Struct({
   providerInstances: Schema.Record(ProviderInstanceId, ProviderInstanceConfig).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
+  mcpServers: GlobalMcpServerMap.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
 });
 export type ServerSettings = typeof ServerSettings.Type;
@@ -706,6 +789,8 @@ export class ServerSettingsError extends Schema.TaggedErrorClass<ServerSettingsE
     operation: ServerSettingsOperation,
     providerInstanceId: Schema.optional(Schema.String),
     environmentVariable: Schema.optional(Schema.String),
+    mcpServerId: Schema.optional(Schema.String),
+    mcpFieldName: Schema.optional(Schema.String),
     cause: Schema.Defect(),
   },
 ) {
@@ -716,7 +801,10 @@ export class ServerSettingsError extends Schema.TaggedErrorClass<ServerSettingsE
       this.environmentVariable === undefined
         ? ""
         : ` and environment variable ${this.environmentVariable}`;
-    return `Server settings ${this.operation} failed${provider}${variable} at ${this.settingsPath}.`;
+    const mcpServer =
+      this.mcpServerId === undefined ? "" : ` for MCP server ${this.mcpServerId}`;
+    const mcpField = this.mcpFieldName === undefined ? "" : ` and MCP field ${this.mcpFieldName}`;
+    return `Server settings ${this.operation} failed${provider}${variable}${mcpServer}${mcpField} at ${this.settingsPath}.`;
   }
 }
 
@@ -768,7 +856,10 @@ const GrokSettingsPatch = Schema.Struct({
 
 const AntigravitySettingsPatch = Schema.Struct({
   enabled: Schema.optionalKey(Schema.Boolean),
+  runtime: Schema.optionalKey(AntigravityRuntimeKind),
+  acpBinaryPath: Schema.optionalKey(TrimmedString),
   binaryPath: Schema.optionalKey(TrimmedString),
+  sdkPythonPath: Schema.optionalKey(TrimmedString),
   customModels: Schema.optionalKey(Schema.Array(Schema.String)),
 });
 
@@ -814,6 +905,13 @@ export const ServerSettingsPatch = Schema.Struct({
     }),
   ),
   sourceControlWriterModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  diffReviewModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  contextCompactorModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  skillCuratorModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  memoryCuratorModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  delegationDefaultModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  agentPresets: Schema.optionalKey(Schema.Array(AgentPreset)),
+  sealsInstructions: Schema.optionalKey(TrimmedString),
   observability: Schema.optionalKey(
     Schema.Struct({
       otlpTracesUrl: Schema.optionalKey(TrimmedString),
@@ -836,6 +934,7 @@ export const ServerSettingsPatch = Schema.Struct({
   // patches risk leaving driver-specific config in a half-merged state.
   // The web UI sends a fully-formed map every time it edits this field.
   providerInstances: Schema.optionalKey(Schema.Record(ProviderInstanceId, ProviderInstanceConfig)),
+  mcpServers: Schema.optionalKey(GlobalMcpServerMap),
 });
 export type ServerSettingsPatch = typeof ServerSettingsPatch.Type;
 
@@ -843,6 +942,7 @@ export const ClientSettingsPatch = Schema.Struct({
   confirmThreadArchive: Schema.optionalKey(Schema.Boolean),
   confirmThreadDelete: Schema.optionalKey(Schema.Boolean),
   diffIgnoreWhitespace: Schema.optionalKey(Schema.Boolean),
+  diffPresentation: Schema.optionalKey(DiffPresentation),
   environmentIdentificationMode: Schema.optionalKey(EnvironmentIdentificationMode),
   glassOpacity: Schema.optionalKey(GlassOpacity),
   harnessSoundVolume: Schema.optionalKey(HarnessSoundVolume),
@@ -877,6 +977,7 @@ export const ClientSettingsPatch = Schema.Struct({
     ),
   ),
   planModeEnabled: Schema.optionalKey(Schema.Boolean),
+  glassSidebarEnabled: Schema.optionalKey(Schema.Boolean),
   legacySidebarEnabled: Schema.optionalKey(Schema.Boolean),
   sidebarAutoSettleAfterDays: Schema.optionalKey(Schema.NullOr(SidebarAutoSettleAfterDays)),
   sidebarProjectGroupingMode: Schema.optionalKey(SidebarProjectGroupingMode),
@@ -888,5 +989,6 @@ export const ClientSettingsPatch = Schema.Struct({
   sidebarThreadPreviewCount: Schema.optionalKey(SidebarThreadPreviewCount),
   timestampFormat: Schema.optionalKey(TimestampFormat),
   wordWrap: Schema.optionalKey(Schema.Boolean),
+  showThinkingTraces: Schema.optionalKey(Schema.Boolean),
 });
 export type ClientSettingsPatch = typeof ClientSettingsPatch.Type;

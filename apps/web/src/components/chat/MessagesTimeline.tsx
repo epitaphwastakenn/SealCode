@@ -14,6 +14,8 @@ import {
 
 const EMPTY_AGENT_PANEL_MODEL = emptyAgentPanelModel();
 const NOOP_OPEN_AGENTS = () => {};
+const NOOP_REVIEW_TURN_DIFF = (_turnId: TurnId) => {};
+const EMPTY_TURN_DIFF_SUMMARY_BY_TURN_ID = new Map<TurnId, TurnDiffSummary>();
 import { resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
 import {
   createContext,
@@ -39,6 +41,7 @@ import {
   workLogEntryIsToolLike,
 } from "../../session-logic";
 import { type TurnDiffSummary } from "../../types";
+import { shouldRenderUnattributedDiffFallback } from "../../lib/checkpointAttribution";
 import {
   getRenderablePatch,
   resolveDiffThemeName,
@@ -104,8 +107,9 @@ import {
 } from "~/lib/previewAnnotation";
 import { cn } from "~/lib/utils";
 import { useUiStateStore } from "~/uiStateStore";
-import { type TimestampFormat } from "@t3tools/contracts/settings";
+import { type DiffPresentation, type TimestampFormat } from "@t3tools/contracts/settings";
 import { formatChatTimestampTooltip, formatShortTimestamp } from "../../timestampFormat";
+import { useCheckpointDiff } from "../../lib/checkpointDiffState";
 
 import {
   buildInlineTerminalContextText,
@@ -140,10 +144,13 @@ interface TimelineRowSharedState {
   onRevertUserMessage: (messageId: MessageId) => void;
   onImageExpand: (preview: ExpandedImagePreview) => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
+  onReviewTurnDiff: (turnId: TurnId) => void;
   onToggleTurnFold: (turnId: TurnId) => void;
   onToggleWorkGroup: (groupId: string, anchorKey: string) => void;
   agentPanelModel: AgentPanelModel;
   onOpenAgents: () => void;
+  diffPresentation: DiffPresentation;
+  diffIgnoreWhitespace: boolean;
 }
 
 interface TimelineRowActivityState {
@@ -188,6 +195,7 @@ function TimelineLoadEarlierHeader({
 }
 const TIMELINE_LIST_FOOTER = <div className="h-3 sm:h-4" />;
 const EMPTY_TIMELINE_SKILLS: ReadonlyArray<Pick<ServerProviderSkill, "name" | "displayName">> = [];
+const EMPTY_EXPANDED_TURN_IDS: ReadonlyArray<string> = [];
 const TIMELINE_MAINTAIN_SCROLL_AT_END = {
   animated: false,
   on: {
@@ -210,11 +218,16 @@ interface MessagesTimelineProps {
   activeTurnStartedAt: string | null;
   listRef: React.RefObject<LegendListRef | null>;
   timelineEntries: ReturnType<typeof deriveTimelineEntries>;
+  preserveAssistantCommentary?: boolean;
   latestTurn: TimelineLatestTurn | null;
   runningTurnId: TurnId | null;
   turnDiffSummaryByAssistantMessageId: Map<MessageId, TurnDiffSummary>;
+  turnDiffSummaryByTurnId?: Map<TurnId, TurnDiffSummary>;
+  diffPresentation?: DiffPresentation;
+  diffIgnoreWhitespace?: boolean;
   routeThreadKey: string;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
+  onReviewTurnDiff?: (turnId: TurnId) => void;
   revertTurnCountByUserMessageId: Map<MessageId, number>;
   onRevertUserMessage: (messageId: MessageId) => void;
   isRevertingCheckpoint: boolean;
@@ -256,11 +269,16 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   onOpenAgents = NOOP_OPEN_AGENTS,
   listRef,
   timelineEntries,
+  preserveAssistantCommentary = true,
   latestTurn,
   runningTurnId,
   turnDiffSummaryByAssistantMessageId,
+  turnDiffSummaryByTurnId = EMPTY_TURN_DIFF_SUMMARY_BY_TURN_ID,
+  diffPresentation = "summary",
+  diffIgnoreWhitespace = true,
   routeThreadKey,
   onOpenTurnDiff,
+  onReviewTurnDiff = NOOP_REVIEW_TURN_DIFF,
   revertTurnCountByUserMessageId,
   onRevertUserMessage,
   isRevertingCheckpoint,
@@ -281,7 +299,13 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   topFadeEnabled = false,
   loadEarlier = null,
 }: MessagesTimelineProps) {
-  const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(new Set());
+  const persistedExpandedTurnIds = useUiStateStore(
+    (state) => state.timelineExpandedTurnIdsByThread[routeThreadKey] ?? EMPTY_EXPANDED_TURN_IDS,
+  );
+  const setTimelineTurnExpanded = useUiStateStore((state) => state.setTimelineTurnExpanded);
+  const [expandedTurnIds, setExpandedTurnIds] = useState<ReadonlySet<TurnId>>(
+    () => new Set(persistedExpandedTurnIds as ReadonlyArray<TurnId>),
+  );
   const [expandedWorkGroupIds, setExpandedWorkGroupIds] = useState<ReadonlySet<string>>(new Set());
   const [disclosureToggleSettling, setDisclosureToggleSettling] = useState(false);
   const [minimapStripMap] = useState(() => new Map<string, HTMLSpanElement>());
@@ -336,17 +360,24 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   const onToggleTurnFold = useCallback(
     (turnId: TurnId) => {
       suspendEndScrollMaintenanceForDisclosure(`turn-fold:${turnId}`);
+      const expanded = !expandedTurnIds.has(turnId);
       setExpandedTurnIds((existing) => {
         const next = new Set(existing);
-        if (next.has(turnId)) {
+        if (!expanded) {
           next.delete(turnId);
         } else {
           next.add(turnId);
         }
         return next;
       });
+      setTimelineTurnExpanded(routeThreadKey, turnId, expanded);
     },
-    [suspendEndScrollMaintenanceForDisclosure],
+    [
+      expandedTurnIds,
+      routeThreadKey,
+      setTimelineTurnExpanded,
+      suspendEndScrollMaintenanceForDisclosure,
+    ],
   );
   const onToggleWorkGroup = useCallback(
     (groupId: string, anchorKey: string) => {
@@ -368,6 +399,10 @@ export const MessagesTimeline = memo(function MessagesTimeline({
   // place; the next turn (or a reload, since this is local state) folds it.
   const previousLatestTurnRef = useRef(latestTurn);
   useEffect(() => {
+    setExpandedTurnIds(new Set(persistedExpandedTurnIds as ReadonlyArray<TurnId>));
+  }, [persistedExpandedTurnIds, routeThreadKey]);
+
+  useEffect(() => {
     const previous = previousLatestTurnRef.current;
     previousLatestTurnRef.current = latestTurn;
     if (!latestTurn || previous?.turnId === undefined) {
@@ -380,6 +415,7 @@ export const MessagesTimeline = memo(function MessagesTimeline({
           next.add(latestTurn.turnId);
           return next;
         });
+        setTimelineTurnExpanded(routeThreadKey, latestTurn.turnId, true);
       }
       return;
     }
@@ -391,7 +427,8 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       next.delete(previous.turnId);
       return next;
     });
-  }, [latestTurn]);
+    setTimelineTurnExpanded(routeThreadKey, previous.turnId, false);
+  }, [latestTurn, routeThreadKey, setTimelineTurnExpanded]);
 
   const rawRows = useMemo(
     () =>
@@ -404,7 +441,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
         isWorking,
         activeTurnStartedAt,
         turnDiffSummaryByAssistantMessageId,
+        turnDiffSummaryByTurnId,
         revertTurnCountByUserMessageId,
+        preserveAssistantCommentary,
       }),
     [
       timelineEntries,
@@ -415,7 +454,9 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       isWorking,
       activeTurnStartedAt,
       turnDiffSummaryByAssistantMessageId,
+      turnDiffSummaryByTurnId,
       revertTurnCountByUserMessageId,
+      preserveAssistantCommentary,
     ],
   );
   const rows = useStableRows(rawRows);
@@ -513,10 +554,13 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       onRevertUserMessage,
       onImageExpand,
       onOpenTurnDiff,
+      onReviewTurnDiff,
       onToggleTurnFold,
       onToggleWorkGroup,
       agentPanelModel,
       onOpenAgents,
+      diffPresentation,
+      diffIgnoreWhitespace,
     }),
     [
       timestampFormat,
@@ -529,10 +573,13 @@ export const MessagesTimeline = memo(function MessagesTimeline({
       onRevertUserMessage,
       onImageExpand,
       onOpenTurnDiff,
+      onReviewTurnDiff,
       onToggleTurnFold,
       onToggleWorkGroup,
       agentPanelModel,
       onOpenAgents,
+      diffPresentation,
+      diffIgnoreWhitespace,
     ],
   );
   const activityState = useMemo<TimelineRowActivityState>(
@@ -1090,18 +1137,61 @@ function RevertUserMessageButton({ messageId }: { messageId: MessageId }) {
 function TurnFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "turn-fold" }> }) {
   const ctx = use(TimelineRowCtx);
   const Icon = row.expanded ? ChevronDownIcon : ChevronRightIcon;
+  const stateLabel =
+    row.summary.state === "failed"
+      ? "Failed"
+      : row.summary.state === "interrupted"
+        ? "Stopped"
+        : "Completed";
+  const summaryItems = [
+    row.summary.toolCallCount > 0
+      ? `${row.summary.toolCallCount} tool call${row.summary.toolCallCount === 1 ? "" : "s"}`
+      : null,
+    row.summary.assistantResponseCount > 0
+      ? `${row.summary.assistantResponseCount} response${row.summary.assistantResponseCount === 1 ? "" : "s"}`
+      : null,
+    row.summary.agentCount > 0
+      ? `${row.summary.agentCount} agent${row.summary.agentCount === 1 ? "" : "s"}`
+      : null,
+    row.summary.changedFileCount !== null
+      ? `${row.summary.changedFileCount} file${row.summary.changedFileCount === 1 ? "" : "s"}`
+      : null,
+  ].filter((item): item is string => item !== null);
+  const accessibleLabel = [stateLabel, row.label, ...summaryItems].join(", ");
 
   return (
     <div className="border-b border-border/60 pb-2 pt-1">
       <button
         type="button"
         aria-expanded={row.expanded}
+        aria-label={accessibleLabel}
         data-scroll-anchor-ignore
         onClick={() => ctx.onToggleTurnFold(row.turnId)}
-        className="flex cursor-pointer select-none items-center gap-1 rounded-md px-1 text-xs text-muted-foreground tabular-nums transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+        className="flex w-full cursor-pointer select-none items-start gap-2 rounded-md px-1 py-1 text-left text-xs text-muted-foreground tabular-nums transition-colors hover:bg-accent/20 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
       >
-        <span>{row.label}</span>
-        <Icon className="size-3.5" />
+        <span
+          aria-hidden
+          className={cn(
+            "mt-1.5 size-1.5 shrink-0 rounded-full",
+            row.summary.state === "failed"
+              ? "bg-destructive"
+              : row.summary.state === "interrupted"
+                ? "bg-muted-foreground/60"
+                : "bg-success",
+          )}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            <span className="font-medium text-foreground/85">{stateLabel}</span>
+            <span>{row.label}</span>
+          </span>
+          {summaryItems.length > 0 ? (
+            <span className="mt-0.5 block text-[11px] text-muted-foreground/75">
+              {summaryItems.join(" · ")}
+            </span>
+          ) : null}
+        </span>
+        <Icon className="mt-0.5 size-3.5 shrink-0" />
       </button>
     </div>
   );
@@ -1114,6 +1204,11 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
   return (
     <>
       <div className="relative min-w-0 px-1 py-0.5">
+        {!row.showAssistantMeta && messageText.trim().length > 0 ? (
+          <div className="mb-0.5 text-[11px] font-medium uppercase tracking-[0.08em] text-muted-foreground/70">
+            Agent response
+          </div>
+        ) : null}
         <ChatMarkdown
           text={messageText}
           cwd={ctx.markdownCwd}
@@ -1125,7 +1220,10 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
           turnSummary={row.assistantTurnDiffSummary}
           routeThreadKey={ctx.routeThreadKey}
           resolvedTheme={ctx.resolvedTheme}
+          diffPresentation={ctx.diffPresentation}
+          diffIgnoreWhitespace={ctx.diffIgnoreWhitespace}
           onOpenTurnDiff={ctx.onOpenTurnDiff}
+          onReviewTurnDiff={ctx.onReviewTurnDiff}
         />
         {row.showAssistantMeta ? (
           <div className="mt-1.5 flex items-center gap-2 text-xs tabular-nums opacity-0 transition-opacity duration-200 focus-within:opacity-100 group-hover/assistant:opacity-100">
@@ -1429,15 +1527,37 @@ const AssistantChangedFilesSection = memo(function AssistantChangedFilesSection(
   turnSummary,
   routeThreadKey,
   resolvedTheme,
+  diffPresentation,
+  diffIgnoreWhitespace,
   onOpenTurnDiff,
+  onReviewTurnDiff,
 }: {
   turnSummary: TurnDiffSummary | undefined;
   routeThreadKey: string;
   resolvedTheme: "light" | "dark";
+  diffPresentation: DiffPresentation;
+  diffIgnoreWhitespace: boolean;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
+  onReviewTurnDiff: (turnId: TurnId) => void;
 }) {
   if (!turnSummary) return null;
   const checkpointFiles = turnSummary.files;
+  if (shouldRenderUnattributedDiffFallback(turnSummary)) {
+    return (
+      <div className="mt-2 flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2 py-1.5 text-xs text-muted-foreground">
+        <span>Changed files could not be attributed safely to this turn.</span>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          className="h-6 px-2 text-xs"
+          onClick={() => onOpenTurnDiff(turnSummary.turnId)}
+        >
+          Open raw diff
+        </Button>
+      </div>
+    );
+  }
   if (checkpointFiles.length === 0) return null;
 
   return (
@@ -1446,7 +1566,10 @@ const AssistantChangedFilesSection = memo(function AssistantChangedFilesSection(
       checkpointFiles={checkpointFiles}
       routeThreadKey={routeThreadKey}
       resolvedTheme={resolvedTheme}
+      diffPresentation={diffPresentation}
+      diffIgnoreWhitespace={diffIgnoreWhitespace}
       onOpenTurnDiff={onOpenTurnDiff}
+      onReviewTurnDiff={onReviewTurnDiff}
     />
   );
 });
@@ -1458,13 +1581,19 @@ function AssistantChangedFilesSectionInner({
   checkpointFiles,
   routeThreadKey,
   resolvedTheme,
+  diffPresentation,
+  diffIgnoreWhitespace,
   onOpenTurnDiff,
+  onReviewTurnDiff,
 }: {
   turnSummary: TurnDiffSummary;
   checkpointFiles: TurnDiffSummary["files"];
   routeThreadKey: string;
   resolvedTheme: "light" | "dark";
+  diffPresentation: DiffPresentation;
+  diffIgnoreWhitespace: boolean;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
+  onReviewTurnDiff: (turnId: TurnId) => void;
 }) {
   const activity = use(TimelineRowActivityCtx);
   const isLatestTurn = activity.latestTurnId === turnSummary.turnId;
@@ -1477,21 +1606,68 @@ function AssistantChangedFilesSectionInner({
   );
   const [allDirectoriesExpanded, setAllDirectoriesExpanded] = useState(autoExpanded);
   const expanded = persistedExpanded ?? (isLatestTurn && autoExpanded);
+  const showInlineDiff = diffPresentation === "inline";
+  const threadRef = parseScopedThreadKey(routeThreadKey);
+  const checkpointTurnCount = turnSummary.checkpointTurnCount ?? null;
+  const checkpointDiff = useCheckpointDiff(
+    {
+      environmentId: threadRef?.environmentId ?? null,
+      threadId: threadRef?.threadId ?? null,
+      fromTurnCount: checkpointTurnCount === null ? null : Math.max(0, checkpointTurnCount - 1),
+      toTurnCount: checkpointTurnCount,
+      ignoreWhitespace: diffIgnoreWhitespace,
+      cacheScope: `chat-turn:${turnSummary.turnId}`,
+    },
+    { enabled: showInlineDiff && checkpointTurnCount !== null },
+  );
+  const inlinePatch = useMemo(
+    () => getRenderablePatch(checkpointDiff.data?.diff, `chat-turn:${turnSummary.turnId}`),
+    [checkpointDiff.data?.diff, turnSummary.turnId],
+  );
 
   return (
-    <ChangedFilesCard
-      turnId={turnSummary.turnId}
-      files={checkpointFiles}
-      expanded={expanded}
-      showCompactPreview={isLatestTurn}
-      allDirectoriesExpanded={allDirectoriesExpanded}
-      resolvedTheme={resolvedTheme}
-      onExpandedChange={(nextExpanded) =>
-        setExpanded(routeThreadKey, turnSummary.turnId, nextExpanded)
-      }
-      onToggleAllDirectories={() => setAllDirectoriesExpanded((current) => !current)}
-      onOpenTurnDiff={onOpenTurnDiff}
-    />
+    <>
+      {!showInlineDiff ? (
+        <ChangedFilesCard
+          turnId={turnSummary.turnId}
+          files={checkpointFiles}
+          expanded={expanded}
+          showCompactPreview={isLatestTurn}
+          allDirectoriesExpanded={allDirectoriesExpanded}
+          resolvedTheme={resolvedTheme}
+          onExpandedChange={(nextExpanded) =>
+            setExpanded(routeThreadKey, turnSummary.turnId, nextExpanded)
+          }
+          onToggleAllDirectories={() => setAllDirectoriesExpanded((current) => !current)}
+          onOpenTurnDiff={onOpenTurnDiff}
+          onReviewTurnDiff={onReviewTurnDiff}
+          reviewDisabled={activity.isWorking}
+        />
+      ) : null}
+      {showInlineDiff && checkpointDiff.isPending ? (
+        <p className="px-3 py-2 text-[11px] text-muted-foreground">Loading inline diff…</p>
+      ) : null}
+      {showInlineDiff && inlinePatch?.kind === "files" ? (
+        <div className="mt-2 max-h-[32rem] space-y-2 overflow-auto rounded-xl border border-border/60 bg-code p-1">
+          {inlinePatch.files.map((fileDiff) => (
+            <FileDiff
+              key={resolveFileDiffPath(fileDiff)}
+              fileDiff={fileDiff}
+              options={{
+                collapsed: false,
+                diffStyle: "unified",
+                theme: resolveDiffThemeName(resolvedTheme),
+              }}
+            />
+          ))}
+        </div>
+      ) : null}
+      {showInlineDiff && inlinePatch?.kind === "raw" ? (
+        <pre className="mt-2 max-h-80 overflow-auto rounded-xl bg-code p-3 text-xs text-code-foreground">
+          {inlinePatch.text}
+        </pre>
+      ) : null}
+    </>
   );
 }
 

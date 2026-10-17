@@ -22,6 +22,7 @@ import * as Arr from "effect/Array";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
 import * as Result from "effect/Result";
+import { readProviderConfigString } from "./ProviderSettingsForm";
 import {
   CloudIcon,
   LaptopIcon,
@@ -72,6 +73,7 @@ import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { AddProviderInstanceDialog } from "./AddProviderInstanceDialog";
 import { ProviderInstanceCard } from "./ProviderInstanceCard";
+import { AntigravitySetupControls } from "./AntigravitySetupControls";
 import { DRIVER_OPTIONS, getDriverOption } from "./providerDriverMeta";
 import { searchableSetting } from "./settingsSearch";
 import {
@@ -827,6 +829,15 @@ export function EnvironmentProviderSettings({
               ) : null;
             return (
               <ProviderInstanceCard
+                setupControls={row.driver === "antigravity" ? <div className="space-y-3">
+                  <label className="flex items-center gap-3 text-sm">Runtime
+                    <select className="rounded-md border bg-background px-2 py-1" value={readProviderConfigString(row.instance.config, "runtime") === "sdk" ? "sdk" : "acp"}
+                      onChange={(event) => updateProviderInstance(row, { ...row.instance, config: { ...(row.instance.config as Record<string, unknown>), runtime: event.target.value } })}>
+                      <option value="acp">ACP (Google account)</option><option value="sdk">SDK (API / Vertex)</option>
+                    </select>
+                  </label>
+                  {readProviderConfigString(row.instance.config, "runtime") !== "sdk" && <AntigravitySetupControls environmentId={environmentId} instanceId={row.instanceId} />}
+                </div> : undefined}
                 key={row.instanceId}
                 instanceId={row.instanceId}
                 instance={row.instance}
@@ -852,6 +863,15 @@ export function EnvironmentProviderSettings({
                     updateProviderInstance(row, next);
                   }
                 }}
+                fallbackInstances={rows
+                  .filter((candidate) => candidate.instanceId !== row.instanceId)
+                  .map((candidate) => ({
+                    instanceId: candidate.instanceId,
+                    displayName:
+                      candidate.instance.displayName?.trim() ||
+                      getDriverOption(candidate.driver)?.label ||
+                      String(candidate.instanceId),
+                  }))}
                 onDelete={row.isDefault ? undefined : () => deleteProviderInstance(row.instanceId)}
                 headerAction={headerAction}
                 hiddenModels={modelPreferences.hiddenModels}

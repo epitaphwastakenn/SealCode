@@ -23,6 +23,7 @@ import { ProjectionSnapshotQuery } from "../Services/ProjectionSnapshotQuery.ts"
 import { encodeThreadDetailPageCursor } from "../threadDetailCursor.ts";
 
 const asProjectId = (value: string): ProjectId => ProjectId.make(value);
+const asThreadId = (value: string): ThreadId => ThreadId.make(value);
 const asTurnId = (value: string): TurnId => TurnId.make(value);
 const asMessageId = (value: string): MessageId => MessageId.make(value);
 const asEventId = (value: string): EventId => EventId.make(value);
@@ -1574,6 +1575,103 @@ projectionSnapshotLayer("ProjectionSnapshotQuery", (it) => {
       const fullSnapshot = yield* snapshotQuery.getSnapshot();
       assert.equal(fullSnapshot.threads[0]?.latestTurn?.turnId, asTurnId("turn-running"));
       assert.equal(fullSnapshot.threads[0]?.latestTurn?.state, "running");
+    }),
+  );
+
+  it.effect("lists project checkpoint diffs without deleted project or thread rows", () =>
+    Effect.gen(function* () {
+      const snapshotQuery = yield* ProjectionSnapshotQuery;
+      const sql = yield* SqlClient.SqlClient;
+
+      yield* sql`DELETE FROM projection_projects`;
+      yield* sql`DELETE FROM projection_threads`;
+      yield* sql`DELETE FROM projection_turns`;
+
+      yield* sql`
+        INSERT INTO projection_projects (
+          project_id,
+          title,
+          workspace_root,
+          default_model_selection_json,
+          scripts_json,
+          created_at,
+          updated_at,
+          deleted_at
+        )
+        VALUES
+          ('project-live', 'Live project', '/tmp/live', '{}', '[]', '2026-04-04T00:00:00.000Z', '2026-04-04T00:00:00.000Z', NULL),
+          ('project-deleted', 'Deleted project', '/tmp/deleted', '{}', '[]', '2026-04-04T00:00:00.000Z', '2026-04-04T00:00:00.000Z', '2026-04-04T00:00:01.000Z')
+      `;
+
+      yield* sql`
+        INSERT INTO projection_threads (
+          thread_id,
+          project_id,
+          title,
+          model_selection_json,
+          runtime_mode,
+          interaction_mode,
+          branch,
+          worktree_path,
+          latest_turn_id,
+          latest_user_message_at,
+          pending_approval_count,
+          pending_user_input_count,
+          has_actionable_proposed_plan,
+          created_at,
+          updated_at,
+          archived_at,
+          deleted_at
+        )
+        VALUES
+          ('thread-new', 'project-live', 'New thread', '{}', 'full-access', 'default', NULL, NULL, 'turn-new', NULL, 0, 0, 0, '2026-04-04T00:00:02.000Z', '2026-04-04T00:00:02.000Z', NULL, NULL),
+          ('thread-old', 'project-live', 'Old thread', '{}', 'full-access', 'default', NULL, NULL, 'turn-old', NULL, 0, 0, 0, '2026-04-04T00:00:03.000Z', '2026-04-04T00:00:03.000Z', '2026-04-04T00:00:04.000Z', NULL),
+          ('thread-deleted', 'project-live', 'Deleted thread', '{}', 'full-access', 'default', NULL, NULL, 'turn-deleted', NULL, 0, 0, 0, '2026-04-04T00:00:05.000Z', '2026-04-04T00:00:05.000Z', NULL, '2026-04-04T00:00:06.000Z'),
+          ('thread-deleted-project', 'project-deleted', 'Deleted project thread', '{}', 'full-access', 'default', NULL, NULL, 'turn-project-deleted', NULL, 0, 0, 0, '2026-04-04T00:00:07.000Z', '2026-04-04T00:00:07.000Z', NULL, NULL)
+      `;
+
+      yield* sql`
+        INSERT INTO projection_turns (
+          thread_id,
+          turn_id,
+          pending_message_id,
+          source_proposed_plan_thread_id,
+          source_proposed_plan_id,
+          assistant_message_id,
+          state,
+          requested_at,
+          started_at,
+          completed_at,
+          checkpoint_turn_count,
+          checkpoint_ref,
+          checkpoint_status,
+          checkpoint_files_json,
+          checkpoint_file_attribution
+        )
+        VALUES
+          ('thread-new', 'turn-new', NULL, NULL, NULL, 'message-new', 'completed', '2026-04-04T00:01:00.000Z', '2026-04-04T00:01:01.000Z', '2026-04-04T00:01:02.000Z', 4, 'checkpoint-new', 'ready', '[{"path":"src/new.ts","kind":"modified","additions":3,"deletions":1}]', 'known'),
+          ('thread-old', 'turn-old', NULL, NULL, NULL, NULL, 'completed', '2026-04-04T00:00:10.000Z', '2026-04-04T00:00:11.000Z', '2026-04-04T00:00:12.000Z', 2, 'checkpoint-old', 'missing', '[]', 'unknown'),
+          ('thread-deleted', 'turn-deleted', NULL, NULL, NULL, NULL, 'completed', '2026-04-04T00:00:20.000Z', '2026-04-04T00:00:21.000Z', '2026-04-04T00:00:22.000Z', 3, 'checkpoint-thread-deleted', 'ready', '[]', 'known'),
+          ('thread-deleted-project', 'turn-project-deleted', NULL, NULL, NULL, NULL, 'completed', '2026-04-04T00:00:30.000Z', '2026-04-04T00:00:31.000Z', '2026-04-04T00:00:32.000Z', 5, 'checkpoint-project-deleted', 'ready', '[]', 'known')
+      `;
+
+      if (!snapshotQuery.getProjectDiffIndex) {
+        throw new Error("ProjectionSnapshotQuery.getProjectDiffIndex is unavailable");
+      }
+      const result = yield* snapshotQuery.getProjectDiffIndex({
+        projectId: asProjectId("project-live"),
+      });
+
+      assert.equal(result.projectId, asProjectId("project-live"));
+      assert.deepEqual(
+        result.entries.map((entry) => [entry.threadId, entry.turnId, entry.checkpointTurnCount]),
+        [
+          [asThreadId("thread-new"), asTurnId("turn-new"), 4],
+          [asThreadId("thread-old"), asTurnId("turn-old"), 2],
+        ],
+      );
+      assert.equal(result.entries[0]?.fileAttribution, "known");
+      assert.equal(result.entries[1]?.fileAttribution, undefined);
     }),
   );
 

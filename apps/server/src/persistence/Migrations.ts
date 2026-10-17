@@ -53,6 +53,9 @@ import Migration0037 from "./Migrations/037_ProjectionTurnsKeysetIndex.ts";
 import Migration0038 from "./Migrations/038_ProjectionThreadsPinOrderKey.ts";
 import Migration0039 from "./Migrations/039_ProjectionProjectsDefaultThreadEnvMode.ts";
 import Migration0040 from "./Migrations/040_ProjectionThreadsPinnedRepair.ts";
+import Migration0041 from "./Migrations/041_HarnessEfficiency.ts";
+import Migration0042 from "./Migrations/042_CheckpointFileAttribution.ts";
+import Migration0043 from "./Migrations/043_CheckpointFileAttributionKnown.ts";
 
 /**
  * Migration loader with all migrations defined inline.
@@ -105,6 +108,9 @@ export const migrationEntries = [
   [38, "ProjectionThreadsPinOrderKey", Migration0038],
   [39, "ProjectionProjectsDefaultThreadEnvMode", Migration0039],
   [40, "ProjectionThreadsPinnedRepair", Migration0040],
+  [41, "HarnessEfficiency", Migration0041],
+  [42, "CheckpointFileAttribution", Migration0042],
+  [43, "CheckpointFileAttributionKnown", Migration0043],
 ] as const;
 
 export const migrationManifest = migrationEntries.map(([id, name]) => [id, name] as const);

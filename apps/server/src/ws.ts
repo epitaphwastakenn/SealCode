@@ -48,6 +48,7 @@ import {
   FilesystemBrowseError,
   AssetWorkspaceContextNotFoundError,
   AssetWorkspaceContextResolutionError,
+  VoiceTranscriptionError,
   RpcClientId,
   EnvironmentAuthorizationError,
   ThreadId,
@@ -86,8 +87,14 @@ import * as ServerRuntimeStartup from "./serverRuntimeStartup.ts";
 import * as ServerSettings from "./serverSettings.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
+import * as GlobalMcpManager from "./mcp/GlobalMcpManager.ts";
 import * as PreviewManager from "./preview/Manager.ts";
 import { issueAssetUrl } from "./assets/AssetAccess.ts";
+import * as VoiceTranscription from "./voiceTranscription.ts";
+import {
+  VOICE_UPLOAD_CAPACITY_ERROR_MESSAGE,
+  voiceUploadAdmissionGate,
+} from "./voiceUploadAdmission.ts";
 import * as PortScanner from "./preview/PortScanner.ts";
 import * as WorkspaceEntries from "./workspace/WorkspaceEntries.ts";
 import * as WorkspaceFileSystem from "./workspace/WorkspaceFileSystem.ts";
@@ -373,6 +380,7 @@ const makeWsRpcLayer = (
       const config = yield* ServerConfig.ServerConfig;
       const lifecycleEvents = yield* ServerLifecycleEvents.ServerLifecycleEvents;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
+      const globalMcpManager = yield* GlobalMcpManager.GlobalMcpManager;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
@@ -1161,6 +1169,21 @@ const makeWsRpcLayer = (
             ),
             { "rpc.aggregate": "orchestration" },
           ),
+        [ORCHESTRATION_WS_METHODS.getProjectDiffIndex]: (input) =>
+          observeRpcEffect(
+            ORCHESTRATION_WS_METHODS.getProjectDiffIndex,
+            (projectionSnapshotQuery.getProjectDiffIndex?.(input) ??
+              Effect.die(new Error("Project diff index is unavailable on this server"))).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new OrchestrationGetSnapshotError({
+                    message: "Failed to load project diff index",
+                    cause,
+                  }),
+              ),
+            ),
+            { "rpc.aggregate": "orchestration" },
+          ),
         [ORCHESTRATION_WS_METHODS.searchThreads]: (input) =>
           observeRpcEffect(
             ORCHESTRATION_WS_METHODS.searchThreads,
@@ -1457,6 +1480,13 @@ const makeWsRpcLayer = (
           observeRpcEffect(WS_METHODS.serverUpdateServer, serverSelfUpdate.update(input), {
             "rpc.aggregate": "server",
           }),
+        [WS_METHODS.serverSetupProvider]: (input) =>
+          observeRpcEffect(WS_METHODS.serverSetupProvider, Effect.gen(function* () {
+            const registry = yield* ProviderInstanceRegistry;
+            const instance = yield* registry.getInstance(input.instanceId);
+            if (!instance?.setup) return yield* new ProviderSetupError({ message: "This provider does not support setup." });
+            return yield* instance.setup(input);
+          }), { "rpc.aggregate": "server" }),
         [WS_METHODS.serverUpdateServerWithProgress]: (input) =>
           observeRpcStream(
             WS_METHODS.serverUpdateServerWithProgress,
@@ -1521,6 +1551,18 @@ const makeWsRpcLayer = (
             {
               "rpc.aggregate": "server",
             },
+          ),
+        [WS_METHODS.serverGetMcpStatuses]: (_input) =>
+          observeRpcEffect(
+            WS_METHODS.serverGetMcpStatuses,
+            globalMcpManager.getStatuses,
+            { "rpc.aggregate": "server" },
+          ),
+        [WS_METHODS.serverReconnectMcp]: ({ id }) =>
+          observeRpcEffect(
+            WS_METHODS.serverReconnectMcp,
+            globalMcpManager.reloadServer(id).pipe(Effect.andThen(globalMcpManager.getStatuses)),
+            { "rpc.aggregate": "server" },
           ),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) =>
           observeRpcEffect(
@@ -1804,6 +1846,29 @@ const makeWsRpcLayer = (
               });
             }),
             { "rpc.aggregate": "workspace" },
+          ),
+        [WS_METHODS.voiceTranscribe]: (input) =>
+          observeRpcEffect(
+            WS_METHODS.voiceTranscribe,
+            voiceUploadAdmissionGate
+              .run(VoiceTranscription.transcribeVoiceRecording({ request: input }))
+              .pipe(
+                Effect.mapError((cause) => {
+                  if (cause instanceof VoiceTranscriptionError) {
+                    return cause;
+                  }
+                  const message =
+                    cause instanceof Error ? cause.message : "Voice transcription failed.";
+                  return new VoiceTranscriptionError({
+                    failure:
+                      message === VOICE_UPLOAD_CAPACITY_ERROR_MESSAGE
+                        ? "capacity"
+                        : "provider_failed",
+                    message,
+                  });
+                }),
+              ),
+            { "rpc.aggregate": "voice" },
           ),
         [WS_METHODS.subscribeVcsStatus]: (input) =>
           observeRpcStream(
@@ -2100,6 +2165,17 @@ const makeWsRpcLayer = (
             }),
             { "rpc.aggregate": "server" },
           ),
+        [WS_METHODS.subscribeMcpStatus]: (_input) =>
+          observeRpcStream(
+            WS_METHODS.subscribeMcpStatus,
+            globalMcpManager.streamStatusChanges.pipe(
+              Stream.map((statuses) => ({
+                type: "mcp.status.updated" as const,
+                statuses,
+              })),
+            ),
+            { "rpc.aggregate": "server" },
+          ),
         [WS_METHODS.subscribeServerLifecycle]: (_input) =>
           observeRpcStreamEffect(
             WS_METHODS.subscribeServerLifecycle,
@@ -2236,3 +2312,5 @@ export const websocketRpcRouteLayer = Layer.unwrap(
     );
   }),
 );
+import { ProviderSetupError } from "@t3tools/contracts";
+import { ProviderInstanceRegistry } from "./provider/Services/ProviderInstanceRegistry.ts";

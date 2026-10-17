@@ -108,7 +108,7 @@ export function ComposerBannerStack({ className, items }: ComposerBannerStackPro
         {showCollapsedStackCap && firstStackedItem ? (
           <div
             className={cn(
-              "pointer-events-none absolute inset-x-0 -top-3 z-0 mx-auto h-3 rounded-t-[22px]",
+              "pointer-events-none absolute inset-x-0 -top-3 z-0 mx-auto h-3 rounded-t-[16px]",
               "border border-b-0 bg-background/96 shadow-[0_6px_18px_rgba(0,0,0,0.06)]",
               stackCapBorderClass[firstStackedItem.variant],
               "transition-opacity duration-150 ease-out",
@@ -190,7 +190,7 @@ function ComposerBannerStackAlert({
   return (
     <Alert
       variant={item.variant}
-      className={cn("alert-glass rounded-[22px]", item.className)}
+      className={cn("alert-glass rounded-[16px]", item.className)}
       data-variant={item.variant}
     >
       {item.icon}

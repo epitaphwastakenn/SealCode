@@ -1,6 +1,8 @@
-import { execFile } from "node:child_process";
-import * as NodeHTTP from "node:http";
-import * as NodeHTTPS from "node:https";
+import * as NodeChildProcess from "node:child_process";
+import * as NodeFSP from "node:fs/promises";
+import * as NodeHttp from "node:http";
+import * as NodeHttps from "node:https";
+import * as NodePath from "node:path";
 import type { SubscriptionUsage, SubscriptionUsageWindow } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 
@@ -11,6 +13,83 @@ const QUOTA_METHODS = [
 ] as const;
 const QUOTA_PATH_PREFIX = "/exa.language_server_pb.LanguageServerService/";
 const REQUEST_TIMEOUT_MS = 3_000;
+const CLOUD_REQUEST_TIMEOUT_MS = 10_000;
+const ANTIGRAVITY_CREDENTIAL_TARGET = "gemini:antigravity";
+const ANTIGRAVITY_API_ORIGIN = "https://daily-cloudcode-pa.googleapis.com";
+const ANTIGRAVITY_TOKEN_URL = "https://oauth2.googleapis.com/token";
+const ANTIGRAVITY_USER_AGENT = "antigravity/windows/amd64";
+const ACCESS_TOKEN_EXPIRY_SKEW_MS = 60_000;
+
+const WINDOWS_CREDENTIAL_SCRIPT = String.raw`
+using namespace System.Runtime.InteropServices
+
+$source = @'
+using System;
+using System.Runtime.InteropServices;
+
+public static class SealCodeCredentialManager {
+  [StructLayout(LayoutKind.Sequential)]
+  public struct Credential {
+    public UInt32 Flags;
+    public UInt32 Type;
+    public IntPtr TargetName;
+    public IntPtr Comment;
+    public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
+    public UInt32 CredentialBlobSize;
+    public IntPtr CredentialBlob;
+    public UInt32 Persist;
+    public UInt32 AttributeCount;
+    public IntPtr Attributes;
+    public IntPtr TargetAlias;
+    public IntPtr UserName;
+  }
+
+  [DllImport("advapi32.dll", EntryPoint = "CredReadW", CharSet = CharSet.Unicode, SetLastError = true)]
+  public static extern bool CredRead(string target, UInt32 type, UInt32 flags, out IntPtr credential);
+
+  [DllImport("advapi32.dll", SetLastError = true)]
+  public static extern void CredFree(IntPtr credential);
+}
+'@
+
+Add-Type -TypeDefinition $source
+$credentialPointer = [IntPtr]::Zero
+if ([SealCodeCredentialManager]::CredRead("gemini:antigravity", 1, 0, [ref]$credentialPointer)) {
+  try {
+    $credential = [Marshal]::PtrToStructure($credentialPointer, [type][SealCodeCredentialManager+Credential])
+    $bytes = [byte[]]::new($credential.CredentialBlobSize)
+    [Marshal]::Copy($credential.CredentialBlob, $bytes, 0, $credential.CredentialBlobSize)
+    [Console]::Out.Write([Text.Encoding]::UTF8.GetString($bytes))
+  } finally {
+    [SealCodeCredentialManager]::CredFree($credentialPointer)
+  }
+}
+`;
+
+interface AntigravityCredentials {
+  readonly accessToken: string | null;
+  readonly refreshToken: string | null;
+  readonly expiresAt: number | null;
+  readonly oauthClient?: AntigravityOAuthClient;
+}
+
+interface AntigravityOAuthClient {
+  readonly clientId: string;
+  readonly clientSecret: string;
+}
+
+interface JsonResponse {
+  readonly status: number;
+  readonly payload: unknown;
+}
+
+let refreshedAccessToken:
+  | {
+      readonly refreshToken: string;
+      readonly accessToken: string;
+      readonly expiresAt: number;
+    }
+  | undefined;
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -23,6 +102,51 @@ function asFiniteNumber(value: unknown): number | undefined {
   if (typeof value !== "string" || value.trim().length === 0) return undefined;
   const parsed = Number(value);
   return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function asNonEmptyString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function readCredentialExpiry(value: unknown): number | null {
+  const numeric = asFiniteNumber(value);
+  if (numeric !== undefined) {
+    return numeric < 1_000_000_000_000 ? numeric * 1_000 : numeric;
+  }
+  if (typeof value !== "string") return null;
+  const timestamp = Date.parse(value);
+  return Number.isNaN(timestamp) ? null : timestamp;
+}
+
+/** Normalize the credential shapes used by Antigravity's keyring and OAuth file. */
+export function parseAntigravityCredentials(payload: unknown): AntigravityCredentials | undefined {
+  const root = asRecord(payload);
+  const token = asRecord(root?.token) ?? root;
+  if (!token) return undefined;
+  const accessToken = asNonEmptyString(token.access_token);
+  const refreshToken = asNonEmptyString(token.refresh_token);
+  const clientId = asNonEmptyString(token.client_id);
+  const clientSecret = asNonEmptyString(token.client_secret);
+  if (!accessToken && !refreshToken) return undefined;
+  return {
+    accessToken,
+    refreshToken,
+    expiresAt: readCredentialExpiry(token.expiry ?? token.expiry_date),
+    ...(clientId && clientSecret ? { oauthClient: { clientId, clientSecret } } : {}),
+  };
+}
+
+/** Read the OAuth client embedded in the configured official `agy` executable. */
+export function extractAntigravityOAuthClient(
+  binary: Uint8Array,
+): AntigravityOAuthClient | undefined {
+  const contents = Buffer.from(binary).toString("latin1");
+  const clientIds = [...contents.matchAll(/\d{10,}-[a-z0-9]+\.apps\.googleusercontent\.com/g)].map(
+    ([clientId]) => clientId,
+  );
+  const clientId = clientIds.find((candidate) => candidate.startsWith("1071"));
+  const clientSecret = contents.match(/GOCSPX-[A-Za-z0-9_-]{28}/)?.[0];
+  return clientId && clientSecret ? { clientId, clientSecret } : undefined;
 }
 
 function readResetTime(value: unknown): string | null {
@@ -58,7 +182,7 @@ function quotaWindowLabel(bucketName: string): {
   readonly durationMins: number | null;
 } {
   const lower = bucketName.toLowerCase();
-  if (/(?:5\s*hour|5h|session)/.test(lower)) {
+  if (/(?:(?:5|five)\s*hour|5h|session)/.test(lower)) {
     return { label: "5 hour", durationMins: 5 * 60 };
   }
   if (/weekly|week/.test(lower)) {
@@ -237,21 +361,320 @@ export function mapAntigravitySubscriptionUsage(input: {
   };
 }
 
+export function isAntigravityQuotaExhausted(usage: SubscriptionUsage | undefined): boolean {
+  return (
+    usage?.windows.some(
+      (window) =>
+        (window.windowDurationMins === 5 * 60 || /5 hour/i.test(window.label)) &&
+        window.usedPercent >= 100,
+    ) ?? false
+  );
+}
+
+export function isAntigravityQuotaErrorMessage(message: string): boolean {
+  return /(?:5[- ]hour usage limit|5 hour limit|quota (?:exhausted|exceeded)|resource_exhausted|(?:^|\D)429(?:\D|$))/i.test(
+    message,
+  );
+}
+
 function runProcessText(
   command: string,
   args: ReadonlyArray<string>,
   environment: NodeJS.ProcessEnv,
+  timeout = 2_000,
 ): Promise<string | undefined> {
   return new Promise((resolve) => {
-    execFile(
+    NodeChildProcess.execFile(
       command,
       [...args],
-      { env: environment, windowsHide: true, timeout: 2_000 },
+      { env: environment, windowsHide: true, timeout },
       (error, stdout) => {
         resolve(error ? undefined : stdout);
       },
     );
   });
+}
+
+function parseCredentialText(value: string | undefined): AntigravityCredentials | undefined {
+  if (!value) return undefined;
+  try {
+    return parseAntigravityCredentials(JSON.parse(value) as unknown);
+  } catch {
+    return undefined;
+  }
+}
+
+async function readAntigravityCredentials(
+  environment: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+  acpTokenPath?: string,
+): Promise<AntigravityCredentials | undefined> {
+  if (acpTokenPath) {
+    try {
+      return parseCredentialText(await NodeFSP.readFile(acpTokenPath, "utf8"));
+    } catch {
+      return undefined;
+    }
+  }
+  const keyringPayload =
+    platform === "win32"
+      ? await runProcessText(
+          "powershell.exe",
+          ["-NoProfile", "-NonInteractive", "-Command", WINDOWS_CREDENTIAL_SCRIPT],
+          environment,
+          5_000,
+        )
+      : platform === "darwin"
+        ? await runProcessText(
+            "security",
+            ["find-generic-password", "-s", ANTIGRAVITY_CREDENTIAL_TARGET, "-w"],
+            environment,
+          )
+        : undefined;
+  const keyringCredentials = parseCredentialText(keyringPayload);
+  if (keyringCredentials) return keyringCredentials;
+
+  const home = environment.HOME ?? environment.USERPROFILE;
+  if (!home) return undefined;
+  try {
+    return parseCredentialText(
+      await NodeFSP.readFile(NodePath.join(home, ".gemini", "oauth_creds.json"), "utf8"),
+    );
+  } catch {
+    return undefined;
+  }
+}
+
+async function resolveAntigravityBinaryPath(
+  binaryPath: string,
+  environment: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): Promise<string | undefined> {
+  if (NodePath.isAbsolute(binaryPath) || /[\\/]/.test(binaryPath)) return binaryPath;
+  const located =
+    platform === "win32"
+      ? await runProcessText("where.exe", [binaryPath], environment)
+      : await runProcessText("which", [binaryPath], environment);
+  return located
+    ?.split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
+}
+
+async function resolveAntigravityOAuthClient(
+  binaryPath: string,
+  environment: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
+): Promise<AntigravityOAuthClient | undefined> {
+  const clientId = asNonEmptyString(environment.AGY_CLIENT_ID);
+  const clientSecret = asNonEmptyString(environment.AGY_CLIENT_SECRET);
+  if (clientId && clientSecret) return { clientId, clientSecret };
+
+  const resolvedPath = await resolveAntigravityBinaryPath(binaryPath, environment, platform);
+  if (!resolvedPath) return undefined;
+  try {
+    return extractAntigravityOAuthClient(await NodeFSP.readFile(resolvedPath));
+  } catch {
+    return undefined;
+  }
+}
+
+function postRemoteJson(input: {
+  readonly url: string;
+  readonly body: string;
+  readonly headers: Readonly<Record<string, string>>;
+}): Promise<JsonResponse | undefined> {
+  return new Promise((resolve) => {
+    const request = NodeHttps.request(
+      input.url,
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          "Content-Length": Buffer.byteLength(input.body).toString(),
+          ...input.headers,
+        },
+      },
+      (response) => {
+        let body = "";
+        response.setEncoding("utf8");
+        response.on("data", (chunk: string) => {
+          body += chunk;
+        });
+        response.on("end", () => {
+          let payload: unknown;
+          try {
+            payload = body.length > 0 ? (JSON.parse(body) as unknown) : undefined;
+          } catch {
+            payload = undefined;
+          }
+          resolve({ status: response.statusCode ?? 0, payload });
+        });
+      },
+    );
+    request.setTimeout(CLOUD_REQUEST_TIMEOUT_MS, () => request.destroy());
+    request.on("error", () => resolve(undefined));
+    request.end(input.body);
+  });
+}
+
+function postAntigravityApi(
+  path: string,
+  accessToken: string,
+  body: unknown,
+): Promise<JsonResponse | undefined> {
+  return postRemoteJson({
+    url: `${ANTIGRAVITY_API_ORIGIN}${path}`,
+    body: JSON.stringify(body),
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      "User-Agent": ANTIGRAVITY_USER_AGENT,
+    },
+  });
+}
+
+async function refreshAntigravityAccessToken(input: {
+  readonly refreshToken: string;
+  readonly oauthClient?: AntigravityOAuthClient | undefined;
+  readonly binaryPath: string;
+  readonly environment: NodeJS.ProcessEnv;
+  readonly platform: NodeJS.Platform;
+  readonly now: number;
+}): Promise<string | undefined> {
+  const oauthClient =
+    input.oauthClient ??
+    (await resolveAntigravityOAuthClient(input.binaryPath, input.environment, input.platform));
+  if (!oauthClient) return undefined;
+  const body = new URLSearchParams({
+    client_id: oauthClient.clientId,
+    client_secret: oauthClient.clientSecret,
+    refresh_token: input.refreshToken,
+    grant_type: "refresh_token",
+  }).toString();
+  const response = await postRemoteJson({
+    url: ANTIGRAVITY_TOKEN_URL,
+    body,
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+  });
+  const payload = asRecord(response?.payload);
+  const accessToken = response?.status === 200 ? asNonEmptyString(payload?.access_token) : null;
+  if (!accessToken) return undefined;
+  const expiresIn = asFiniteNumber(payload?.expires_in) ?? 3_600;
+  refreshedAccessToken = {
+    refreshToken: input.refreshToken,
+    accessToken,
+    expiresAt: input.now + expiresIn * 1_000,
+  };
+  return accessToken;
+}
+
+async function getAntigravityAccessToken(input: {
+  readonly credentials: AntigravityCredentials;
+  readonly binaryPath: string;
+  readonly environment: NodeJS.ProcessEnv;
+  readonly platform: NodeJS.Platform;
+  readonly now: number;
+}): Promise<string | undefined> {
+  if (
+    input.credentials.refreshToken &&
+    refreshedAccessToken?.refreshToken === input.credentials.refreshToken &&
+    refreshedAccessToken.expiresAt > input.now + ACCESS_TOKEN_EXPIRY_SKEW_MS
+  ) {
+    return refreshedAccessToken.accessToken;
+  }
+  if (
+    input.credentials.accessToken &&
+    (input.credentials.expiresAt === null ||
+      input.credentials.expiresAt > input.now + ACCESS_TOKEN_EXPIRY_SKEW_MS)
+  ) {
+    return input.credentials.accessToken;
+  }
+  return input.credentials.refreshToken
+    ? refreshAntigravityAccessToken({
+        refreshToken: input.credentials.refreshToken,
+        oauthClient: input.credentials.oauthClient,
+        binaryPath: input.binaryPath,
+        environment: input.environment,
+        platform: input.platform,
+        now: input.now,
+      })
+    : undefined;
+}
+
+function readTierName(payload: unknown): string | null {
+  const root = asRecord(payload);
+  for (const value of [root?.paidTier, root?.currentTier]) {
+    const tier = asRecord(value);
+    const label =
+      asNonEmptyString(tier?.name) ?? asNonEmptyString(tier?.id) ?? asNonEmptyString(value);
+    if (label) return label;
+  }
+  return null;
+}
+
+async function fetchAntigravityCloudUsage(
+  accessToken: string,
+  checkedAt: string,
+): Promise<{ readonly unauthorized: boolean; readonly usage?: SubscriptionUsage }> {
+  const loadResponse = await postAntigravityApi("/v1internal:loadCodeAssist", accessToken, {
+    metadata: { ideType: "ANTIGRAVITY" },
+  });
+  if (loadResponse?.status === 401) return { unauthorized: true };
+  if (loadResponse?.status !== 200) return { unauthorized: false };
+  const load = asRecord(loadResponse.payload);
+  const project = asNonEmptyString(load?.cloudaicompanionProject);
+  const quotaResponse = await postAntigravityApi(
+    "/v1internal:retrieveUserQuotaSummary",
+    accessToken,
+    project ? { project } : {},
+  );
+  if (quotaResponse?.status === 401) return { unauthorized: true };
+  if (quotaResponse?.status !== 200) return { unauthorized: false };
+  const usage = mapAntigravitySubscriptionUsage({ payload: quotaResponse.payload, checkedAt });
+  return usage
+    ? {
+        unauthorized: false,
+        usage: { ...usage, plan: readTierName(loadResponse.payload) ?? usage.plan },
+      }
+    : { unauthorized: false };
+}
+
+async function probeAntigravityCloudUsage(input: {
+  readonly environment: NodeJS.ProcessEnv;
+  readonly binaryPath: string;
+  readonly checkedAt: string;
+  readonly platform: NodeJS.Platform;
+  readonly acpTokenPath?: string;
+}): Promise<SubscriptionUsage | undefined> {
+  const credentials = await readAntigravityCredentials(
+    input.environment,
+    input.platform,
+    input.acpTokenPath,
+  );
+  if (!credentials || (input.acpTokenPath && !credentials.oauthClient)) return undefined;
+  const now = Date.parse(input.checkedAt);
+  const accessToken = await getAntigravityAccessToken({
+    credentials,
+    binaryPath: input.binaryPath,
+    environment: input.environment,
+    platform: input.platform,
+    now,
+  });
+  if (!accessToken) return undefined;
+  let result = await fetchAntigravityCloudUsage(accessToken, input.checkedAt);
+  if (result.unauthorized && credentials.refreshToken) {
+    const refreshed = await refreshAntigravityAccessToken({
+      refreshToken: credentials.refreshToken,
+      oauthClient: credentials.oauthClient,
+      binaryPath: input.binaryPath,
+      environment: input.environment,
+      platform: input.platform,
+      now,
+    });
+    if (refreshed) result = await fetchAntigravityCloudUsage(refreshed, input.checkedAt);
+  }
+  return result.usage;
 }
 
 interface ListeningEndpoint {
@@ -300,8 +723,9 @@ function parseAntigravityProcesses(output: string): ReadonlyArray<AntigravityPro
 
 async function findAntigravityProcesses(
   environment: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
 ): Promise<ReadonlyArray<AntigravityProcess>> {
-  if (process.platform === "win32") {
+  if (platform === "win32") {
     const output = await runProcessText(
       "powershell.exe",
       [
@@ -320,9 +744,10 @@ async function findAntigravityProcesses(
 
 async function findListeningEndpoints(
   environment: NodeJS.ProcessEnv,
+  platform: NodeJS.Platform,
 ): Promise<ReadonlyArray<ListeningEndpoint>> {
   const output =
-    process.platform === "win32"
+    platform === "win32"
       ? await runProcessText("netstat", ["-ano", "-p", "tcp"], environment)
       : await runProcessText("lsof", ["-nP", "-iTCP", "-sTCP:LISTEN"], environment);
   return output ? parseListeningEndpoints(output) : [];
@@ -335,7 +760,7 @@ function postJson(input: {
   readonly csrfToken: string;
 }): Promise<unknown | undefined> {
   return new Promise((resolve) => {
-    const transport = input.protocol === "https" ? NodeHTTPS : NodeHTTP;
+    const transport = input.protocol === "https" ? NodeHttps : NodeHttp;
     const request = transport.request(
       {
         hostname: "127.0.0.1",
@@ -402,20 +827,24 @@ async function probePort(
   return undefined;
 }
 
-/**
- * Query Antigravity's loopback language-server quota service. This deliberately
- * does not launch `agy --print /usage`: that command is interactive and can
- * block on browser authentication when the CLI is signed out.
- */
+/** Query Antigravity's cloud quota API using its saved login, then its local service. */
 export function probeAntigravitySubscriptionUsage(input: {
   readonly environment: NodeJS.ProcessEnv;
+  readonly binaryPath: string;
   readonly checkedAt: string;
+  readonly platform: NodeJS.Platform;
+  readonly acpTokenPath?: string;
 }): Effect.Effect<SubscriptionUsage | undefined> {
   return Effect.tryPromise({
     try: async () => {
+      const cloudUsage = await probeAntigravityCloudUsage(input);
+      // ACP credentials belong to one provider instance. Never substitute a
+      // different account from the CLI keyring or a running IDE's local service.
+      if (cloudUsage || input.acpTokenPath) return cloudUsage;
+
       const [processes, endpoints] = await Promise.all([
-        findAntigravityProcesses(input.environment),
-        findListeningEndpoints(input.environment),
+        findAntigravityProcesses(input.environment, input.platform),
+        findListeningEndpoints(input.environment, input.platform),
       ]);
       const processTokens = new Map(
         processes.map((processInfo) => [processInfo.pid, processInfo.csrfToken]),

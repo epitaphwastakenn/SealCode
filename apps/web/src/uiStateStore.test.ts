@@ -13,9 +13,11 @@ import {
   reorderThreads,
   resolveProjectExpanded,
   setDefaultAdvertisedEndpointKey,
+  setLastOpenThreadRoute,
   setProjectExpanded,
   setProjectPinned,
   setThreadChangedFilesExpanded,
+  setTimelineTurnExpanded,
   type UiState,
 } from "./uiStateStore";
 
@@ -27,7 +29,9 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     threadOrderByGroup: {},
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
+    timelineExpandedTurnIdsByThread: {},
     defaultAdvertisedEndpointKey: null,
+    lastOpenThreadRoute: null,
     ...overrides,
   };
 }
@@ -166,6 +170,19 @@ describe("uiStateStore pure functions", () => {
     });
   });
 
+  it("stores and removes expanded timeline turns per thread", () => {
+    const expanded = setTimelineTurnExpanded(makeUiState(), "thread-1", "turn-1", true);
+
+    expect(expanded.timelineExpandedTurnIdsByThread).toEqual({
+      "thread-1": ["turn-1"],
+    });
+    expect(setTimelineTurnExpanded(expanded, "thread-1", "turn-1", true)).toBe(expanded);
+    expect(
+      setTimelineTurnExpanded(expanded, "thread-1", "turn-1", false)
+        .timelineExpandedTurnIdsByThread,
+    ).toEqual({});
+  });
+
   it("stores the endpoint preference by stable key", () => {
     const next = setDefaultAdvertisedEndpointKey(makeUiState(), "desktop-core:lan:http");
 
@@ -173,6 +190,23 @@ describe("uiStateStore pure functions", () => {
     expect(setDefaultAdvertisedEndpointKey(next, "desktop-core:lan:http")).toBe(next);
     expect(setDefaultAdvertisedEndpointKey(next, "")).toMatchObject({
       defaultAdvertisedEndpointKey: null,
+    });
+  });
+
+  it("stores the last open thread route without rewriting equal values", () => {
+    const initialState = makeUiState();
+    const route = {
+      kind: "server" as const,
+      environmentId: "environment-local",
+      threadId: "thread-1",
+    };
+    const next = setLastOpenThreadRoute(initialState, route);
+
+    expect(next.lastOpenThreadRoute).toEqual(route);
+    expect(setLastOpenThreadRoute(next, route)).toBe(next);
+    expect(setLastOpenThreadRoute(next, { kind: "draft", draftId: "draft-1" })).toEqual({
+      ...next,
+      lastOpenThreadRoute: { kind: "draft", draftId: "draft-1" },
     });
   });
 });
@@ -198,6 +232,9 @@ describe("parsePersistedState", () => {
           "turn-2": true,
         },
       },
+      timelineExpandedTurnIdsByThread: {
+        "environment:thread-1": ["turn-1", "turn-2"],
+      },
     });
 
     expect(parsed).toEqual({
@@ -217,6 +254,10 @@ describe("parsePersistedState", () => {
           "turn-2": true,
         },
       },
+      timelineExpandedTurnIdsByThread: {
+        "environment:thread-1": ["turn-1", "turn-2"],
+      },
+      lastOpenThreadRoute: null,
     });
   });
 
@@ -315,6 +356,9 @@ describe("uiStateStore persistence", () => {
           "turn-2": true,
         },
       },
+      timelineExpandedTurnIdsByThread: {
+        "environment:thread-1": ["turn-1", "turn-2"],
+      },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
     });
 
@@ -341,10 +385,41 @@ describe("uiStateStore persistence", () => {
           "turn-2": true,
         },
       },
+      timelineExpandedTurnIdsByThread: {
+        "environment:thread-1": ["turn-1", "turn-2"],
+      },
+      lastOpenThreadRoute: null,
     });
     expect(parsePersistedState(persisted)).toEqual({
       ...state,
     });
+  });
+
+  it("round-trips the last open thread route and drops invalid values", () => {
+    const state = makeUiState({
+      lastOpenThreadRoute: {
+        kind: "server",
+        environmentId: "environment-local",
+        threadId: "thread-1",
+      },
+    });
+
+    persistState(state);
+
+    const persisted = JSON.parse(
+      localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
+    ) as PersistedUiState;
+    expect(persisted.lastOpenThreadRoute).toEqual({
+      kind: "server",
+      environmentId: "environment-local",
+      threadId: "thread-1",
+    });
+    expect(parsePersistedState(persisted).lastOpenThreadRoute).toEqual(state.lastOpenThreadRoute);
+    expect(
+      parsePersistedState({
+        lastOpenThreadRoute: { kind: "server", environmentId: "", threadId: "thread-1" },
+      }).lastOpenThreadRoute,
+    ).toBeNull();
   });
 
   it("drops the temporary expanded-only migration fallback when rewriting state", () => {

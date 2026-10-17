@@ -89,11 +89,76 @@ describe("Cursor personal session usage", () => {
     });
   });
 
-  it("does not turn spend values into a fabricated percentage", () => {
+  it("uses Cursor's included-pool percent instead of includedSpend/limit", () => {
+    const usage = mapCursorPersonalUsage({
+      checkedAt: "2026-08-10T12:00:00.000Z",
+      dashboard: {
+        planUsage: {
+          totalPercentUsed: 24,
+          includedSpend: 40000,
+          limit: 40000,
+        },
+      },
+    });
+
+    expect(usage?.windows).toEqual([
+      {
+        id: "cursor-included",
+        label: "Included",
+        usedPercent: 24,
+        windowDurationMins: null,
+        resetsAt: null,
+      },
+    ]);
+  });
+
+  it("falls back to included spend over the plan limit when Cursor omits percents", () => {
+    const usage = mapCursorPersonalUsage({
+      checkedAt: "2026-08-10T12:00:00.000Z",
+      dashboard: {
+        planUsage: {
+          includedSpend: 2400,
+          limit: 10_000,
+        },
+      },
+    });
+
+    expect(usage?.windows).toEqual([
+      {
+        id: "cursor-included",
+        label: "Included",
+        usedPercent: 24,
+        windowDurationMins: null,
+        resetsAt: null,
+      },
+    ]);
+  });
+
+  it("uses plan includedAmountCents when period usage omits limit", () => {
+    const usage = mapCursorPersonalUsage({
+      checkedAt: "2026-08-10T12:00:00.000Z",
+      dashboard: {
+        planUsage: { includedSpend: 2400 },
+      },
+      planInfo: { planInfo: { includedAmountCents: 10_000 } },
+    });
+
+    expect(usage?.windows).toEqual([
+      {
+        id: "cursor-included",
+        label: "Included",
+        usedPercent: 24,
+        windowDurationMins: null,
+        resetsAt: null,
+      },
+    ]);
+  });
+
+  it("does not invent a percentage when Cursor omits both a percent and a limit", () => {
     expect(
       mapCursorPersonalUsage({
         checkedAt: "2026-08-10T12:00:00.000Z",
-        dashboard: { planUsage: { includedSpend: 5, limit: 100 } },
+        dashboard: { planUsage: { includedSpend: 5 } },
       }),
     ).toBeUndefined();
   });

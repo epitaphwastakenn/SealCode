@@ -1,4 +1,6 @@
+// @effect-diagnostics nodeBuiltinImport:off
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as NodePath from "node:path";
 import {
   DEFAULT_SERVER_SETTINGS,
   ProviderDriverKind,
@@ -202,6 +204,55 @@ it.layer(NodeServices.layer)("server settings", (it) => {
           ],
         ),
       );
+    }).pipe(Effect.provide(makeServerSettingsLayer())),
+  );
+
+  it.effect("preserves redacted MCP secrets and removes stale fields", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
+      const serverConfig = yield* ServerConfig.ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
+      const serverId = "secret-server";
+      const secretName = `mcp-server-${Buffer.from(serverId).toString("base64url")}-env-${Buffer.from("TOKEN").toString("base64url")}`;
+      const secretPath = NodePath.join(serverConfig.secretsDir, `${secretName}.bin`);
+      const server = {
+        id: serverId,
+        displayName: "Secret server",
+        enabled: true,
+        transport: "stdio" as const,
+        command: "mcp-server",
+        args: [],
+        env: [{ name: "TOKEN", value: "secret-value", sensitive: true }],
+        headers: [],
+      };
+
+      const materialized = yield* serverSettings.updateSettings({
+        mcpServers: { [serverId]: server },
+      });
+      const clientSettings = ServerSettingsModule.redactServerSettingsForClient(materialized);
+      assert.deepEqual(clientSettings.mcpServers[serverId]?.env[0], {
+        name: "TOKEN",
+        value: "",
+        sensitive: true,
+        valueRedacted: true,
+      });
+      assert.equal(yield* fileSystem.exists(secretPath), true);
+
+      const preserved = yield* serverSettings.updateSettings({
+        mcpServers: clientSettings.mcpServers,
+      });
+      assert.equal(preserved.mcpServers[serverId]?.env[0]?.value, "secret-value");
+
+      yield* serverSettings.updateSettings({
+        mcpServers: { [serverId]: { ...server, env: [] } },
+      });
+      assert.equal(yield* fileSystem.exists(secretPath), false);
+
+      yield* serverSettings.updateSettings({
+        mcpServers: { [serverId]: server },
+      });
+      yield* serverSettings.updateSettings({ mcpServers: {} });
+      assert.equal(yield* fileSystem.exists(secretPath), false);
     }).pipe(Effect.provide(makeServerSettingsLayer())),
   );
 
@@ -599,8 +650,30 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       assert.equal(next.providers.codex.binaryPath, "/opt/homebrew/bin/codex");
 
       const raw = yield* fileSystem.readFileString(serverConfig.settingsPath);
+      const robloxCommandPath =
+        process.platform === "win32" && process.env.LOCALAPPDATA
+          ? NodePath.join(process.env.LOCALAPPDATA, "Roblox", "mcp.bat")
+          : undefined;
+      const migratedMcpServers =
+        robloxCommandPath !== undefined && (yield* fileSystem.exists(robloxCommandPath))
+          ? {
+              mcpServers: {
+                "roblox-studio": {
+                  id: "roblox-studio",
+                  displayName: "Roblox Studio",
+                  enabled: true,
+                  transport: "stdio",
+                  command: "cmd.exe",
+                  args: ["/c", robloxCommandPath],
+                  env: [],
+                  headers: [],
+                },
+              },
+            }
+          : {};
       // @effect-diagnostics-next-line preferSchemaOverJson:off
       assert.deepEqual(JSON.parse(raw), {
+        ...migratedMcpServers,
         addProjectBaseDirectory: "~/Development",
         observability: {
           otlpTracesUrl: "http://localhost:4318/v1/traces",

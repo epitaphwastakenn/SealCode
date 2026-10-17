@@ -25,6 +25,9 @@ import type {
   ProviderDriverKind,
   ProviderInstanceEnvironment,
   ProviderInstanceId,
+  ProviderSetupInput,
+  ProviderSetupState,
+  ProviderSetupError,
 } from "@t3tools/contracts";
 import type * as Effect from "effect/Effect";
 import type * as Schema from "effect/Schema";
@@ -71,6 +74,7 @@ export interface ProviderInstance {
   readonly snapshot: ServerProviderShape;
   readonly adapter: ProviderAdapterShape<ProviderAdapterError>;
   readonly textGeneration: TextGeneration.TextGeneration["Service"];
+  readonly setup?: (input: ProviderSetupInput) => Effect.Effect<ProviderSetupState, ProviderSetupError>;
 }
 
 export interface ProviderContinuationIdentity {

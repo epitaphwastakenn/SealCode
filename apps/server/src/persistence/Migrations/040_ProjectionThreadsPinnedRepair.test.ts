@@ -21,7 +21,10 @@ layer("040_ProjectionThreadsPinnedRepair", (it) => {
         PRAGMA table_info(projection_threads)
       `;
       assert.ok(columns.some((column) => column.name === "pinned_at"));
-      assert.deepStrictEqual(migrationManifest.at(-1), [40, "ProjectionThreadsPinnedRepair"]);
+      assert.deepStrictEqual(
+        migrationManifest.find(([id]) => id === 40),
+        [40, "ProjectionThreadsPinnedRepair"],
+      );
     }),
   );
 });

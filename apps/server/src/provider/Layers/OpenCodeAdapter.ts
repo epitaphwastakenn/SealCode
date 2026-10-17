@@ -285,6 +285,9 @@ type EventBaseInput = {
 
 function toToolLifecycleItemType(toolName: string): ToolLifecycleItemType {
   const normalized = toolName.toLowerCase();
+  if (normalized.includes("mcp__")) {
+    return "mcp_tool_call";
+  }
   if (normalized.includes("bash") || normalized.includes("command")) {
     return "command_execution";
   }
@@ -298,9 +301,6 @@ function toToolLifecycleItemType(toolName: string): ToolLifecycleItemType {
   }
   if (normalized.includes("web")) {
     return "web_search";
-  }
-  if (normalized.includes("mcp")) {
-    return "mcp_tool_call";
   }
   if (normalized.includes("image")) {
     return "image_view";
@@ -898,7 +898,11 @@ export function makeOpenCodeAdapter(
           }
 
           if (part.type === "tool") {
-            const itemType = toToolLifecycleItemType(part.tool);
+            const mcp = McpProviderSession.makeMcpToolActivityMetadata({
+              providerToolName: part.tool,
+              callId: part.callID,
+            });
+            const itemType = mcp ? "mcp_tool_call" : toToolLifecycleItemType(part.tool);
             const title =
               part.state.status === "running" ? (part.state.title ?? part.tool) : part.tool;
             const detail = detailFromToolPart(part);
@@ -911,6 +915,7 @@ export function makeOpenCodeAdapter(
                   : { status: "inProgress" as const }),
               ...(title ? { title } : {}),
               ...(detail ? { detail } : {}),
+              ...(mcp ? { mcp } : {}),
               data: {
                 tool: part.tool,
                 state: part.state,
@@ -940,6 +945,31 @@ export function makeOpenCodeAdapter(
 
         case "permission.asked": {
           context.pendingPermissions.set(event.properties.id, event.properties);
+          const permissionMetadata =
+            event.properties.metadata && typeof event.properties.metadata === "object"
+              ? (event.properties.metadata as Record<string, unknown>)
+              : {};
+          const mcp = McpProviderSession.makeMcpToolActivityMetadata({
+            providerToolName:
+              typeof permissionMetadata.toolName === "string"
+                ? permissionMetadata.toolName
+                : typeof permissionMetadata.tool === "string"
+                  ? permissionMetadata.tool
+                  : undefined,
+            serverId:
+              typeof permissionMetadata.serverId === "string"
+                ? permissionMetadata.serverId
+                : undefined,
+            upstreamToolName:
+              typeof permissionMetadata.upstreamToolName === "string"
+                ? permissionMetadata.upstreamToolName
+                : undefined,
+            canonicalToolName:
+              typeof permissionMetadata.canonicalToolName === "string"
+                ? permissionMetadata.canonicalToolName
+                : undefined,
+            callId: event.properties.id,
+          });
           yield* emit({
             ...(yield* buildEventBase({
               threadId: context.session.threadId,
@@ -955,6 +985,7 @@ export function makeOpenCodeAdapter(
                   ? event.properties.patterns.join("\n")
                   : event.properties.permission,
               args: event.properties.metadata,
+              ...(mcp ? { mcp } : {}),
             },
           });
           break;
@@ -1222,6 +1253,19 @@ export function makeOpenCodeAdapter(
                     config: {
                       type: "remote",
                       url: mcpSession.endpoint,
+                      headers: {
+                        Authorization: mcpSession.authorizationHeader,
+                      },
+                      oauth: false,
+                    },
+                  }),
+                );
+                yield* runOpenCodeSdk("mcp.add", () =>
+                  client.mcp.add({
+                    name: "sealcode-global",
+                    config: {
+                      type: "remote",
+                      url: mcpSession.globalEndpoint,
                       headers: {
                         Authorization: mcpSession.authorizationHeader,
                       },
@@ -1701,6 +1745,11 @@ export function makeOpenCodeAdapter(
       provider: PROVIDER,
       capabilities: {
         sessionModelSwitch: "in-session",
+        stablePromptPrefix: false,
+        contextCompaction: "unsupported",
+        promptCaching: "unsupported",
+        toolTransport: "mcp",
+        detachedDelegation: false,
       },
       startSession,
       sendTurn,

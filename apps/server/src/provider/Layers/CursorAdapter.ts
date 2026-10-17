@@ -21,6 +21,8 @@ import {
   type ThreadId,
   TurnId,
 } from "@t3tools/contracts";
+import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as DateTime from "effect/DateTime";
 import * as Crypto from "effect/Crypto";
 import * as Deferred from "effect/Deferred";
@@ -65,6 +67,10 @@ import {
   parsePermissionRequest,
 } from "../acp/AcpRuntimeModel.ts";
 import { makeAcpNativeLoggerFactory } from "../acp/AcpNativeLogging.ts";
+import {
+  forkAcpTurnIdleWatchdog,
+  resolveAcpTurnIdleTimeoutMs,
+} from "../acp/AcpTurnIdleWatchdog.ts";
 import { applyCursorAcpModelSelection, makeCursorAcpRuntime } from "../acp/CursorAcpSupport.ts";
 import {
   CursorAskQuestionRequest,
@@ -111,7 +117,15 @@ export interface CursorAdapterLiveOptions {
    * the latest snapshot so the closure isn't stale.
    */
   readonly resolveSettings?: Effect.Effect<CursorSettings>;
+  readonly turnIdleTimeoutMs?: number;
+  readonly turnIdleCheckIntervalMs?: number;
 }
+
+const CURSOR_TURN_IDLE_TIMEOUT_MS = resolveAcpTurnIdleTimeoutMs({
+  envVar: "T3_CURSOR_TURN_IDLE_TIMEOUT_MS",
+  defaultMs: 600_000,
+});
+const CURSOR_TURN_WATCHDOG_INTERVAL_MS = 15_000;
 
 interface PendingApproval {
   readonly decision: Deferred.Deferred<ProviderApprovalDecision>;
@@ -133,6 +147,9 @@ interface CursorSessionContext {
   readonly turns: Array<{ id: TurnId; items: Array<unknown> }>;
   lastPlanFingerprint: string | undefined;
   activeTurnId: TurnId | undefined;
+  settledTurnId: TurnId | undefined;
+  activePromptFiber: Fiber.Fiber<unknown, unknown> | undefined;
+  lastTurnActivityAt: number | undefined;
   /** Number of sendTurn prompts currently in flight or being prepared.
    * >0 means a turn is actively running, so a new sendTurn is a steer that
    * continues it, and only the last remaining prompt settles the turn. */
@@ -168,6 +185,16 @@ function settlePendingUserInputsAsEmptyAnswers(
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function describeUnknownError(error: unknown): string {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message.trim();
+  }
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+  return "Cursor Agent turn failed.";
 }
 
 function parseCursorResume(raw: unknown): { sessionId: string } | undefined {
@@ -316,6 +343,9 @@ export function makeCursorAdapter(
 ) {
   return Effect.gen(function* () {
     const boundInstanceId = options?.instanceId ?? ProviderInstanceId.make("cursor");
+    const turnIdleTimeoutMs = options?.turnIdleTimeoutMs ?? CURSOR_TURN_IDLE_TIMEOUT_MS;
+    const turnIdleCheckIntervalMs =
+      options?.turnIdleCheckIntervalMs ?? CURSOR_TURN_WATCHDOG_INTERVAL_MS;
     const fileSystem = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
@@ -542,10 +572,21 @@ export function makeCursorAdapter(
             ...(mcpSession
               ? {
                   mcpServers: [
+                      {
+                        type: "http" as const,
+                        name: "t3-code",
+                        url: mcpSession.endpoint,
+                        headers: [
+                        {
+                          name: "Authorization",
+                          value: mcpSession.authorizationHeader,
+                        },
+                      ],
+                    },
                     {
                       type: "http" as const,
-                      name: "t3-code",
-                      url: mcpSession.endpoint,
+                      name: "sealcode-global",
+                      url: mcpSession.globalEndpoint,
                       headers: [
                         {
                           name: "Authorization",
@@ -778,6 +819,9 @@ export function makeCursorAdapter(
             turns: [],
             lastPlanFingerprint: undefined,
             activeTurnId: undefined,
+            settledTurnId: undefined,
+            activePromptFiber: undefined,
+            lastTurnActivityAt: undefined,
             promptsInFlight: 0,
             stopped: false,
           };
@@ -785,6 +829,9 @@ export function makeCursorAdapter(
           const nf = yield* Stream.runDrain(
             Stream.mapEffect(acp.getEvents(), (event) =>
               Effect.gen(function* () {
+                if (event._tag !== "EventStreamBarrier") {
+                  ctx.lastTurnActivityAt = yield* Clock.currentTimeMillis;
+                }
                 switch (event._tag) {
                   case "EventStreamBarrier":
                     yield* Deferred.succeed(event.acknowledge, undefined);
@@ -874,7 +921,9 @@ export function makeCursorAdapter(
             Effect.catch((cause) =>
               Effect.logError("Failed to process Cursor runtime notification.", { cause }),
             ),
-            Effect.forkChild,
+            // Session-scoped: forkChild would die when startSession returns and
+            // drop every later session/update (assistant text, tools, usage).
+            Effect.forkIn(sessionScope),
           );
 
           ctx.notificationFiber = nf;
@@ -942,6 +991,7 @@ export function makeCursorAdapter(
           ctx.activeTurnId = turnId;
           if (steeringTurnId === undefined) {
             ctx.lastPlanFingerprint = undefined;
+            ctx.settledTurnId = undefined;
           }
           ctx.session = {
             ...ctx.session,
@@ -1004,7 +1054,13 @@ export function makeCursorAdapter(
             });
           }
 
-          const result = yield* ctx.acp
+          const turnResult = {
+            threadId: input.threadId,
+            turnId,
+            resumeCursor: ctx.session.resumeCursor,
+          };
+          ctx.lastTurnActivityAt = yield* Clock.currentTimeMillis;
+          const promptFiber = yield* ctx.acp
             .prompt({
               prompt: promptParts,
             })
@@ -1012,8 +1068,74 @@ export function makeCursorAdapter(
               Effect.mapError((error) =>
                 mapAcpToAdapterError(PROVIDER, input.threadId, "session/prompt", error),
               ),
+              Effect.forkChild,
             );
+          ctx.activePromptFiber = promptFiber;
 
+          yield* forkAcpTurnIdleWatchdog({
+            idleTimeoutMs: turnIdleTimeoutMs,
+            checkIntervalMs: turnIdleCheckIntervalMs,
+            scope: ctx.scope,
+            isTurnActive: () =>
+              ctx.activeTurnId === turnId && ctx.promptsInFlight > 0 && !ctx.stopped,
+            isAwaitingHuman: () =>
+              ctx.pendingApprovals.size > 0 || ctx.pendingUserInputs.size > 0,
+            lastActivityAt: () => ctx.lastTurnActivityAt ?? 0,
+            touchActivity: (nowMs) => {
+              ctx.lastTurnActivityAt = nowMs;
+            },
+            onIdleTimeout: (idleMs) =>
+              Effect.gen(function* () {
+                if (ctx.settledTurnId === turnId) {
+                  return;
+                }
+                ctx.settledTurnId = turnId;
+                const seconds = Math.max(1, Math.round(idleMs / 1000));
+                yield* offerRuntimeEvent({
+                  type: "turn.completed",
+                  ...(yield* makeEventStamp()),
+                  provider: PROVIDER,
+                  threadId: input.threadId,
+                  turnId,
+                  payload: {
+                    state: "failed",
+                    stopReason: null,
+                    errorMessage: `Cursor Agent went silent for ${seconds}s. The turn was stopped so you can send again.`,
+                  },
+                });
+                yield* Fiber.interrupt(promptFiber).pipe(Effect.ignore);
+                yield* ctx.acp.cancel.pipe(Effect.ignore);
+              }),
+          });
+
+          const promptExit = yield* Fiber.await(promptFiber);
+          if (ctx.activePromptFiber === promptFiber) {
+            ctx.activePromptFiber = undefined;
+          }
+          if (ctx.settledTurnId === turnId) {
+            return turnResult;
+          }
+
+          if (Exit.isFailure(promptExit)) {
+            if (ctx.promptsInFlight === 1) {
+              ctx.settledTurnId = turnId;
+              yield* offerRuntimeEvent({
+                type: "turn.completed",
+                ...(yield* makeEventStamp()),
+                provider: PROVIDER,
+                threadId: input.threadId,
+                turnId,
+                payload: {
+                  state: "failed",
+                  stopReason: null,
+                  errorMessage: describeUnknownError(Cause.squash(promptExit.cause)),
+                },
+              });
+            }
+            return yield* Effect.failCause(promptExit.cause);
+          }
+
+          const result = promptExit.value;
           const turnRecord = ctx.turns.find((turn) => turn.id === turnId);
           if (turnRecord) {
             turnRecord.items.push({ prompt: promptParts, result });
@@ -1031,6 +1153,7 @@ export function makeCursorAdapter(
           // superseded prompt resolving (usually cancelled) while another is
           // in flight or pending must leave the merged turn running.
           if (ctx.promptsInFlight === 1) {
+            ctx.settledTurnId = turnId;
             yield* offerRuntimeEvent({
               type: "turn.completed",
               ...(yield* makeEventStamp()),
@@ -1044,11 +1167,7 @@ export function makeCursorAdapter(
             });
           }
 
-          return {
-            threadId: input.threadId,
-            turnId,
-            resumeCursor: ctx.session.resumeCursor,
-          };
+          return turnResult;
         }).pipe(
           Effect.ensuring(
             Effect.sync(() => {
@@ -1063,6 +1182,9 @@ export function makeCursorAdapter(
         const ctx = yield* requireSession(threadId);
         yield* settlePendingApprovalsAsCancelled(ctx.pendingApprovals);
         yield* settlePendingUserInputsAsEmptyAnswers(ctx.pendingUserInputs);
+        if (ctx.activePromptFiber) {
+          yield* Fiber.interrupt(ctx.activePromptFiber).pipe(Effect.ignore);
+        }
         yield* Effect.ignore(
           ctx.acp.cancel.pipe(
             Effect.mapError((error) =>
@@ -1164,7 +1286,14 @@ export function makeCursorAdapter(
 
     return {
       provider: PROVIDER,
-      capabilities: { sessionModelSwitch: "in-session" },
+      capabilities: {
+        sessionModelSwitch: "in-session",
+        stablePromptPrefix: false,
+        contextCompaction: "unsupported",
+        promptCaching: "unsupported",
+        toolTransport: "mcp",
+        detachedDelegation: false,
+      },
       startSession,
       sendTurn,
       interruptTurn,

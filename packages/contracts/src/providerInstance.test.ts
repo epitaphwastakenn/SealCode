@@ -94,6 +94,14 @@ describe("ProviderInstanceConfig", () => {
     expect(decoded.config).toBeUndefined();
   });
 
+  it("preserves a configured fallback provider instance", () => {
+    const decoded = decodeProviderInstanceConfig({
+      driver: "antigravity",
+      fallbackInstanceId: "antigravity_backup",
+    });
+    expect(decoded.fallbackInstanceId).toBe("antigravity_backup");
+  });
+
   it("preserves driver-opaque config payloads verbatim", () => {
     const opaqueConfig = { homePath: "~/.codex_personal", binaryPath: "codex" };
     const decoded = decodeProviderInstanceConfig({

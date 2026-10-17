@@ -66,14 +66,9 @@ export type CommandCodeDriverEnv =
   | ServerSettingsService;
 
 function resolveBinaryPath(
-  path: Path.Path,
   config: CommandCodeSettings,
-  environment: NodeJS.ProcessEnv,
-  platform: NodeJS.Platform,
 ) {
-  if (config.binaryPath !== "commandcode" || platform !== "win32") return config.binaryPath;
-  const appData = environment.APPDATA;
-  return appData ? path.join(appData, "npm", "commandcode.cmd") : config.binaryPath;
+  return config.binaryPath === "commandcode" ? "cmdc" : config.binaryPath;
 }
 
 const COMMAND_CODE_MODEL_REFERENCE = [
@@ -139,7 +134,7 @@ export const CommandCodeDriver: ProviderDriver<CommandCodeSettings, CommandCodeD
       const effectiveConfig = {
         ...config,
         enabled,
-        binaryPath: resolveBinaryPath(path, config, processEnv, hostPlatform),
+        binaryPath: resolveBinaryPath(config),
       } satisfies CommandCodeSettings;
       const capabilityRegistry = makeHeadlessCliModelCapabilityRegistry();
       const modelCatalog = yield* readCommandCodeModelCatalog(
@@ -174,6 +169,7 @@ export const CommandCodeDriver: ProviderDriver<CommandCodeSettings, CommandCodeD
         checkProvider: checkHeadlessCliProviderStatus(DEFINITION, effectiveConfig, processEnv, {
           capabilityRegistry,
           modelCatalog,
+          platform: hostPlatform,
         }).pipe(
           Effect.map(stamp),
           Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),

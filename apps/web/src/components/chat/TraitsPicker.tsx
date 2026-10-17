@@ -59,7 +59,7 @@ function DefaultBadge() {
   );
 }
 
-function replaceDescriptorCurrentValue(
+export function replaceDescriptorCurrentValue(
   descriptors: ReadonlyArray<ProviderOptionDescriptor>,
   descriptorId: string,
   currentValue: string | boolean | undefined,
@@ -79,7 +79,7 @@ function replaceDescriptorCurrentValue(
   );
 }
 
-function getDescriptorStringValue(
+export function getDescriptorStringValue(
   descriptor: Extract<ProviderOptionDescriptor, { type: "select" }> | null,
 ): string | null {
   if (!descriptor) {
@@ -89,7 +89,7 @@ function getDescriptorStringValue(
   return typeof value === "string" ? value : null;
 }
 
-function getSelectedTraits(
+export function getSelectedTraits(
   provider: ProviderDriverKind,
   models: ReadonlyArray<ServerProviderModel>,
   model: string | null | undefined,
@@ -139,6 +139,16 @@ function getSelectedTraits(
   const selectedAgentLabel = agentDescriptor
     ? getProviderOptionCurrentLabel(agentDescriptor)
     : null;
+  const lastOption =
+    primarySelectDescriptor && primarySelectDescriptor.options.length > 1
+      ? primarySelectDescriptor.options[primarySelectDescriptor.options.length - 1]
+      : null;
+
+  const isMaximumEffort = Boolean(
+    primarySelectDescriptor &&
+      primarySelectDescriptor.options.length > 1 &&
+      (ultrathinkPromptControlled || (lastOption && effort === lastOption.id)),
+  );
 
   return {
     caps,
@@ -155,12 +165,13 @@ function getSelectedTraits(
     contextWindow,
     ultrathinkPromptControlled,
     ultrathinkInBodyText,
+    isMaximumEffort,
     selectedAgent,
     selectedAgentLabel,
   };
 }
 
-function getTraitsSectionVisibility(input: {
+export function getTraitsSectionVisibility(input: {
   provider: ProviderDriverKind;
   models: ReadonlyArray<ServerProviderModel>;
   model: string | null | undefined;
@@ -281,12 +292,16 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
       onPromptChange(nextPrompt);
       return;
     }
-    if (ultrathinkInBodyText && descriptor.id === primarySelectDescriptor?.id) return;
-    if (ultrathinkPromptControlled && descriptor.id === primarySelectDescriptor?.id) {
-      const stripped = prompt.replace(/^Ultrathink:\s*/i, "");
-      onPromptChange(stripped);
-    }
-    updateDescriptors(replaceDescriptorCurrentValue(descriptors, descriptor.id, value));
+    const nextDescriptors = replaceDescriptorCurrentValue(descriptors, descriptor.id, value);
+    updateDescriptors(nextDescriptors);
+  };
+
+  const handleToggleChange = (
+    descriptor: Extract<ProviderOptionDescriptor, { type: "boolean" }>,
+    value: boolean,
+  ) => {
+    const nextDescriptors = replaceDescriptorCurrentValue(descriptors, descriptor.id, value);
+    updateDescriptors(nextDescriptors);
   };
 
   if (!hasAnyControls) {
@@ -378,10 +393,10 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
 });
 
 /**
- * Build the traits trigger's text label plus whether the fast-mode bolt should
- * render. Fast mode is a lightning bolt when on and nothing at all when off —
- * "Normal" is the near-universal case and isn't worth the horizontal space. The
- * one exception is when fast mode is the only trait, where a bare bolt (or bare
+ * Builds the compact summary string and fast-mode state for the traits trigger.
+ *
+ * Fast mode is displayed as a bolt icon (rendered by the caller) rather than
+ * text, keeping the trigger short so two stacked labels (e.g. model above,
  * chevron) would leave the trigger unreadable.
  */
 export function buildTraitsTriggerDisplay(input: {
@@ -389,9 +404,10 @@ export function buildTraitsTriggerDisplay(input: {
   descriptors: ReadonlyArray<ProviderOptionDescriptor>;
   primarySelectDescriptorId: string | null;
   ultrathinkPromptControlled: boolean;
-}): { label: string; showFastModeIcon: boolean } {
+}): { label: string; showFastModeIcon: boolean; isMaximumEffort: boolean } {
   let hasFastMode = false;
   let fastModeEnabled = false;
+  let isMaximumEffort = false;
   const labels: Array<string> = [];
   for (const descriptor of input.descriptors) {
     if (descriptor.id === "fastMode" && descriptor.type === "boolean") {
@@ -412,6 +428,26 @@ export function buildTraitsTriggerDisplay(input: {
         continue;
       }
     }
+
+    if (descriptor.type === "select" && descriptor.options.length > 1) {
+      const isReasoning =
+        descriptor.label.toLowerCase().includes("effort") ||
+        descriptor.label.toLowerCase().includes("reasoning") ||
+        descriptor.id === input.primarySelectDescriptorId;
+
+      if (isReasoning) {
+        if (input.ultrathinkPromptControlled && descriptor.id === input.primarySelectDescriptorId) {
+          isMaximumEffort = true;
+        } else {
+          const currentValue = getProviderOptionCurrentValue(descriptor);
+          const lastOption = descriptor.options[descriptor.options.length - 1];
+          if (currentValue && lastOption && currentValue === lastOption.id) {
+            isMaximumEffort = true;
+          }
+        }
+      }
+    }
+
     const label =
       input.ultrathinkPromptControlled && descriptor.id === input.primarySelectDescriptorId
         ? "Ultrathink"
@@ -427,9 +463,9 @@ export function buildTraitsTriggerDisplay(input: {
   // off an empty label list alone would also catch descriptors that resolved to
   // no label at all, printing a bogus "Normal" for a model without fast mode.
   if (labels.length === 0 && hasFastMode) {
-    return { label: fastModeEnabled ? "Fast" : "Normal", showFastModeIcon: false };
+    return { label: fastModeEnabled ? "Fast" : "Normal", showFastModeIcon: false, isMaximumEffort: false };
   }
-  return { label: labels.join(" · "), showFastModeIcon: fastModeEnabled };
+  return { label: labels.join(" · "), showFastModeIcon: fastModeEnabled, isMaximumEffort };
 }
 
 export const TraitsPicker = memo(function TraitsPicker({

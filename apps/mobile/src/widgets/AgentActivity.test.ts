@@ -154,7 +154,7 @@ describe("AgentActivity widget layout", () => {
       environment as never,
     );
     expect(JSON.stringify(layout.compactLeading)).toContain("#a5b4fc"); // indigo-300
-    expect(JSON.stringify(layout.compactTrailing)).toContain("Input");
+    expect(JSON.stringify(layout.compactTrailing)).toContain("Needs input");
     expect(JSON.stringify(layout.minimal)).toContain("#a5b4fc");
   });
 
@@ -213,11 +213,11 @@ describe("AgentActivity widget layout", () => {
     expect(banner).toContain("Agent work completed");
     expect(banner).not.toContain("0 active");
     expect(banner).toContain("#6ee7b7"); // emerald-300 header tint
-    expect(JSON.stringify(layout.compactTrailing)).toContain("Done");
+    expect(JSON.stringify(layout.compactTrailing)).toContain("Completed");
     expect(JSON.stringify(layout.compactTrailing)).not.toContain("0 active");
-    expect(JSON.stringify(layout.expandedLeading)).toContain("Done");
+    expect(JSON.stringify(layout.expandedLeading)).toContain("Completed");
     expect(JSON.stringify(layout.minimal)).toContain("checkmark.circle.fill");
-    expect(JSON.stringify(layout.bannerSmall)).toContain("Done");
+    expect(JSON.stringify(layout.bannerSmall)).toContain("Completed");
   });
 
   it("reads Failed when the finished work ended in failure", () => {

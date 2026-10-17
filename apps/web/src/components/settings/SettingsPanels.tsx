@@ -4,8 +4,12 @@ import type { CSSProperties, ReactNode } from "react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAtomValue } from "@effect/atom-react";
 import {
+  AgentPreset as AgentPresetSchema,
+  type AgentPreset,
+  type ModelSelection,
   type BackgroundActivityProfile,
   type DesktopUpdateChannel,
+  type ServerProvider,
   ProviderDriverKind,
   type ScopedThreadRef,
   type SidebarProjectGroupingMode,
@@ -20,6 +24,7 @@ import {
   DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
   DEFAULT_UNIFIED_SETTINGS,
   type EnvironmentIdentificationMode,
+  type DiffPresentation,
   MAX_CODE_FONT_SIZE,
   MAX_GLASS_OPACITY,
   MAX_HARNESS_SOUND_VOLUME,
@@ -34,12 +39,14 @@ import {
   MIN_PROMPT_FONT_SIZE,
   MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
   MIN_TERMINAL_FONT_SIZE,
+  type UnifiedSettings,
 } from "@t3tools/contracts/settings";
 import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
 import { createModelSelection } from "@t3tools/shared/model";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
+import { randomUUID } from "../../lib/utils";
 import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
 import {
   canCheckForUpdate,
@@ -64,7 +71,11 @@ import {
   useTheme,
 } from "../../hooks/useTheme";
 import { useLocalStorage } from "../../hooks/useLocalStorage";
-import { usePrimarySettings, useUpdatePrimarySettings } from "../../hooks/useSettings";
+import {
+  useClientSettings,
+  usePrimarySettings,
+  useUpdatePrimarySettings,
+} from "../../hooks/useSettings";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import {
@@ -75,6 +86,7 @@ import {
   applyProviderInstanceSettings,
   deriveProviderInstanceEntries,
   sortProviderInstanceEntries,
+  type ProviderInstanceEntry,
 } from "../../providerInstances";
 import { ensureLocalApi, readLocalApi } from "../../localApi";
 import { isMacPlatform } from "../../lib/utils";
@@ -83,6 +95,7 @@ import { useProjects } from "../../state/entities";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { Button } from "../ui/button";
+import { useThreadDeleteConfirmation } from "../threadActionMenu";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import {
   Dialog,
@@ -95,6 +108,7 @@ import {
 } from "../ui/dialog";
 import { DraftInput } from "../ui/draft-input";
 import { Input } from "../ui/input";
+import { Textarea } from "../ui/textarea";
 import {
   DEFAULT_CODE_FONT_STACK,
   DEFAULT_SANS_FONT_STACK,
@@ -156,6 +170,12 @@ const TIMESTAMP_FORMAT_LABELS = {
   "24-hour": "24-hour",
 } as const;
 
+const DIFF_PRESENTATION_LABELS: Record<DiffPresentation, string> = {
+  summary: "Changed files summary",
+  inline: "Inline code diff",
+  panel: "Open in diff panel",
+};
+
 const BACKGROUND_ACTIVITY_PROFILE_LABELS: Record<BackgroundActivityProfile, string> = {
   balanced: "Balanced",
   performance: "Performance",
@@ -209,6 +229,206 @@ function backgroundActivityProfileSettings(profile: BackgroundActivityProfile) {
       overrides: {},
     },
   };
+}
+
+function HarnessHelperModelRow(props: {
+  readonly title: string;
+  readonly description: string;
+  readonly selection: ModelSelection | null;
+  readonly settings: UnifiedSettings;
+  readonly providers: ReadonlyArray<ServerProvider>;
+  readonly instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
+  readonly fallbackSelection: ModelSelection;
+  readonly onSelectionChange: (selection: ModelSelection | null) => void;
+}) {
+  const activeSelection = props.selection ?? props.fallbackSelection;
+  const instanceEntry = props.instanceEntries.find(
+    (entry) => entry.instanceId === activeSelection.instanceId,
+  );
+  const modelOptionsByInstance = getCustomModelOptionsByInstance(
+    props.settings,
+    props.providers,
+    activeSelection.instanceId,
+    activeSelection.model,
+  );
+  const enabled = props.selection !== null;
+
+  return (
+    <SettingsRow
+      title={props.title}
+      description={props.description}
+      control={
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          {enabled ? (
+            <>
+              <ProviderModelPicker
+                activeInstanceId={activeSelection.instanceId}
+                model={activeSelection.model}
+                lockedProvider={null}
+                instanceEntries={props.instanceEntries}
+                modelOptionsByInstance={modelOptionsByInstance}
+                triggerVariant="outline"
+                triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
+                triggerAriaLabel={`${props.title} model`}
+                onInstanceModelChange={(instanceId, model) =>
+                  props.onSelectionChange(
+                    createModelSelection(
+                      instanceId,
+                      model,
+                      activeSelection.instanceId === instanceId
+                        ? activeSelection.options
+                        : undefined,
+                    ),
+                  )
+                }
+              />
+              <TraitsPicker
+                provider={instanceEntry?.driverKind ?? DEFAULT_DRIVER_KIND}
+                models={instanceEntry?.models ?? []}
+                model={activeSelection.model}
+                prompt=""
+                onPromptChange={() => {}}
+                modelOptions={activeSelection.options}
+                allowPromptInjectedEffort={false}
+                triggerVariant="outline"
+                triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
+                onModelOptionsChange={(options) =>
+                  props.onSelectionChange(
+                    createModelSelection(
+                      activeSelection.instanceId,
+                      activeSelection.model,
+                      options,
+                    ),
+                  )
+                }
+              />
+            </>
+          ) : null}
+          <Switch
+            checked={enabled}
+            onCheckedChange={(checked) =>
+              props.onSelectionChange(
+                checked
+                  ? createModelSelection(
+                      props.fallbackSelection.instanceId,
+                      props.fallbackSelection.model,
+                      props.fallbackSelection.options,
+                    )
+                  : null,
+              )
+            }
+            aria-label={`Use a dedicated ${props.title.toLowerCase()}`}
+          />
+        </div>
+      }
+    />
+  );
+}
+
+function AgentPresetsSettings(props: {
+  readonly settings: UnifiedSettings;
+  readonly currentSelection: ModelSelection;
+  readonly updateSettings: (patch: { agentPresets: ReadonlyArray<AgentPreset> }) => void;
+}) {
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<AgentPreset["kind"]>("custom");
+  const [interactionMode, setInteractionMode] =
+    useState<AgentPreset["interactionMode"]>("default");
+  const savePreset = () => {
+    const trimmedName = name.trim();
+    if (trimmedName.length === 0) return;
+    const preset = Schema.decodeSync(AgentPresetSchema)({
+      id: randomUUID(),
+      name: trimmedName,
+      kind,
+      modelSelection: props.currentSelection,
+      interactionMode,
+      skills: [],
+    });
+    props.updateSettings({ agentPresets: [...props.settings.agentPresets, preset] });
+    setName("");
+  };
+
+  return (
+    <SettingsRow
+      title="Workflow presets"
+      description="Save a named model and effort workflow, then apply it from the composer before the next turn."
+    >
+      <div className="mt-3 space-y-2 pb-3.5">
+        <div className="flex flex-wrap gap-1.5">
+          <Input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                savePreset();
+              }
+            }}
+            placeholder="Preset name"
+            aria-label="Workflow preset name"
+            className="min-w-40 flex-1"
+          />
+          <Select value={kind} onValueChange={(value) => setKind(value as AgentPreset["kind"])}>
+            <SelectTrigger className="w-28" aria-label="Workflow preset type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectPopup>
+              <SelectItem value="coding">Coding</SelectItem>
+              <SelectItem value="review">Review</SelectItem>
+              <SelectItem value="research">Research</SelectItem>
+              <SelectItem value="custom">Custom</SelectItem>
+            </SelectPopup>
+          </Select>
+          <Select
+            value={interactionMode}
+            onValueChange={(value) =>
+              setInteractionMode(value as AgentPreset["interactionMode"])
+            }
+          >
+            <SelectTrigger className="w-28" aria-label="Workflow preset mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectPopup>
+              <SelectItem value="default">Default</SelectItem>
+              <SelectItem value="plan">Plan</SelectItem>
+            </SelectPopup>
+          </Select>
+          <Button type="button" size="sm" variant="outline" onClick={savePreset} disabled={!name.trim()}>
+            Save current
+          </Button>
+        </div>
+        {props.settings.agentPresets.length > 0 ? (
+          <div className="divide-y divide-border/60 rounded-md border border-border/60">
+            {props.settings.agentPresets.map((preset) => (
+              <div key={preset.id} className="flex items-center gap-2 px-2.5 py-2">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">{preset.name}</div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {preset.kind} · {preset.modelSelection.model}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  onClick={() =>
+                    props.updateSettings({
+                      agentPresets: props.settings.agentPresets.filter(
+                        (candidate) => candidate.id !== preset.id,
+                      ),
+                    })
+                  }
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </SettingsRow>
+  );
 }
 
 function AboutVersionTitle() {
@@ -451,6 +671,12 @@ export function useSettingsRestore(onRestored?: () => void) {
     settings.imageViewerModelSelection ?? null,
     DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection ?? null,
   );
+  const isHarnessHelperModelsDirty = [
+    settings.contextCompactorModelSelection,
+    settings.skillCuratorModelSelection,
+    settings.memoryCuratorModelSelection,
+    settings.delegationDefaultModelSelection,
+  ].some((selection) => selection !== null);
   const isBackgroundActivityDirty = hasChangedBackgroundActivitySettings(settings);
 
   const changedSettingLabels = useMemo(
@@ -458,6 +684,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(theme !== "system" ? ["Theme"] : []),
       ...(!followSystem ? ["Follow system"] : []),
       ...(themeHalves !== null ? ["Theme mix"] : []),
+      ...(settings.glassSidebarEnabled !== DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled
+        ? ["Glass sidebar"]
+        : []),
       ...(settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? ["Glass opacity"] : []),
       ...(settings.environmentIdentificationMode !==
       DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode
@@ -491,6 +720,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ...(settings.diffIgnoreWhitespace !== DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace
         ? ["Diff whitespace changes"]
         : []),
+      ...(settings.diffPresentation !== DEFAULT_UNIFIED_SETTINGS.diffPresentation
+        ? ["Diff presentation"]
+        : []),
       ...(settings.enableLegacyTokenStreaming !==
       DEFAULT_UNIFIED_SETTINGS.enableLegacyTokenStreaming
         ? ["Stream token by token"]
@@ -518,10 +750,12 @@ export function useSettingsRestore(onRestored?: () => void) {
         : []),
       ...(isTextGenerationModelDirty ? ["Text generation model"] : []),
       ...(isImageViewerModelDirty ? ["Image viewer model"] : []),
+      ...(isHarnessHelperModelsDirty ? ["Harness helper models"] : []),
     ],
     [
       isTextGenerationModelDirty,
       isImageViewerModelDirty,
+      isHarnessHelperModelsDirty,
       isBackgroundActivityDirty,
       settings.confirmThreadArchive,
       settings.confirmThreadDelete,
@@ -529,6 +763,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.defaultThreadEnvMode,
       settings.newWorktreesStartFromOrigin,
       settings.diffIgnoreWhitespace,
+      settings.diffPresentation,
       settings.environmentIdentificationMode,
       settings.fontFamilyCode,
       settings.fontFamilyComposer,
@@ -548,6 +783,10 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.wordWrap,
       followSystem,
       theme,
+      settings.contextCompactorModelSelection,
+      settings.skillCuratorModelSelection,
+      settings.memoryCuratorModelSelection,
+      settings.delegationDefaultModelSelection,
     ],
   );
 
@@ -616,7 +855,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       wordWrap: DEFAULT_UNIFIED_SETTINGS.wordWrap,
       diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
+      diffPresentation: DEFAULT_UNIFIED_SETTINGS.diffPresentation,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
+      glassSidebarEnabled: DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled,
       glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
@@ -974,6 +1215,32 @@ export function AppearanceSettingsPanel() {
             onImportOpenChange={setIsImportThemeOpen}
           />
         </div>
+
+        <SettingsRow
+          {...searchableSetting("glass-sidebar")}
+          description="Render the sidebar as a translucent glass panel over the window background. On Windows this reveals the desktop Acrylic material behind the app."
+          resetAction={
+            settings.glassSidebarEnabled !== DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled ? (
+              <SettingResetButton
+                label="glass sidebar"
+                onClick={() =>
+                  updateSettings({
+                    glassSidebarEnabled: DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.glassSidebarEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ glassSidebarEnabled: Boolean(checked) })
+              }
+              aria-label="Glass sidebar"
+            />
+          }
+        />
 
         <SettingsRow
           {...searchableSetting("setting-glass-opacity")}
@@ -1799,6 +2066,14 @@ export function GeneralSettingsPanel() {
     settings.imageViewerModelSelection ?? null,
     DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection ?? null,
   );
+  const usesDedicatedDiffReviewer = settings.diffReviewModelSelection !== null;
+  const diffReviewSelection = settings.diffReviewModelSelection ?? textGenerationModelSelection;
+  const diffReviewModelOptionsByInstance = getCustomModelOptionsByInstance(
+    settings,
+    serverProviders,
+    diffReviewSelection.instanceId,
+    diffReviewSelection.model,
+  );
   const resolvedBackgroundActivity = resolveServerBackgroundActivitySettings(settings);
   const activeBackgroundActivityProfile = resolvedBackgroundActivity.profile;
   const backgroundActivityProfileOption = resolveBackgroundActivityProfileOption(settings);
@@ -1958,6 +2233,46 @@ export function GeneralSettingsPanel() {
               }
               aria-label="Hide whitespace changes by default"
             />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("diff-presentation")}
+          description="Choose whether chat shows the changed-files summary, the full inline patch, or the dedicated diff panel."
+          resetAction={
+            settings.diffPresentation !== DEFAULT_UNIFIED_SETTINGS.diffPresentation ? (
+              <SettingResetButton
+                label="diff presentation"
+                onClick={() =>
+                  updateSettings({ diffPresentation: DEFAULT_UNIFIED_SETTINGS.diffPresentation })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.diffPresentation}
+              onValueChange={(value) => {
+                if (value === "summary" || value === "inline" || value === "panel") {
+                  updateSettings({ diffPresentation: value });
+                }
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-44" aria-label="Diff presentation">
+                <SelectValue>{DIFF_PRESENTATION_LABELS[settings.diffPresentation]}</SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectItem hideIndicator value="summary">
+                  {DIFF_PRESENTATION_LABELS.summary}
+                </SelectItem>
+                <SelectItem hideIndicator value="inline">
+                  {DIFF_PRESENTATION_LABELS.inline}
+                </SelectItem>
+                <SelectItem hideIndicator value="panel">
+                  {DIFF_PRESENTATION_LABELS.panel}
+                </SelectItem>
+              </SelectPopup>
+            </Select>
           }
         />
 
@@ -2354,6 +2669,171 @@ export function GeneralSettingsPanel() {
             </div>
           }
         />
+
+        <SettingsRow
+          title="Show provider thinking"
+          description="Show normalized reasoning and thinking traces in chat. Tool calls remain visible when this is off."
+          control={
+            <Switch
+              checked={settings.showThinkingTraces}
+              onCheckedChange={(checked) =>
+                updateSettings({ showThinkingTraces: Boolean(checked) })
+              }
+              aria-label="Show provider thinking traces"
+            />
+          }
+        />
+
+        <SettingsRow
+          title="Diff review agent"
+          description="Optional model used by the read-only Review changes action in chat. Off uses the global text generation model."
+          control={
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              {usesDedicatedDiffReviewer ? (
+                <>
+                  <ProviderModelPicker
+                    activeInstanceId={diffReviewSelection.instanceId}
+                    model={diffReviewSelection.model}
+                    lockedProvider={null}
+                    instanceEntries={textGenerationModelInstanceEntries}
+                    modelOptionsByInstance={diffReviewModelOptionsByInstance}
+                    triggerVariant="outline"
+                    triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
+                    triggerAriaLabel="Diff review agent model"
+                    onInstanceModelChange={(instanceId, model) => {
+                      const existing = settings.diffReviewModelSelection;
+                      updateSettings({
+                        diffReviewModelSelection:
+                          existing && existing.instanceId === instanceId
+                            ? createModelSelection(instanceId, model, existing.options)
+                            : createModelSelection(instanceId, model),
+                      });
+                    }}
+                  />
+                  <TraitsPicker
+                    provider={
+                      textGenerationModelInstanceEntries.find(
+                        (entry) => entry.instanceId === diffReviewSelection.instanceId,
+                      )?.driverKind ?? DEFAULT_DRIVER_KIND
+                    }
+                    models={
+                      textGenerationModelInstanceEntries.find(
+                        (entry) => entry.instanceId === diffReviewSelection.instanceId,
+                      )?.models ?? []
+                    }
+                    model={diffReviewSelection.model}
+                    prompt=""
+                    onPromptChange={() => {}}
+                    modelOptions={diffReviewSelection.options}
+                    allowPromptInjectedEffort={false}
+                    triggerVariant="outline"
+                    triggerClassName="min-w-0 max-w-none shrink-0 text-foreground/90 hover:text-foreground"
+                    onModelOptionsChange={(nextOptions) =>
+                      updateSettings({
+                        diffReviewModelSelection: createModelSelection(
+                          diffReviewSelection.instanceId,
+                          diffReviewSelection.model,
+                          nextOptions,
+                        ),
+                      })
+                    }
+                  />
+                </>
+              ) : null}
+              <Switch
+                checked={usesDedicatedDiffReviewer}
+                onCheckedChange={(checked) =>
+                  updateSettings({
+                    diffReviewModelSelection: checked
+                      ? createModelSelection(
+                          textGenerationModelSelection.instanceId,
+                          textGenerationModelSelection.model,
+                          textGenerationModelSelection.options,
+                        )
+                      : null,
+                  })
+                }
+                aria-label="Use a separate diff review agent"
+              />
+            </div>
+          }
+        />
+
+        <AgentPresetsSettings
+          settings={settings}
+          currentSelection={textGenerationModelSelection}
+          updateSettings={(patch) => updateSettings(patch)}
+        />
+
+        <HarnessHelperModelRow
+          title="Context compactor"
+          description="Optional lower-cost model for summarizing context when a provider exposes harness-owned compaction."
+          selection={settings.contextCompactorModelSelection}
+          settings={settings}
+          providers={serverProviders}
+          instanceEntries={textGenerationModelInstanceEntries}
+          fallbackSelection={textGenerationModelSelection}
+          onSelectionChange={(selection) =>
+            updateSettings({ contextCompactorModelSelection: selection })
+          }
+        />
+        <HarnessHelperModelRow
+          title="Skill curator"
+          description="Optional model used only after a detected reusable workflow to draft a staged skill proposal."
+          selection={settings.skillCuratorModelSelection}
+          settings={settings}
+          providers={serverProviders}
+          instanceEntries={textGenerationModelInstanceEntries}
+          fallbackSelection={textGenerationModelSelection}
+          onSelectionChange={(selection) =>
+            updateSettings({ skillCuratorModelSelection: selection })
+          }
+        />
+        <HarnessHelperModelRow
+          title="Memory curator"
+          description="Optional model used only for approved or triggered memory proposals."
+          selection={settings.memoryCuratorModelSelection}
+          settings={settings}
+          providers={serverProviders}
+          instanceEntries={textGenerationModelInstanceEntries}
+          fallbackSelection={textGenerationModelSelection}
+          onSelectionChange={(selection) =>
+            updateSettings({ memoryCuratorModelSelection: selection })
+          }
+        />
+        <HarnessHelperModelRow
+          title="Delegation default"
+          description="Optional model selection for isolated delegated tasks when the selected provider supports them."
+          selection={settings.delegationDefaultModelSelection}
+          settings={settings}
+          providers={serverProviders}
+          instanceEntries={textGenerationModelInstanceEntries}
+          fallbackSelection={textGenerationModelSelection}
+          onSelectionChange={(selection) =>
+            updateSettings({ delegationDefaultModelSelection: selection })
+          }
+        />
+
+        <SettingsRow
+          title="Seals.md harness rules"
+          description="Persistent instructions included at the start of every provider turn, similar to global user rules."
+        >
+          <div className="mt-3 w-full pb-3.5">
+            <Textarea
+              key={settings.sealsInstructions}
+              defaultValue={settings.sealsInstructions}
+              onBlur={(event) => {
+                const sealsInstructions = event.target.value.trim();
+                if (sealsInstructions !== settings.sealsInstructions) {
+                  updateSettings({ sealsInstructions });
+                }
+              }}
+              rows={7}
+              placeholder="Use concise answers. Run focused tests after edits."
+              aria-label="Seals.md harness rules"
+            />
+          </div>
+        </SettingsRow>
       </SettingsSection>
 
       <SettingsSection title="About">
@@ -2383,7 +2863,29 @@ export function GeneralSettingsPanel() {
 
 export function ArchivedThreadsPanel() {
   const projects = useProjects();
-  const { unarchiveThread, confirmAndDeleteThread } = useThreadActions();
+  const { unarchiveThread, deleteThread } = useThreadActions();
+  const confirmThreadDelete = useClientSettings((settings) => settings.confirmThreadDelete);
+  const {
+    requestDeleteConfirmation,
+    requestConfirmation: requestWorktreeConfirmation,
+    deleteConfirmDialog,
+  } = useThreadDeleteConfirmation();
+  const confirmWorktreeDeletion = useCallback(
+    ({ path }: { path: string }) =>
+      requestWorktreeConfirmation({
+        title: "linked worktree",
+        count: 1,
+        single: true,
+        heading: "Delete linked worktree?",
+        description: [
+          "This thread is the only one linked to this worktree:",
+          path,
+          "",
+          "Delete the worktree too?",
+        ].join("\n"),
+      }),
+    [requestWorktreeConfirmation],
+  );
   const environmentIds = useMemo(
     () => [...new Set(projects.map((project) => project.environmentId))],
     [projects],
@@ -2445,8 +2947,26 @@ export function ArchivedThreadsPanel() {
     return groups;
   }, [archivedSnapshots]);
 
+  const deleteArchivedThread = useCallback(
+    async (threadRef: ScopedThreadRef) => {
+      const result = await deleteThread(threadRef, { confirmWorktreeDeletion });
+      if (result._tag === "Success") {
+        refreshArchivedThreads();
+      } else if (!isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        toastManager.add(
+          stackedThreadToast({
+            type: "error",
+            title: "Failed to delete thread",
+            description: error instanceof Error ? error.message : "An error occurred.",
+          }),
+        );
+      }
+    },
+    [confirmWorktreeDeletion, deleteThread, refreshArchivedThreads],
+  );
   const handleArchivedThreadContextMenu = useCallback(
-    async (threadRef: ScopedThreadRef, position: { x: number; y: number }) => {
+    async (threadRef: ScopedThreadRef, title: string, position: { x: number; y: number }) => {
       const api = readLocalApi();
       if (!api) return;
       const clicked = await api.contextMenu.show(
@@ -2475,135 +2995,142 @@ export function ArchivedThreadsPanel() {
       }
 
       if (clicked === "delete") {
-        const result = await confirmAndDeleteThread(threadRef);
-        if (result._tag === "Success") {
-          refreshArchivedThreads();
-        } else if (!isAtomCommandInterrupted(result)) {
-          const error = squashAtomCommandFailure(result);
-          toastManager.add(
-            stackedThreadToast({
-              type: "error",
-              title: "Failed to delete thread",
-              description: error instanceof Error ? error.message : "An error occurred.",
-            }),
-          );
+        if (confirmThreadDelete) {
+          requestDeleteConfirmation({
+            title,
+            count: 1,
+            single: true,
+            onConfirm: () => deleteArchivedThread(threadRef),
+          });
+          return;
         }
+        await deleteArchivedThread(threadRef);
       }
     },
-    [confirmAndDeleteThread, refreshArchivedThreads, unarchiveThread],
+    [
+      confirmThreadDelete,
+      deleteArchivedThread,
+      requestDeleteConfirmation,
+      refreshArchivedThreads,
+      unarchiveThread,
+    ],
   );
 
   return (
-    <SettingsPageContainer>
-      {archivedGroups.length === 0 ? (
-        <SettingsSection
-          id={isLoadingArchive ? undefined : searchableSetting("archive").id}
-          title={searchableSetting("archive").title}
-        >
-          <SettingsRow
-            title={
-              <span className="inline-flex items-center gap-2">
-                {isLoadingArchive ? (
-                  <LoaderIcon className="size-3.5 animate-spin text-muted-foreground" />
-                ) : (
-                  <ArchiveIcon className="size-3.5 text-muted-foreground" />
-                )}
-                {isLoadingArchive
-                  ? "Loading archived threads"
-                  : archiveError
-                    ? "Could not load archived threads"
-                    : "No archived threads"}
-              </span>
-            }
-            description={
-              isLoadingArchive
-                ? "Checking connected environments."
-                : (archiveError ?? "Archived threads will appear here.")
-            }
-          />
-        </SettingsSection>
-      ) : (
-        archivedGroups.map(({ project, threads: projectThreads }, index) => (
+    <>
+      <SettingsPageContainer>
+        {archivedGroups.length === 0 ? (
           <SettingsSection
-            key={project.id}
-            id={index === 0 ? searchableSetting("archive").id : undefined}
-            title={project.name}
-            icon={<ProjectFavicon environmentId={project.environmentId} cwd={project.cwd} />}
+            id={isLoadingArchive ? undefined : searchableSetting("archive").id}
+            title={searchableSetting("archive").title}
           >
-            {projectThreads.map((thread) => (
-              <SettingsRow
-                key={thread.id}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  void (async () => {
-                    const result = await settlePromise(() =>
-                      handleArchivedThreadContextMenu(
-                        scopeThreadRef(thread.environmentId, thread.id),
-                        {
-                          x: event.clientX,
-                          y: event.clientY,
-                        },
-                      ),
-                    );
-                    if (result._tag === "Failure") {
-                      const error = squashAtomCommandFailure(result);
-                      toastManager.add(
-                        stackedThreadToast({
-                          type: "error",
-                          title: "Archived thread action failed",
-                          description:
-                            error instanceof Error ? error.message : "An error occurred.",
-                        }),
-                      );
-                    }
-                  })();
-                }}
-                title={thread.title}
-                description={
-                  <>
-                    Archived {formatRelativeTimeLabel(thread.archivedAt ?? thread.createdAt)}
-                    {" \u00b7 Created "}
-                    {formatRelativeTimeLabel(thread.createdAt)}
-                  </>
-                }
-                control={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-7 shrink-0 cursor-pointer gap-1.5 px-2.5"
-                    onClick={() => {
-                      void (async () => {
-                        const result = await unarchiveThread(
-                          scopeThreadRef(thread.environmentId, thread.id),
-                        );
-                        if (result._tag === "Success") {
-                          refreshArchivedThreads();
-                          return;
-                        }
-                        if (!isAtomCommandInterrupted(result)) {
-                          const error = squashAtomCommandFailure(result);
-                          toastManager.add(
-                            stackedThreadToast({
-                              type: "error",
-                              title: "Failed to unarchive thread",
-                              description:
-                                error instanceof Error ? error.message : "An error occurred.",
-                            }),
-                          );
-                        }
-                      })();
-                    }}
-                  >
-                    <ArchiveX className="size-3.5" />
-                    <span>Unarchive</span>
-                  </Button>
-                }
-              />
-            ))}
+            <SettingsRow
+              title={
+                <span className="inline-flex items-center gap-2">
+                  {isLoadingArchive ? (
+                    <LoaderIcon className="size-3.5 animate-spin text-muted-foreground" />
+                  ) : (
+                    <ArchiveIcon className="size-3.5 text-muted-foreground" />
+                  )}
+                  {isLoadingArchive
+                    ? "Loading archived threads"
+                    : archiveError
+                      ? "Could not load archived threads"
+                      : "No archived threads"}
+                </span>
+              }
+              description={
+                isLoadingArchive
+                  ? "Checking connected environments."
+                  : (archiveError ?? "Archived threads will appear here.")
+              }
+            />
           </SettingsSection>
-        ))
-      )}
-    </SettingsPageContainer>
+        ) : (
+          archivedGroups.map(({ project, threads: projectThreads }, index) => (
+            <SettingsSection
+              key={project.id}
+              id={index === 0 ? searchableSetting("archive").id : undefined}
+              title={project.name}
+              icon={<ProjectFavicon environmentId={project.environmentId} cwd={project.cwd} />}
+            >
+              {projectThreads.map((thread) => (
+                <SettingsRow
+                  key={thread.id}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    void (async () => {
+                      const result = await settlePromise(() =>
+                        handleArchivedThreadContextMenu(
+                          scopeThreadRef(thread.environmentId, thread.id),
+                          thread.title,
+                          {
+                            x: event.clientX,
+                            y: event.clientY,
+                          },
+                        ),
+                      );
+                      if (result._tag === "Failure") {
+                        const error = squashAtomCommandFailure(result);
+                        toastManager.add(
+                          stackedThreadToast({
+                            type: "error",
+                            title: "Archived thread action failed",
+                            description:
+                              error instanceof Error ? error.message : "An error occurred.",
+                          }),
+                        );
+                      }
+                    })();
+                  }}
+                  title={thread.title}
+                  description={
+                    <>
+                      Archived {formatRelativeTimeLabel(thread.archivedAt ?? thread.createdAt)}
+                      {" \u00b7 Created "}
+                      {formatRelativeTimeLabel(thread.createdAt)}
+                    </>
+                  }
+                  control={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 shrink-0 cursor-pointer gap-1.5 px-2.5"
+                      onClick={() => {
+                        void (async () => {
+                          const result = await unarchiveThread(
+                            scopeThreadRef(thread.environmentId, thread.id),
+                          );
+                          if (result._tag === "Success") {
+                            refreshArchivedThreads();
+                            return;
+                          }
+                          if (!isAtomCommandInterrupted(result)) {
+                            const error = squashAtomCommandFailure(result);
+                            toastManager.add(
+                              stackedThreadToast({
+                                type: "error",
+                                title: "Failed to unarchive thread",
+                                description:
+                                  error instanceof Error ? error.message : "An error occurred.",
+                              }),
+                            );
+                          }
+                        })();
+                      }}
+                    >
+                      <ArchiveX className="size-3.5" />
+                      <span>Unarchive</span>
+                    </Button>
+                  }
+                />
+              ))}
+            </SettingsSection>
+          ))
+        )}
+      </SettingsPageContainer>
+      {deleteConfirmDialog}
+    </>
   );
 }

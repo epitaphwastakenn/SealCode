@@ -748,6 +748,10 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
     restoreCheckpoint: Effect.fn("GitVcsDriver.checkpoints.restoreCheckpoint")(function* (input) {
       const operation = "GitVcsDriver.checkpoints.restoreCheckpoint";
 
+      if (input.paths !== undefined && input.paths.length === 0) {
+        return true;
+      }
+
       let commitOid = yield* resolveCheckpointCommit(input.cwd, input.checkpointRef);
 
       if (!commitOid && input.fallbackToHead === true) {
@@ -758,15 +762,18 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
         return false;
       }
 
+      const pathspecs =
+        input.paths === undefined ? ["."] : input.paths.map((filePath) => `:(literal)${filePath}`);
+
       yield* execute({
         operation,
         cwd: input.cwd,
-        args: ["restore", "--source", commitOid, "--worktree", "--staged", "--", "."],
+        args: ["restore", "--source", commitOid, "--worktree", "--staged", "--", ...pathspecs],
       });
       yield* execute({
         operation,
         cwd: input.cwd,
-        args: ["clean", "-fd", "--", "."],
+        args: ["clean", "-fd", "--", ...pathspecs],
       });
 
       const headExists = yield* hasHeadCommit(input.cwd);
@@ -774,7 +781,7 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
         yield* execute({
           operation,
           cwd: input.cwd,
-          args: ["reset", "--quiet", "--", "."],
+          args: ["reset", "--quiet", "--", ...pathspecs],
         });
       }
 
@@ -789,7 +796,12 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
         "checkpoint.to_ref": input.toCheckpointRef,
         "checkpoint.ignore_whitespace": input.ignoreWhitespace,
         "checkpoint.fallback_from_to_head": input.fallbackFromToHead,
+        "checkpoint.path_count": input.paths?.length ?? null,
       });
+
+      if (input.paths !== undefined && input.paths.length === 0) {
+        return "";
+      }
 
       let fromRevision: string = input.fromCheckpointRef;
       if (input.fallbackFromToHead === true) {
@@ -826,6 +838,9 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
           ...(input.ignoreWhitespace ? ["--ignore-all-space"] : []),
           `${fromRevision}^{commit}`,
           `${input.toCheckpointRef}^{commit}`,
+          ...(input.paths === undefined
+            ? []
+            : ["--", ...input.paths.map((path) => `:(literal)${path}`)]),
         ],
         allowNonZeroExit: true,
         maxOutputBytes: CHECKPOINT_DIFF_MAX_OUTPUT_BYTES,

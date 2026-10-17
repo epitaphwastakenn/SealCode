@@ -16,6 +16,7 @@ import { isTemporaryWorktreeBranch, WORKTREE_BRANCH_PREFIX } from "@t3tools/shar
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Crypto from "effect/Crypto";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
@@ -28,6 +29,10 @@ import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
 import { resolveThreadWorkspaceCwd } from "../../checkpointing/Utils.ts";
 import { increment, orchestrationEventsProcessedTotal } from "../../observability/Metrics.ts";
 import { ProviderAdapterRequestError } from "../../provider/Errors.ts";
+import {
+  isAntigravityQuotaErrorMessage,
+  isAntigravityQuotaExhausted,
+} from "../../provider/antigravityUsage.ts";
 import type { ProviderServiceError } from "../../provider/Errors.ts";
 import { TextGeneration } from "../../textGeneration/TextGeneration.ts";
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
@@ -54,6 +59,13 @@ import {
   requiresContextTransfer,
 } from "../ContextTransferCoordinator.ts";
 import { ServerConfig } from "../../config.ts";
+import {
+  appendResolvedContextReferences,
+  resolveContextReferences,
+} from "../../harness/ContextReferences.ts";
+import { assemblePrompt } from "../../harness/PromptAssembly.ts";
+import { resolveHarnessHelperModelSelection } from "../../harness/HelperModelRouting.ts";
+import { readMemorySnapshot } from "../../mcp/McpHarnessStore.ts";
 const isProviderAdapterRequestError = Schema.is(ProviderAdapterRequestError);
 const isProviderDriverKind = Schema.is(ProviderDriverKind);
 
@@ -226,6 +238,18 @@ export function providerErrorLabel(value: string | undefined): string {
   return normalized && normalized.length > 0 ? normalized : "unknown";
 }
 
+function errorDetail(error: unknown): string {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "detail" in error &&
+    typeof error.detail === "string"
+  ) {
+    return error.detail;
+  }
+  return error instanceof Error ? error.message : "Helper model failed.";
+}
+
 export function providerErrorLabelFromInstanceHint(input: {
   readonly instanceId?: string | undefined;
   readonly modelSelectionInstanceId?: string | undefined;
@@ -330,6 +354,7 @@ const make = Effect.gen(function* () {
   const textGeneration = yield* TextGeneration;
   const serverSettingsService = yield* ServerSettingsService;
   const serverConfig = yield* ServerConfig;
+  const memorySnapshotByThread = new Map<ThreadId, string>();
   const serverCommandId = (tag: string) =>
     crypto.randomUUIDv4.pipe(Effect.map((uuid) => CommandId.make(`server:${tag}:${uuid}`)));
   const serverEventId = () => crypto.randomUUIDv4.pipe(Effect.map(EventId.make));
@@ -698,8 +723,9 @@ const make = Effect.gen(function* () {
         new Error(`Thread '${input.threadId}' was not found in read model.`),
       );
     }
-    const requestedModelSelection =
+    let requestedModelSelection =
       input.modelSelection ?? threadModelSelections.get(input.threadId) ?? thread.modelSelection;
+    let automaticFailover = false;
     const project = yield* resolveProject(thread.projectId);
     const cwd =
       resolveThreadWorkspaceCwd({
@@ -707,9 +733,40 @@ const make = Effect.gen(function* () {
         projects: project ? [project] : [],
       }) ?? process.cwd();
     const providers = yield* providerRegistry.getProviders;
-    const requestedProvider = providers.find(
+    let requestedProvider = providers.find(
       (provider) => provider.instanceId === requestedModelSelection.instanceId,
     );
+    if (
+      requestedProvider?.driver === ProviderDriverKind.make("antigravity") &&
+      isAntigravityQuotaExhausted(requestedProvider.subscriptionUsage)
+    ) {
+      const settings = yield* serverSettingsService.getSettings;
+      const fallbackInstanceId =
+        settings.providerInstances[requestedModelSelection.instanceId]?.fallbackInstanceId;
+      if (fallbackInstanceId && fallbackInstanceId !== requestedModelSelection.instanceId) {
+        const fallback = providers.find((provider) => provider.instanceId === fallbackInstanceId);
+        if (!fallback || fallback.auth.status !== "authenticated") {
+          return yield* new ProviderAdapterRequestError({
+            provider: requestedProvider.driver,
+            method: "thread.turn.start",
+            detail: `Fallback provider '${fallbackInstanceId}' is not authenticated. Open Settings > Providers, configure its isolated account, and sign in with Google before retrying.`,
+          });
+        }
+        if (!fallback.models.some((model) => model.slug === requestedModelSelection.model)) {
+          return yield* new ProviderAdapterRequestError({
+            provider: requestedProvider.driver,
+            method: "thread.turn.start",
+            detail: `Fallback provider '${fallbackInstanceId}' does not offer model '${requestedModelSelection.model}'.`,
+          });
+        }
+        requestedModelSelection = {
+          ...requestedModelSelection,
+          instanceId: fallbackInstanceId,
+        };
+        automaticFailover = true;
+        requestedProvider = fallback;
+      }
+    }
     const requestedModel = requestedProvider?.models.find(
       (model) => model.slug === requestedModelSelection.model,
     );
@@ -786,17 +843,34 @@ const make = Effect.gen(function* () {
         existing.state === "completed" && existing.summary
           ? existing.summary
           : yield* Effect.gen(function* () {
-              contextTransfers.markRunning(transferKey, new Date().toISOString());
+              contextTransfers.markRunning(transferKey, DateTime.formatIso(yield* DateTime.now));
               const sourceContext = buildContextTransferSourceContext(thread, request);
+              const settings = yield* serverSettingsService.getSettings;
+              const sourceQuotaExhausted =
+                sourceSession?.provider === ProviderDriverKind.make("antigravity") &&
+                isAntigravityQuotaErrorMessage(sourceSession.lastError ?? "");
               const generated = yield* textGeneration.generateContextTransferSummary({
                 cwd,
                 context: sourceContext,
-                modelSelection: {
-                  instanceId: sourceSession!.providerInstanceId!,
-                  model: sourceSession!.model ?? thread.modelSelection.model,
-                },
+                modelSelection: resolveHarnessHelperModelSelection(
+                  {
+                    textGenerationModelSelection:
+                      automaticFailover || sourceQuotaExhausted
+                        ? requestedModelSelection
+                        : {
+                            instanceId: sourceSession!.providerInstanceId!,
+                            model: sourceSession!.model ?? thread.modelSelection.model,
+                          },
+                    contextCompactorModelSelection: settings.contextCompactorModelSelection,
+                  },
+                  "contextCompactor",
+                ),
               });
-              contextTransfers.complete(transferKey, generated.summary, new Date().toISOString());
+              contextTransfers.complete(
+                transferKey,
+                generated.summary,
+                DateTime.formatIso(yield* DateTime.now),
+              );
               return generated.summary;
             }).pipe(
               Effect.tapError((error) =>
@@ -804,11 +878,15 @@ const make = Effect.gen(function* () {
                   transferKey,
                   sourceProvider: request.sourceProvider,
                   targetProvider: request.targetProvider,
-                  detail: error.detail,
+                  detail: errorDetail(error),
                 }).pipe(
                   Effect.andThen(
-                    Effect.sync(() => {
-                      contextTransfers.fail(transferKey, error.detail, new Date().toISOString());
+                    Effect.gen(function* () {
+                      contextTransfers.fail(
+                        transferKey,
+                        errorDetail(error),
+                        DateTime.formatIso(yield* DateTime.now),
+                      );
                     }),
                   ),
                 ),
@@ -817,14 +895,48 @@ const make = Effect.gen(function* () {
       transferInput = buildContextTransferPrompt(summary, promptForTarget);
     }
 
+    const resolvedContextReferences = yield* resolveContextReferences(cwd, input.messageText).pipe(
+      Effect.mapError(
+        (cause) =>
+          new ProviderAdapterRequestError({
+            provider: providerErrorLabel(requestedProvider?.driver),
+            method: "thread.turn.start",
+            detail: cause.message,
+            cause,
+          }),
+      ),
+    );
+    transferInput = appendResolvedContextReferences(transferInput, resolvedContextReferences);
+    if (!memorySnapshotByThread.has(input.threadId)) {
+      const memorySnapshot = yield* readMemorySnapshot({
+        threadId: input.threadId,
+      }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new ProviderAdapterRequestError({
+              provider: providerErrorLabel(requestedProvider?.driver),
+              method: "thread.turn.start",
+              detail: cause instanceof Error ? cause.message : "Failed to load SealCode memory.",
+            }),
+        ),
+      );
+      memorySnapshotByThread.set(input.threadId, memorySnapshot.text);
+    }
+    const memoryText = memorySnapshotByThread.get(input.threadId) ?? "";
+    if (memoryText.length > 0) {
+      transferInput = `${transferInput}\n\n<sealcode_memory>\n${memoryText}\n</sealcode_memory>`;
+    }
+
+    const explicitModelSelection =
+      input.modelSelection !== undefined || automaticFailover ? requestedModelSelection : undefined;
     yield* ensureSessionForThread(input.threadId, input.createdAt, {
-      ...(input.modelSelection !== undefined ? { modelSelection: input.modelSelection } : {}),
+      ...(explicitModelSelection !== undefined ? { modelSelection: explicitModelSelection } : {}),
       pendingTurnStart: true,
     });
-    if (input.modelSelection !== undefined) {
-      threadModelSelections.set(input.threadId, input.modelSelection);
+    if (explicitModelSelection !== undefined) {
+      threadModelSelections.set(input.threadId, explicitModelSelection);
     }
-    const normalizedInput = toNonEmptyProviderInput(transferInput);
+    const { sealsInstructions } = yield* serverSettingsService.getSettings;
     const normalizedAttachments = attachmentsForTarget;
     const activeSession = yield* providerService
       .listSessions()
@@ -850,7 +962,14 @@ const make = Effect.gen(function* () {
               model: activeSession.model,
             }
           : requestedModelSelection
-        : input.modelSelection;
+        : explicitModelSelection;
+    const assembledPrompt = assemblePrompt({
+      stableInstructions: sealsInstructions,
+      stableIdentity:
+        modelForTurn === undefined ? undefined : `${modelForTurn.instanceId}:${modelForTurn.model}`,
+      dynamicInput: transferInput,
+    });
+    const normalizedInput = toNonEmptyProviderInput(assembledPrompt.input);
 
     return {
       threadId: input.threadId,
@@ -858,6 +977,7 @@ const make = Effect.gen(function* () {
       ...(normalizedAttachments.length > 0 ? { attachments: normalizedAttachments } : {}),
       ...(modelForTurn !== undefined ? { modelSelection: modelForTurn } : {}),
       ...(input.interactionMode !== undefined ? { interactionMode: input.interactionMode } : {}),
+      promptMetadata: assembledPrompt.metadata,
     };
   });
 
@@ -1372,6 +1492,8 @@ const make = Effect.gen(function* () {
     if (!thread) {
       return;
     }
+
+    memorySnapshotByThread.delete(thread.id);
 
     const now = event.payload.createdAt;
     if (thread.session && thread.session.status !== "stopped") {

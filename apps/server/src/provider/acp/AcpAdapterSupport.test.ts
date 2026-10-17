@@ -25,4 +25,21 @@ describe("AcpAdapterSupport", () => {
     expect(error._tag).toBe("ProviderAdapterRequestError");
     expect(error.message).toContain("Invalid params");
   });
+
+  it("surfaces ACP transport error detail", () => {
+    const error = mapAcpToAdapterError(
+      ProviderDriverKind.make("cursor"),
+      "thread-1" as never,
+      "session/start",
+      new EffectAcpErrors.AcpTransportError({
+        operation: "call-rpc",
+        method: "authenticate",
+        detail: "authenticate timed out after 500ms",
+        cause: undefined,
+      }),
+    );
+
+    expect(error._tag).toBe("ProviderAdapterRequestError");
+    expect(error.message).toContain("authenticate timed out after 500ms");
+  });
 });

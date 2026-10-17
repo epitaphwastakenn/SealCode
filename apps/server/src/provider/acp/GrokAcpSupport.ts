@@ -1,5 +1,6 @@
 import { type GrokSettings, ProviderDriverKind } from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
@@ -17,6 +18,9 @@ const T3_CODE_OAUTH_REFERRER = "t3code";
 const GROK_AUTH_METHOD_API_KEY = "xai.api_key";
 const GROK_AUTH_METHOD_CACHED_TOKEN = "cached_token";
 const GROK_DRIVER_KIND = ProviderDriverKind.make("grok");
+const GROK_ACP_INITIALIZE_TIMEOUT = Duration.seconds(30);
+const GROK_ACP_AUTHENTICATE_TIMEOUT = Duration.seconds(45);
+const GROK_ACP_SESSION_NEW_TIMEOUT = Duration.seconds(30);
 
 type GrokAcpRuntimeGrokSettings = Pick<GrokSettings, "binaryPath">;
 
@@ -64,6 +68,9 @@ export const makeGrokAcpRuntime = (
         ...input,
         spawn: buildGrokAcpSpawnInput(input.grokSettings, input.cwd, input.environment),
         authMethodId: resolveGrokAuthMethodId(input.environment),
+        initializeTimeout: input.initializeTimeout ?? GROK_ACP_INITIALIZE_TIMEOUT,
+        authenticateTimeout: input.authenticateTimeout ?? GROK_ACP_AUTHENTICATE_TIMEOUT,
+        sessionNewTimeout: input.sessionNewTimeout ?? GROK_ACP_SESSION_NEW_TIMEOUT,
       }).pipe(
         Layer.provide(
           Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, input.childProcessSpawner),

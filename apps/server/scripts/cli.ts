@@ -172,8 +172,15 @@ const buildCmd = Command.make(
       } else {
         yield* Effect.logWarning("[cli] Web dist not found — skipping client bundle.");
       }
+
+      const antigravityBridgeSrc = path.join(serverDir, "src/provider/antigravity");
+      const antigravityBridgeTarget = path.join(serverDir, "dist/provider/antigravity");
+      if (yield* fs.exists(antigravityBridgeSrc)) {
+        yield* fs.copy(antigravityBridgeSrc, antigravityBridgeTarget);
+        yield* Effect.log("[cli] Copied Antigravity bridge assets into dist/provider/antigravity");
+      }
     }),
-).pipe(Command.withDescription("Build the server package (tsdown + bundle web client)."));
+).pipe(Command.withDescription("Build the server package (tsdown + bundle web client + bridge assets)."));
 
 // ---------------------------------------------------------------------------
 // publish subcommand

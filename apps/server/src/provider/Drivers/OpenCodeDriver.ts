@@ -116,7 +116,9 @@ export const OpenCodeDriver: ProviderDriver<OpenCodeSettings, OpenCodeDriverEnv>
     Effect.gen(function* () {
       const openCodeRuntime = yield* OpenCodeRuntime;
       const serverConfig = yield* ServerConfig;
+      const fileSystem = yield* FileSystem.FileSystem;
       const httpClient = yield* HttpClient.HttpClient;
+      const path = yield* Path.Path;
       const serverSettings = yield* ServerSettingsService;
       const eventLoggers = yield* ProviderEventLoggers;
       const processEnv = mergeProviderInstanceEnvironment(environment);
@@ -147,7 +149,13 @@ export const OpenCodeDriver: ProviderDriver<OpenCodeSettings, OpenCodeDriverEnv>
         effectiveConfig,
         serverConfig.cwd,
         processEnv,
-      ).pipe(Effect.map(stampIdentity), Effect.provideService(OpenCodeRuntime, openCodeRuntime));
+      ).pipe(
+        Effect.map(stampIdentity),
+        Effect.provideService(FileSystem.FileSystem, fileSystem),
+        Effect.provideService(HttpClient.HttpClient, httpClient),
+        Effect.provideService(OpenCodeRuntime, openCodeRuntime),
+        Effect.provideService(Path.Path, path),
+      );
 
       const snapshotSettings = makeProviderSnapshotSettingsSource(effectiveConfig, serverSettings);
       const snapshot = yield* makeManagedServerProvider<ProviderSnapshotSettings<OpenCodeSettings>>(

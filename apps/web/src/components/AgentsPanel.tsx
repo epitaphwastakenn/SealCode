@@ -28,6 +28,10 @@ import { useEffect, useRef, useState } from "react";
 import { cn } from "~/lib/utils";
 import { orchestrationEnvironment } from "~/state/orchestration";
 import { ScrollArea } from "~/components/ui/scroll-area";
+import {
+  presentThreadState,
+  stateForRuntimeSubagentStatus,
+} from "@t3tools/shared/statusPresentation";
 
 /**
  * In-flight states all present as Working (one steady state, per the
@@ -36,16 +40,40 @@ import { ScrollArea } from "~/components/ui/scroll-area";
  * user problem). Only settled states differentiate.
  */
 const STATUS_VISUALS: Record<RuntimeSubagent["status"], { dotClass: string; label: string }> = {
-  pending: { dotClass: "bg-info", label: "Working" },
-  running: { dotClass: "bg-info", label: "Working" },
-  waiting: { dotClass: "bg-info", label: "Working" },
+  pending: {
+    dotClass: "bg-info",
+    label: presentThreadState(stateForRuntimeSubagentStatus("pending")).label,
+  },
+  running: {
+    dotClass: "bg-info",
+    label: presentThreadState(stateForRuntimeSubagentStatus("running")).label,
+  },
+  waiting: {
+    dotClass: "bg-info",
+    label: presentThreadState(stateForRuntimeSubagentStatus("waiting")).label,
+  },
   // Idle reads as settled (muted, not sky): a resting Codex child looks done
   // unless resumed — live-test: sky idle dots read as stuck in-progress.
-  idle: { dotClass: "bg-muted-foreground/50", label: "Idle · resumable" },
-  completed: { dotClass: "bg-success", label: "Completed" },
-  failed: { dotClass: "bg-destructive", label: "Failed" },
-  cancelled: { dotClass: "bg-muted-foreground/60", label: "Stopped" },
-  interrupted: { dotClass: "bg-muted-foreground/60", label: "Stopped" },
+  idle: {
+    dotClass: "bg-muted-foreground/50",
+    label: presentThreadState(stateForRuntimeSubagentStatus("idle")).label,
+  },
+  completed: {
+    dotClass: "bg-success",
+    label: presentThreadState(stateForRuntimeSubagentStatus("completed")).label,
+  },
+  failed: {
+    dotClass: "bg-destructive",
+    label: presentThreadState(stateForRuntimeSubagentStatus("failed")).label,
+  },
+  cancelled: {
+    dotClass: "bg-muted-foreground/60",
+    label: presentThreadState(stateForRuntimeSubagentStatus("cancelled")).label,
+  },
+  interrupted: {
+    dotClass: "bg-muted-foreground/60",
+    label: presentThreadState(stateForRuntimeSubagentStatus("interrupted")).label,
+  },
 };
 
 function StatusDot({ status }: { status: RuntimeSubagent["status"] }) {

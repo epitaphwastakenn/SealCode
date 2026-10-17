@@ -62,6 +62,9 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Clock from "effect/Clock";
 import { ServerSettingsService } from "../../serverSettings.ts";
 import { VcsStatusBroadcaster } from "../../vcs/VcsStatusBroadcaster.ts";
+import * as VcsProcess from "../../vcs/VcsProcess.ts";
+import * as WorkspaceEntries from "../../workspace/WorkspaceEntries.ts";
+import * as WorkspaceFileSystem from "../../workspace/WorkspaceFileSystem.ts";
 import * as GitWorkflowService from "../../git/GitWorkflowService.ts";
 
 const asProjectId = (value: string): ProjectId => ProjectId.make(value);
@@ -151,6 +154,8 @@ describe("ProviderCommandReactor", () => {
     readonly mainModelVision?: boolean;
     readonly titleRegenerationCompletionDispatchFailures?: number;
     readonly titleRegenerationBeforeStart?: "one" | "two";
+    readonly providerSnapshots?: ReadonlyArray<Record<string, unknown>>;
+    readonly serverSettings?: Parameters<typeof ServerSettingsService.layerTest>[0];
     readonly startSessionEffect?: (
       session: ProviderSession,
     ) => Effect.Effect<ProviderSession, ProviderAdapterRequestError>;
@@ -305,7 +310,7 @@ describe("ProviderCommandReactor", () => {
     const describeImages = vi.fn<TextGenerationShape["describeImages"]>((_) =>
       Effect.succeed({ description: "A compact dark composer with violet controls." }),
     );
-    const providerSnapshots = [
+    const providerSnapshots = input?.providerSnapshots ?? [
       {
         instanceId: modelSelection.instanceId,
         driver: ProviderDriverKind.make(String(modelSelection.instanceId)),
@@ -433,8 +438,25 @@ describe("ProviderCommandReactor", () => {
           describeImages,
         }),
       ),
-      Layer.provideMerge(ServerSettingsService.layerTest()),
+      Layer.provideMerge(ServerSettingsService.layerTest(input?.serverSettings)),
       Layer.provideMerge(ServerConfig.layerTest(process.cwd(), baseDir)),
+      Layer.provideMerge(SqlitePersistenceMemory),
+      Layer.provideMerge(Layer.mock(VcsProcess.VcsProcess)({ run: () => Effect.die("unused") })),
+      Layer.provideMerge(
+        Layer.mock(WorkspaceEntries.WorkspaceEntries)({
+          browse: () => Effect.die("unused"),
+          list: () => Effect.die("unused"),
+          search: () => Effect.die("unused"),
+          searchContents: () => Effect.die("unused"),
+          refresh: () => Effect.die("unused"),
+        }),
+      ),
+      Layer.provideMerge(
+        Layer.mock(WorkspaceFileSystem.WorkspaceFileSystem)({
+          readFile: () => Effect.die("unused"),
+          writeFile: () => Effect.die("unused"),
+        }),
+      ),
       Layer.provideMerge(NodeServices.layer),
     );
     runtime = ManagedRuntime.make(layer);
@@ -573,6 +595,184 @@ describe("ProviderCommandReactor", () => {
     expect(thread?.session?.threadId).toBe("thread-1");
     expect(thread?.session?.status).toBe("starting");
     expect(thread?.session?.runtimeMode).toBe("approval-required");
+  });
+
+  it("starts an exhausted Antigravity turn on its configured fallback instance", async () => {
+    const primary = ProviderInstanceId.make("antigravity_primary");
+    const backup = ProviderInstanceId.make("antigravity_backup");
+    const model = "gemini-3.7-flash";
+    const provider = (instanceId: ProviderInstanceId, usedPercent: number) => ({
+      instanceId,
+      driver: ProviderDriverKind.make("antigravity"),
+      auth: { status: "authenticated" },
+      subscriptionUsage: {
+        plan: null,
+        windows: [
+          {
+            id: `${instanceId}-5-hour`,
+            label: "Gemini 5 hour",
+            usedPercent,
+            windowDurationMins: 300,
+            resetsAt: null,
+          },
+        ],
+        metrics: [],
+        checkedAt: "2026-08-15T00:00:00.000Z",
+      },
+      models: [
+        {
+          slug: model,
+          name: model,
+          isCustom: false,
+          capabilities: { optionDescriptors: [], vision: false },
+        },
+      ],
+    });
+    const harness = await createHarness({
+      threadModelSelection: { instanceId: primary, model },
+      providerSnapshots: [provider(primary, 100), provider(backup, 0)],
+      serverSettings: {
+        providerInstances: {
+          [primary]: {
+            driver: ProviderDriverKind.make("antigravity"),
+            fallbackInstanceId: backup,
+          },
+          [backup]: { driver: ProviderDriverKind.make("antigravity") },
+        },
+      },
+    });
+
+    await harness.runEffect(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-antigravity-fallback"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: MessageId.make("message-antigravity-fallback"),
+          role: "user",
+          text: "Continue the task",
+          attachments: [],
+        },
+        runtimeMode: "approval-required",
+        interactionMode: "default",
+        createdAt: "2026-08-15T00:00:00.000Z",
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+    expect(harness.sendTurn.mock.calls[0]?.[0]).toMatchObject({
+      modelSelection: { instanceId: backup, model },
+    });
+  });
+
+  it("uses the fallback account to summarize context after an active quota failure", async () => {
+    const primary = ProviderInstanceId.make("antigravity_primary");
+    const backup = ProviderInstanceId.make("antigravity_backup");
+    const model = "gemini-3.7-flash";
+    const provider = (instanceId: ProviderInstanceId) => ({
+      instanceId,
+      driver: ProviderDriverKind.make("antigravity"),
+      auth: { status: "authenticated" },
+      models: [
+        {
+          slug: model,
+          name: model,
+          isCustom: false,
+          capabilities: { optionDescriptors: [], vision: false },
+        },
+      ],
+    });
+    const harness = await createHarness({
+      threadModelSelection: { instanceId: primary, model },
+      providerSnapshots: [provider(primary), provider(backup)],
+    });
+    const threadId = ThreadId.make("thread-1");
+    const messageId = MessageId.make("message-antigravity-quota-retry");
+    const createdAt = "2026-08-15T00:00:00.000Z";
+
+    await harness.runEffect(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-antigravity-primary-turn"),
+        threadId,
+        message: {
+          messageId,
+          role: "user",
+          text: "Continue the task",
+          attachments: [],
+        },
+        runtimeMode: "approval-required",
+        interactionMode: "default",
+        createdAt,
+      }),
+    );
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+    const sourceSession = harness.runtimeSessions[0];
+    expect(sourceSession).toBeDefined();
+    if (!sourceSession) return;
+    harness.runtimeSessions[0] = {
+      ...sourceSession,
+      provider: ProviderDriverKind.make("antigravity"),
+      status: "error",
+      lastError: "You've reached your 5-hour usage limit.",
+    };
+
+    await harness.runEffect(
+      harness.engine.dispatch({
+        type: "thread.turn.retry",
+        commandId: CommandId.make("cmd-antigravity-quota-retry"),
+        threadId,
+        messageId,
+        modelSelection: { instanceId: backup, model },
+        createdAt,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 2);
+    expect(harness.generateContextTransferSummary).toHaveBeenCalledWith(
+      expect.objectContaining({ modelSelection: { instanceId: backup, model } }),
+    );
+    expect(harness.sendTurn.mock.calls[1]?.[0]).toMatchObject({
+      modelSelection: { instanceId: backup, model },
+      input: expect.stringContaining("<context-transfer>"),
+    });
+  });
+
+  it("allows a turn to start while another thread uses the same workspace", async () => {
+    const harness = await createHarness({
+      titleRegenerationBeforeStart: "two",
+      startSessionEffect: (session) => Effect.succeed({ ...session, status: "running" }),
+    });
+    const now = "2026-01-01T00:00:00.000Z";
+
+    await Effect.runPromise(
+      harness.startSession(ThreadId.make("thread-2"), {
+        cwd: "/tmp/provider-project",
+        modelSelection: {
+          instanceId: ProviderInstanceId.make("codex"),
+          model: "gpt-5-codex",
+        },
+      }),
+    );
+    await Effect.runPromise(
+      harness.engine.dispatch({
+        type: "thread.turn.start",
+        commandId: CommandId.make("cmd-turn-start-shared-workspace"),
+        threadId: ThreadId.make("thread-1"),
+        message: {
+          messageId: asMessageId("user-message-shared-workspace"),
+          role: "user",
+          text: "work on a disjoint file",
+          attachments: [],
+        },
+        interactionMode: DEFAULT_PROVIDER_INTERACTION_MODE,
+        runtimeMode: "approval-required",
+        createdAt: now,
+      }),
+    );
+
+    await waitFor(() => harness.sendTurn.mock.calls.length === 1);
+    expect(harness.sendTurn).toHaveBeenCalledTimes(1);
   });
 
   it("uses the Codex image viewer when the main model has no vision", async () => {

@@ -4,7 +4,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 
 export type BuildArch = "arm64" | "x64" | "universal";
-export type BuildPlatform = "mac" | "linux" | "win";
 
 interface PlatformConfig {
   readonly archChoices: ReadonlyArray<BuildArch>;
@@ -46,7 +45,6 @@ const resolveHostProcessArch = Effect.fn("resolveHostProcessArch")(function* () 
 });
 
 export const getDefaultBuildArch = Effect.fn("getDefaultBuildArch")(function* (
-  platform: BuildPlatform,
   platformConfig: PlatformConfig,
 ) {
   const hostArch = yield* resolveHostProcessArch();

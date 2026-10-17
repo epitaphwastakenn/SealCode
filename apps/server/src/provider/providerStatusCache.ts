@@ -11,6 +11,12 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import { writeFileStringAtomically } from "../atomicWrite.ts";
+// Only used to read snapshots written by the removed CLI integration.
+const antigravityDisplayKey = (slug: string, name?: string) => (name?.trim() || slug)
+  .toLowerCase()
+  .replace(/\s*\((?:low|medium|high|thinking)\)/gi, " ")
+  .replace(/-(?:low|medium|high|thinking)(?=[^a-z0-9]|$)/gi, " ")
+  .replace(/[^a-z0-9]+/g, " ").trim();
 
 const decodeProviderStatusCache = Schema.decodeUnknownEffect(
   Schema.fromJsonString(ServerProviderSchema),
@@ -18,13 +24,41 @@ const decodeProviderStatusCache = Schema.decodeUnknownEffect(
 
 const LEGACY_ANTIGRAVITY_EFFORT_MODEL = /-(?:low|medium|high)$/i;
 
+const isAntigravityCatalogId = (slug: string): boolean =>
+  /^[a-z0-9][a-z0-9._:/-]*$/.test(slug) && !/[:/]$/.test(slug);
+
+const antigravityCachedModelRank = (slug: string): number =>
+  (isAntigravityCatalogId(slug) ? 2 : 0) + (/-thinking$/i.test(slug) ? 1 : 0);
+
 const cachedModelsForProvider = (
   provider: ProviderDriverKind,
   models: ReadonlyArray<ServerProvider["models"][number]>,
-): ReadonlyArray<ServerProvider["models"][number]> =>
-  provider === "antigravity"
-    ? models.filter((model) => model.isCustom || !LEGACY_ANTIGRAVITY_EFFORT_MODEL.test(model.slug))
-    : models;
+  fallbackModels: ReadonlyArray<ServerProvider["models"][number]>,
+): ReadonlyArray<ServerProvider["models"][number]> => {
+  if (provider !== "antigravity") return models;
+
+  const fallbackKeys = new Set(
+    fallbackModels.map((model) => antigravityDisplayKey(model.slug, model.name)),
+  );
+  const selected = new Map<string, ServerProvider["models"][number]>();
+  for (const model of models) {
+    if (model.isCustom) {
+      selected.set(`custom:${model.slug}`, model);
+      continue;
+    }
+    if (LEGACY_ANTIGRAVITY_EFFORT_MODEL.test(model.slug)) continue;
+    const key = antigravityDisplayKey(model.slug, model.name);
+    if (fallbackKeys.has(key)) continue;
+    const existing = selected.get(key);
+    if (
+      !existing ||
+      antigravityCachedModelRank(model.slug) > antigravityCachedModelRank(existing.slug)
+    ) {
+      selected.set(key, model);
+    }
+  }
+  return [...selected.values()];
+};
 
 const mergeProviderModels = (
   fallbackModels: ReadonlyArray<ServerProvider["models"][number]>,
@@ -49,7 +83,8 @@ export const isCachedProviderCorrelated = (input: {
   readonly fallbackProvider: ServerProvider;
 }): boolean =>
   input.cachedProvider.instanceId === input.fallbackProvider.instanceId &&
-  input.cachedProvider.driver === input.fallbackProvider.driver;
+  input.cachedProvider.driver === input.fallbackProvider.driver &&
+  (input.fallbackProvider.driver !== "antigravity" || input.cachedProvider.continuation.groupKey === input.fallbackProvider.continuation.groupKey);
 
 export const hydrateCachedProvider = (input: {
   readonly cachedProvider: ServerProvider;
@@ -71,7 +106,11 @@ export const hydrateCachedProvider = (input: {
     ...fallbackWithoutMessage,
     models: mergeProviderModels(
       input.fallbackProvider.models,
-      cachedModelsForProvider(input.fallbackProvider.driver, input.cachedProvider.models),
+      input.fallbackProvider.continuation.groupKey.startsWith("antigravity:acp:") ? input.cachedProvider.models : cachedModelsForProvider(
+        input.fallbackProvider.driver,
+        input.cachedProvider.models,
+        input.fallbackProvider.models,
+      ),
     ),
     installed: input.cachedProvider.installed,
     version: input.cachedProvider.version,

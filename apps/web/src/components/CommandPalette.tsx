@@ -35,6 +35,7 @@ import {
   FolderPlusIcon,
   LinkIcon,
   MessageSquareIcon,
+  MicIcon,
   PaletteIcon,
   SettingsIcon,
   SquarePenIcon,
@@ -83,6 +84,7 @@ import {
   resolveProjectPathForDispatch,
 } from "../lib/projectPaths";
 import { onOpenCommandPalette } from "../commandPaletteBus";
+import { toggleComposerVoice } from "../composerVoiceBus";
 import { isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
@@ -1477,6 +1479,26 @@ function OpenCommandPaletteDialog(props: {
       },
     });
   }
+
+  actionItems.push({
+    kind: "action",
+    value: "action:record-voice-note",
+    searchTerms: [
+      "voice",
+      "speech",
+      "microphone",
+      "dictate",
+      "transcribe",
+      "record",
+      "voice note",
+    ],
+    title: "Record voice note",
+    icon: <MicIcon className={ITEM_ICON_CLASS} />,
+    shortcutCommand: "composer.voice",
+    run: async () => {
+      toggleComposerVoice();
+    },
+  });
 
   actionItems.push({
     kind: "action",

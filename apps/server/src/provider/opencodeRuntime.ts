@@ -216,7 +216,7 @@ export function parseModelsCliOutput(stdout: string): {
   };
 
   for (const line of lines) {
-    const slugMatch = SLUG_LINE_RE.exec(line);
+    const slugMatch = line.trimStart().startsWith("{") ? null : SLUG_LINE_RE.exec(line);
     if (slugMatch) {
       flushModel();
       currentSlug = slugMatch[1]!;

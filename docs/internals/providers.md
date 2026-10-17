@@ -39,6 +39,26 @@ directory to route session and turn operations for a thread, so callers name a t
 Adding a driver means writing the driver plus adapter and adding it to `BUILT_IN_DRIVERS`. No
 orchestration, contract, or client change is required for the common case.
 
+## Antigravity ACP
+
+Antigravity uses Google's `agy_acp_server` over newline-delimited JSON-RPC. The driver
+shares the ACP transport with Cursor and Grok, uses `session/resume`, and waits for
+native cancellation and queued events before completing a turn. Native questions
+arrive through `session/request_permission` with an `interaction_` tool ID; they
+remain interactive in full-access mode and accept the offered choices only.
+
+The managed runtime is pinned to the official ACP registry release and verified
+against its archive SHA-256. Each provider instance owns a separate Google OAuth
+profile under the server state directory. Setup uses `server.setupProvider`; the
+server returns the Google authorization URL for a user-initiated browser visit.
+Remote callback forwarding checks the exact loopback redirect and OAuth state.
+MCP servers are passed directly in session creation/resumption; no CLI configuration
+files or plugins are modified. SDK mode remains separate and uses API/Vertex credentials.
+
+Saved `cli` settings decode to `acp`. CLI resume cursors are rejected with new-thread
+guidance, preserving historical messages. ACP uses a distinct continuation identity
+so cached CLI health/model data cannot be presented as ACP state.
+
 ## How provider work is requested
 
 Clients never call a provider directly. They dispatch orchestration commands over the RPC method

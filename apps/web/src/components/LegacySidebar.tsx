@@ -122,6 +122,7 @@ import {
   resolveThreadRouteTarget,
 } from "../threadRoutes";
 import { stackedThreadToast, toastManager } from "./ui/toast";
+import { useThreadDeleteConfirmation } from "./threadActionMenu";
 import { formatRelativeTimeLabel } from "../timestampFormat";
 import { Kbd } from "./ui/kbd";
 import {
@@ -1145,6 +1146,27 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
   const appSettingsConfirmThreadDelete = useClientSettings<boolean>(
     (settings) => settings.confirmThreadDelete,
   );
+  const {
+    requestDeleteConfirmation,
+    requestConfirmation: requestWorktreeConfirmation,
+    deleteConfirmDialog,
+  } = useThreadDeleteConfirmation();
+  const confirmWorktreeDeletion = useCallback(
+    ({ path }: { path: string }) =>
+      requestWorktreeConfirmation({
+        title: "linked worktree",
+        count: 1,
+        single: true,
+        heading: "Delete linked worktree?",
+        description: [
+          "This thread is the only one linked to this worktree:",
+          path,
+          "",
+          "Delete the worktree too?",
+        ].join("\n"),
+      }),
+    [requestWorktreeConfirmation],
+  );
   const appSettingsConfirmThreadArchive = useClientSettings<boolean>(
     (settings) => settings.confirmThreadArchive,
   );
@@ -1903,36 +1925,39 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
 
       if (clicked !== "delete") return;
 
-      if (appSettingsConfirmThreadDelete) {
-        const confirmed = await api.dialogs.confirm(
-          [
-            `Delete ${count} thread${count === 1 ? "" : "s"}?`,
-            "This permanently clears conversation history for these threads.",
-          ].join("\n"),
-        );
-        if (!confirmed) return;
-      }
-
-      const deletedThreadKeys = new Set(threadKeys);
-      for (const { threadRef } of selectedThreadEntries) {
-        const result = await deleteThread(threadRef, {
-          deletedThreadKeys,
-        });
-        if (result._tag === "Failure") {
-          if (!isAtomCommandInterrupted(result)) {
-            const error = squashAtomCommandFailure(result);
-            toastManager.add(
-              stackedThreadToast({
-                type: "error",
-                title: "Failed to delete threads",
-                description: error instanceof Error ? error.message : "An error occurred.",
-              }),
-            );
+      const deleteSelectedThreads = async () => {
+        const deletedThreadKeys = new Set(threadKeys);
+        for (const { threadRef } of selectedThreadEntries) {
+          const result = await deleteThread(threadRef, {
+            deletedThreadKeys,
+            confirmWorktreeDeletion,
+          });
+          if (result._tag === "Failure") {
+            if (!isAtomCommandInterrupted(result)) {
+              const error = squashAtomCommandFailure(result);
+              toastManager.add(
+                stackedThreadToast({
+                  type: "error",
+                  title: "Failed to delete threads",
+                  description: error instanceof Error ? error.message : "An error occurred.",
+                }),
+              );
+            }
+            return;
           }
-          return;
         }
+        removeFromSelection(threadKeys);
+      };
+      if (appSettingsConfirmThreadDelete) {
+        requestDeleteConfirmation({
+          title: "",
+          count,
+          single: count === 1,
+          onConfirm: deleteSelectedThreads,
+        });
+        return;
       }
-      removeFromSelection(threadKeys);
+      await deleteSelectedThreads();
     },
     [
       appSettingsConfirmThreadArchive,
@@ -1942,6 +1967,8 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       deleteThread,
       markThreadUnread,
       removeFromSelection,
+      confirmWorktreeDeletion,
+      requestDeleteConfirmation,
     ],
   );
 
@@ -2253,28 +2280,29 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
         return;
       }
       if (clicked !== "delete") return;
-      if (appSettingsConfirmThreadDelete) {
-        const confirmed = await api.dialogs.confirm(
-          [
-            `Delete thread "${thread.title}"?`,
-            "This permanently clears conversation history for this thread.",
-          ].join("\n"),
-        );
-        if (!confirmed) {
-          return;
+      const deleteCurrentThread = async () => {
+        const result = await deleteThread(threadRef, { confirmWorktreeDeletion });
+        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+          const error = squashAtomCommandFailure(result);
+          toastManager.add(
+            stackedThreadToast({
+              type: "error",
+              title: "Failed to delete thread",
+              description: error instanceof Error ? error.message : "An error occurred.",
+            }),
+          );
         }
+      };
+      if (appSettingsConfirmThreadDelete) {
+        requestDeleteConfirmation({
+          title: thread.title,
+          count: 1,
+          single: true,
+          onConfirm: deleteCurrentThread,
+        });
+        return;
       }
-      const result = await deleteThread(threadRef);
-      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-        const error = squashAtomCommandFailure(result);
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Failed to delete thread",
-            description: error instanceof Error ? error.message : "An error occurred.",
-          }),
-        );
-      }
+      await deleteCurrentThread();
     },
     [
       appSettingsConfirmThreadDelete,
@@ -2285,6 +2313,8 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       markThreadUnread,
       memberProjectByScopedKey,
       project.workspaceRoot,
+      confirmWorktreeDeletion,
+      requestDeleteConfirmation,
       startThreadRename,
     ],
   );
@@ -2294,7 +2324,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       <div className="group/project-header relative">
         <SidebarMenuButton
           ref={isManualProjectSorting ? dragHandleProps?.setActivatorNodeRef : undefined}
-          className={`pr-8 group-hover/project-header:bg-sidebar-row-hover group-hover/project-header:text-sidebar-foreground max-sm:pr-14 ${
+          className={`min-h-10 rounded-lg border border-transparent px-2.5 py-2 pr-8 text-[0.9375rem] font-bold group-hover/project-header:border-sidebar-border/70 group-hover/project-header:bg-sidebar-row-hover group-hover/project-header:text-sidebar-foreground max-sm:pr-14 ${
             isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : ""
           }`}
           {...(isManualProjectSorting && dragHandleProps ? dragHandleProps.attributes : {})}
@@ -2332,10 +2362,15 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
               }`}
             />
           )}
-          <ProjectFavicon environmentId={project.environmentId} cwd={project.workspaceRoot} />
+          <span className="flex size-5 shrink-0 items-center justify-center [&>svg]:size-5">
+            <ProjectFavicon environmentId={project.environmentId} cwd={project.workspaceRoot} />
+          </span>
           <span className="flex min-w-0 flex-1 items-center gap-2">
-            <span className="truncate text-sm font-medium text-sidebar-foreground/90">
+            <span className="truncate text-[0.9375rem] font-bold text-sidebar-foreground">
               {project.displayName}
+            </span>
+            <span className="shrink-0 rounded-full bg-sidebar-accent px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-sidebar-muted-foreground">
+              {visibleProjectThreads.length}
             </span>
             {project.groupedProjectCount > 1 ? (
               <span className="shrink-0 text-secondary-label text-[10px]">
@@ -2552,6 +2587,8 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
           </DialogFooter>
         </DialogPopup>
       </Dialog>
+
+      {deleteConfirmDialog}
     </>
   );
 });

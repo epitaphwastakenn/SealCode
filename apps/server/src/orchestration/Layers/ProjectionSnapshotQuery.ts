@@ -7,6 +7,7 @@ import {
   OrchestrationCheckpointFile,
   OrchestrationProposedPlanId,
   OrchestrationReadModel,
+  OrchestrationGetProjectDiffIndexResult,
   OrchestrationThreadSearchSource,
   OrchestrationShellSnapshot,
   OrchestrationThread,
@@ -25,6 +26,7 @@ import {
   ModelSelection,
   ProjectId,
   ThreadId,
+  TrimmedNonEmptyString,
 } from "@t3tools/contracts";
 import * as Arr from "effect/Array";
 import * as Effect from "effect/Effect";
@@ -104,6 +106,14 @@ const ProjectionCheckpointDbRowSchema = ProjectionCheckpoint.mapFields(
     files: Schema.fromJsonString(Schema.Array(OrchestrationCheckpointFile)),
   }),
 );
+const ProjectionProjectDiffDbRowSchema = ProjectionCheckpoint.mapFields(
+  Struct.assign({
+    projectId: ProjectId,
+    threadTitle: TrimmedNonEmptyString,
+    archivedAt: Schema.NullOr(IsoDateTime),
+    files: Schema.fromJsonString(Schema.Array(OrchestrationCheckpointFile)),
+  }),
+);
 const ProjectionLatestTurnDbRowSchema = Schema.Struct({
   threadId: ProjectionThread.fields.threadId,
   turnId: TurnId,
@@ -120,6 +130,13 @@ const ProjectionCountsRowSchema = Schema.Struct({
   projectCount: Schema.Number,
   threadCount: Schema.Number,
 });
+
+function checkpointAttributionFields(
+  fileAttribution: OrchestrationCheckpointSummary["fileAttribution"],
+): Pick<OrchestrationCheckpointSummary, "fileAttribution"> | Record<PropertyKey, never> {
+  return fileAttribution === "known" ? { fileAttribution } : {};
+}
+
 const ProjectionThreadSearchRequest = Schema.Struct({
   pattern: Schema.String,
   limit: Schema.Int,
@@ -139,6 +156,10 @@ const ProjectIdLookupInput = Schema.Struct({
 });
 const ThreadIdLookupInput = Schema.Struct({
   threadId: ThreadId,
+});
+const ProjectDiffIndexLookupInput = Schema.Struct({
+  projectId: ProjectId,
+  limit: Schema.Int,
 });
 // Windowed reads order turns by the stable keyset (anchor, turn key), where
 // anchor is requested_at and turn key is
@@ -728,6 +749,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           checkpoint_ref AS "checkpointRef",
           checkpoint_status AS "status",
           checkpoint_files_json AS "files",
+          checkpoint_file_attribution AS "fileAttribution",
           assistant_message_id AS "assistantMessageId",
           completed_at AS "completedAt"
         FROM projection_turns
@@ -1147,12 +1169,45 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           checkpoint_ref AS "checkpointRef",
           checkpoint_status AS "status",
           checkpoint_files_json AS "files",
+          checkpoint_file_attribution AS "fileAttribution",
           assistant_message_id AS "assistantMessageId",
           completed_at AS "completedAt"
         FROM projection_turns
         WHERE thread_id = ${threadId}
           AND checkpoint_turn_count IS NOT NULL
         ORDER BY checkpoint_turn_count ASC
+      `,
+  });
+
+  const listProjectDiffRows = SqlSchema.findAll({
+    Request: ProjectDiffIndexLookupInput,
+    Result: ProjectionProjectDiffDbRowSchema,
+    execute: ({ projectId, limit }) =>
+      sql`
+        SELECT
+          threads.project_id AS "projectId",
+          turns.thread_id AS "threadId",
+          threads.title AS "threadTitle",
+          threads.archived_at AS "archivedAt",
+          turns.turn_id AS "turnId",
+          turns.checkpoint_turn_count AS "checkpointTurnCount",
+          turns.checkpoint_ref AS "checkpointRef",
+          turns.checkpoint_status AS "status",
+          turns.checkpoint_files_json AS "files",
+          turns.checkpoint_file_attribution AS "fileAttribution",
+          turns.assistant_message_id AS "assistantMessageId",
+          turns.completed_at AS "completedAt"
+        FROM projection_turns AS turns
+        INNER JOIN projection_threads AS threads
+          ON threads.thread_id = turns.thread_id
+        INNER JOIN projection_projects AS projects
+          ON projects.project_id = threads.project_id
+        WHERE threads.project_id = ${projectId}
+          AND projects.deleted_at IS NULL
+          AND threads.deleted_at IS NULL
+          AND turns.checkpoint_turn_count IS NOT NULL
+        ORDER BY turns.completed_at DESC, turns.checkpoint_turn_count DESC
+        LIMIT ${limit}
       `,
   });
 
@@ -1546,6 +1601,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
                   checkpointRef: row.checkpointRef,
                   status: row.status,
                   files: row.files,
+                  ...checkpointAttributionFields(row.fileAttribution),
                   assistantMessageId: row.assistantMessageId,
                   completedAt: row.completedAt,
                 });
@@ -2345,6 +2401,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
             checkpointRef: row.checkpointRef,
             status: row.status,
             files: row.files,
+            ...checkpointAttributionFields(row.fileAttribution),
             assistantMessageId: row.assistantMessageId,
             completedAt: row.completedAt,
           }),
@@ -2380,6 +2437,36 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
         toCheckpointRef: row.value.toCheckpointRef,
       });
     });
+
+  const getProjectDiffIndex: ProjectionSnapshotQueryShape["getProjectDiffIndex"] = (input) =>
+    listProjectDiffRows({
+      projectId: input.projectId,
+      limit: input.limit ?? 100,
+    }).pipe(
+      Effect.mapError(
+        toPersistenceSqlOrDecodeError(
+          "ProjectionSnapshotQuery.getProjectDiffIndex:query",
+          "ProjectionSnapshotQuery.getProjectDiffIndex:decodeRows",
+        ),
+      ),
+      Effect.map((rows) => ({
+        projectId: input.projectId,
+        entries: rows.map((row) => ({
+          projectId: row.projectId,
+          threadId: row.threadId,
+          threadTitle: row.threadTitle,
+          archivedAt: row.archivedAt,
+          turnId: row.turnId,
+          checkpointTurnCount: row.checkpointTurnCount,
+          checkpointRef: row.checkpointRef,
+          status: row.status,
+          files: row.files,
+          ...checkpointAttributionFields(row.fileAttribution),
+          assistantMessageId: row.assistantMessageId,
+          completedAt: row.completedAt,
+        })),
+      } satisfies OrchestrationGetProjectDiffIndexResult)),
+    );
 
   const getThreadShellById: ProjectionSnapshotQueryShape["getThreadShellById"] = (threadId) =>
     Effect.gen(function* () {
@@ -2606,6 +2693,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
           checkpointRef: row.checkpointRef,
           status: row.status,
           files: row.files,
+          ...checkpointAttributionFields(row.fileAttribution),
           assistantMessageId: row.assistantMessageId,
           completedAt: row.completedAt,
         })),
@@ -2779,6 +2867,7 @@ const makeProjectionSnapshotQuery = Effect.gen(function* () {
     getFirstActiveThreadIdByProjectId,
     getThreadCheckpointContext,
     getFullThreadDiffContext,
+    getProjectDiffIndex,
     getThreadShellById,
     getThreadDetailById,
     getThreadDetailSnapshot,

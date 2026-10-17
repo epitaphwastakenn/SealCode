@@ -156,7 +156,7 @@ export const DEFAULT_MODEL_BY_PROVIDER: Partial<Record<ProviderDriverKind, strin
   [CURSOR_DRIVER_KIND]: "auto",
   [GROK_DRIVER_KIND]: "grok-build",
   [OPENCODE_DRIVER_KIND]: "openai/gpt-5",
-  [ANTIGRAVITY_DRIVER_KIND]: "flash",
+  [ANTIGRAVITY_DRIVER_KIND]: "antigravity-default",
   [COMMANDCODE_DRIVER_KIND]: "deepseek/deepseek-v4-flash",
 };
 

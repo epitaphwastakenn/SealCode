@@ -17,6 +17,7 @@ const clientSettings: ClientSettings = {
   confirmThreadDelete: false,
   dismissedProviderUpdateNotificationKeys: [],
   diffIgnoreWhitespace: true,
+  diffPresentation: "summary",
   environmentIdentificationMode: "artwork",
   favorites: [],
   fontFamilyCode: "",
@@ -29,6 +30,7 @@ const clientSettings: ClientSettings = {
   fontSizeTerminal: 12,
   fontSmoothing: true,
   glassOpacity: 80,
+  glassSidebarEnabled: false,
   harnessSoundVolume: 70,
   planModeEnabled: false,
   providerModelPreferences: {},
@@ -43,6 +45,7 @@ const clientSettings: ClientSettings = {
   legacySidebarEnabled: false,
   timestampFormat: "24-hour",
   wordWrap: true,
+  showThinkingTraces: true,
 };
 
 const decodeClientSettingsJson = Schema.decodeEffect(Schema.fromJsonString(ClientSettingsSchema));

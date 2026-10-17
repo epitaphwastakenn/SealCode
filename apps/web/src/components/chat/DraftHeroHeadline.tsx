@@ -149,12 +149,17 @@ export function DraftHeroHeadline({
 
   return (
     <h1 className="mx-auto w-full max-w-5xl text-center font-normal text-2xl text-foreground tracking-tight sm:text-3xl">
-      {hasResolvedProject ? (
+      {hasResolvedProject && activeProjectTitle !== "No project" ? (
         <>What should we build in {projectSelector}?</>
-      ) : canChooseProject ? (
+      ) : canChooseProject && !hasResolvedProject ? (
         <>{projectSelector} to start</>
       ) : (
-        <>Add a project to start</>
+        <>
+          Where should we work now?
+          {!hasResolvedProject && !canChooseProject ? (
+            <span className="mt-3 block text-lg font-normal tracking-normal">{projectSelector}</span>
+          ) : null}
+        </>
       )}
     </h1>
   );

@@ -423,6 +423,7 @@ const PreviewPanel = lazy(() =>
   import("./preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
 );
 const DiffPanel = lazy(() => import("./DiffPanel"));
+const ProjectDiffCenter = lazy(() => import("./ProjectDiffCenter"));
 const FilePreviewPanel = lazy(() => import("./files/FilePreviewPanel"));
 const EMPTY_PENDING_FILE_SURFACE_IDS: ReadonlySet<string> = new Set();
 const TYPE_TO_FOCUS_EDITABLE_SELECTOR = [
@@ -1269,6 +1270,18 @@ function ChatViewContent(props: ChatViewProps) {
     };
   }, [routeKind, routeThreadRef, routeThreadState]);
   const markThreadVisited = useUiStateStore((store) => store.markThreadVisited);
+  const setLastOpenThreadRoute = useUiStateStore((store) => store.setLastOpenThreadRoute);
+  useEffect(() => {
+    if (routeKind === "draft" && draftId) {
+      setLastOpenThreadRoute({ kind: "draft", draftId });
+      return;
+    }
+    setLastOpenThreadRoute({
+      kind: "server",
+      environmentId,
+      threadId,
+    });
+  }, [draftId, environmentId, routeKind, setLastOpenThreadRoute, threadId]);
   const settings = useEnvironmentSettings(environmentId);
   // New-thread defaults live in the primary environment's settings.json (the
   // settings UI never writes to remote environments), so read them from the
@@ -2541,16 +2554,60 @@ function ChatViewContent(props: ChatViewProps) {
     }
     return [...serverMessagesWithPreviewHandoff, ...pendingMessages];
   }, [attachmentPreviewHandoffByMessageId, displayServerMessages, optimisticUserMessages]);
-  const timelineEntries = useMemo(
-    () =>
-      deriveTimelineEntries(
-        timelineMessages,
-        activeThread?.proposedPlans ?? [],
-        workLogEntries,
-        turnPlans,
-      ),
-    [activeThread?.proposedPlans, timelineMessages, turnPlans, workLogEntries],
-  );
+  const timelineEntries = useMemo(() => {
+    const entries = deriveTimelineEntries(
+      timelineMessages,
+      activeThread?.proposedPlans ?? [],
+      workLogEntries,
+      turnPlans,
+    );
+    return settings.showThinkingTraces
+      ? entries
+      : entries.filter((entry) => entry.kind !== "work" || entry.entry.tone !== "thinking");
+  }, [
+    activeThread?.proposedPlans,
+    settings.showThinkingTraces,
+    timelineMessages,
+    turnPlans,
+    workLogEntries,
+  ]);
+  const restoredFailedTurnRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (
+      activeLatestTurn?.state !== "error" ||
+      activeThreadKey === null ||
+      restoredFailedTurnRef.current === `${activeThreadKey}:${activeLatestTurn.turnId}`
+    ) {
+      return;
+    }
+    restoredFailedTurnRef.current = `${activeThreadKey}:${activeLatestTurn.turnId}`;
+    if (promptRef.current.length > 0) return;
+    const failedPrompt = [...timelineMessages]
+      .reverse()
+      .find((message) => message.role === "user")?.text;
+    if (!failedPrompt) return;
+    promptRef.current = failedPrompt;
+    setComposerDraftPrompt(composerDraftTarget, failedPrompt);
+    composerRef.current?.resetCursorState({
+      cursor: collapseExpandedComposerCursor(failedPrompt, failedPrompt.length),
+      prompt: failedPrompt,
+      detectTrigger: true,
+    });
+    toastManager.add(
+      stackedThreadToast({
+        type: "error",
+        title: "Agent stopped before responding",
+        description: "Your message is back in the prompt. Change the model and try again.",
+      }),
+    );
+  }, [
+    activeLatestTurn?.state,
+    activeLatestTurn?.turnId,
+    activeThreadKey,
+    composerDraftTarget,
+    setComposerDraftPrompt,
+    timelineMessages,
+  ]);
   const [dockedDraftHeroThreadKey, setDockedDraftHeroThreadKey] = useState<string | null>(null);
   const draftHeroDockRequested =
     activeThreadKey !== null && dockedDraftHeroThreadKey === activeThreadKey;
@@ -2571,6 +2628,13 @@ function ChatViewContent(props: ChatViewProps) {
     }
     return byMessageId;
   }, [turnDiffSummaries]);
+  const turnDiffSummaryByTurnId = useMemo(() => {
+    const byTurnId = new Map<TurnId, TurnDiffSummary>();
+    for (const summary of turnDiffSummaries) {
+      byTurnId.set(summary.turnId, summary);
+    }
+    return byTurnId;
+  }, [turnDiffSummaries]);
   const revertTurnCountByUserMessageId = useMemo(() => {
     const byUserMessageId = new Map<MessageId, number>();
     for (let index = 0; index < timelineEntries.length; index += 1) {
@@ -2587,7 +2651,11 @@ function ChatViewContent(props: ChatViewProps) {
         if (nextEntry.message.role === "user") {
           break;
         }
-        const summary = turnDiffSummaryByAssistantMessageId.get(nextEntry.message.id);
+        const summary =
+          turnDiffSummaryByAssistantMessageId.get(nextEntry.message.id) ??
+          (nextEntry.message.turnId === null
+            ? undefined
+            : turnDiffSummaryByTurnId.get(nextEntry.message.turnId));
         if (!summary) {
           continue;
         }
@@ -2602,7 +2670,12 @@ function ChatViewContent(props: ChatViewProps) {
     }
 
     return byUserMessageId;
-  }, [inferredCheckpointTurnCountByTurnId, timelineEntries, turnDiffSummaryByAssistantMessageId]);
+  }, [
+    inferredCheckpointTurnCountByTurnId,
+    timelineEntries,
+    turnDiffSummaryByAssistantMessageId,
+    turnDiffSummaryByTurnId,
+  ]);
 
   const gitCwd = activeProject
     ? projectScriptCwd({
@@ -3268,6 +3341,10 @@ function ChatViewContent(props: ChatViewProps) {
     useRightPanelStore.getState().open(activeThreadRef, "diff");
     onDiffPanelOpen?.();
   }, [activeThreadRef, isGitRepo, isServerThread, onDiffPanelOpen]);
+  const addProjectDiffSurface = useCallback(() => {
+    if (!activeThreadRef || !activeProject) return;
+    useRightPanelStore.getState().open(activeThreadRef, "diff-center");
+  }, [activeProject, activeThreadRef]);
   const addFilesSurface = useCallback(() => {
     if (!activeThreadRef || !activeProject) return;
     useRightPanelStore.getState().open(activeThreadRef, "files");
@@ -5309,6 +5386,8 @@ function ChatViewContent(props: ChatViewProps) {
   };
 
   const onInterrupt = async () => {
+    sendInFlightRef.current = false;
+    resetLocalDispatch();
     if (!activeThread) return;
     const result = await interruptThreadTurn({
       environmentId,
@@ -5902,6 +5981,47 @@ function ChatViewContent(props: ChatViewProps) {
     },
     [activeThreadRef, isServerThread, onDiffPanelOpen],
   );
+  const onReviewTurnDiff = useCallback(
+    async (turnId: TurnId) => {
+      if (!isServerThread || !activeThread || isWorking) return;
+      const createdAt = new Date().toISOString();
+      const reviewModelSelection =
+        settings.diffReviewModelSelection ?? settings.textGenerationModelSelection;
+      const result = await startThreadTurn({
+        environmentId,
+        input: {
+          threadId: activeThread.id,
+          message: {
+            messageId: newMessageId(),
+            role: "user",
+            text: `Review only the code changes produced by turn ${turnId}. Do not edit files or run mutating commands. Report correctness, regressions, security, performance, and maintainability findings by severity, then finish with a strict score from 0/10 to 10/10 and one sentence explaining the score.`,
+            attachments: [],
+          },
+          modelSelection: reviewModelSelection,
+          runtimeMode: activeThread.runtimeMode,
+          interactionMode: "plan",
+          createdAt,
+        },
+      });
+      if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+        const error = squashAtomCommandFailure(result);
+        setThreadError(
+          activeThread.id,
+          error instanceof Error ? error.message : "Failed to start the read-only review.",
+        );
+      }
+    },
+    [
+      activeThread,
+      environmentId,
+      isServerThread,
+      isWorking,
+      setThreadError,
+      settings.diffReviewModelSelection,
+      settings.textGenerationModelSelection,
+      startThreadTurn,
+    ],
+  );
   // Both the Map and the revert handler are read from refs at call-time so
   // the callback reference is fully stable and never busts context identity.
   const revertTurnCountRef = useRef(revertTurnCountByUserMessageId);
@@ -5995,6 +6115,13 @@ function ChatViewContent(props: ChatViewProps) {
           mode="embedded"
           composerDraftTarget={composerDraftTarget}
           initialGitScope={initialDiffPanelGitScope}
+        />
+      </Suspense>
+    ) : activeRightPanelSurface?.kind === "diff-center" && activeProject ? (
+      <Suspense fallback={null}>
+        <ProjectDiffCenter
+          environmentId={activeProject.environmentId}
+          projectId={activeProject.id}
         />
       </Suspense>
     ) : activeRightPanelSurface?.kind === "agents" ? (
@@ -6109,6 +6236,7 @@ function ChatViewContent(props: ChatViewProps) {
                 activeTurnStartedAt={activeWorkStartedAt}
                 listRef={legendListRef}
                 timelineEntries={timelineEntries}
+                preserveAssistantCommentary={settings.showThinkingTraces}
                 latestTurn={activeLatestTurn}
                 runningTurnId={
                   activeThread.session?.status === "running"
@@ -6116,9 +6244,13 @@ function ChatViewContent(props: ChatViewProps) {
                     : null
                 }
                 turnDiffSummaryByAssistantMessageId={turnDiffSummaryByAssistantMessageId}
+                turnDiffSummaryByTurnId={turnDiffSummaryByTurnId}
+                diffPresentation={settings.diffPresentation}
+                diffIgnoreWhitespace={settings.diffIgnoreWhitespace}
                 activeThreadEnvironmentId={activeThread.environmentId}
                 routeThreadKey={routeThreadKey}
                 onOpenTurnDiff={onOpenTurnDiff}
+                onReviewTurnDiff={onReviewTurnDiff}
                 revertTurnCountByUserMessageId={revertTurnCountByUserMessageId}
                 onRevertUserMessage={onRevertUserMessage}
                 isRevertingCheckpoint={isRevertingCheckpoint}
@@ -6213,7 +6345,7 @@ function ChatViewContent(props: ChatViewProps) {
                         showComposerContextStrip && "chat-composer-glass-shell-with-context",
                       )}
                     >
-                      <div className="chat-composer-glass-host relative z-10 w-full rounded-[22px]">
+                      <div className="chat-composer-glass-host relative z-10 w-full rounded-[16px]">
                         <div ref={attachDraftHeroComposerAnchorRef} className="relative z-10">
                           <ChatComposer
                             composerRef={composerRef}
@@ -6434,10 +6566,12 @@ function ChatViewContent(props: ChatViewProps) {
           onAddBrowser={createBrowserSurface}
           onAddTerminal={addTerminalSurface}
           onAddDiff={addDiffSurface}
+          onAddDiffCenter={addProjectDiffSurface}
           onAddFiles={addFilesSurface}
           onAddAgents={addAgentsSurface}
           browserAvailable={isPreviewSupportedInRuntime()}
           diffAvailable={isServerThread && isGitRepo}
+          diffCenterAvailable={activeProject !== null}
           filesAvailable={activeProject !== null}
           liveAgentCount={agentPanelModel.liveCount}
         >
@@ -6463,10 +6597,12 @@ function ChatViewContent(props: ChatViewProps) {
             onAddBrowser={createBrowserSurface}
             onAddTerminal={addTerminalSurface}
             onAddDiff={addDiffSurface}
+            onAddDiffCenter={addProjectDiffSurface}
             onAddFiles={addFilesSurface}
             onAddAgents={addAgentsSurface}
             browserAvailable={isPreviewSupportedInRuntime()}
             diffAvailable={isServerThread && isGitRepo}
+            diffCenterAvailable={activeProject !== null}
             filesAvailable={activeProject !== null}
             liveAgentCount={agentPanelModel.liveCount}
           >

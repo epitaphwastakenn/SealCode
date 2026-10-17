@@ -13,6 +13,7 @@ import {
   FileDiffIcon,
   FolderIcon,
   FolderClosedIcon,
+  ShieldCheckIcon,
 } from "lucide-react";
 import { cn } from "~/lib/utils";
 import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
@@ -37,6 +38,8 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
   onExpandedChange: (expanded: boolean) => void;
   onToggleAllDirectories: () => void;
   onOpenTurnDiff: (turnId: TurnId, filePath?: string) => void;
+  onReviewTurnDiff?: (turnId: TurnId) => void;
+  reviewDisabled?: boolean;
 }) {
   const {
     turnId,
@@ -48,6 +51,8 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
     onExpandedChange,
     onToggleAllDirectories,
     onOpenTurnDiff,
+    onReviewTurnDiff = () => {},
+    reviewDisabled = false,
   } = props;
   const summaryStat = useMemo(() => summarizeTurnDiffStats(files), [files]);
   const scopeSummary = useMemo(() => summarizeChangedFileScopes(files), [files]);
@@ -101,6 +106,26 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
           </span>
         </button>
         <div className="flex items-center gap-1.5">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  aria-label="Review changes"
+                  disabled={reviewDisabled}
+                  onClick={() => onReviewTurnDiff(turnId)}
+                />
+              }
+            >
+              <ShieldCheckIcon className="size-3" />
+              <span className="hidden sm:inline">Review</span>
+            </TooltipTrigger>
+            <TooltipPopup side="top">
+              Run the configured agent in read-only mode and score this diff
+            </TooltipPopup>
+          </Tooltip>
           {expanded ? (
             <Tooltip>
               <TooltipTrigger

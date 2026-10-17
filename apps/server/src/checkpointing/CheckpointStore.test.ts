@@ -221,5 +221,79 @@ it.layer(TestLayer)("CheckpointStore.layer", (it) => {
         expect(whitespaceIgnoredDiff).not.toContain("+          <h1>Title</h1>");
       }),
     );
+
+    it.effect("can restrict a checkpoint diff to attributed paths", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const checkpointStore = yield* CheckpointStore.CheckpointStore;
+        const threadId = ThreadId.make("thread-checkpoint-store-paths");
+        const fromCheckpointRef = checkpointRefForThreadTurn(threadId, 0);
+        const toCheckpointRef = checkpointRefForThreadTurn(threadId, 1);
+
+        yield* checkpointStore.captureCheckpoint({
+          cwd: tmp,
+          checkpointRef: fromCheckpointRef,
+        });
+        yield* writeTextFile(NodePath.join(tmp, "README.md"), "changed\n");
+        yield* writeTextFile(NodePath.join(tmp, "unrelated.txt"), "not this turn\n");
+        yield* checkpointStore.captureCheckpoint({
+          cwd: tmp,
+          checkpointRef: toCheckpointRef,
+        });
+
+        const diff = yield* checkpointStore.diffCheckpoints({
+          cwd: tmp,
+          fromCheckpointRef,
+          toCheckpointRef,
+          ignoreWhitespace: false,
+          paths: ["README.md"],
+        });
+
+        expect(diff).toContain("README.md");
+        expect(diff).not.toContain("unrelated.txt");
+      }),
+    );
+  });
+
+  describe("restoreCheckpoint", () => {
+    it.effect("restores attributed paths without touching unrelated workspace changes", () =>
+      Effect.gen(function* () {
+        const tmp = yield* makeTmpDir();
+        yield* initRepoWithCommit(tmp);
+        const checkpointStore = yield* CheckpointStore.CheckpointStore;
+        const threadId = ThreadId.make("thread-checkpoint-store-restore-paths");
+        const baselineRef = checkpointRefForThreadTurn(threadId, 0);
+        const turnRef = checkpointRefForThreadTurn(threadId, 1);
+
+        yield* checkpointStore.captureCheckpoint({ cwd: tmp, checkpointRef: baselineRef });
+        yield* writeTextFile(NodePath.join(tmp, "README.md"), "turn change\n");
+        yield* checkpointStore.captureCheckpoint({ cwd: tmp, checkpointRef: turnRef });
+        yield* writeTextFile(NodePath.join(tmp, "README.md"), "latest change\n");
+        yield* writeTextFile(NodePath.join(tmp, "unrelated.txt"), "keep this\n");
+
+        expect(
+          yield* checkpointStore.restoreCheckpoint({
+            cwd: tmp,
+            checkpointRef: baselineRef,
+            paths: ["README.md"],
+          }),
+        ).toBe(true);
+        expect(yield* git(tmp, ["show", "HEAD:README.md"])).toBe("# test");
+        expect(yield* git(tmp, ["diff", "--", "README.md"])).toBe("");
+        expect(
+          (yield* Effect.gen(function* () {
+            const fileSystem = yield* FileSystem.FileSystem;
+            return yield* fileSystem.readFileString(NodePath.join(tmp, "README.md"));
+          })).replaceAll("\r\n", "\n"),
+        ).toBe("# test\n");
+        expect(
+          (yield* Effect.gen(function* () {
+            const fileSystem = yield* FileSystem.FileSystem;
+            return yield* fileSystem.readFileString(NodePath.join(tmp, "unrelated.txt"));
+          })).replaceAll("\r\n", "\n"),
+        ).toBe("keep this\n");
+      }),
+    );
   });
 });

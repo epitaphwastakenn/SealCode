@@ -104,6 +104,11 @@ import { startNewThreadFromContext } from "../lib/chatThreadActions";
 import { useClientSettings } from "../hooks/useSettings";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useNowMinute } from "../hooks/useNowMinute";
+import {
+  DeleteThreadConfirmDialog,
+  ThreadActionMenu,
+  useThreadDeleteConfirmation,
+} from "./threadActionMenu";
 import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
 import { useProjects, useThreadShells } from "../state/entities";
 import { environmentServerConfigsAtom, primaryServerKeybindingsAtom } from "../state/server";
@@ -158,6 +163,7 @@ import { getTriggerDisplayModelLabel } from "./chat/providerIconUtils";
 import { deriveProviderInstanceEntries, type ProviderInstanceEntry } from "../providerInstances";
 import { useThreadRunningTerminalIds } from "../state/terminalSessions";
 import { stackedThreadToast, toastManager } from "./ui/toast";
+import { presentThreadState } from "@t3tools/shared/statusPresentation";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Menu, MenuPopup, MenuRadioGroup, MenuRadioItem, MenuTrigger } from "./ui/menu";
@@ -226,18 +232,24 @@ function JumpHintBadge(props: { label: string }) {
   );
 }
 
-// Self-ticking so only this span re-renders each second, not the whole row.
+// Self-ticking via a text-node write so active rows do not commit through React every second.
 function WorkingDuration(props: { startedAt: string | null }) {
   const startedMs = props.startedAt !== null ? Date.parse(props.startedAt) : Number.NaN;
-  const [, setTick] = useState(0);
+  const textRef = useRef<HTMLSpanElement>(null);
   useEffect(() => {
     if (Number.isNaN(startedMs)) return;
-    const id = window.setInterval(() => setTick((tick) => tick + 1), 1_000);
+    const update = () => {
+      if (textRef.current) {
+        textRef.current.textContent = formatWorkingDurationLabel(Date.now() - startedMs);
+      }
+    };
+    update();
+    const id = window.setInterval(update, 1_000);
     return () => window.clearInterval(id);
   }, [startedMs]);
   if (Number.isNaN(startedMs)) return null;
   return (
-    <span className="font-mono tabular-nums">
+    <span ref={textRef} className="font-mono tabular-nums">
       {formatWorkingDurationLabel(Date.now() - startedMs)}
     </span>
   );
@@ -452,10 +464,12 @@ function SortablePinnedThreadRow(props: {
 function SortableSidebarFolder(props: {
   id: string;
   label: string;
+  threadCount: number;
   expanded: boolean;
   pinned: boolean;
   onToggle: () => void;
   onTogglePinned: () => void;
+  onCreateThread: () => void;
   children: ReactNode;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -470,19 +484,37 @@ function SortableSidebarFolder(props: {
       }}
       className={cn("list-none", isDragging && "z-20 opacity-80")}
     >
-      <div className="group/sidebar-folder flex min-w-0 items-center gap-1 rounded-md hover:bg-sidebar-row-hover">
+      <div className="group/sidebar-folder flex min-h-10 min-w-0 items-center gap-1 rounded-lg border border-transparent hover:border-sidebar-border/70 hover:bg-sidebar-row-hover">
         <button
           type="button"
           aria-expanded={props.expanded}
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-left text-xs font-medium text-sidebar-muted-foreground/85 hover:text-sidebar-foreground"
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[0.9375rem] font-bold text-sidebar-foreground hover:text-sidebar-foreground"
           onClick={props.onToggle}
         >
           <ChevronDownIcon
             aria-hidden
-            className={cn("size-3 shrink-0 transition-transform", !props.expanded && "-rotate-90")}
+            className={cn(
+              "size-4 shrink-0 transition-transform",
+              !props.expanded && "-rotate-90",
+            )}
           />
-          <FolderIcon aria-hidden className="size-3.5 shrink-0" />
+          <FolderIcon aria-hidden className="size-5 shrink-0 text-sidebar-foreground/90" />
           <span className="min-w-0 flex-1 truncate">{props.label}</span>
+          <span className="shrink-0 rounded-full bg-sidebar-accent px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-sidebar-muted-foreground">
+            {props.threadCount}
+          </span>
+        </button>
+        <button
+          type="button"
+          aria-label={`Create thread in ${props.label}`}
+          title={`Create thread in ${props.label}`}
+          className="inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md text-sidebar-muted-foreground/45 opacity-0 transition-opacity hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring group-hover/sidebar-folder:opacity-100"
+          onClick={(event) => {
+            event.stopPropagation();
+            props.onCreateThread();
+          }}
+        >
+          <PlusIcon aria-hidden className="size-3.5" />
         </button>
         <button
           type="button"
@@ -663,7 +695,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
     ? null
     : status === "working"
       ? {
-          label: "Working",
+          label: presentThreadState("working").label,
           icon: "working" as const,
           // No shimmer: a label that animates forever is noise in a sidebar
           // full of them (and repaints every vsync on high-refresh displays).
@@ -676,25 +708,25 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
         ? {
             // Monitoring is calm background presence, not active progress
             // (monitoring-pill D6), so it keeps the label at full strength.
-            label: "Monitoring",
+            label: presentThreadState("monitoring").label,
             icon: null,
             className: "text-sky-600 dark:text-sky-400",
           }
         : status === "approval"
           ? {
-              label: "Approval",
+              label: presentThreadState("needs-approval").label,
               icon: null,
               className: "text-amber-700 dark:text-amber-300",
             }
           : status === "input"
             ? {
-                label: "Input",
+                label: presentThreadState("needs-input").label,
                 icon: null,
                 className: "text-indigo-600 dark:text-indigo-300",
               }
             : status === "failed"
               ? {
-                  label: "Failed",
+                  label: presentThreadState("failed").label,
                   icon: null,
                   className: "text-red-700 dark:text-red-300",
                 }
@@ -706,7 +738,7 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                   }
                 : isUnread
                   ? {
-                      label: "Done",
+                      label: presentThreadState("completed").label,
                       icon: "done" as const,
                       className: "text-emerald-700 dark:text-emerald-300",
                     }
@@ -1532,6 +1564,26 @@ export default function Sidebar() {
     reorderPinnedThread,
     deleteThread,
   } = useThreadActions();
+  const {
+    requestConfirmation: requestWorktreeConfirmation,
+    deleteConfirmDialog: worktreeConfirmDialog,
+  } = useThreadDeleteConfirmation();
+  const confirmWorktreeDeletion = useCallback(
+    ({ path }: { path: string }) =>
+      requestWorktreeConfirmation({
+        title: "linked worktree",
+        count: 1,
+        single: true,
+        heading: "Delete linked worktree?",
+        description: [
+          "This thread is the only one linked to this worktree:",
+          path,
+          "",
+          "Delete the worktree too?",
+        ].join("\n"),
+      }),
+    [requestWorktreeConfirmation],
+  );
   const updateThreadMetadata = useAtomCommand(threadEnvironment.updateMetadata, {
     reportFailure: false,
   });
@@ -2883,15 +2935,13 @@ export default function Sidebar() {
       }
       if (clicked.value !== "delete") return;
       if (confirmThreadDelete) {
-        const confirmed = await settlePromise(() =>
-          api.dialogs.confirm(
-            [
-              `Delete ${count} thread${count === 1 ? "" : "s"}?`,
-              "This permanently clears conversation history for these threads.",
-            ].join("\n"),
-          ),
-        );
-        if (confirmed._tag === "Failure" || !confirmed.value) return;
+        setDeleteConfirmState({
+          threadRef: null,
+          title: "",
+          single: false,
+          count,
+        });
+        return;
       }
       // Grown as deletions actually land, never seeded with the whole batch:
       // orphaned-worktree detection must only discount threads that are
@@ -2903,6 +2953,7 @@ export default function Sidebar() {
         if (!thread) continue;
         const result = await deleteThread(scopeThreadRef(thread.environmentId, thread.id), {
           deletedThreadKeys,
+          confirmWorktreeDeletion,
         });
         if (result._tag === "Failure") {
           if (!isAtomCommandInterrupted(result)) {
@@ -2926,6 +2977,7 @@ export default function Sidebar() {
       attemptSnooze,
       clearSelection,
       confirmThreadDelete,
+      confirmWorktreeDeletion,
       deleteThread,
       markThreadUnread,
       performSnooze,
@@ -2937,165 +2989,129 @@ export default function Sidebar() {
     ],
   );
 
-  const handleThreadContextMenu = useCallback(
-    (threadRef: ScopedThreadRef, position: { x: number; y: number }) => {
-      void (async () => {
-        const api = readLocalApi();
-        if (!api) return;
-        const threadKey = scopedThreadKey(threadRef);
-        const selectionState = useThreadSelectionStore.getState();
-        if (selectionState.hasSelection() && selectionState.selectedThreadKeys.has(threadKey)) {
-          await handleMultiSelectContextMenu(position);
-          return;
-        }
-        const thread = threadByKeyRef.current.get(threadKey);
-        if (!thread) return;
-        const threadWorkspacePath =
-          thread.worktreePath ??
-          projectCwdByKey.get(`${thread.environmentId}:${thread.projectId}`) ??
-          null;
-        // Un-settle works on every settled row: for explicit settles it
-        // clears the override, for auto-settled rows it pins the thread
-        // active until real activity clears the pin. Environments without
-        // the settlement capability get no lifecycle items at all.
-        const supportsSettlement =
-          serverConfigs.get(thread.environmentId)?.environment.capabilities.threadSettlement ===
-          true;
-        const supportsSnooze =
-          serverConfigs.get(thread.environmentId)?.environment.capabilities.threadSnooze === true;
-        const supportsPinning =
-          serverConfigs.get(thread.environmentId)?.environment.capabilities.threadPinning === true;
-        const supportsTitleRegeneration =
-          serverConfigs.get(thread.environmentId)?.environment.capabilities
-            .threadTitleRegeneration === true;
-        const isRegeneratingTitle = thread.titleRegeneration != null;
-        const isSettled = settledThreadKeysRef.current.has(threadKey);
-        const isSnoozed = snoozedThreadKeysRef.current.has(threadKey);
-        const isPinned = thread.pinnedAt != null;
-        // Presets resolve at menu-open time (same as the popover).
-        const snoozePresets = resolveSnoozePresets(new Date(), timestampFormat);
-        const clicked = await settlePromise(() =>
-          api.contextMenu.show(
-            buildThreadActionMenuItems({
-              branch: thread.branch ?? null,
-              isPinned,
-              isSettled,
-              isSnoozed,
-              canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
-              isRegeneratingTitle,
-              supports: {
-                settlement: supportsSettlement,
-                snooze: supportsSnooze,
-                pinning: supportsPinning,
-                titleRegeneration: supportsTitleRegeneration,
-              },
-              snoozePresets,
-            }),
-            position,
-          ),
+  const [threadMenuState, setThreadMenuState] = useState<{
+    threadRef: ScopedThreadRef;
+    threadKey: string;
+    position: { x: number; y: number };
+  } | null>(null);
+  const [deleteConfirmState, setDeleteConfirmState] = useState<{
+    threadRef: ScopedThreadRef | null;
+    title: string;
+    single: boolean;
+    count: number;
+  } | null>(null);
+  const closeThreadMenu = useCallback(() => setThreadMenuState(null), []);
+  const closeDeleteConfirm = useCallback(() => setDeleteConfirmState(null), []);
+  const handleThreadMenuAction = useCallback(
+    async (
+      action: string,
+      threadRef: ScopedThreadRef,
+      thread: typeof threadByKeyRef.current extends Map<string, infer V> ? V : never,
+    ) => {
+      const threadKey = scopedThreadKey(threadRef);
+      const threadWorkspacePath =
+        thread.worktreePath ??
+        projectCwdByKey.get(`${thread.environmentId}:${thread.projectId}`) ??
+        null;
+      if (action.startsWith("snooze:")) {
+        const preset = resolveSnoozePresets(new Date(), timestampFormat).find(
+          (candidate) => `snooze:${candidate.id}` === action,
         );
-        if (clicked._tag === "Failure") return;
-        if (clicked.value?.startsWith("snooze:")) {
-          const preset = snoozePresets.find(
-            (candidate) => `snooze:${candidate.id}` === clicked.value,
+        if (preset) attemptSnooze(threadRef, preset);
+        return;
+      }
+      switch (action) {
+        case "new-thread-on-branch": {
+          const result = await settlePromise(() =>
+            handleNewThreadRef.current(scopeProjectRef(thread.environmentId, thread.projectId), {
+              branch: thread.branch,
+              worktreePath: thread.worktreePath,
+              envMode: thread.worktreePath ? "worktree" : "local",
+              startFromOrigin: false,
+            }),
           );
-          if (preset) attemptSnooze(threadRef, preset);
-          return;
-        }
-        switch (clicked.value) {
-          case "new-thread-on-branch": {
-            // Explicit branch carry-over: reuse the thread's worktree when it
-            // has one, otherwise its branch on the local checkout.
-            const result = await settlePromise(() =>
-              handleNewThreadRef.current(scopeProjectRef(thread.environmentId, thread.projectId), {
-                branch: thread.branch,
-                worktreePath: thread.worktreePath,
-                envMode: thread.worktreePath ? "worktree" : "local",
-                startFromOrigin: false,
+          if (result._tag === "Failure") {
+            const error = squashAtomCommandFailure(result);
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: "Could not create thread",
+                description: error instanceof Error ? error.message : "An error occurred.",
               }),
             );
-            if (result._tag === "Failure") {
-              const error = squashAtomCommandFailure(result);
-              toastManager.add(
-                stackedThreadToast({
-                  type: "error",
-                  title: "Could not create thread",
-                  description: error instanceof Error ? error.message : "An error occurred.",
-                }),
-              );
-            }
+          }
+          return;
+        }
+        case "settle":
+          attemptSettle(threadRef);
+          return;
+        case "unsettle":
+          attemptUnsettle(threadRef);
+          return;
+        case "unsnooze":
+          attemptUnsnooze(threadRef);
+          return;
+        case "pin":
+          attemptPin(threadRef);
+          return;
+        case "unpin":
+          attemptUnpin(threadRef);
+          return;
+        case "rename":
+          startThreadRename(threadRef, thread.title);
+          return;
+        case "regenerate-title": {
+          if (thread.titleRegeneration != null) return;
+          const result = await updateThreadMetadata({
+            environmentId: threadRef.environmentId,
+            input: { threadId: threadRef.threadId, regenerateTitle: true },
+          });
+          if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+            const error = squashAtomCommandFailure(result);
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: "Failed to regenerate thread title",
+                description: error instanceof Error ? error.message : "An error occurred.",
+              }),
+            );
+          }
+          return;
+        }
+        case "mark-unread":
+          markThreadUnread(threadKey, thread.latestTurn?.completedAt);
+          return;
+        case "copy-path":
+          if (!threadWorkspacePath) {
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: "Path unavailable",
+                description: "This thread does not have a workspace path to copy.",
+              }),
+            );
             return;
           }
-          case "settle":
-            attemptSettle(threadRef);
-            return;
-          case "unsettle":
-            attemptUnsettle(threadRef);
-            return;
-          case "unsnooze":
-            attemptUnsnooze(threadRef);
-            return;
-          case "pin":
-            attemptPin(threadRef);
-            return;
-          case "unpin":
-            attemptUnpin(threadRef);
-            return;
-          case "rename":
-            startThreadRename(threadRef, thread.title);
-            return;
-          case "regenerate-title": {
-            if (isRegeneratingTitle) return;
-            const result = await updateThreadMetadata({
-              environmentId: threadRef.environmentId,
-              input: { threadId: threadRef.threadId, regenerateTitle: true },
+          copyPathToClipboard(threadWorkspacePath, { path: threadWorkspacePath });
+          return;
+        case "copy-branch":
+          if (thread.branch) {
+            copyBranchToClipboard(thread.branch, { branch: thread.branch });
+          }
+          return;
+        case "delete": {
+          closeThreadMenu();
+          if (confirmThreadDelete) {
+            setDeleteConfirmState({
+              threadRef,
+              title: thread.title,
+              single: true,
+              count: 1,
             });
-            if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-              const error = squashAtomCommandFailure(result);
-              toastManager.add(
-                stackedThreadToast({
-                  type: "error",
-                  title: "Failed to regenerate thread title",
-                  description: error instanceof Error ? error.message : "An error occurred.",
-                }),
-              );
-            }
             return;
           }
-          case "mark-unread":
-            markThreadUnread(threadKey, thread.latestTurn?.completedAt);
-            return;
-          case "copy-path":
-            if (!threadWorkspacePath) {
-              toastManager.add(
-                stackedThreadToast({
-                  type: "error",
-                  title: "Path unavailable",
-                  description: "This thread does not have a workspace path to copy.",
-                }),
-              );
-              return;
-            }
-            copyPathToClipboard(threadWorkspacePath, { path: threadWorkspacePath });
-            return;
-          case "copy-branch":
-            if (thread.branch) {
-              copyBranchToClipboard(thread.branch, { branch: thread.branch });
-            }
-            return;
-          case "delete": {
-            if (confirmThreadDelete) {
-              const confirmed = await settlePromise(() =>
-                api.dialogs.confirm(
-                  [
-                    `Delete thread "${thread.title}"?`,
-                    "This permanently clears conversation history for this thread.",
-                  ].join("\n"),
-                ),
-              );
-              if (confirmed._tag === "Failure" || !confirmed.value) return;
-            }
-            const result = await deleteThread(threadRef);
+          {
+            const result = await deleteThread(threadRef, { confirmWorktreeDeletion });
             if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
               const error = squashAtomCommandFailure(result);
               toastManager.add(
@@ -3105,14 +3121,13 @@ export default function Sidebar() {
                   description: error instanceof Error ? error.message : "An error occurred.",
                 }),
               );
-              return;
             }
-            return;
           }
-          default:
-            return;
+          return;
         }
-      })();
+        default:
+          return;
+      }
     },
     [
       attemptPin,
@@ -3121,18 +3136,38 @@ export default function Sidebar() {
       attemptUnpin,
       attemptUnsettle,
       attemptUnsnooze,
+      closeThreadMenu,
       confirmThreadDelete,
       copyBranchToClipboard,
       copyPathToClipboard,
+      confirmWorktreeDeletion,
       deleteThread,
-      handleMultiSelectContextMenu,
       markThreadUnread,
       projectCwdByKey,
-      serverConfigs,
       startThreadRename,
-      updateThreadMetadata,
       timestampFormat,
+      updateThreadMetadata,
     ],
+  );
+
+  const handleThreadContextMenu = useCallback(
+    (threadRef: ScopedThreadRef, position: { x: number; y: number }) => {
+      const threadKey = scopedThreadKey(threadRef);
+      const selectionState = useThreadSelectionStore.getState();
+      if (selectionState.hasSelection() && selectionState.selectedThreadKeys.has(threadKey)) {
+        const api = readLocalApi();
+        if (api) {
+          void handleMultiSelectContextMenu(position);
+        } else {
+          setThreadMenuState({ threadRef, threadKey, position });
+        }
+        return;
+      }
+      const thread = threadByKeyRef.current.get(threadKey);
+      if (!thread) return;
+      setThreadMenuState({ threadRef, threadKey, position });
+    },
+    [handleMultiSelectContextMenu],
   );
 
   // Thread jump (cmd+1..9) and prev/next traversal reuse the same commands as
@@ -3665,6 +3700,7 @@ export default function Sidebar() {
                                 key={entry.group.projectKey}
                                 id={folderDragId(entry.group.projectKey)}
                                 label={entry.group.displayName}
+                                threadCount={entry.threads.length}
                                 expanded={expanded}
                                 pinned={pinnedProjectKeySet.has(entry.group.projectKey)}
                                 onToggle={() => setProjectExpanded(preferenceKeys, !expanded)}
@@ -3674,6 +3710,17 @@ export default function Sidebar() {
                                     !pinnedProjectKeySet.has(entry.group.projectKey),
                                   )
                                 }
+                                onCreateThread={() => {
+                                  const firstProjectRef = entry.group.memberProjectRefs[0];
+                                  if (!firstProjectRef) return;
+                                  if (isMobile) setOpenMobile(false);
+                                  void newThreadContext.handleNewThread(
+                                    firstProjectRef,
+                                    entry.group.groupedProjectCount > 1
+                                      ? undefined
+                                      : { startFromOrigin: false },
+                                  );
+                                }}
                               >
                                 <SortableContext
                                   items={entry.threads.map((thread) =>
@@ -3831,6 +3878,112 @@ export default function Sidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarChromeFooter />
+      {threadMenuState
+        ? (() => {
+            const thread = threadByKeyRef.current.get(threadMenuState.threadKey);
+            if (!thread) return null;
+            const threadRef = threadMenuState.threadRef;
+            const threadKey = threadMenuState.threadKey;
+            const position = threadMenuState.position;
+            const supportsSettlement =
+              serverConfigs.get(thread.environmentId)?.environment.capabilities.threadSettlement ===
+              true;
+            const supportsSnooze =
+              serverConfigs.get(thread.environmentId)?.environment.capabilities.threadSnooze ===
+              true;
+            const supportsPinning =
+              serverConfigs.get(thread.environmentId)?.environment.capabilities.threadPinning ===
+              true;
+            const supportsTitleRegeneration =
+              serverConfigs.get(thread.environmentId)?.environment.capabilities
+                .threadTitleRegeneration === true;
+            const isSettled = settledThreadKeysRef.current.has(threadKey);
+            const isSnoozed = snoozedThreadKeysRef.current.has(threadKey);
+            const isPinned = thread.pinnedAt != null;
+            const items = buildThreadActionMenuItems({
+              branch: thread.branch ?? null,
+              isPinned,
+              isSettled,
+              isSnoozed,
+              canSnoozeNow: canSnooze(thread, { now: new Date().toISOString() }),
+              isRegeneratingTitle: thread.titleRegeneration != null,
+              supports: {
+                settlement: supportsSettlement,
+                snooze: supportsSnooze,
+                pinning: supportsPinning,
+                titleRegeneration: supportsTitleRegeneration,
+              },
+              snoozePresets: resolveSnoozePresets(new Date(), timestampFormat),
+            });
+            return (
+              <ThreadActionMenu
+                items={items}
+                position={position}
+                onClose={closeThreadMenu}
+                onSelect={(action) => {
+                  closeThreadMenu();
+                  void handleThreadMenuAction(action, threadRef, thread);
+                }}
+              />
+            );
+          })()
+        : null}
+      {deleteConfirmState ? (
+        <DeleteThreadConfirmDialog
+          title={deleteConfirmState.title}
+          count={deleteConfirmState.count}
+          single={deleteConfirmState.single}
+          onCancel={closeDeleteConfirm}
+          onConfirm={async () => {
+            const state = deleteConfirmState;
+            closeDeleteConfirm();
+            if (state.single) {
+              if (!state.threadRef) return;
+              const result = await deleteThread(state.threadRef, { confirmWorktreeDeletion });
+              if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+                const error = squashAtomCommandFailure(result);
+                toastManager.add(
+                  stackedThreadToast({
+                    type: "error",
+                    title: "Failed to delete thread",
+                    description: error instanceof Error ? error.message : "An error occurred.",
+                  }),
+                );
+              }
+              return;
+            }
+            const threadKeys = [...useThreadSelectionStore.getState().selectedThreadKeys].filter(
+              (key) => threadByKeyRef.current.has(key),
+            );
+            if (threadKeys.length === 0) return;
+            const deletedThreadKeys = new Set<string>();
+            for (const key of threadKeys) {
+              const t = threadByKeyRef.current.get(key);
+              if (!t) continue;
+              const result = await deleteThread(scopeThreadRef(t.environmentId, t.id), {
+                deletedThreadKeys,
+                confirmWorktreeDeletion,
+              });
+              if (result._tag === "Failure") {
+                if (!isAtomCommandInterrupted(result)) {
+                  const error = squashAtomCommandFailure(result);
+                  toastManager.add(
+                    stackedThreadToast({
+                      type: "error",
+                      title: "Failed to delete threads",
+                      description: error instanceof Error ? error.message : "An error occurred.",
+                    }),
+                  );
+                }
+                return;
+              }
+              deletedThreadKeys.add(key);
+            }
+            removeFromSelection(threadKeys);
+          }}
+        />
+      ) : null}
+      {worktreeConfirmDialog}
     </>
   );
 }

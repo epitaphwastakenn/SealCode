@@ -6,18 +6,18 @@ import {
   type OrchestrationEvent,
   type OrchestrationMessage,
   type OrchestrationProposedPlanId,
-  CheckpointRef,
   classifyTaskAgentKind,
   EventId,
   isToolLifecycleItemType,
   ThreadId,
   type ThreadTokenUsageSnapshot,
   TurnId,
-  type OrchestrationCheckpointSummary,
   type OrchestrationProposedPlan,
   type OrchestrationThread,
   type OrchestrationThreadActivity,
   type ProviderRuntimeEvent,
+  type ModelSelection,
+  type ProviderInstanceId,
 } from "@t3tools/contracts";
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
@@ -30,9 +30,9 @@ import * as Stream from "effect/Stream";
 import { makeDrainableWorker } from "@t3tools/shared/DrainableWorker";
 
 import { ProviderService } from "../../provider/Services/ProviderService.ts";
+import { isAntigravityQuotaErrorMessage } from "../../provider/antigravityUsage.ts";
 import { ProjectionTurnRepository } from "../../persistence/Services/ProjectionTurns.ts";
 import { ProjectionTurnRepositoryLive } from "../../persistence/Layers/ProjectionTurns.ts";
-import { isGitRepository } from "../../git/Utils.ts";
 import { OrchestrationEngineService } from "../Services/OrchestrationEngine.ts";
 import { ThreadBackgroundLivenessService } from "../ThreadBackgroundLiveness.ts";
 import { ThreadPlanProgressService } from "../ThreadPlanProgress.ts";
@@ -43,6 +43,7 @@ import {
 } from "../Services/ProviderRuntimeIngestion.ts";
 import { forkParked } from "../../serverActivation.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
+import { skillLearningTrigger } from "../../harness/SkillLearningPolicy.ts";
 
 const providerTurnKey = (threadId: ThreadId, turnId: TurnId) => `${threadId}:${turnId}`;
 const providerTaskKey = (threadId: ThreadId, taskId: string) => `${threadId}:${taskId}`;
@@ -98,6 +99,11 @@ const TASK_DESCRIPTION_BY_TASK_CACHE_CAPACITY = 10_000;
 const TASK_DESCRIPTION_BY_TASK_TTL = Duration.minutes(120);
 const MAX_BUFFERED_ASSISTANT_CHARS = 24_000;
 const STRICT_PROVIDER_LIFECYCLE_GUARD = process.env.T3CODE_STRICT_PROVIDER_LIFECYCLE_GUARD !== "0";
+
+interface SkillLearningState {
+  toolCallCount: number;
+  hadFailure: boolean;
+}
 
 type TurnStartRequestedDomainEvent = Extract<
   OrchestrationEvent,
@@ -178,31 +184,6 @@ function findProposedPlanById(
     }
   }
   return undefined;
-}
-
-function hasCheckpointForTurn(
-  checkpoints: ReadonlyArray<OrchestrationCheckpointSummary>,
-  turnId: TurnId,
-): boolean {
-  for (let index = 0; index < checkpoints.length; index += 1) {
-    if (checkpoints[index]?.turnId === turnId) {
-      return true;
-    }
-  }
-  return false;
-}
-
-function maxCheckpointTurnCount(
-  checkpoints: ReadonlyArray<OrchestrationCheckpointSummary>,
-): number {
-  let maxTurnCount = 0;
-  for (let index = 0; index < checkpoints.length; index += 1) {
-    const checkpoint = checkpoints[index];
-    if (checkpoint && checkpoint.checkpointTurnCount > maxTurnCount) {
-      maxTurnCount = checkpoint.checkpointTurnCount;
-    }
-  }
-  return maxTurnCount;
 }
 
 function truncateDetail(value: string, limit = 180): string {
@@ -390,8 +371,11 @@ export function runtimeEventToActivities(
           payload: {
             requestId: toApprovalRequestId(event.requestId),
             ...(requestKind ? { requestKind } : {}),
-            requestType: event.payload.requestType,
+              requestType: event.payload.requestType,
+              ...(event.payload.availableDecisions ? { availableDecisions: event.payload.availableDecisions } : {}),
             ...(event.payload.detail ? { detail: event.payload.detail } : {}),
+            ...(event.payload.args !== undefined ? { args: event.payload.args } : {}),
+            ...(event.payload.mcp ? { mcp: event.payload.mcp } : {}),
           },
           turnId: toTurnId(event.turnId) ?? null,
           ...maybeSequence,
@@ -795,12 +779,14 @@ export function runtimeEventToActivities(
           payload: {
             itemType: event.payload.itemType,
             ...(event.payload.status ? { status: event.payload.status } : {}),
+            ...(event.payload.title ? { title: event.payload.title } : {}),
             ...(event.payload.detail ? { detail: truncateDetail(event.payload.detail) } : {}),
             ...(event.payload.data !== undefined ? { data: event.payload.data } : {}),
             ...(event.payload.agentId ? { agentId: event.payload.agentId } : {}),
             ...(event.payload.parentToolUseId
               ? { parentToolUseId: event.payload.parentToolUseId }
               : {}),
+            ...(event.payload.mcp ? { mcp: event.payload.mcp } : {}),
           },
           turnId: toTurnId(event.turnId) ?? null,
           ...maybeSequence,
@@ -821,12 +807,15 @@ export function runtimeEventToActivities(
           summary: event.payload.title ?? "Tool",
           payload: {
             itemType: event.payload.itemType,
+            ...(event.payload.status ? { status: event.payload.status } : {}),
+            ...(event.payload.title ? { title: event.payload.title } : {}),
             ...(event.payload.detail ? { detail: truncateDetail(event.payload.detail) } : {}),
             ...(event.payload.data !== undefined ? { data: event.payload.data } : {}),
             ...(event.payload.agentId ? { agentId: event.payload.agentId } : {}),
             ...(event.payload.parentToolUseId
               ? { parentToolUseId: event.payload.parentToolUseId }
               : {}),
+            ...(event.payload.mcp ? { mcp: event.payload.mcp } : {}),
           },
           turnId: toTurnId(event.turnId) ?? null,
           ...maybeSequence,
@@ -847,11 +836,15 @@ export function runtimeEventToActivities(
           summary: `${event.payload.title ?? "Tool"} started`,
           payload: {
             itemType: event.payload.itemType,
+            ...(event.payload.status ? { status: event.payload.status } : {}),
+            ...(event.payload.title ? { title: event.payload.title } : {}),
             ...(event.payload.detail ? { detail: truncateDetail(event.payload.detail) } : {}),
+            ...(event.payload.data !== undefined ? { data: event.payload.data } : {}),
             ...(event.payload.agentId ? { agentId: event.payload.agentId } : {}),
             ...(event.payload.parentToolUseId
               ? { parentToolUseId: event.payload.parentToolUseId }
               : {}),
+            ...(event.payload.mcp ? { mcp: event.payload.mcp } : {}),
           },
           turnId: toTurnId(event.turnId) ?? null,
           ...maybeSequence,
@@ -875,6 +868,38 @@ const make = Effect.gen(function* () {
   const providerService = yield* ProviderService;
   const projectionTurnRepository = yield* ProjectionTurnRepository;
   const serverSettingsService = yield* ServerSettingsService;
+  const pendingQuotaFailovers = new Map<
+    string,
+    { readonly messageId: MessageId; readonly modelSelection: ModelSelection }
+  >();
+  const failoverInstancesByThread = new Map<ThreadId, Set<ProviderInstanceId>>();
+
+  const resolveQuotaFailover = Effect.fn("resolveQuotaFailover")(function* (input: {
+    readonly thread: OrchestrationThread;
+    readonly sourceInstanceId: ProviderInstanceId;
+  }) {
+    const settings = yield* serverSettingsService.getSettings;
+    const source = settings.providerInstances[input.sourceInstanceId];
+    const fallbackInstanceId = source?.fallbackInstanceId;
+    if (!fallbackInstanceId || fallbackInstanceId === input.sourceInstanceId) return undefined;
+
+    const visited = failoverInstancesByThread.get(input.thread.id) ?? new Set<ProviderInstanceId>();
+    if (visited.has(fallbackInstanceId)) return undefined;
+
+    const message = input.thread.messages.findLast((entry) => entry.role === "user");
+    if (!message) return undefined;
+    visited.add(input.sourceInstanceId);
+    visited.add(fallbackInstanceId);
+    failoverInstancesByThread.set(input.thread.id, visited);
+    return {
+      kind: "ready" as const,
+      messageId: message.id,
+      modelSelection: {
+        ...input.thread.modelSelection,
+        instanceId: fallbackInstanceId,
+      },
+    };
+  });
   const providerCommandId = (event: ProviderRuntimeEvent, tag: string) =>
     crypto.randomUUIDv4.pipe(
       Effect.map((uuid) => CommandId.make(`provider:${event.eventId}:${tag}:${uuid}`)),
@@ -914,6 +939,26 @@ const make = Effect.gen(function* () {
     timeToLive: TASK_DESCRIPTION_BY_TASK_TTL,
     lookup: () => Effect.succeed(""),
   });
+
+  const skillLearningByThread = new Map<ThreadId, SkillLearningState>();
+
+  const recordSkillLearningSignal = (event: ProviderRuntimeEvent) => {
+    const current = skillLearningByThread.get(event.threadId) ?? {
+      toolCallCount: 0,
+      hadFailure: false,
+    };
+    if (event.type === "item.completed" && isToolLifecycleItemType(event.payload.itemType)) {
+      current.toolCallCount += 1;
+    }
+    if (
+      event.type === "runtime.error" ||
+      (event.type === "turn.completed" &&
+        normalizeRuntimeTurnState(event.payload.state) === "failed")
+    ) {
+      current.hadFailure = true;
+    }
+    skillLearningByThread.set(event.threadId, current);
+  };
 
   const rememberTaskDescription = (threadId: ThreadId, taskId: string, description: string) =>
     Cache.set(taskDescriptionByTaskKey, providerTaskKey(threadId, taskId), description);
@@ -1477,6 +1522,8 @@ const make = Effect.gen(function* () {
       const thread = yield* resolveThreadShell(event.threadId);
       if (!thread) return;
 
+      recordSkillLearningSignal(event);
+
       let loadedThreadDetail: OrchestrationThread | null | undefined;
       const getLoadedThreadDetail = () =>
         Effect.gen(function* () {
@@ -1495,6 +1542,46 @@ const make = Effect.gen(function* () {
       });
       const hasPendingTurnStart =
         Option.isSome(pendingTurnStart) && thread.session?.status === "starting";
+
+      if (
+        event.type === "runtime.error" &&
+        event.provider === "antigravity" &&
+        event.providerInstanceId !== undefined &&
+        eventTurnId !== undefined &&
+        isAntigravityQuotaErrorMessage(event.payload.message)
+      ) {
+        const detailedThread = yield* getLoadedThreadDetail();
+        const failover = detailedThread
+          ? yield* resolveQuotaFailover({
+              thread: detailedThread,
+              sourceInstanceId: event.providerInstanceId,
+            })
+          : undefined;
+        if (failover?.kind === "ready") {
+          pendingQuotaFailovers.set(providerTurnKey(thread.id, eventTurnId), failover);
+          return;
+        }
+      }
+
+      if (event.type === "turn.completed" && eventTurnId !== undefined) {
+        const failoverKey = providerTurnKey(thread.id, eventTurnId);
+        const failover = pendingQuotaFailovers.get(failoverKey);
+        if (failover && normalizeRuntimeTurnState(event.payload.state) === "failed") {
+          pendingQuotaFailovers.delete(failoverKey);
+          yield* orchestrationEngine.dispatch({
+            type: "thread.turn.retry",
+            commandId: yield* providerCommandId(event, "quota-failover"),
+            threadId: thread.id,
+            messageId: failover.messageId,
+            modelSelection: failover.modelSelection,
+            createdAt: now,
+          });
+          return;
+        }
+        if (normalizeRuntimeTurnState(event.payload.state) !== "failed") {
+          failoverInstancesByThread.delete(thread.id);
+        }
+      }
 
       const conflictsWithActiveTurn =
         activeTurnId !== null && eventTurnId !== undefined && !sameId(activeTurnId, eventTurnId);
@@ -1900,43 +1987,6 @@ const make = Effect.gen(function* () {
         });
       }
 
-      if (event.type === "turn.diff.updated") {
-        const turnId = toTurnId(event.turnId);
-        const checkpointContext = turnId
-          ? yield* projectionSnapshotQuery
-              .getThreadCheckpointContext(thread.id)
-              .pipe(Effect.map(Option.getOrUndefined))
-          : undefined;
-        const workspaceCwd =
-          checkpointContext?.worktreePath ?? checkpointContext?.workspaceRoot ?? undefined;
-        if (turnId && checkpointContext && workspaceCwd && isGitRepository(workspaceCwd)) {
-          // Skip if a checkpoint already exists for this turn. A real
-          // (non-placeholder) capture from CheckpointReactor should not
-          // be clobbered, and dispatching a duplicate placeholder for the
-          // same turnId would produce an unstable checkpointTurnCount.
-          if (hasCheckpointForTurn(checkpointContext.checkpoints, turnId)) {
-            // Already tracked; no-op.
-          } else {
-            const assistantMessageId = MessageId.make(
-              `assistant:${event.itemId ?? event.turnId ?? event.eventId}`,
-            );
-            yield* orchestrationEngine.dispatch({
-              type: "thread.turn.diff.complete",
-              commandId: yield* providerCommandId(event, "thread-turn-diff-complete"),
-              threadId: thread.id,
-              turnId,
-              completedAt: now,
-              checkpointRef: CheckpointRef.make(`provider-diff:${event.eventId}`),
-              status: "missing",
-              files: [],
-              assistantMessageId,
-              checkpointTurnCount: maxCheckpointTurnCount(checkpointContext.checkpoints) + 1,
-              createdAt: now,
-            });
-          }
-        }
-      }
-
       if (event.type === "task.started" || event.type === "task.progress") {
         const description = event.payload.description?.trim();
         if (description) {
@@ -2004,7 +2054,33 @@ const make = Effect.gen(function* () {
         }
       }
 
-      const activities = runtimeEventToActivities(event, taskTitle);
+      const activities = [...runtimeEventToActivities(event, taskTitle)];
+      const skillState = skillLearningByThread.get(thread.id);
+      const skillTrigger =
+        event.type === "turn.completed" && skillState
+          ? skillLearningTrigger({
+              toolCallCount: skillState.toolCallCount,
+              completedWorkflow: skillState.toolCallCount >= 5,
+              hadFailure: skillState.hadFailure,
+              userCorrected: false,
+              repeatedGuidanceCount: 0,
+            })
+          : undefined;
+      if (skillTrigger !== undefined) {
+        activities.push({
+          id: EventId.make(`skill-opportunity:${event.eventId}`),
+          createdAt: event.createdAt,
+          tone: "info",
+          kind: "skill.opportunity",
+          summary: "Reusable workflow detected",
+          payload: {
+            trigger: skillTrigger,
+            toolCallCount: skillState?.toolCallCount ?? 0,
+            requiresApproval: true,
+          },
+          turnId: toTurnId(event.turnId) ?? null,
+        });
+      }
       yield* Effect.forEach(activities, (activity) =>
         providerCommandId(event, "thread-activity-append").pipe(
           Effect.flatMap((commandId) =>
@@ -2018,6 +2094,14 @@ const make = Effect.gen(function* () {
           ),
         ),
       ).pipe(Effect.asVoid);
+
+      if (
+        event.type === "turn.completed" ||
+        event.type === "turn.aborted" ||
+        event.type === "session.exited"
+      ) {
+        skillLearningByThread.delete(thread.id);
+      }
     });
 
   const processDomainEvent = (_event: TurnStartRequestedDomainEvent) => Effect.void;

@@ -15,6 +15,8 @@ import {
   DEFAULT_TEXT_GENERATION_MODEL_BY_PROVIDER,
   DEFAULT_MODEL_BY_PROVIDER,
   DEFAULT_SERVER_SETTINGS,
+  type GlobalMcpServer,
+  type McpSecretField,
   type ModelSelection,
   type ProviderInstanceConfig,
   type ProviderInstanceEnvironmentVariable,
@@ -23,6 +25,7 @@ import {
   ServerSettings,
   ServerSettingsError,
   type ServerSettingsPatch,
+  validateGlobalMcpServerMap,
 } from "@t3tools/contracts";
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
@@ -63,8 +66,18 @@ const textDecoder = new TextDecoder();
 
 const normalizeServerSettings = (
   settings: ServerSettings,
-): Effect.Effect<ServerSettings, ServerSettingsError> =>
-  encodeServerSettings(settings).pipe(
+): Effect.Effect<ServerSettings, ServerSettingsError> => {
+  const mcpValidationError = validateGlobalMcpServerMap(settings.mcpServers);
+  if (mcpValidationError !== undefined) {
+    return Effect.fail(
+      new ServerSettingsError({
+        settingsPath: "<memory>",
+        operation: "normalize",
+        cause: new Error(mcpValidationError),
+      }),
+    );
+  }
+  return encodeServerSettings(settings).pipe(
     Effect.flatMap(decodeServerSettings),
     Effect.mapError(
       (cause) =>
@@ -75,12 +88,21 @@ const normalizeServerSettings = (
         }),
     ),
   );
+};
 
 function providerEnvironmentSecretName(input: {
   readonly instanceId: string;
   readonly name: string;
 }): string {
   return `provider-env-${Buffer.from(input.instanceId, "utf8").toString("base64url")}-${Buffer.from(input.name, "utf8").toString("base64url")}`;
+}
+
+function mcpSecretName(input: {
+  readonly serverId: string;
+  readonly kind: "env" | "header";
+  readonly name: string;
+}): string {
+  return `mcp-server-${Buffer.from(input.serverId, "utf8").toString("base64url")}-${input.kind}-${Buffer.from(input.name, "utf8").toString("base64url")}`;
 }
 
 function redactProviderEnvironmentVariable(
@@ -97,6 +119,18 @@ function redactProviderEnvironmentVariable(
   };
 }
 
+function redactMcpField(field: McpSecretField): McpSecretField {
+  if (!field.sensitive) {
+    const { valueRedacted: _omit, ...rest } = field;
+    return rest;
+  }
+  return {
+    ...field,
+    value: "",
+    ...(field.value.length > 0 || field.valueRedacted ? { valueRedacted: true } : {}),
+  };
+}
+
 export function redactServerSettingsForClient(settings: ServerSettings): ServerSettings {
   const providerInstances = Object.fromEntries(
     Object.entries(settings.providerInstances).map(([instanceId, instance]) => [
@@ -109,7 +143,17 @@ export function redactServerSettingsForClient(settings: ServerSettings): ServerS
         : instance,
     ]),
   );
-  return { ...settings, providerInstances };
+  const mcpServers = Object.fromEntries(
+    Object.entries(settings.mcpServers).map(([serverId, server]) => [
+      serverId,
+      {
+        ...server,
+        env: server.env.map(redactMcpField),
+        headers: server.headers.map(redactMcpField),
+      },
+    ]),
+  );
+  return { ...settings, providerInstances, mcpServers };
 }
 
 export class ServerSettingsService extends Context.Service<
@@ -181,6 +225,7 @@ export const layerTest = (overrides: DeepPartial<ServerSettings> = {}) =>
 
 const ServerSettingsJson = fromLenientJson(ServerSettings);
 const decodeServerSettingsJsonExit = Schema.decodeUnknownExit(ServerSettingsJson);
+const decodeUnknownJsonExit = Schema.decodeUnknownExit(Schema.fromJsonString(Schema.Unknown));
 
 function resolveTextGenerationProvider(settings: ServerSettings): ServerSettings {
   return isModelSelectionProviderEnabled(settings, settings.textGenerationModelSelection)
@@ -213,6 +258,11 @@ const ATOMIC_SETTINGS_KEYS: ReadonlySet<string> = new Set([
   "automaticGitFetchInterval",
   "providerHealthRefreshInterval",
   "sourceControlWriterModelSelection",
+  "diffReviewModelSelection",
+  "contextCompactorModelSelection",
+  "skillCuratorModelSelection",
+  "memoryCuratorModelSelection",
+  "delegationDefaultModelSelection",
   "textGenerationModelSelection",
   "imageViewerModelSelection",
 ]);
@@ -289,9 +339,54 @@ const make = Effect.gen(function* () {
     ),
   );
 
+  const resolveRobloxMcpServer = Effect.gen(function* () {
+    if (process.platform !== "win32") return undefined;
+    const localAppData = process.env.LOCALAPPDATA?.trim();
+    if (!localAppData) return undefined;
+    const commandPath = pathService.join(localAppData, "Roblox", "mcp.bat");
+    if (!(yield* fs.exists(commandPath).pipe(
+      Effect.mapError(
+        (cause) =>
+          new ServerSettingsError({
+            settingsPath,
+            operation: "check-exists",
+            cause,
+          }),
+      ),
+    ))) return undefined;
+    return {
+      id: "roblox-studio",
+      displayName: "Roblox Studio",
+      enabled: true,
+      transport: "stdio" as const,
+      command: "cmd.exe",
+      args: ["/c", commandPath],
+      env: [],
+      headers: [],
+    } satisfies GlobalMcpServer;
+  });
+
+  const addRobloxMigrationIfNeeded = (settings: ServerSettings, hasMcpRegistry: boolean) =>
+    Effect.gen(function* () {
+      if (hasMcpRegistry) return settings;
+      const roblox = yield* resolveRobloxMcpServer;
+      return roblox
+        ? {
+            ...settings,
+            mcpServers: { [roblox.id]: roblox, ...settings.mcpServers },
+          }
+        : settings;
+    });
+
   const loadSettingsFromDisk = Effect.gen(function* () {
+    const roblox = yield* resolveRobloxMcpServer;
     if (!(yield* readConfigExists)) {
-      return DEFAULT_SERVER_SETTINGS;
+      return roblox
+        ? {
+            ...DEFAULT_SERVER_SETTINGS,
+            mcpServers: { [roblox.id]: roblox },
+          }
+        : DEFAULT_SERVER_SETTINGS;
     }
 
     const raw = yield* readRawConfig;
@@ -302,9 +397,24 @@ const make = Effect.gen(function* () {
         issues: Cause.pretty(decoded.cause),
         cause: decoded.cause,
       });
-      return DEFAULT_SERVER_SETTINGS;
+      return roblox
+        ? {
+            ...DEFAULT_SERVER_SETTINGS,
+            mcpServers: { [roblox.id]: roblox },
+          }
+        : DEFAULT_SERVER_SETTINGS;
     }
-    return decoded.value;
+    return yield* addRobloxMigrationIfNeeded(
+      decoded.value,
+      (() => {
+        try {
+          const parsed = JSON.parse(raw) as unknown;
+          return parsed !== null && typeof parsed === "object" && "mcpServers" in parsed;
+        } catch {
+          return true;
+        }
+      })(),
+    );
   });
 
   const settingsCache = yield* Cache.make<typeof cacheKey, ServerSettings, ServerSettingsError>({
@@ -353,9 +463,42 @@ const make = Effect.gen(function* () {
           environment,
         } satisfies ProviderInstanceConfig;
       }
+      const mcpServers: Record<string, GlobalMcpServer> = {};
+      for (const [serverId, server] of Object.entries(settings.mcpServers)) {
+        const materializeFields = (
+          kind: "env" | "header",
+          fields: ReadonlyArray<McpSecretField>,
+        ) =>
+          Effect.forEach(fields, (field) => {
+            if (!field.sensitive || !field.valueRedacted) return Effect.succeed(field);
+            return secretStore
+              .get(mcpSecretName({ serverId, kind, name: field.name }))
+              .pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new ServerSettingsError({
+                      settingsPath,
+                      operation: "read-secret",
+                      mcpServerId: serverId,
+                      mcpFieldName: field.name,
+                      cause,
+                    }),
+                ),
+                Effect.map((secret) => ({
+                  ...field,
+                  value: Option.isSome(secret) ? textDecoder.decode(secret.value) : "",
+                })),
+              );
+          });
+        const env = yield* materializeFields("env", server.env);
+        const headers = yield* materializeFields("header", server.headers);
+        mcpServers[serverId] = { ...server, env, headers };
+      }
+
       return {
         ...settings,
         providerInstances: providerInstances as ServerSettings["providerInstances"],
+        mcpServers,
       };
     });
 
@@ -471,9 +614,100 @@ const make = Effect.gen(function* () {
         }
       }
 
+      const persistedMcpServers: Record<string, GlobalMcpServer> = {};
+      const nextMcpSecretKeys = new Set<string>();
+      const persistMcpFields = (
+        serverId: string,
+        kind: "env" | "header",
+        fields: ReadonlyArray<McpSecretField>,
+      ) =>
+        Effect.forEach(fields, (field) => {
+          const secretName = mcpSecretName({ serverId, kind, name: field.name });
+          if (!field.sensitive) {
+            return secretStore.remove(secretName).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ServerSettingsError({
+                    settingsPath,
+                    operation: "remove-secret",
+                    mcpServerId: serverId,
+                    mcpFieldName: field.name,
+                    cause,
+                  }),
+              ),
+              Effect.as(redactMcpField(field)),
+            );
+          }
+
+          nextMcpSecretKeys.add(secretName);
+          if (!field.valueRedacted) {
+            if (field.value.length > 0) {
+              return secretStore.set(secretName, textEncoder.encode(field.value)).pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new ServerSettingsError({
+                      settingsPath,
+                      operation: "write-secret",
+                      mcpServerId: serverId,
+                      mcpFieldName: field.name,
+                      cause,
+                    }),
+                ),
+                Effect.as({ ...field, value: "", valueRedacted: true }),
+              );
+            }
+            return secretStore.remove(secretName).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ServerSettingsError({
+                    settingsPath,
+                    operation: "remove-secret",
+                    mcpServerId: serverId,
+                    mcpFieldName: field.name,
+                    cause,
+                  }),
+              ),
+              Effect.as(redactMcpField(field)),
+            );
+          }
+          return Effect.succeed(redactMcpField(field));
+        });
+
+      for (const [serverId, server] of Object.entries(next.mcpServers)) {
+        const env = yield* persistMcpFields(serverId, "env", server.env);
+        const headers = yield* persistMcpFields(serverId, "header", server.headers);
+        persistedMcpServers[serverId] = { ...server, env, headers };
+      }
+
+      for (const [serverId, server] of Object.entries(current.mcpServers)) {
+        for (const [kind, fields] of [
+          ["env", server.env],
+          ["header", server.headers],
+        ] as const) {
+          for (const field of fields) {
+            if (!field.sensitive) continue;
+            const secretName = mcpSecretName({ serverId, kind, name: field.name });
+            if (nextMcpSecretKeys.has(secretName)) continue;
+            yield* secretStore.remove(secretName).pipe(
+              Effect.mapError(
+                (cause) =>
+                  new ServerSettingsError({
+                    settingsPath,
+                    operation: "remove-stale-secret",
+                    mcpServerId: serverId,
+                    mcpFieldName: field.name,
+                    cause,
+                  }),
+              ),
+            );
+          }
+        }
+      }
+
       return {
         ...next,
         providerInstances: providerInstances as ServerSettings["providerInstances"],
+        mcpServers: persistedMcpServers,
       };
     });
 
@@ -555,6 +789,24 @@ const make = Effect.gen(function* () {
     }
 
     const startup = Effect.gen(function* () {
+      const initialSettings = yield* getSettingsFromCache;
+      const shouldPersistMcpMigration = yield* Effect.gen(function* () {
+        if (!(yield* readConfigExists)) {
+          return Object.keys(initialSettings.mcpServers).length > 0;
+        }
+        const raw = yield* readRawConfig;
+        const parsed = decodeUnknownJsonExit(raw);
+        return (
+          parsed._tag === "Success" &&
+          parsed.value !== null &&
+          typeof parsed.value === "object" &&
+          !("mcpServers" in parsed.value) &&
+          Object.keys(initialSettings.mcpServers).length > 0
+        );
+      });
+      if (shouldPersistMcpMigration) {
+        yield* writeSettingsAtomically(initialSettings);
+      }
       yield* startWatcher;
       yield* Cache.invalidate(settingsCache, cacheKey);
       yield* getSettingsFromCache;

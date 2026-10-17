@@ -1037,7 +1037,7 @@ describe("resolveThreadStatusPill", () => {
           hasPendingUserInput: true,
         },
       }),
-    ).toMatchObject({ label: "Pending Approval", pulse: false });
+    ).toMatchObject({ state: "needs-approval", label: "Needs approval", pulse: false });
   });
 
   it("shows awaiting input when plan mode is blocked on user answers", () => {
@@ -1048,7 +1048,7 @@ describe("resolveThreadStatusPill", () => {
           hasPendingUserInput: true,
         },
       }),
-    ).toMatchObject({ label: "Awaiting Input", pulse: false });
+    ).toMatchObject({ state: "needs-input", label: "Needs input", pulse: false });
   });
 
   it("falls back to working when the thread is actively running without blockers", () => {
@@ -1073,7 +1073,7 @@ describe("resolveThreadStatusPill", () => {
           },
         },
       }),
-    ).toMatchObject({ label: "Plan Ready", pulse: false });
+    ).toMatchObject({ state: "plan-ready", label: "Plan ready", pulse: false });
   });
 
   it("does not manufacture completed state without a client visit marker", () => {
@@ -1142,44 +1142,49 @@ describe("resolveProjectStatusIndicator", () => {
     expect(
       resolveProjectStatusIndicator([
         {
+          state: "completed",
           label: "Completed",
           colorClass: "text-emerald-600",
           dotClass: "bg-emerald-500",
           pulse: false,
         },
         {
-          label: "Pending Approval",
+          state: "needs-approval",
+          label: "Needs approval",
           colorClass: "text-amber-600",
           dotClass: "bg-amber-500",
           pulse: false,
         },
         {
+          state: "working",
           label: "Working",
           colorClass: "text-sky-600",
           dotClass: "bg-sky-500",
           pulse: true,
         },
       ]),
-    ).toMatchObject({ label: "Pending Approval", dotClass: "bg-amber-500" });
+    ).toMatchObject({ state: "needs-approval", label: "Needs approval", dotClass: "bg-amber-500" });
   });
 
   it("prefers plan-ready over completed when no stronger action is needed", () => {
     expect(
       resolveProjectStatusIndicator([
         {
+          state: "completed",
           label: "Completed",
           colorClass: "text-emerald-600",
           dotClass: "bg-emerald-500",
           pulse: false,
         },
         {
-          label: "Plan Ready",
+          state: "plan-ready",
+          label: "Plan ready",
           colorClass: "text-violet-600",
           dotClass: "bg-violet-500",
           pulse: false,
         },
       ]),
-    ).toMatchObject({ label: "Plan Ready", dotClass: "bg-violet-500" });
+    ).toMatchObject({ state: "plan-ready", label: "Plan ready", dotClass: "bg-violet-500" });
   });
 });
 

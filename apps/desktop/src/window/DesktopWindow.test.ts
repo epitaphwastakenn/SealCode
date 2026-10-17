@@ -61,6 +61,10 @@ const environmentInput = {
 function makeFakeBrowserWindow() {
   const windowListeners = new Map<string, (...args: readonly unknown[]) => void>();
   const webContentsListeners = new Map<string, (...args: readonly unknown[]) => void>();
+  const session = {
+    setPermissionRequestHandler: vi.fn(),
+    setPermissionCheckHandler: vi.fn(),
+  };
   const webContents = {
     copyImageAt: vi.fn(),
     getURL: vi.fn(() => "sealcode-dev://app/"),
@@ -73,6 +77,7 @@ function makeFakeBrowserWindow() {
     reload: vi.fn(),
     replaceMisspelling: vi.fn(),
     send: vi.fn(),
+    session,
     setWindowOpenHandler: vi.fn(),
   };
 
@@ -117,6 +122,7 @@ function makeFakeBrowserWindow() {
     openDevTools: webContents.openDevTools,
     reload: webContents.reload,
     send: webContents.send,
+    session,
     setAutoHideCursor: window.setAutoHideCursor,
     webContentsListeners,
     windowListeners,
@@ -406,6 +412,14 @@ describe("DesktopWindow", () => {
     );
   });
 
+  it("allows microphone capture on the trusted main window", () => {
+    assert.isTrue(DesktopWindow.isDesktopMainWindowPermissionAllowed("media"));
+    assert.isTrue(DesktopWindow.isDesktopMainWindowPermissionAllowed("microphone"));
+    assert.isTrue(DesktopWindow.isDesktopMainWindowPermissionAllowed("clipboard-sanitized-write"));
+    assert.isTrue(DesktopWindow.isDesktopMainWindowPermissionAllowed("fullscreen"));
+    assert.isFalse(DesktopWindow.isDesktopMainWindowPermissionAllowed("serial"));
+  });
+
   it.effect("does not open a development window until the backend is ready", () =>
     Effect.gen(function* () {
       const fakeWindow = makeFakeBrowserWindow();
@@ -435,6 +449,37 @@ describe("DesktopWindow", () => {
         assert.deepEqual(fakeWindow.setAutoHideCursor.mock.calls, [[false]]);
         assert.deepEqual(fakeWindow.loadURL.mock.calls[0], ["sealcode-dev://app/"]);
         assert.equal(fakeWindow.openDevTools.mock.calls.length, 1);
+      }).pipe(Effect.provide(layer));
+    }),
+  );
+
+  it.effect("grants media capture on the main window session", () =>
+    Effect.gen(function* () {
+      const fakeWindow = makeFakeBrowserWindow();
+      const createCount = yield* Ref.make(0);
+      const mainWindow = yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none());
+      const layer = makeTestLayer({
+        window: fakeWindow.window,
+        createCount,
+        mainWindow,
+      });
+
+      yield* Effect.gen(function* () {
+        const desktopWindow = yield* DesktopWindow.DesktopWindow;
+        yield* desktopWindow.handleBackendReady(new URL("http://127.0.0.1:3773"));
+
+        const requestHandler = fakeWindow.session.setPermissionRequestHandler.mock.calls[0]?.[0];
+        const checkHandler = fakeWindow.session.setPermissionCheckHandler.mock.calls[0]?.[0];
+        assert.isFunction(requestHandler);
+        assert.isFunction(checkHandler);
+
+        let granted: boolean | undefined;
+        requestHandler(null, "media", (value: boolean) => {
+          granted = value;
+        });
+        assert.isTrue(granted);
+        assert.isTrue(checkHandler(null, "media") as boolean);
+        assert.isTrue(checkHandler(null, "clipboard-sanitized-write") as boolean);
       }).pipe(Effect.provide(layer));
     }),
   );

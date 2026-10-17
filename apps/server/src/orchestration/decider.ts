@@ -1022,6 +1022,56 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
       return [...lifecycleResetEvents, userMessageEvent, turnStartRequestedEvent];
     }
 
+    case "thread.turn.retry": {
+      const thread = yield* requireThread({
+        readModel,
+        command,
+        threadId: command.threadId,
+      });
+      const message = thread.messages.find((entry) => entry.id === command.messageId);
+      if (!message || message.role !== "user") {
+        return yield* new OrchestrationCommandInvariantError({
+          commandType: command.type,
+          detail: `User message '${command.messageId}' does not exist on thread '${command.threadId}'.`,
+        });
+      }
+      const metaUpdatedEvent: Omit<OrchestrationEvent, "sequence"> = {
+        ...(yield* withEventBase({
+          aggregateKind: "thread",
+          aggregateId: command.threadId,
+          occurredAt: command.createdAt,
+          commandId: command.commandId,
+        })),
+        type: "thread.meta-updated",
+        payload: {
+          threadId: command.threadId,
+          modelSelection: command.modelSelection,
+          updatedAt: command.createdAt,
+        },
+      };
+      return [
+        metaUpdatedEvent,
+        {
+          ...(yield* withEventBase({
+            aggregateKind: "thread",
+            aggregateId: command.threadId,
+            occurredAt: command.createdAt,
+            commandId: command.commandId,
+          })),
+          causationEventId: metaUpdatedEvent.eventId,
+          type: "thread.turn-start-requested",
+          payload: {
+            threadId: command.threadId,
+            messageId: command.messageId,
+            modelSelection: command.modelSelection,
+            runtimeMode: thread.runtimeMode,
+            interactionMode: thread.interactionMode,
+            createdAt: command.createdAt,
+          },
+        },
+      ];
+    }
+
     case "thread.turn.interrupt": {
       yield* requireThread({
         readModel,
@@ -1307,6 +1357,9 @@ export const decideOrchestrationCommand = Effect.fn("decideOrchestrationCommand"
           checkpointRef: command.checkpointRef,
           status: command.status,
           files: command.files,
+          ...(command.fileAttribution === undefined
+            ? {}
+            : { fileAttribution: command.fileAttribution }),
           assistantMessageId: command.assistantMessageId ?? null,
           completedAt: command.completedAt,
         },

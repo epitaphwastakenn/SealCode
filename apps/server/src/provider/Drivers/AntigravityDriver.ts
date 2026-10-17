@@ -1,88 +1,101 @@
 import { AntigravitySettings, ProviderDriverKind, type ServerProvider } from "@t3tools/contracts";
-import { HostProcessPlatform } from "@t3tools/shared/hostProcess";
+import { HostProcessArchitecture } from "@t3tools/shared/hostProcess";
+import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
+import * as DateTime from "effect/DateTime";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 import { ChildProcessSpawner } from "effect/unstable/process";
-
 import * as BackgroundPolicy from "../../background/BackgroundPolicy.ts";
+import { ServerConfig } from "../../config.ts";
 import { ServerSettingsService } from "../../serverSettings.ts";
-import { makeHeadlessCliTextGeneration } from "../../textGeneration/HeadlessCliTextGeneration.ts";
+import { makeAntigravityTextGeneration } from "../../textGeneration/AntigravityTextGeneration.ts";
+import { makeUnsupportedTextGeneration } from "../../textGeneration/UnsupportedTextGeneration.ts";
 import { ProviderDriverError } from "../Errors.ts";
-import { makeHeadlessCliAdapter } from "../Layers/HeadlessCliAdapter.ts";
-import {
-  buildInitialHeadlessCliProvider,
-  checkHeadlessCliProviderStatus,
-  makeHeadlessCliModelCapabilityRegistry,
-  type HeadlessCliProviderDefinition,
-} from "../Layers/HeadlessCliProvider.ts";
-import { probeAntigravitySubscriptionUsage } from "../antigravityUsage.ts";
+import { makeAntigravityAdapter } from "../Layers/AntigravityAdapter.ts";
+import { makeAntigravityAcpAdapter } from "../Layers/AntigravityAcpAdapter.ts";
+import { checkAntigravityAcpProvider } from "../Layers/AntigravityAcpProvider.ts";
+import { makeAntigravityRuntimeFactory } from "../acp/AntigravityAcpSupport.ts";
+import { makeAntigravitySetup } from "../AntigravitySetup.ts";
+import { PINNED_SDK_VERSION } from "../antigravity/bridgeProtocol.ts";
 import { makeManagedServerProvider } from "../makeManagedServerProvider.ts";
-import {
-  defaultProviderContinuationIdentity,
-  type ProviderDriver,
-  type ProviderInstance,
-} from "../ProviderDriver.ts";
+import { type ProviderDriver, type ProviderInstance } from "../ProviderDriver.ts";
 import { mergeProviderInstanceEnvironment } from "../ProviderInstanceEnvironment.ts";
-import {
-  makeManualOnlyProviderMaintenanceCapabilities,
-  makeStaticProviderMaintenanceResolver,
-  resolveProviderMaintenanceCapabilitiesEffect,
-} from "../providerMaintenance.ts";
-import type { ServerProviderDraft } from "../providerSnapshot.ts";
+import { makeManualOnlyProviderMaintenanceCapabilities } from "../providerMaintenance.ts";
+import { buildServerProvider, type ServerProviderDraft } from "../providerSnapshot.ts";
 import {
   haveProviderSnapshotSettingsChanged,
   makeProviderSnapshotSettingsSource,
-  type ProviderSnapshotSettings,
 } from "../providerUpdateSettings.ts";
-
 const DRIVER_KIND = ProviderDriverKind.make("antigravity");
 const decodeSettings = Schema.decodeSync(AntigravitySettings);
-const DEFINITION: HeadlessCliProviderDefinition = {
-  driver: DRIVER_KIND,
-  displayName: "Antigravity",
-  protocol: "antigravity",
-  defaultModels: [{ slug: "gemini-3.6-flash", name: "Gemini 3.6 Flash" }],
-  subscriptionUsage: probeAntigravitySubscriptionUsage,
-  probeSubscriptionUsageBeforeCliHealth: true,
-};
-const UPDATE = makeStaticProviderMaintenanceResolver(
-  makeManualOnlyProviderMaintenanceCapabilities({ provider: DRIVER_KIND, packageName: null }),
-);
-
 export type AntigravityDriverEnv =
   | BackgroundPolicy.BackgroundPolicy
   | ChildProcessSpawner.ChildProcessSpawner
+  | Crypto.Crypto
   | FileSystem.FileSystem
   | Path.Path
+  | ServerConfig
   | ServerSettingsService;
 
-function resolveBinaryPath(
-  path: Path.Path,
+function checkSdkProviderStatus(
   config: AntigravitySettings,
-  environment: NodeJS.ProcessEnv,
-  platform: NodeJS.Platform,
-) {
-  if (config.binaryPath !== "agy" || platform !== "win32") return config.binaryPath;
-  const localAppData = environment.LOCALAPPDATA;
-  return localAppData ? path.join(localAppData, "agy", "bin", "agy.exe") : config.binaryPath;
-}
+  processEnv: NodeJS.ProcessEnv,
+  stamp: (snapshot: ServerProviderDraft) => ServerProvider,
+): Effect.Effect<ServerProvider> {
+  const models = [
+    {
+      id: "gemini-3.7-flash",
+      name: "Gemini 3.7 Flash",
+      description: "Default Antigravity SDK model",
+      isDefault: true,
+    },
+    ...config.customModels.map((m) => ({
+      id: m,
+      name: m,
+    })),
+  ];
 
-const stampIdentity =
-  (input: {
-    readonly instanceId: ProviderInstance["instanceId"];
-    readonly displayName: string | undefined;
-    readonly accentColor: string | undefined;
-  }) =>
-  (snapshot: ServerProviderDraft): ServerProvider => ({
-    ...snapshot,
-    instanceId: input.instanceId,
-    driver: DRIVER_KIND,
-    ...(input.displayName ? { displayName: input.displayName } : {}),
-    ...(input.accentColor ? { accentColor: input.accentColor } : {}),
-    continuation: { groupKey: `antigravity:${input.instanceId}` },
-  });
+  const hasApiKey = Boolean(processEnv.GEMINI_API_KEY);
+  const hasVertex = Boolean(
+    processEnv.GOOGLE_GENAI_USE_VERTEXAI || processEnv.GOOGLE_CLOUD_PROJECT,
+  );
+  const statusLevel =
+    hasApiKey || hasVertex ? ("ready_to_connect" as const) : ("configuration_required" as const);
+  const statusMessage =
+    statusLevel === "ready_to_connect"
+      ? "Antigravity SDK ready (API key / Vertex ADC configured)."
+      : "Configuration required: Set GEMINI_API_KEY or configure Vertex AI ADC. Google account ACP sign-in is separate from the Python SDK.";
+
+  return Effect.map(Effect.map(DateTime.now, DateTime.formatIso), (checkedAt) =>
+    stamp(
+      buildServerProvider({
+        presentation: {
+          displayName: "Antigravity",
+          showInteractionModeToggle: true,
+          requiresNewThreadForModelChange: true,
+        },
+        enabled: config.enabled,
+        checkedAt,
+        models: models.map((model, index) => ({
+          slug: model.id,
+          name: model.name,
+          isCustom: index > 0,
+          ...(index === 0 ? { isDefault: true } : {}),
+          capabilities: null,
+        })),
+        probe: {
+          installed: true,
+          version: PINNED_SDK_VERSION,
+          status: statusLevel === "ready_to_connect" ? "ready" : "warning",
+          auth: { status: hasApiKey || hasVertex ? "authenticated" : "unknown" },
+          message: statusMessage,
+        },
+      }),
+    ),
+  );
+}
 
 export const AntigravityDriver: ProviderDriver<AntigravitySettings, AntigravityDriverEnv> = {
   driverKind: DRIVER_KIND,
@@ -91,78 +104,96 @@ export const AntigravityDriver: ProviderDriver<AntigravitySettings, AntigravityD
   defaultConfig: () => decodeSettings({}),
   create: ({ instanceId, displayName, accentColor, environment, enabled, config }) =>
     Effect.gen(function* () {
-      const path = yield* Path.Path;
-      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
-      const hostPlatform = yield* HostProcessPlatform;
-      const serverSettings = yield* ServerSettingsService;
+      const settings = yield* ServerSettingsService;
+      const arch = yield* HostProcessArchitecture;
+      const fs = yield* FileSystem.FileSystem;
       const processEnv = mergeProviderInstanceEnvironment(environment);
-      const effectiveConfig = {
-        ...config,
-        enabled,
-        binaryPath: resolveBinaryPath(path, config, processEnv, hostPlatform),
-      } satisfies AntigravitySettings;
-      const capabilityRegistry = makeHeadlessCliModelCapabilityRegistry();
-      const stamp = stampIdentity({ instanceId, displayName, accentColor });
-      const maintenanceCapabilities = yield* resolveProviderMaintenanceCapabilitiesEffect(UPDATE, {
-        binaryPath: effectiveConfig.binaryPath,
-        env: processEnv,
-      });
-      const adapter = yield* makeHeadlessCliAdapter(effectiveConfig, {
-        provider: DRIVER_KIND,
+      const effectiveConfig = { ...config, enabled };
+      const isSdk = config.runtime === "sdk";
+      const continuationKey = isSdk
+        ? `antigravity:instance:${instanceId}`
+        : `antigravity:acp:instance:${instanceId}`;
+      const stamp = (snapshot: ServerProviderDraft): ServerProvider => ({
+        ...snapshot,
         instanceId,
-        environment: processEnv,
-        protocol: "antigravity",
-        modelCapabilities: capabilityRegistry.resolve,
+        driver: DRIVER_KIND,
+        ...(displayName ? { displayName } : {}),
+        ...(accentColor ? { accentColor } : {}),
+        continuation: { groupKey: continuationKey },
       });
-      const snapshotSettings = makeProviderSnapshotSettingsSource(effectiveConfig, serverSettings);
-      const snapshot = yield* makeManagedServerProvider<
-        ProviderSnapshotSettings<AntigravitySettings>
-      >({
+      const runtime = isSdk
+        ? undefined
+        : yield* makeAntigravityRuntimeFactory({
+            instanceId,
+            config: effectiveConfig,
+            environment: processEnv,
+          });
+      const adapter = runtime
+        ? yield* makeAntigravityAcpAdapter({ instanceId, makeRuntime: runtime.makeRuntime })
+        : yield* makeAntigravityAdapter({
+            instanceId,
+            pythonPath: config.sdkPythonPath,
+            environment: processEnv,
+          });
+      const maintenanceCapabilities = makeManualOnlyProviderMaintenanceCapabilities({
+        provider: DRIVER_KIND,
+        packageName: null,
+      });
+      const source = makeProviderSnapshotSettingsSource(effectiveConfig, settings);
+      const check = (probe: boolean) =>
+        runtime
+          ? checkAntigravityAcpProvider({ ...runtime, enabled, probe, environment: processEnv }).pipe(
+              Effect.provideService(FileSystem.FileSystem, fs),
+              Effect.map(stamp),
+            )
+          : checkSdkProviderStatus(effectiveConfig, processEnv, stamp);
+      const snapshot = yield* makeManagedServerProvider({
         maintenanceCapabilities,
-        getSettings: snapshotSettings.getSettings,
-        streamSettings: snapshotSettings.streamSettings,
+        getSettings: source.getSettings,
+        streamSettings: source.streamSettings,
         haveSettingsChanged: haveProviderSnapshotSettingsChanged,
-        initialSnapshot: (settings) =>
-          buildInitialHeadlessCliProvider(DEFINITION, settings.provider, capabilityRegistry).pipe(
-            Effect.map(stamp),
-          ),
-        checkProvider: checkHeadlessCliProviderStatus(DEFINITION, effectiveConfig, processEnv, {
-          capabilityRegistry,
-        }).pipe(
-          Effect.map(stamp),
-          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-        ),
-      }).pipe(
-        Effect.mapError(
-          (cause) =>
-            new ProviderDriverError({
-              driver: DRIVER_KIND,
-              instanceId,
-              detail: `Failed to build Antigravity snapshot: ${cause.message}`,
-              cause,
-            }),
-        ),
-      );
+        initialSnapshot: () => check(false),
+        checkProvider: check(true),
+      });
+      const setup = runtime
+        ? yield* makeAntigravitySetup({
+            ...runtime,
+            arch,
+            manualInstallation: Boolean(config.acpBinaryPath),
+            stopSessions: adapter.stopAll(),
+            refresh: snapshot.refresh,
+          })
+        : undefined;
       return {
         instanceId,
         driverKind: DRIVER_KIND,
-        continuationIdentity: defaultProviderContinuationIdentity({
-          driverKind: DRIVER_KIND,
-          instanceId,
-        }),
+        continuationIdentity: { driverKind: DRIVER_KIND, continuationKey },
         displayName,
         accentColor,
         enabled,
         snapshot,
         adapter,
-        textGeneration: makeHeadlessCliTextGeneration({
-          binaryPath: effectiveConfig.binaryPath,
-          environment: processEnv,
-          provider: DRIVER_KIND,
-          providerName: "Antigravity",
-          protocol: "antigravity",
-          platform: hostPlatform,
-        }),
+        ...(setup ? { setup } : {}),
+        textGeneration: isSdk
+          ? makeAntigravityTextGeneration({
+              pythonPath: config.sdkPythonPath,
+              environment: processEnv,
+            })
+          : {
+              ...makeUnsupportedTextGeneration("Antigravity ACP"),
+              generateContextTransferSummary: (input) =>
+                Effect.succeed({ summary: input.context.trim() }),
+            },
       } satisfies ProviderInstance;
-    }),
+    }).pipe(
+      Effect.mapError(
+        (cause) =>
+          new ProviderDriverError({
+            driver: DRIVER_KIND,
+            instanceId,
+            detail: cause.message,
+            cause,
+          }),
+      ),
+    ),
 };

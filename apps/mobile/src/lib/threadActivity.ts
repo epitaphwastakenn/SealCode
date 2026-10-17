@@ -3,6 +3,7 @@ import type {
   OrchestrationLatestTurn,
   OrchestrationThread,
   OrchestrationThreadActivity,
+  McpToolActivityMetadata,
   ToolLifecycleItemType,
   TurnId,
   UserInputQuestion,
@@ -13,6 +14,7 @@ import * as Arr from "effect/Array";
 import * as Order from "effect/Order";
 
 export interface PendingApproval {
+  readonly availableDecisions?: ReadonlyArray<string>;
   readonly requestId: ApprovalRequestId;
   readonly requestKind: "command" | "file-read" | "file-change";
   readonly createdAt: string;
@@ -71,6 +73,8 @@ interface WorkLogEntry {
   changedFiles?: ReadonlyArray<string>;
   tone: "thinking" | "tool" | "info" | "error";
   toolTitle?: string;
+  toolCallId?: string;
+  mcp?: McpToolActivityMetadata;
   itemType?: ToolLifecycleItemType;
   requestKind?: PendingApproval["requestKind"];
   toolLifecycleStatus?: WorkLogToolLifecycleStatus;
@@ -141,6 +145,7 @@ function requestKindFromRequestType(requestType: unknown): PendingApproval["requ
   switch (requestType) {
     case "command_execution_approval":
     case "exec_command_approval":
+    case "dynamic_tool_call":
       return "command";
     case "file_read_approval":
       return "file-read";
@@ -212,6 +217,7 @@ function parseUserInputQuestions(
         question: question.question,
         options,
         multiSelect: question.multiSelect === true,
+        ...(question.allowCustomAnswer === false ? { allowCustomAnswer: false } : {}),
       };
     })
     .filter((question): question is UserInputQuestion => question !== null);
@@ -373,6 +379,7 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
   };
   const itemType = extractWorkLogItemType(payload);
   const requestKind = extractWorkLogRequestKind(payload);
+  const mcp = extractMcpMetadata(payload);
   if (
     !taskDetailAsLabel &&
     payload &&
@@ -394,12 +401,20 @@ function toDerivedWorkLogEntry(activity: OrchestrationThreadActivity): DerivedWo
     entry.changedFiles = changedFiles;
   }
   if (title) {
-    entry.toolTitle = title;
+    entry.toolTitle = mcp
+      ? `${mcp.serverDisplayName ?? mcp.serverId} → ${mcp.upstreamToolName}`
+      : title;
+  }
+  if (mcp) {
+    entry.mcp = mcp;
+    if (mcp.callId) {
+      entry.toolCallId = mcp.callId;
+    }
   }
   if (itemType === "mcp_tool_call") {
     const data = asRecord(payload?.data);
-    if (data?.item !== undefined) {
-      entry.toolData = data.item;
+    if (data !== null) {
+      entry.toolData = data.item !== undefined ? data.item : data;
     }
   }
   if (itemType) {
@@ -459,6 +474,15 @@ function shouldCollapseToolLifecycleEntries(
   previous: DerivedWorkLogEntry,
   next: DerivedWorkLogEntry,
 ): boolean {
+  const sameMcpCall =
+    previous.mcp?.callId !== undefined &&
+    next.mcp?.callId !== undefined &&
+    previous.mcp.serverId === next.mcp.serverId &&
+    previous.mcp.callId === next.mcp.callId &&
+    previous.turnId === next.turnId;
+  if (sameMcpCall) {
+    return true;
+  }
   if (previous.activityKind !== "tool.updated" && previous.activityKind !== "tool.completed") {
     return false;
   }
@@ -483,8 +507,10 @@ function mergeDerivedWorkLogEntries(
   const itemType = next.itemType ?? previous.itemType;
   const requestKind = next.requestKind ?? previous.requestKind;
   const collapseKey = next.collapseKey ?? previous.collapseKey;
+  const toolCallId = next.toolCallId ?? previous.toolCallId;
   const toolLifecycleStatus = next.toolLifecycleStatus ?? previous.toolLifecycleStatus;
   const toolData = next.toolData ?? previous.toolData;
+  const mcp = next.mcp ?? previous.mcp;
   return {
     ...previous,
     ...next,
@@ -496,8 +522,10 @@ function mergeDerivedWorkLogEntries(
     ...(itemType ? { itemType } : {}),
     ...(requestKind ? { requestKind } : {}),
     ...(collapseKey ? { collapseKey } : {}),
+    ...(toolCallId ? { toolCallId } : {}),
     ...(toolLifecycleStatus ? { toolLifecycleStatus } : {}),
     ...(toolData !== undefined ? { toolData } : {}),
+    ...(mcp !== undefined ? { mcp } : {}),
   };
 }
 
@@ -515,6 +543,9 @@ function mergeChangedFiles(
 function deriveToolLifecycleCollapseKey(entry: DerivedWorkLogEntry): string | undefined {
   if (entry.activityKind !== "tool.updated" && entry.activityKind !== "tool.completed") {
     return undefined;
+  }
+  if (entry.toolCallId) {
+    return `tool:${entry.toolCallId}`;
   }
   const normalizedLabel = normalizeCompactToolLabel(entry.toolTitle ?? entry.label);
   const detail = entry.detail?.trim() ?? "";
@@ -893,6 +924,27 @@ function extractToolCommand(payload: Record<string, unknown> | null): {
 
 function extractToolTitle(payload: Record<string, unknown> | null): string | null {
   return asTrimmedString(payload?.title);
+}
+
+function extractMcpMetadata(
+  payload: Record<string, unknown> | null,
+): McpToolActivityMetadata | null {
+  const value = asRecord(payload?.mcp);
+  const serverId = asTrimmedString(value?.serverId);
+  const upstreamToolName = asTrimmedString(value?.upstreamToolName);
+  const canonicalToolName = asTrimmedString(value?.canonicalToolName);
+  if (!serverId || !upstreamToolName || !canonicalToolName) return null;
+  const serverDisplayName = asTrimmedString(value?.serverDisplayName);
+  const providerToolName = asTrimmedString(value?.providerToolName);
+  const callId = asTrimmedString(value?.callId);
+  return {
+    serverId,
+    upstreamToolName,
+    canonicalToolName,
+    ...(serverDisplayName ? { serverDisplayName } : {}),
+    ...(providerToolName ? { providerToolName } : {}),
+    ...(callId ? { callId } : {}),
+  };
 }
 
 function extractWorkLogToolLifecycleStatus(
@@ -1350,10 +1402,15 @@ export function derivePendingApprovals(
       payload?.requestKind === "file-change"
         ? payload.requestKind
         : requestKindFromRequestType(payload?.requestType);
-    const detail = typeof payload?.detail === "string" ? payload.detail : undefined;
+    const mcp = extractMcpMetadata(payload);
+    const rawDetail = typeof payload?.detail === "string" ? payload.detail : undefined;
+    const detail = mcp
+      ? `${mcp.serverDisplayName ?? mcp.serverId} → ${mcp.upstreamToolName}${rawDetail ? `: ${rawDetail}` : ""}`
+      : rawDetail;
 
     if (activity.kind === "approval.requested" && requestId && requestKind) {
       openByRequestId.set(requestId, {
+        ...(Array.isArray(payload?.availableDecisions) ? { availableDecisions: payload.availableDecisions.filter((value): value is string => typeof value === "string") } : {}),
         requestId,
         requestKind,
         createdAt: activity.createdAt,

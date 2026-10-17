@@ -4,6 +4,7 @@ import type {
 } from "@t3tools/client-runtime/state/shell";
 import type { EnvironmentThreadSearchMatch } from "@t3tools/client-runtime/state/thread-search";
 import { canSnooze, resolveSnoozePresets } from "@t3tools/client-runtime/state/thread-settled";
+import { presentThreadState } from "@t3tools/shared/statusPresentation";
 import type { MenuAction } from "@react-native-menu/menu";
 import { memo, useCallback, useEffect, useMemo, useState, type ComponentProps } from "react";
 import {
@@ -55,10 +56,10 @@ const MONO_FONT = Platform.select({
 const STATUS_LABEL_BY_STATUS: Partial<
   Record<ThreadListV2Status, { label: string; className: string }>
 > = {
-  approval: { label: "Approval", className: "text-amber-700 dark:text-amber-300" },
-  input: { label: "Input", className: "text-indigo-600 dark:text-indigo-300" },
-  working: { label: "Working", className: "text-sky-600 dark:text-sky-400" },
-  failed: { label: "Failed", className: "text-red-700 dark:text-red-300" },
+  approval: { label: presentThreadState("needs-approval").shortLabel, className: "text-amber-700 dark:text-amber-300" },
+  input: { label: presentThreadState("needs-input").shortLabel, className: "text-indigo-600 dark:text-indigo-300" },
+  working: { label: presentThreadState("working").shortLabel, className: "text-sky-600 dark:text-sky-400" },
+  failed: { label: presentThreadState("failed").shortLabel, className: "text-red-700 dark:text-red-300" },
 };
 
 function threadTimeLabel(thread: EnvironmentThreadShell): string {

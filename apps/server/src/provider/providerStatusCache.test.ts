@@ -31,6 +31,7 @@ const makeProvider = (
 ): ServerProvider => ({
   instanceId: defaultInstanceIdForDriver(provider),
   driver: provider,
+  continuation: { groupKey: `${provider}:instance:${provider}` },
   enabled: true,
   installed: true,
   version: "1.0.0",
@@ -44,6 +45,11 @@ const makeProvider = (
 });
 
 it.layer(NodeServices.layer)("providerStatusCache", (it) => {
+  it("does not hydrate ACP with cached CLI status or models", () => {
+    const cached = makeProvider(ANTIGRAVITY_DRIVER);
+    const current = makeProvider(ANTIGRAVITY_DRIVER, { continuation: { groupKey: "antigravity:acp:instance:antigravity" }, installed: false, status: "warning" });
+    assert.strictEqual(hydrateCachedProvider({ cachedProvider: cached, fallbackProvider: current }), current);
+  });
   it.effect("logs structural diagnostics without retaining invalid cache contents", () => {
     const messages: Array<unknown> = [];
     const logger = Logger.make<unknown, void>((options) => {
@@ -235,6 +241,49 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
         fallbackProvider: fallbackAntigravity,
       }).models.map((model) => model.slug),
       ["gemini-3.6-flash", "my-antigravity-model-high"],
+    );
+  });
+
+  it("dedupes cached Antigravity thinking and display-name aliases", () => {
+    const cachedAntigravity = makeProvider(ANTIGRAVITY_DRIVER, {
+      models: [
+        {
+          slug: "Claude Opus 4.6",
+          name: "Claude Opus 4.6",
+          isCustom: false,
+          capabilities: emptyCapabilities,
+        },
+        {
+          slug: "claude-opus-4-6",
+          name: "Claude Opus 4.6",
+          isCustom: false,
+          capabilities: emptyCapabilities,
+        },
+        {
+          slug: "claude-opus-4-6-thinking",
+          name: "Claude Opus 4.6 (Thinking)",
+          isCustom: false,
+          capabilities: emptyCapabilities,
+        },
+      ],
+    });
+    const fallbackAntigravity = makeProvider(ANTIGRAVITY_DRIVER, {
+      models: [
+        {
+          slug: "gemini-3.6-flash",
+          name: "Gemini 3.6 Flash",
+          isCustom: false,
+          capabilities: emptyCapabilities,
+        },
+      ],
+    });
+
+    assert.deepStrictEqual(
+      hydrateCachedProvider({
+        cachedProvider: cachedAntigravity,
+        fallbackProvider: fallbackAntigravity,
+      }).models.map((model) => model.slug),
+      ["gemini-3.6-flash", "claude-opus-4-6-thinking"],
     );
   });
 

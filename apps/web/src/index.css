@@ -440,7 +440,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     position: absolute;
     z-index: 0;
     inset: 0;
-    border-radius: 22px;
+    border-radius: 16px;
     background: color-mix(
       in srgb,
       var(--chat-composer-glass-surface) var(--glass-opacity),
@@ -458,28 +458,28 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   .chat-composer-glass-shell-with-context::before {
     border-radius: 0;
     /*
-     * One continuous glass layer: a 22px composer joined to a 16px strip,
+     * One continuous glass layer: a 16px composer joined to a 16px strip,
      * whose visible sides align with the composer's bottom tangents.
      */
     clip-path: shape(
-      from 0 22px,
-      curve to 22px 0 with 0 9.85px / 9.85px 0,
-      line to calc(100% - 22px) 0,
-      curve to 100% 22px with calc(100% - 9.85px) 0 / 100% 9.85px,
-      line to 100% calc(100% - var(--chat-composer-context-extension) - 22px),
-      curve to calc(100% - 22px) calc(100% - var(--chat-composer-context-extension)) with 100%
-        calc(100% - var(--chat-composer-context-extension) - 9.85px) / calc(100% - 9.85px)
+      from 0 16px,
+      curve to 16px 0 with 0 7.16px / 7.16px 0,
+      line to calc(100% - 16px) 0,
+      curve to 100% 16px with calc(100% - 7.16px) 0 / 100% 7.16px,
+      line to 100% calc(100% - var(--chat-composer-context-extension) - 16px),
+      curve to calc(100% - 16px) calc(100% - var(--chat-composer-context-extension)) with 100%
+        calc(100% - var(--chat-composer-context-extension) - 7.16px) / calc(100% - 7.16px)
         calc(100% - var(--chat-composer-context-extension)),
-      line to calc(100% - 22px) calc(100% - 16px),
-      curve to calc(100% - 38px) 100% with calc(100% - 22px) calc(100% - 7.16px) /
-        calc(100% - 29.16px) 100%,
-      line to 38px 100%,
-      curve to 22px calc(100% - 16px) with 29.16px 100% / 22px calc(100% - 7.16px),
-      line to 22px calc(100% - var(--chat-composer-context-extension)),
-      curve to 0 calc(100% - var(--chat-composer-context-extension) - 22px) with 9.85px
+      line to calc(100% - 16px) calc(100% - 16px),
+      curve to calc(100% - 32px) 100% with calc(100% - 16px) calc(100% - 7.16px) /
+        calc(100% - 23.16px) 100%,
+      line to 32px 100%,
+      curve to 16px calc(100% - 16px) with 23.16px 100% / 16px calc(100% - 7.16px),
+      line to 16px calc(100% - var(--chat-composer-context-extension)),
+      curve to 0 calc(100% - var(--chat-composer-context-extension) - 16px) with 7.16px
         calc(100% - var(--chat-composer-context-extension)) / 0
-        calc(100% - var(--chat-composer-context-extension) - 9.85px),
-      line to 0 22px,
+        calc(100% - var(--chat-composer-context-extension) - 7.16px),
+      line to 0 16px,
       close
     );
   }
@@ -512,10 +512,10 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
       0 0,
       100% 0,
       100% 100%,
-      calc(100% - 22px) 100%,
-      calc(100% - 22px) calc(100% - 2px),
-      22px calc(100% - 2px),
-      22px 100%,
+      calc(100% - 16px) 100%,
+      calc(100% - 16px) calc(100% - 2px),
+      16px calc(100% - 2px),
+      16px 100%,
       0 100%
     );
   }
@@ -531,7 +531,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
     inset: 0;
     border: 1px solid var(--chat-composer-outline);
     border-radius: 0 0 16px 16px;
-    /* Start the strip outline exactly where the composer's 22px curve reaches its tangent. */
+    /* Start the strip outline exactly where the composer's 16px curve reaches its tangent. */
     -webkit-mask-image: linear-gradient(to bottom, transparent 0 1rem, black 1rem);
     mask-image: linear-gradient(to bottom, transparent 0 1rem, black 1rem);
     box-shadow: 0 12px 28px -18px rgb(0 0 0 / 40%);
@@ -568,7 +568,7 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   @supports not (clip-path: shape(from 0 0, line to 1px 1px)) {
     .chat-composer-glass-shell-with-context::before {
       inset-block-end: var(--chat-composer-context-extension);
-      border-radius: 22px;
+      border-radius: 16px;
       clip-path: none;
     }
 
@@ -622,6 +622,35 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
 
   .alert-glass[data-variant="warning"] {
     --alert-glass-tint: var(--warning);
+  }
+
+  .sidebar-glass {
+    background: color-mix(in srgb, var(--sidebar) var(--glass-opacity), transparent);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
+    border-color: color-mix(in srgb, var(--foreground) 10%, transparent);
+    box-shadow: 0 8px 28px -20px rgb(0 0 0 / 45%);
+  }
+
+  .dark .sidebar-glass {
+    border-color: color-mix(in srgb, var(--color-white) 8%, transparent);
+    box-shadow:
+      inset 0 1px rgb(255 255 255 / 4%),
+      0 16px 40px -20px rgb(0 0 0 / 85%);
+  }
+
+  .sidebar-glass[data-slot="sidebar-inner"] {
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border-color: transparent;
+    box-shadow: none;
+  }
+
+  [data-slot="sidebar-container"].sidebar-glass [data-slot="sidebar-inner"] {
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
   }
 
   .dialog-glass {
@@ -680,6 +709,242 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
 
   .dark .dialog-backdrop {
     background: color-mix(in srgb, var(--background) 64%, transparent);
+  }
+
+  @keyframes reasoning-shimmer {
+    0% {
+      transform: translateX(-120%);
+    }
+    100% {
+      transform: translateX(220%);
+    }
+  }
+
+  @keyframes reasoning-bar-flash {
+    0% {
+      opacity: 0;
+    }
+    22% {
+      opacity: 1;
+      box-shadow:
+        0 0 18px 4px var(--primary),
+        0 0 36px 10px color-mix(in srgb, var(--primary) 40%, transparent);
+    }
+    100% {
+      opacity: 0;
+      box-shadow: 0 0 0 transparent;
+    }
+  }
+
+  @keyframes reasoning-surge-sweep {
+    0% {
+      transform: translateX(-140%) skewX(-18deg);
+      opacity: 0;
+    }
+    18% {
+      opacity: 1;
+    }
+    100% {
+      transform: translateX(420%) skewX(-18deg);
+      opacity: 0;
+    }
+  }
+
+  @keyframes reasoning-thumb-spring {
+    0% {
+      transform: translate(-50%, -50%) scale(1);
+    }
+    32% {
+      transform: translate(-50%, -50%) scale(1.32);
+    }
+    68% {
+      transform: translate(-50%, -50%) scale(0.92);
+    }
+    100% {
+      transform: translate(-50%, -50%) scale(1.08);
+    }
+  }
+
+  @keyframes reasoning-badge-enter {
+    0% {
+      transform: scale(0.78) translateY(2px);
+      opacity: 0.35;
+      filter: saturate(0.6);
+    }
+    55% {
+      transform: scale(1.12) translateY(0);
+      opacity: 1;
+      filter: saturate(1.25);
+    }
+    100% {
+      transform: scale(1);
+      opacity: 1;
+      filter: none;
+    }
+  }
+
+  @keyframes reasoning-twinkle {
+    0%,
+    100% {
+      transform: scale(1) rotate(0deg);
+      opacity: 0.8;
+    }
+    50% {
+      transform: scale(1.28) rotate(18deg);
+      opacity: 1;
+    }
+  }
+
+  @keyframes reasoning-spark-burst {
+    0% {
+      opacity: 1;
+      transform: translate(-50%, -50%) translate(var(--spark-x), var(--spark-y)) scale(1.1);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-50%, -50%)
+        translate(calc(var(--spark-x) * 5.4), calc(var(--spark-y) * 5.4)) scale(0.12);
+    }
+  }
+
+  @keyframes reasoning-corona {
+    0% {
+      opacity: 0.75;
+      transform: translate(-50%, -50%) scale(0.35);
+    }
+    100% {
+      opacity: 0;
+      transform: translate(-50%, -50%) scale(2.7);
+    }
+  }
+
+  @keyframes reasoning-tick-ignite {
+    0% {
+      transform: scale(1);
+      box-shadow: none;
+    }
+    40% {
+      transform: scale(2.35);
+      box-shadow: 0 0 10px 2px var(--primary);
+    }
+    100% {
+      transform: scale(1.55);
+      box-shadow: 0 0 6px var(--primary);
+    }
+  }
+
+  @keyframes reasoning-heat-sheen {
+    0% {
+      transform: translateX(-130%) rotate(12deg);
+    }
+    100% {
+      transform: translateX(230%) rotate(12deg);
+    }
+  }
+
+  @keyframes reasoning-particle-flow {
+    0% {
+      left: 0%;
+      opacity: 0;
+      transform: scale(0.6);
+    }
+    10% {
+      opacity: 1;
+      transform: scale(1.1);
+    }
+    82% {
+      opacity: 0.95;
+      transform: scale(0.95);
+    }
+    100% {
+      left: 100%;
+      opacity: 0;
+      transform: scale(0.4);
+    }
+  }
+
+  .animate-reasoning-particle-1 { animation: reasoning-particle-flow 1.05s linear infinite; animation-delay: 0s; }
+  .animate-reasoning-particle-2 { animation: reasoning-particle-flow 1.25s linear infinite; animation-delay: 0.18s; }
+  .animate-reasoning-particle-3 { animation: reasoning-particle-flow 0.95s linear infinite; animation-delay: 0.35s; }
+  .animate-reasoning-particle-4 { animation: reasoning-particle-flow 1.35s linear infinite; animation-delay: 0.52s; }
+  .animate-reasoning-particle-5 { animation: reasoning-particle-flow 1.15s linear infinite; animation-delay: 0.7s; }
+  .animate-reasoning-particle-6 { animation: reasoning-particle-flow 1.0s linear infinite; animation-delay: 0.88s; }
+  .animate-reasoning-particle-7 { animation: reasoning-particle-flow 1.2s linear infinite; animation-delay: 0.12s; }
+  .animate-reasoning-particle-8 { animation: reasoning-particle-flow 0.9s linear infinite; animation-delay: 0.42s; }
+  .animate-reasoning-particle-9 { animation: reasoning-particle-flow 1.4s linear infinite; animation-delay: 0.65s; }
+  .animate-reasoning-particle-10 { animation: reasoning-particle-flow 1.1s linear infinite; animation-delay: 0.28s; }
+  .animate-reasoning-particle-11 { animation: reasoning-particle-flow 1.3s linear infinite; animation-delay: 0.78s; }
+  .animate-reasoning-particle-12 { animation: reasoning-particle-flow 1.0s linear infinite; animation-delay: 0.48s; }
+  .animate-reasoning-particle-13 { animation: reasoning-particle-flow 1.18s linear infinite; animation-delay: 0.95s; }
+  .animate-reasoning-particle-14 { animation: reasoning-particle-flow 0.92s linear infinite; animation-delay: 0.6s; }
+
+  .animate-reasoning-shimmer {
+    animation: reasoning-shimmer 1.8s cubic-bezier(0.22, 0.8, 0.28, 1) 1 both;
+  }
+
+  .animate-reasoning-heat-sheen {
+    animation: reasoning-heat-sheen 2.8s cubic-bezier(0.22, 0.8, 0.28, 1) 1 both;
+  }
+
+  .animate-reasoning-bar-flash {
+    animation: reasoning-bar-flash 0.7s cubic-bezier(0.15, 0.85, 0.35, 1) forwards;
+  }
+
+  .animate-reasoning-surge-sweep {
+    animation: reasoning-surge-sweep 0.55s cubic-bezier(0.16, 0.84, 0.24, 1) forwards;
+  }
+
+  .animate-reasoning-thumb-spring {
+    animation: reasoning-thumb-spring 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  }
+
+  .animate-reasoning-badge-enter {
+    animation: reasoning-badge-enter 0.42s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+  }
+
+  .animate-reasoning-twinkle {
+    animation: reasoning-twinkle 2.4s ease-in-out 2;
+  }
+
+  .animate-reasoning-spark {
+    animation: reasoning-spark-burst 0.62s cubic-bezier(0.12, 0.82, 0.28, 1) forwards;
+  }
+
+  .animate-reasoning-corona {
+    animation: reasoning-corona 0.7s cubic-bezier(0.16, 0.8, 0.24, 1) forwards;
+  }
+
+  .animate-reasoning-tick-ignite {
+    animation: reasoning-tick-ignite 0.38s cubic-bezier(0.16, 0.84, 0.32, 1.2) forwards;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .animate-reasoning-shimmer,
+    .animate-reasoning-heat-sheen,
+    .animate-reasoning-bar-flash,
+    .animate-reasoning-surge-sweep,
+    .animate-reasoning-thumb-spring,
+    .animate-reasoning-badge-enter,
+    .animate-reasoning-twinkle,
+    .animate-reasoning-spark,
+    .animate-reasoning-corona,
+    .animate-reasoning-tick-ignite,
+    .animate-reasoning-particle-1,
+    .animate-reasoning-particle-2,
+    .animate-reasoning-particle-3,
+    .animate-reasoning-particle-4,
+    .animate-reasoning-particle-5,
+    .animate-reasoning-particle-6,
+    .animate-reasoning-particle-7,
+    .animate-reasoning-particle-8,
+    .animate-reasoning-particle-9,
+    .animate-reasoning-particle-10,
+    .animate-reasoning-particle-11,
+    .animate-reasoning-particle-12,
+    .animate-reasoning-particle-13,
+    .animate-reasoning-particle-14 {
+      animation: none;
+    }
   }
 
   .settings-slider {
@@ -817,6 +1082,10 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
 
     .chat-composer-glass-shell::before {
       background: var(--chat-composer-glass-surface);
+    }
+
+    .sidebar-glass {
+      background: var(--sidebar) !important;
     }
 
     .dialog-glass,
@@ -997,6 +1266,10 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
 /* Keep both sidebar implementations (default and legacy) on the same quiet
    zinc hierarchy: zinc-50 navigation, zinc-25 hover, and white selected/raised
    surfaces. */
+[data-app-sidebar]:not(.sidebar-glass) {
+  background-color: var(--sidebar);
+}
+
 [data-app-sidebar] {
   --background: var(--color-zinc-25);
   --foreground: var(--color-zinc-800);
@@ -1017,7 +1290,6 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   --sidebar-row-selected: var(--color-white);
   --sidebar-border: var(--color-zinc-200);
   --sidebar-stage-fade: var(--sidebar);
-  background-color: var(--sidebar);
 }
 
 .dark [data-app-sidebar] {
@@ -1153,6 +1425,16 @@ html.dark[data-theme-id] {
 html[data-theme-id] body {
   background-color: var(--app-chrome-background);
   color: var(--foreground);
+}
+
+html[data-theme-gradient="true"] [data-slot="sidebar-inset"] {
+  background-color: transparent;
+  background-image: linear-gradient(
+    145deg,
+    color-mix(in srgb, var(--app-theme-canvas) 86%, var(--app-theme-accent)) 0%,
+    var(--app-theme-canvas) 58%,
+    color-mix(in srgb, var(--app-theme-canvas) 92%, var(--app-theme-accent)) 100%
+  );
 }
 
 /* Theme-token dependency probes are restored synchronously, before paint. Keep
@@ -1317,6 +1599,10 @@ html[data-theme-id] .chat-markdown .chat-markdown-chrome-action[aria-pressed="tr
   color: var(--code-foreground);
 }
 
+html[data-theme-id] [data-app-sidebar]:not(.sidebar-glass) {
+  background-color: var(--sidebar);
+}
+
 html[data-theme-id] [data-app-sidebar] {
   --background: var(--app-theme-canvas);
   --foreground: var(--app-theme-text);
@@ -1337,7 +1623,6 @@ html[data-theme-id] [data-app-sidebar] {
   --sidebar-row-selected: var(--app-theme-sidebar-row-selected);
   --sidebar-border: var(--app-theme-sidebar-border);
   --sidebar-stage-fade: var(--app-theme-sidebar);
-  background-color: var(--sidebar);
 }
 
 /* Keep the navigation edge as quiet as the standard palettes. Theme files may
@@ -1408,26 +1693,58 @@ body {
   --desktop-window-right-resize-inset: 6px;
 }
 
-/* Electron's Windows 11 Acrylic backdrop is visible only through transparent
-   renderer surfaces. Keep the main workspace panels opaque, but let the
-   navigation panel reveal the desktop behind its tinted glass surface. */
+.electron-windows[data-glass-sidebar="true"] {
+  --desktop-window-right-resize-inset: 0px;
+}
+
+/* Renderer surfaces: keep solid until glass is enabled, then strip to
+   transparent so the native acrylic shows. The chip body/html paints are
+   repeated in the glass rule with !important to beat themed palettes. */
 html.electron-windows,
 html.electron-windows body {
+  background-color: var(--app-chrome-background);
+}
+
+html.electron-windows[data-glass-sidebar="true"],
+html.electron-windows[data-glass-sidebar="true"] body,
+html.electron-windows body[data-glass-sidebar="true"],
+html.electron-windows body[data-glass-sidebar="true"] #root,
+html.electron-windows body[data-glass-sidebar="true"] [data-slot="sidebar-wrapper"] {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+/* Native Acrylic already blurs the desktop. A second CSS backdrop-filter
+   on that live texture is what flickered the glass sidebar. Keep the tint
+   only; do not isolate a stacking context that can flash an empty backdrop. */
+html.electron-windows[data-glass-sidebar="true"] [data-app-sidebar].sidebar-glass,
+html.electron-windows[data-glass-sidebar="true"] [data-slot="sidebar-container"].sidebar-glass,
+html.electron-windows body[data-glass-sidebar="true"] [data-app-sidebar].sidebar-glass,
+html.electron-windows body[data-glass-sidebar="true"] [data-slot="sidebar-container"].sidebar-glass {
+  background: color-mix(in srgb, var(--sidebar) var(--glass-opacity), transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html.electron-windows[data-glass-sidebar="true"] [data-app-sidebar].sidebar-glass [data-slot="sidebar-inner"],
+html.electron-windows[data-glass-sidebar="true"] [data-slot="sidebar-container"].sidebar-glass [data-slot="sidebar-inner"],
+html.electron-windows body[data-glass-sidebar="true"] [data-app-sidebar].sidebar-glass [data-slot="sidebar-inner"],
+html.electron-windows body[data-glass-sidebar="true"] [data-slot="sidebar-container"].sidebar-glass [data-slot="sidebar-inner"] {
+  background: transparent !important;
+  background-image: none !important;
+}
+
+
+html.electron-windows [data-app-sidebar]:not(.sidebar-glass) {
+  background-color: var(--sidebar);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html.electron-windows [data-app-sidebar]:not(.sidebar-glass) [data-slot="sidebar-inner"] {
   background-color: transparent;
-}
-
-html.electron-windows body {
-  background-image: none;
-}
-
-html.electron-windows [data-app-sidebar] {
-  background-color: color-mix(in srgb, var(--sidebar) 72%, transparent);
-  backdrop-filter: blur(28px) saturate(140%);
-  -webkit-backdrop-filter: blur(28px) saturate(140%);
-}
-
-html.electron-windows [data-app-sidebar] [data-slot="sidebar-inner"] {
-  background-color: color-mix(in srgb, var(--sidebar) 72%, transparent);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 /* App-chrome grain. Baked into each surface's own background (behind
@@ -2119,6 +2436,155 @@ label:has(> select#reasoning-effort) select {
   background-clip: text;
   -webkit-background-clip: text;
   animation: ultrathink-rainbow 10s linear infinite;
+}
+
+@keyframes max-effort-border-breathe {
+  0%,
+  100% {
+    opacity: 0.28;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+@keyframes max-effort-frame-enter {
+  0% {
+    transform: scale(0.986);
+  }
+  55% {
+    transform: scale(1.012);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes max-effort-frame-exit {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(0.988);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+@keyframes max-effort-border-exit {
+  from {
+    opacity: 0.8;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes max-effort-host-enter {
+  0% {
+    transform: scale(0.992);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent);
+  }
+  45% {
+    transform: scale(1.008);
+    box-shadow: 0 0 26px color-mix(in srgb, var(--primary) 26%, transparent);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--primary) 0%, transparent);
+  }
+}
+
+@keyframes max-effort-host-exit {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 16px color-mix(in srgb, var(--primary) 16%, transparent);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+.max-effort-frame {
+  --max-effort-spectrum: linear-gradient(
+    120deg,
+    color-mix(in srgb, var(--primary) 48%, transparent) 0%,
+    color-mix(in srgb, color-mix(in srgb, var(--primary) 40%, white) 58%, transparent) 50%,
+    color-mix(in srgb, var(--primary) 48%, transparent) 100%
+  );
+  position: relative;
+  background: transparent;
+}
+
+.max-effort-frame:not(.max-effort-frame-exit) {
+  animation: max-effort-frame-enter 0.48s cubic-bezier(0.22, 1.12, 0.36, 1);
+}
+
+.max-effort-frame-exit {
+  animation: max-effort-frame-exit 0.42s ease-out forwards;
+}
+
+.max-effort-frame::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  background-image: var(--max-effort-spectrum);
+  background-size: 220% 220%;
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  animation:
+    ultrathink-rainbow 10s linear infinite,
+    max-effort-border-breathe 3.2s ease-in-out infinite;
+}
+
+.max-effort-frame-exit::before {
+  animation:
+    ultrathink-rainbow 10s linear infinite,
+    max-effort-border-exit 0.42s ease-out forwards;
+}
+
+.max-effort-frame > * {
+  position: relative;
+}
+
+.chat-composer-glass-host:has(.ultrathink-frame)::after,
+.chat-composer-glass-host:has(.max-effort-frame)::after {
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.chat-composer-glass-host:has(.max-effort-frame:not(.max-effort-frame-exit)) {
+  animation: max-effort-host-enter 0.5s cubic-bezier(0.22, 1.12, 0.36, 1);
+}
+
+.chat-composer-glass-host:has(.max-effort-frame-exit) {
+  animation: max-effort-host-exit 0.42s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .max-effort-frame:not(.max-effort-frame-exit),
+  .max-effort-frame-exit,
+  .max-effort-frame::before,
+  .max-effort-frame-exit::before,
+  .chat-composer-glass-host:has(.max-effort-frame:not(.max-effort-frame-exit)),
+  .chat-composer-glass-host:has(.max-effort-frame-exit) {
+    animation: none;
+  }
+
+  .max-effort-frame::before {
+    opacity: 0.55;
+  }
 }
 
 /* Composer chips are non-editable decorators, so the browser skips them when

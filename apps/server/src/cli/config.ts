@@ -16,6 +16,7 @@ import { Argument, Flag } from "effect/unstable/cli";
 import { readBootstrapEnvelope } from "../bootstrap.ts";
 import * as ServerConfig from "../config.ts";
 import { expandHomePath, resolveBaseDir } from "../os-jank.ts";
+import { applyLocalSpeechToTextEnvFile } from "../voiceTranscription.ts";
 
 export const modeFlag = Flag.choice("mode", ServerConfig.RuntimeMode.literals).pipe(
   Flag.withDescription("Runtime mode. `desktop` keeps loopback defaults unless overridden."),
@@ -286,6 +287,7 @@ export const resolveServerConfig = (
       baseDirIsExplicit: Option.isSome(explicitBaseDir),
     });
     yield* ServerConfig.ensureServerDirectories(derivedPaths);
+    applyLocalSpeechToTextEnvFile(path.join(derivedPaths.stateDir, ".env"));
     const persistedObservabilitySettings = yield* loadPersistedObservabilitySettings(
       derivedPaths.settingsPath,
     );

@@ -15,9 +15,9 @@ import * as Result from "effect/Result";
 import { useState, type ReactNode } from "react";
 import {
   isProviderDriverKind,
+  ProviderInstanceId,
   type ProviderInstanceConfig,
   type ProviderInstanceEnvironmentVariable,
-  type ProviderInstanceId,
   type ProviderDriverKind,
   type ServerProvider,
   type ServerProviderModel,
@@ -319,6 +319,7 @@ function ProviderEnvironmentSection(props: {
 }
 
 interface ProviderInstanceCardProps {
+  readonly setupControls?: ReactNode;
   readonly instanceId: ProviderInstanceId;
   readonly instance: ProviderInstanceConfig;
   readonly driverOption: DriverOption | undefined;
@@ -326,6 +327,10 @@ interface ProviderInstanceCardProps {
   readonly isExpanded: boolean;
   readonly onExpandedChange: (open: boolean) => void;
   readonly onUpdate: (nextInstance: ProviderInstanceConfig) => void;
+  readonly fallbackInstances: ReadonlyArray<{
+    readonly instanceId: ProviderInstanceId;
+    readonly displayName: string;
+  }>;
   /**
    * Pass `undefined` to hide the delete button entirely. Built-in default
    * instance slots use `undefined` — they can't be deleted without losing
@@ -376,6 +381,7 @@ interface ProviderInstanceCardProps {
  *     flows through the envelope.
  */
 export function ProviderInstanceCard({
+  setupControls,
   instanceId,
   instance,
   driverOption,
@@ -383,6 +389,7 @@ export function ProviderInstanceCard({
   isExpanded,
   onExpandedChange,
   onUpdate,
+  fallbackInstances,
   onDelete,
   headerAction,
   hiddenModels,
@@ -497,6 +504,18 @@ export function ProviderInstanceCard({
     onUpdate(
       cleaned.length > 0
         ? ({ ...rest, environment: cleaned } as ProviderInstanceConfig)
+        : (rest as ProviderInstanceConfig),
+    );
+  };
+
+  const updateFallbackInstance = (value: string) => {
+    const { fallbackInstanceId: _omit, ...rest } = instance;
+    onUpdate(
+      value
+        ? ({
+            ...rest,
+            fallbackInstanceId: ProviderInstanceId.make(value),
+          } as ProviderInstanceConfig)
         : (rest as ProviderInstanceConfig),
     );
   };
@@ -757,6 +776,27 @@ export function ProviderInstanceCard({
               />
             </div>
 
+            <label className="block">
+              <span className="text-xs font-medium text-foreground">Fallback instance</span>
+              <select
+                className="mt-1.5 h-9 w-full rounded-md border border-input bg-background px-3 text-sm text-foreground"
+                value={instance.fallbackInstanceId ?? ""}
+                onChange={(event) => updateFallbackInstance(event.target.value)}
+                aria-label={`Fallback instance for ${displayName}`}
+              >
+                <option value="">None</option>
+                {fallbackInstances.map((fallback) => (
+                  <option key={fallback.instanceId} value={fallback.instanceId}>
+                    {fallback.displayName}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                Continues this thread on another account when the current account reaches its
+                five-hour limit.
+              </span>
+            </label>
+
             <div>
               <ProviderEnvironmentSection
                 environment={instance.environment ?? []}
@@ -764,6 +804,7 @@ export function ProviderInstanceCard({
               />
             </div>
 
+            {setupControls}
             {driverOption ? (
               <ProviderSettingsForm
                 definition={driverOption}

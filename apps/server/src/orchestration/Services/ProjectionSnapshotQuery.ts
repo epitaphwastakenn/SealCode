@@ -11,6 +11,8 @@ import type {
   OrchestrationCheckpointSummary,
   OrchestrationProject,
   OrchestrationProjectShell,
+  OrchestrationGetProjectDiffIndexInput,
+  OrchestrationGetProjectDiffIndexResult,
   OrchestrationReadModel,
   OrchestrationSearchThreadsInput,
   OrchestrationSearchThreadsResult,
@@ -155,6 +157,11 @@ export interface ProjectionSnapshotQueryShape {
     threadId: ThreadId,
     toTurnCount: number,
   ) => Effect.Effect<Option.Option<ProjectionFullThreadDiffContext>, ProjectionRepositoryError>;
+
+  /** Read compact checkpoint summaries for every thread in one project. */
+  readonly getProjectDiffIndex?: (
+    input: OrchestrationGetProjectDiffIndexInput,
+  ) => Effect.Effect<OrchestrationGetProjectDiffIndexResult, ProjectionRepositoryError>;
 
   /**
    * Read a single active thread shell row by id.

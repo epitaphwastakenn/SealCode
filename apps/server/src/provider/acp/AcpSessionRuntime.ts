@@ -50,17 +50,53 @@ export type AcpSessionRuntimeEvent = AcpParsedSessionEvent | AcpSessionEventStre
 const defaultSessionLoadTimeout = Duration.seconds(90);
 const defaultSessionLoadReplayIdleGap = Duration.seconds(2);
 
+function failOnRpcTimeout<A, E, R>(
+  method: string,
+  timeout: Duration.Input | undefined,
+  effect: Effect.Effect<A, E, R>,
+): Effect.Effect<A, E | EffectAcpErrors.AcpTransportError, R> {
+  if (timeout === undefined) {
+    return effect;
+  }
+  const duration = Duration.fromInputUnsafe(timeout);
+  return effect.pipe(
+    Effect.timeoutOption(duration),
+    Effect.flatMap((result) =>
+      Option.match(result, {
+        onNone: () =>
+          Effect.fail(
+            new EffectAcpErrors.AcpTransportError({
+              operation: "call-rpc",
+              method,
+              detail: `${method} timed out after ${Math.round(Duration.toMillis(duration))}ms`,
+              cause: undefined,
+            }),
+          ),
+        onSome: Effect.succeed,
+      }),
+    ),
+  );
+}
+
 export interface AcpSpawnInput {
   readonly command: string;
   readonly args: ReadonlyArray<string>;
   readonly cwd?: string;
   readonly env?: NodeJS.ProcessEnv;
+  readonly extendEnv?: boolean;
 }
 
 export interface AcpSessionRuntimeOptions {
   readonly spawn: AcpSpawnInput;
   readonly cwd: string;
   readonly resumeSessionId?: string;
+  readonly resumeMethod?: "load" | "resume";
+  readonly cancelBehavior?: "interrupt" | "wait-for-prompt";
+  readonly transformStdout?: (stdout: ChildProcessSpawner.ChildProcessHandle["stdout"]) => ChildProcessSpawner.ChildProcessHandle["stdout"];
+  readonly onStderr?: (text: string) => Effect.Effect<void>;
+  readonly initializeTimeout?: Duration.Input;
+  readonly authenticateTimeout?: Duration.Input;
+  readonly sessionNewTimeout?: Duration.Input;
   readonly sessionLoadTimeout?: Duration.Input;
   readonly sessionLoadReplayIdleGap?: Duration.Input;
   readonly clientCapabilities?: EffectAcpSchema.InitializeRequest["clientCapabilities"];
@@ -332,13 +368,14 @@ export const make = (
     const spawnCommand = yield* resolveSpawnCommand(
       options.spawn.command,
       options.spawn.args,
-      options.spawn.env ? { env: options.spawn.env, extendEnv: true } : {},
+      { ...(options.spawn.env ? { env: options.spawn.env } : {}), extendEnv: options.spawn.extendEnv ?? true },
     );
     const child = yield* spawner
       .spawn(
         ChildProcess.make(spawnCommand.command, spawnCommand.args, {
           ...(options.spawn.cwd ? { cwd: options.spawn.cwd } : {}),
-          ...(options.spawn.env ? { env: options.spawn.env, extendEnv: true } : {}),
+          ...(options.spawn.env ? { env: options.spawn.env } : {}),
+          extendEnv: options.spawn.extendEnv ?? true,
           shell: spawnCommand.shell,
         }),
       )
@@ -353,8 +390,9 @@ export const make = (
         ),
       );
 
+    yield* child.stderr.pipe(Stream.decodeText(), Stream.runForEach(options.onStderr ?? (() => Effect.void)), Effect.forkIn(runtimeScope));
     const acpContext = yield* Layer.build(
-      EffectAcpClient.layerChildProcess(child, {
+      EffectAcpClient.layerChildProcess({ ...child, stdout: options.transformStdout?.(child.stdout) ?? child.stdout }, {
         ...(options.protocolLogging?.logIncoming !== undefined
           ? { logIncoming: options.protocolLogging.logIncoming }
           : {}),
@@ -538,7 +576,11 @@ export const make = (
       const initializeResult = yield* runLoggedRequest(
         "initialize",
         initializePayload,
-        acp.agent.initialize(initializePayload),
+        failOnRpcTimeout(
+          "initialize",
+          options.initializeTimeout,
+          acp.agent.initialize(initializePayload),
+        ),
       );
 
       const authenticatePayload = {
@@ -548,7 +590,11 @@ export const make = (
       yield* runLoggedRequest(
         "authenticate",
         authenticatePayload,
-        acp.agent.authenticate(authenticatePayload),
+        failOnRpcTimeout(
+          "authenticate",
+          options.authenticateTimeout,
+          acp.agent.authenticate(authenticatePayload),
+        ),
       );
 
       let sessionId: string;
@@ -556,7 +602,12 @@ export const make = (
         | EffectAcpSchema.LoadSessionResponse
         | EffectAcpSchema.NewSessionResponse
         | EffectAcpSchema.ResumeSessionResponse;
-      if (options.resumeSessionId) {
+      if (options.resumeSessionId && options.resumeMethod === "resume") {
+        sessionId = options.resumeSessionId;
+        const payload = { sessionId, cwd: options.cwd, mcpServers: options.mcpServers ?? [] };
+        sessionSetupResult = yield* runLoggedRequest("session/resume", payload,
+          failOnRpcTimeout("session/resume", options.sessionLoadTimeout ?? defaultSessionLoadTimeout, acp.agent.resumeSession(payload)));
+      } else if (options.resumeSessionId) {
         const loadPayload = {
           sessionId: options.resumeSessionId,
           cwd: options.cwd,
@@ -638,7 +689,11 @@ export const make = (
         const created = yield* runLoggedRequest(
           "session/new",
           createPayload,
-          acp.agent.createSession(createPayload),
+          failOnRpcTimeout(
+            "session/new",
+            options.sessionNewTimeout,
+            acp.agent.createSession(createPayload),
+          ),
         );
         sessionId = created.sessionId;
         sessionSetupResult = created;
@@ -749,7 +804,7 @@ export const make = (
                   yield* Ref.set(activePromptFiberRef, Option.none());
                 }),
               ),
-              Effect.tap(() =>
+              Effect.ensuring(
                 closeActiveAssistantSegment({
                   queue: eventQueue,
                   assistantSegmentRef,
@@ -762,6 +817,11 @@ export const make = (
         Effect.flatMap((started) =>
           Effect.gen(function* () {
             const activePromptFiber = yield* Ref.get(activePromptFiberRef);
+            if (options.cancelBehavior === "wait-for-prompt") {
+              yield* acp.agent.cancel({ sessionId: started.sessionId });
+              if (Option.isSome(activePromptFiber)) yield* Fiber.await(activePromptFiber.value);
+              return;
+            }
             if (Option.isSome(activePromptFiber)) {
               yield* Fiber.interrupt(activePromptFiber.value).pipe(Effect.ignore);
             }

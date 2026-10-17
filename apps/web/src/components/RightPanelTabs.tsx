@@ -1,6 +1,6 @@
 import type { ContextMenuItem, PreviewSessionSnapshot } from "@t3tools/contracts";
 import { getTerminalLabel } from "@t3tools/shared/terminalLabels";
-import { Bot, FileDiff, Files, Globe2, Plus, TerminalSquare, X } from "lucide-react";
+import { Bot, FileDiff, Files, GitCompareArrows, Globe2, Plus, TerminalSquare, X } from "lucide-react";
 import {
   type MouseEvent as ReactMouseEvent,
   type ReactElement,
@@ -43,10 +43,12 @@ interface RightPanelTabsProps {
   onAddBrowser: () => void;
   onAddTerminal: () => void;
   onAddDiff: () => void;
+  onAddDiffCenter: () => void;
   onAddFiles: () => void;
   onAddAgents: () => void;
   browserAvailable: boolean;
   diffAvailable: boolean;
+  diffCenterAvailable: boolean;
   filesAvailable: boolean;
   /** Running + waiting subagents; badges the Agents card in the empty state. */
   liveAgentCount: number;
@@ -93,10 +95,12 @@ function RightPanelEmptyState(props: {
   onAddBrowser: () => void;
   onAddTerminal: () => void;
   onAddDiff: () => void;
+  onAddDiffCenter: () => void;
   onAddFiles: () => void;
   onAddAgents: () => void;
   browserAvailable: boolean;
   diffAvailable: boolean;
+  diffCenterAvailable: boolean;
   filesAvailable: boolean;
   liveAgentCount: number;
 }) {
@@ -135,6 +139,15 @@ function RightPanelEmptyState(props: {
       available: props.diffAvailable,
       disabledReason: SURFACE_DISABLED_REASONS.diff,
       onClick: props.onAddDiff,
+      badgeCount: 0,
+    },
+    {
+      label: "Project diffs",
+      description: "Review checkpoint changes across this project.",
+      icon: GitCompareArrows,
+      available: props.diffCenterAvailable,
+      disabledReason: "Project diffs are only available when a project is open.",
+      onClick: props.onAddDiffCenter,
       badgeCount: 0,
     },
     {
@@ -222,6 +235,8 @@ function surfaceTitle(
   switch (surface.kind) {
     case "diff":
       return "Diff";
+    case "diff-center":
+      return "Project diffs";
     case "files":
       return "Files";
     case "file":
@@ -279,6 +294,8 @@ function SurfaceIcon({
     }
     case "diff":
       return <FileDiff className="size-3 shrink-0" />;
+    case "diff-center":
+      return <GitCompareArrows className="size-3 shrink-0" />;
     case "files":
       return <Files className="size-3 shrink-0" />;
     case "file":
@@ -494,6 +511,14 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                     <FileDiff />
                     Diff
                   </SurfaceMenuItem>
+                  <SurfaceMenuItem
+                    available={props.diffCenterAvailable}
+                    disabledReason="Project diffs are only available when a project is open."
+                    onClick={props.onAddDiffCenter}
+                  >
+                    <GitCompareArrows />
+                    Project diffs
+                  </SurfaceMenuItem>
                   <SurfaceMenuItem available onClick={props.onAddAgents}>
                     <Bot />
                     Agents
@@ -511,10 +536,12 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
             onAddBrowser={props.onAddBrowser}
             onAddTerminal={props.onAddTerminal}
             onAddDiff={props.onAddDiff}
+            onAddDiffCenter={props.onAddDiffCenter}
             onAddFiles={props.onAddFiles}
             onAddAgents={props.onAddAgents}
             browserAvailable={props.browserAvailable}
             diffAvailable={props.diffAvailable}
+            diffCenterAvailable={props.diffCenterAvailable}
             filesAvailable={props.filesAvailable}
             liveAgentCount={props.liveAgentCount}
           />

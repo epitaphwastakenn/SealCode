@@ -1,8 +1,36 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { mapAntigravitySubscriptionUsage } from "./antigravityUsage.ts";
+import {
+  isAntigravityQuotaErrorMessage,
+  isAntigravityQuotaExhausted,
+  extractAntigravityOAuthClient,
+  mapAntigravitySubscriptionUsage,
+  parseAntigravityCredentials,
+} from "./antigravityUsage.ts";
 
 describe("Antigravity subscription usage", () => {
+  it("detects exhausted five-hour usage and quota-limit errors", () => {
+    expect(
+      isAntigravityQuotaExhausted({
+        plan: null,
+        windows: [
+          {
+            id: "antigravity-gemini-5-hour",
+            label: "Gemini 5 hour",
+            usedPercent: 100,
+            windowDurationMins: 300,
+            resetsAt: null,
+          },
+        ],
+        metrics: [],
+        checkedAt: "2026-08-15T00:00:00.000Z",
+      }),
+    ).toBe(true);
+    expect(isAntigravityQuotaErrorMessage("You've reached your 5-hour usage limit.")).toBe(true);
+    expect(isAntigravityQuotaErrorMessage("HTTP 429: quota exceeded")).toBe(true);
+    expect(isAntigravityQuotaErrorMessage("Authentication failed")).toBe(false);
+  });
+
   it("maps quota-summary groups into model family windows", () => {
     const usage = mapAntigravitySubscriptionUsage({
       checkedAt: "2026-08-10T12:00:00.000Z",
@@ -61,5 +89,76 @@ describe("Antigravity subscription usage", () => {
     expect(usage?.windows.map((window) => window.usedPercent)).toEqual(
       expect.arrayContaining([expect.closeTo(10), expect.closeTo(60)]),
     );
+  });
+
+  it("maps the cloud quota summary returned without a local language server", () => {
+    const usage = mapAntigravitySubscriptionUsage({
+      checkedAt: "2026-08-12T12:00:00.000Z",
+      payload: {
+        groups: [
+          {
+            displayName: "Gemini Models",
+            buckets: [
+              {
+                displayName: "Weekly Limit Remaining",
+                remainingFraction: 0.8,
+                resetTime: "2026-08-17T12:00:00Z",
+              },
+              {
+                displayName: "Five Hour Limit Remaining",
+                remainingFraction: 0.25,
+                resetTime: "2026-08-12T17:00:00Z",
+              },
+            ],
+          },
+        ],
+      },
+    });
+
+    expect(usage?.windows.map((window) => [window.label, window.usedPercent])).toEqual([
+      ["Gemini Weekly", expect.closeTo(20)],
+      ["Gemini 5 hour", 75],
+    ]);
+  });
+
+  it("normalizes keyring and OAuth-file credentials", () => {
+    expect(
+      parseAntigravityCredentials({
+        token: {
+          access_token: "keyring-access",
+          refresh_token: "keyring-refresh",
+          expiry: "2026-08-12T13:00:00Z",
+        },
+      }),
+    ).toEqual({
+      accessToken: "keyring-access",
+      refreshToken: "keyring-refresh",
+      expiresAt: Date.parse("2026-08-12T13:00:00Z"),
+    });
+    expect(
+      parseAntigravityCredentials({
+        access_token: "file-access",
+        refresh_token: "file-refresh",
+        expiry_date: 1_786_539_600_000,
+      }),
+    ).toEqual({
+      accessToken: "file-access",
+      refreshToken: "file-refresh",
+      expiresAt: 1_786_539_600_000,
+    });
+  });
+
+  it("extracts Antigravity's OAuth client without consuming adjacent binary text", () => {
+    const clientSecret = `GOCSPX-${"a".repeat(28)}`;
+    const binary = Buffer.from(
+      `884354919052-other.apps.googleusercontent.com\0${clientSecret}trailing\0` +
+        "107100606059-antigravity.apps.googleusercontent.com",
+      "latin1",
+    );
+
+    expect(extractAntigravityOAuthClient(binary)).toEqual({
+      clientId: "107100606059-antigravity.apps.googleusercontent.com",
+      clientSecret,
+    });
   });
 });

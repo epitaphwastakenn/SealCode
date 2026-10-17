@@ -1,5 +1,6 @@
 import { type CursorSettings, type ProviderOptionSelection } from "@t3tools/contracts";
 import * as Crypto from "effect/Crypto";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
@@ -12,6 +13,10 @@ import {
   resolveCursorAcpConfigUpdates,
 } from "../Layers/CursorProvider.ts";
 import * as AcpSessionRuntime from "./AcpSessionRuntime.ts";
+
+const CURSOR_ACP_INITIALIZE_TIMEOUT = Duration.seconds(20);
+const CURSOR_ACP_AUTHENTICATE_TIMEOUT = Duration.seconds(30);
+const CURSOR_ACP_SESSION_NEW_TIMEOUT = Duration.seconds(20);
 
 type CursorAcpRuntimeCursorSettings = Pick<CursorSettings, "apiEndpoint" | "binaryPath">;
 
@@ -60,6 +65,9 @@ export const makeCursorAcpRuntime = (
         spawn: buildCursorAcpSpawnInput(input.cursorSettings, input.cwd, input.environment),
         authMethodId: "cursor_login",
         clientCapabilities: CURSOR_PARAMETERIZED_MODEL_PICKER_CAPABILITIES,
+        initializeTimeout: input.initializeTimeout ?? CURSOR_ACP_INITIALIZE_TIMEOUT,
+        authenticateTimeout: input.authenticateTimeout ?? CURSOR_ACP_AUTHENTICATE_TIMEOUT,
+        sessionNewTimeout: input.sessionNewTimeout ?? CURSOR_ACP_SESSION_NEW_TIMEOUT,
       }).pipe(
         Layer.provide(
           Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, input.childProcessSpawner),

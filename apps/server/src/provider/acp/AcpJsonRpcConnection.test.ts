@@ -566,6 +566,68 @@ describe("AcpSessionRuntime", () => {
     ),
   );
 
+  it.effect("fails start when authenticate exceeds authenticateTimeout", () =>
+    Effect.gen(function* () {
+      const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
+      const error = yield* runtime.start().pipe(Effect.flip);
+      expect(error._tag).toBe("AcpTransportError");
+      if (error._tag === "AcpTransportError") {
+        expect(error.method).toBe("authenticate");
+        expect(error.detail).toContain("authenticate timed out");
+      }
+    }).pipe(
+      Effect.provide(
+        AcpSessionRuntime.layer({
+          authMethodId: "test",
+          spawn: {
+            command: mockAgentCommand,
+            args: mockAgentArgs,
+            env: {
+              T3_ACP_HANG_AUTHENTICATE_FOREVER: "1",
+            },
+          },
+          cwd: process.cwd(),
+          authenticateTimeout: "500 millis",
+          clientInfo: { name: "t3-test", version: "0.0.0" },
+        }),
+      ),
+      Effect.scoped,
+      Effect.provide(NodeServices.layer),
+      TestClock.withLive,
+    ),
+  );
+
+  it.effect("fails start when initialize exceeds initializeTimeout", () =>
+    Effect.gen(function* () {
+      const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
+      const error = yield* runtime.start().pipe(Effect.flip);
+      expect(error._tag).toBe("AcpTransportError");
+      if (error._tag === "AcpTransportError") {
+        expect(error.method).toBe("initialize");
+        expect(error.detail).toContain("initialize timed out");
+      }
+    }).pipe(
+      Effect.provide(
+        AcpSessionRuntime.layer({
+          authMethodId: "test",
+          spawn: {
+            command: mockAgentCommand,
+            args: mockAgentArgs,
+            env: {
+              T3_ACP_HANG_INITIALIZE_FOREVER: "1",
+            },
+          },
+          cwd: process.cwd(),
+          initializeTimeout: "500 millis",
+          clientInfo: { name: "t3-test", version: "0.0.0" },
+        }),
+      ),
+      Effect.scoped,
+      Effect.provide(NodeServices.layer),
+      TestClock.withLive,
+    ),
+  );
+
   it.effect("completes session/load after replay becomes idle while its RPC stays pending", () =>
     Effect.gen(function* () {
       const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;

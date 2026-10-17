@@ -131,7 +131,7 @@ export function AgentActivity(
   // minimal glyph — must agree, and a failure anywhere should dominate a
   // newer success.
   const allDone = props.activeCount === 0;
-  const doneLabel = failedRow ? "Failed" : "Done";
+  const doneLabel = failedRow ? "Failed" : "Completed";
   const outcomeLabel = failedRow ? "Agent work failed" : "Agent work completed";
 
   // Header copy: "5 active agents" + (", 1 needs attention"). The banner renders
@@ -256,7 +256,7 @@ export function AgentActivity(
               modifiers={[
                 font({ weight: "semibold", size: 13 }),
                 // The all-done header carries the outcome tint (emerald /
-                // red) the way the Done/Failed status labels do.
+                // red) the way the Completed/Failed status labels do.
                 foregroundStyle(allDone ? headerTint : primaryForeground),
                 lineLimit(1),
               ]}
@@ -328,8 +328,8 @@ export function AgentActivity(
       <Text modifiers={[font({ weight: "semibold", size: 11 }), foregroundStyle(tint)]}>
         {attentionRow
           ? attentionRow.phase === "waiting_for_approval"
-            ? "Approval"
-            : "Input"
+            ? "Needs approval"
+            : "Needs input"
           : activeLabel}
       </Text>
     ),

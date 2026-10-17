@@ -1,7 +1,13 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { EnvironmentId, ThreadId } from "@t3tools/contracts";
+import { createFileRoute, Link, redirect, useNavigate } from "@tanstack/react-router";
 import { LinkIcon, PlusIcon, RotateCcwIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAtomValue } from "@effect/atom-react";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 
 import { openCommandPalette } from "../commandPaletteBus";
 import { sortScopedProjectsForSidebar } from "../components/Sidebar.logic";
@@ -9,15 +15,23 @@ import { Button } from "../components/ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../components/ui/empty";
 import { SidebarInset } from "../components/ui/sidebar";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
+import { resolveChatIndexLanding } from "../lib/chatIndexLanding";
+import { DraftId, useComposerDraftStore } from "../composerDraftStore";
 import {
   useAllEnvironmentShellsBootstrapped,
   useProjects,
   useThreadShells,
 } from "../state/entities";
-import { useEnvironments } from "../state/environments";
+import { useEnvironments, usePrimaryEnvironmentId } from "../state/environments";
+import { projectEnvironment } from "../state/projects";
+import { useAtomCommand } from "../state/use-atom-command";
+import { primaryServerProvidersAtom } from "../state/server";
+import { resolveDefaultProviderModelSelection } from "../providerInstances";
 import { APP_DISPLAY_NAME } from "~/branding";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
-import { cn } from "~/lib/utils";
+import { cn, newProjectId } from "~/lib/utils";
+import { buildDraftThreadRouteParams, buildThreadRouteParams } from "../threadRoutes";
+import { useUiStateStore } from "../uiStateStore";
 import { COLLAPSED_SIDEBAR_TITLEBAR_INSET_CLASS } from "~/workspaceTitlebar";
 
 function ChatIndexRouteView() {
@@ -32,17 +46,25 @@ function ChatIndexRouteView() {
 }
 
 /**
- * Landing on the index route drops straight into a draft thread for the most
- * recently active project, so the first screen is a prompt instead of a dead
- * end. Falls back to an add-project hero when no project exists yet.
+ * `/` should never be a dead glass pane. Restore the last open thread when it
+ * still exists, otherwise land in a composer — a new draft for the latest
+ * project, or a scratch chat when no project has been added yet.
  */
 function IndexDraftLanding() {
+  const navigate = useNavigate();
   const projects = useProjects();
   const threads = useThreadShells();
   const bootstrapped = useAllEnvironmentShellsBootstrapped();
   const handleNewThread = useNewThreadHandler();
-  const startingRef = useRef(false);
+  const lastOpenThreadRoute = useUiStateStore((state) => state.lastOpenThreadRoute);
+  const draftThreadsByThreadKey = useComposerDraftStore((store) => store.draftThreadsByThreadKey);
+  const draftIds = useMemo(
+    () => new Set(Object.keys(draftThreadsByThreadKey)),
+    [draftThreadsByThreadKey],
+  );
+  const startedKeyRef = useRef<string | null>(null);
   const [startState, setStartState] = useState({ failed: false, retryRequest: 0 });
+  const createScratchThread = useCreateScratchThread();
 
   const mostRecentProject = useMemo(
     () =>
@@ -52,26 +74,74 @@ function IndexDraftLanding() {
     [bootstrapped, projects, threads],
   );
 
+  const landing = useMemo(() => {
+    if (!bootstrapped) {
+      return null;
+    }
+    return resolveChatIndexLanding({
+      lastOpenThreadRoute,
+      threads,
+      draftIds,
+      mostRecentProject:
+        mostRecentProject === null
+          ? null
+          : { environmentId: mostRecentProject.environmentId, id: mostRecentProject.id },
+    });
+  }, [bootstrapped, draftIds, lastOpenThreadRoute, mostRecentProject, threads]);
+
   useEffect(() => {
-    if (mostRecentProject === null || startingRef.current) {
+    if (landing === null) {
       return;
     }
-    startingRef.current = true;
-    void handleNewThread(scopeProjectRef(mostRecentProject.environmentId, mostRecentProject.id), {
-      replace: true,
-    }).catch(() => {
-      startingRef.current = false;
+    const landingKey = `${startState.retryRequest}:${JSON.stringify(landing)}`;
+    if (startedKeyRef.current === landingKey) {
+      return;
+    }
+    startedKeyRef.current = landingKey;
+
+    const run = async () => {
+      if (landing.kind === "server") {
+        await navigate({
+          to: "/$environmentId/$threadId",
+          params: buildThreadRouteParams({
+            environmentId: landing.environmentId,
+            threadId: landing.threadId,
+          }),
+          replace: true,
+        });
+        return;
+      }
+      if (landing.kind === "draft") {
+        await navigate({
+          to: "/draft/$draftId",
+          params: buildDraftThreadRouteParams(DraftId.make(landing.draftId)),
+          replace: true,
+        });
+        return;
+      }
+      if (landing.kind === "new-draft") {
+        await handleNewThread(scopeProjectRef(landing.environmentId, landing.projectId), {
+          replace: true,
+        });
+        return;
+      }
+      await createScratchThread();
+    };
+
+    void run().catch(() => {
+      startedKeyRef.current = null;
       setStartState((state) => ({ ...state, failed: true }));
     });
-  }, [handleNewThread, mostRecentProject, startState.retryRequest]);
+  }, [createScratchThread, handleNewThread, landing, navigate, startState.retryRequest]);
 
   if (!bootstrapped) {
     return null;
   }
-  if (mostRecentProject !== null) {
+  if (landing !== null && landing.kind !== "scratch") {
     return startState.failed ? (
       <DraftStartError
         onRetry={() => {
+          startedKeyRef.current = null;
           setStartState((state) => ({
             failed: false,
             retryRequest: state.retryRequest + 1,
@@ -80,7 +150,49 @@ function IndexDraftLanding() {
       />
     ) : null;
   }
-  return <NoProjectsHero />;
+  return startState.failed ? (
+    <NoProjectsHero
+      onRetry={() => {
+        startedKeyRef.current = null;
+        setStartState((state) => ({
+          failed: false,
+          retryRequest: state.retryRequest + 1,
+        }));
+      }}
+    />
+  ) : null;
+}
+
+function useCreateScratchThread() {
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const providers = useAtomValue(primaryServerProvidersAtom);
+  const createProject = useAtomCommand(projectEnvironment.create, { reportFailure: false });
+  const handleNewThread = useNewThreadHandler();
+
+  return useCallback(async () => {
+    if (primaryEnvironmentId === null) {
+      throw new Error("Connect a local environment before starting a scratch chat.");
+    }
+    const projectId = newProjectId();
+    const result = await createProject({
+      environmentId: primaryEnvironmentId,
+      input: {
+        projectId,
+        title: "No project",
+        workspaceRoot: "~/.sealcode/scratch",
+        createWorkspaceRootIfMissing: true,
+        defaultModelSelection: resolveDefaultProviderModelSelection(providers, null),
+      },
+    });
+    if (result._tag === "Failure") {
+      if (isAtomCommandInterrupted(result)) {
+        return;
+      }
+      const error = squashAtomCommandFailure(result);
+      throw error instanceof Error ? error : new Error("Could not create scratch chat.");
+    }
+    await handleNewThread(scopeProjectRef(primaryEnvironmentId, projectId), { replace: true });
+  }, [createProject, handleNewThread, primaryEnvironmentId, providers]);
 }
 
 function DraftStartError({ onRetry }: { readonly onRetry: () => void }) {
@@ -88,9 +200,9 @@ function DraftStartError({ onRetry }: { readonly onRetry: () => void }) {
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
       <Empty className="flex-1">
         <EmptyHeader className="max-w-md">
-          <EmptyTitle className="text-foreground text-xl">Couldn’t start a new thread</EmptyTitle>
+          <EmptyTitle className="text-foreground text-xl">Couldn’t open a thread</EmptyTitle>
           <EmptyDescription className="mt-2 text-sm text-muted-foreground/78">
-            The project is still available. Try opening the draft again.
+            Try opening the last workspace again, or start a new chat.
           </EmptyDescription>
           <div className="mt-5 flex justify-center">
             <Button size="sm" onClick={onRetry}>
@@ -104,8 +216,22 @@ function DraftStartError({ onRetry }: { readonly onRetry: () => void }) {
   );
 }
 
-function NoProjectsHero() {
+function NoProjectsHero({ onRetry }: { readonly onRetry?: () => void }) {
   const openAddProject = useCallback(() => openCommandPalette({ open: "add-project" }), []);
+  const createScratchThread = useCreateScratchThread();
+  const [scratchError, setScratchError] = useState<string | null>(null);
+  const [creatingScratch, setCreatingScratch] = useState(false);
+  const startScratch = useCallback(async () => {
+    if (creatingScratch) return;
+    setCreatingScratch(true);
+    setScratchError(null);
+    try {
+      await createScratchThread();
+    } catch (error) {
+      setScratchError(error instanceof Error ? error.message : "Could not open scratch chat.");
+      setCreatingScratch(false);
+    }
+  }, [createScratchThread, creatingScratch]);
 
   return (
     <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none bg-background text-foreground">
@@ -114,17 +240,35 @@ function NoProjectsHero() {
           <div className="w-full max-w-lg px-8 py-12">
             <EmptyHeader className="max-w-none">
               <EmptyTitle className="text-foreground text-2xl sm:text-3xl">
-                What should we work on?
+                Where should we work now?
               </EmptyTitle>
               <EmptyDescription className="mt-2 text-sm text-muted-foreground/78">
-                Add a project to start your first thread.
+                Start a scratch chat immediately, or add a project when the agent should work in a
+                repository.
               </EmptyDescription>
-              <div className="mt-6 flex justify-center">
+              <div className="mt-6 flex flex-wrap justify-center gap-2">
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (onRetry) {
+                      onRetry();
+                      return;
+                    }
+                    void startScratch();
+                  }}
+                  disabled={creatingScratch}
+                >
+                  <PlusIcon className="size-4" />
+                  {creatingScratch ? "Starting…" : "New scratch chat"}
+                </Button>
                 <Button size="sm" onClick={openAddProject}>
                   <PlusIcon className="size-4" />
                   Add project
                 </Button>
               </div>
+              {scratchError ? (
+                <p className="mt-3 text-center text-xs text-destructive">{scratchError}</p>
+              ) : null}
             </EmptyHeader>
           </div>
         </Empty>
@@ -134,6 +278,29 @@ function NoProjectsHero() {
 }
 
 export const Route = createFileRoute("/_chat/")({
+  beforeLoad: () => {
+    const lastOpenThreadRoute = useUiStateStore.getState().lastOpenThreadRoute;
+    if (lastOpenThreadRoute?.kind === "server") {
+      throw redirect({
+        to: "/$environmentId/$threadId",
+        params: {
+          environmentId: EnvironmentId.make(lastOpenThreadRoute.environmentId),
+          threadId: ThreadId.make(lastOpenThreadRoute.threadId),
+        },
+        replace: true,
+      });
+    }
+    if (lastOpenThreadRoute?.kind === "draft") {
+      const draftId = DraftId.make(lastOpenThreadRoute.draftId);
+      if (useComposerDraftStore.getState().getDraftSession(draftId) !== null) {
+        throw redirect({
+          to: "/draft/$draftId",
+          params: { draftId },
+          replace: true,
+        });
+      }
+    }
+  },
   component: ChatIndexRouteView,
 });
 

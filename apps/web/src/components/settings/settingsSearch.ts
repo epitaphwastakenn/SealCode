@@ -53,6 +53,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     targetId: "appearance",
   },
   {
+    id: "glass-sidebar",
+    title: "Glass sidebar",
+    to: "/settings/appearance",
+  },
+  {
     // Prefixed because the slider control already owns the `glass-opacity` id.
     id: "setting-glass-opacity",
     title: "Glass opacity",
@@ -118,6 +123,11 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "hide-whitespace-changes",
     title: "Hide whitespace changes",
+    to: "/settings/general",
+  },
+  {
+    id: "diff-presentation",
+    title: "Diff presentation",
     to: "/settings/general",
   },
   {
@@ -224,6 +234,11 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "remote-environments",
     title: "Remote environments",
+    to: "/settings/connections",
+  },
+  {
+    id: "global-mcp-servers",
+    title: "Global MCP servers",
     to: "/settings/connections",
   },
   {

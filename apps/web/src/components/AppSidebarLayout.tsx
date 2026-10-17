@@ -2,6 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
   useEffect,
+  useLayoutEffect,
   useState,
   useSyncExternalStore,
   type CSSProperties,
@@ -14,7 +15,11 @@ import { getLocalStorageItem } from "../hooks/useLocalStorage";
 import { resolveShortcutCommand, shortcutLabelForCommand } from "../keybindings";
 import { cn, isMacPlatform } from "../lib/utils";
 import { primaryServerKeybindingsAtom } from "../state/server";
-import { useEnvironmentIdentificationMode, useLegacySidebarEnabled } from "../hooks/useSettings";
+import {
+  useEnvironmentIdentificationMode,
+  useGlassSidebarEnabled,
+  useLegacySidebarEnabled,
+} from "../hooks/useSettings";
 import LegacyThreadSidebar from "./LegacySidebar";
 import ThreadSidebar from "./Sidebar";
 import { SettingsSidebarNav } from "./settings/SettingsSidebarNav";
@@ -121,6 +126,7 @@ function SidebarControl() {
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const legacySidebarEnabled = useLegacySidebarEnabled();
+  const glassSidebarEnabled = useGlassSidebarEnabled();
   // Settings routes show the settings nav in place of whichever thread
   // sidebar is active.
   const pathname = useLocation({ select: (location) => location.pathname });
@@ -182,13 +188,18 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
     };
   }, [navigate, pathname]);
 
+  useLayoutEffect(() => {
+    document.documentElement.dataset.glassSidebar = glassSidebarEnabled ? "true" : "false";
+    document.body.dataset.glassSidebar = glassSidebarEnabled ? "true" : "false";
+  }, [glassSidebarEnabled]);
+
   return (
     <SidebarProvider className="h-dvh! min-h-0!" defaultOpen style={sidebarProviderStyle}>
       <Sidebar
         side="left"
         collapsible="offcanvas"
         data-app-sidebar=""
-        className="border-r border-sidebar-border bg-sidebar text-sidebar-foreground"
+        className="border-r border-sidebar-border text-sidebar-foreground"
         resizable={{
           maxWidth: sidebarMaximumWidth,
           minWidth: THREAD_SIDEBAR_MIN_WIDTH,

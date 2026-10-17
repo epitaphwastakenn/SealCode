@@ -28,6 +28,7 @@ export const ORCHESTRATION_WS_METHODS = {
   getWorkflowScript: "orchestration.getWorkflowScript",
   getTurnDiff: "orchestration.getTurnDiff",
   getFullThreadDiff: "orchestration.getFullThreadDiff",
+  getProjectDiffIndex: "orchestration.getProjectDiffIndex",
   searchThreads: "orchestration.searchThreads",
   getArchivedShellSnapshot: "orchestration.getArchivedShellSnapshot",
   subscribeShell: "orchestration.subscribeShell",
@@ -297,12 +298,18 @@ export type OrchestrationCheckpointFile = typeof OrchestrationCheckpointFile.Typ
 export const OrchestrationCheckpointStatus = Schema.Literals(["ready", "missing", "error"]);
 export type OrchestrationCheckpointStatus = typeof OrchestrationCheckpointStatus.Type;
 
+/** Distinguishes a verified empty diff from a checkpoint whose file summary failed. */
+export const OrchestrationCheckpointFileAttribution = Schema.Literals(["known", "unknown"]);
+export type OrchestrationCheckpointFileAttribution =
+  typeof OrchestrationCheckpointFileAttribution.Type;
+
 export const OrchestrationCheckpointSummary = Schema.Struct({
   turnId: TurnId,
   checkpointTurnCount: NonNegativeInt,
   checkpointRef: CheckpointRef,
   status: OrchestrationCheckpointStatus,
   files: Schema.Array(OrchestrationCheckpointFile),
+  fileAttribution: Schema.optional(OrchestrationCheckpointFileAttribution),
   assistantMessageId: Schema.NullOr(MessageId),
   completedAt: IsoDateTime,
 });
@@ -953,6 +960,15 @@ const ThreadSessionSetCommand = Schema.Struct({
   createdAt: IsoDateTime,
 });
 
+const ThreadTurnRetryCommand = Schema.Struct({
+  type: Schema.Literal("thread.turn.retry"),
+  commandId: CommandId,
+  threadId: ThreadId,
+  messageId: MessageId,
+  modelSelection: ModelSelection,
+  createdAt: IsoDateTime,
+});
+
 const ThreadMessageAssistantDeltaCommand = Schema.Struct({
   type: Schema.Literal("thread.message.assistant.delta"),
   commandId: CommandId,
@@ -989,6 +1005,7 @@ const ThreadTurnDiffCompleteCommand = Schema.Struct({
   checkpointRef: CheckpointRef,
   status: OrchestrationCheckpointStatus,
   files: Schema.Array(OrchestrationCheckpointFile),
+  fileAttribution: Schema.optional(OrchestrationCheckpointFileAttribution),
   assistantMessageId: Schema.optional(MessageId),
   checkpointTurnCount: NonNegativeInt,
   createdAt: IsoDateTime,
@@ -1020,6 +1037,7 @@ const ThreadTitleRegenerationCompleteCommand = Schema.Struct({
 
 const InternalOrchestrationCommand = Schema.Union([
   ThreadSessionSetCommand,
+  ThreadTurnRetryCommand,
   ThreadMessageAssistantDeltaCommand,
   ThreadMessageAssistantCompleteCommand,
   ThreadProposedPlanUpsertCommand,
@@ -1288,6 +1306,7 @@ export const ThreadTurnDiffCompletedPayload = Schema.Struct({
   checkpointRef: CheckpointRef,
   status: OrchestrationCheckpointStatus,
   files: Schema.Array(OrchestrationCheckpointFile),
+  fileAttribution: Schema.optional(OrchestrationCheckpointFileAttribution),
   assistantMessageId: Schema.NullOr(MessageId),
   completedAt: IsoDateTime,
 });
@@ -1530,6 +1549,7 @@ const ProjectionCheckpointRow = Schema.Struct({
   checkpointRef: CheckpointRef,
   status: OrchestrationCheckpointStatus,
   files: Schema.Array(OrchestrationCheckpointFile),
+  fileAttribution: Schema.optional(OrchestrationCheckpointFileAttribution),
   assistantMessageId: Schema.NullOr(MessageId),
   completedAt: IsoDateTime,
 });
@@ -1567,6 +1587,37 @@ export type OrchestrationGetFullThreadDiffInput = typeof OrchestrationGetFullThr
 
 export const OrchestrationGetFullThreadDiffResult = ThreadTurnDiff;
 export type OrchestrationGetFullThreadDiffResult = typeof OrchestrationGetFullThreadDiffResult.Type;
+
+/** Compact, project-scoped checkpoint entries used by the Diff Center. */
+export const OrchestrationProjectDiffEntry = Schema.Struct({
+  projectId: ProjectId,
+  threadId: ThreadId,
+  threadTitle: TrimmedNonEmptyString,
+  archivedAt: Schema.NullOr(IsoDateTime),
+  turnId: TurnId,
+  checkpointTurnCount: NonNegativeInt,
+  checkpointRef: CheckpointRef,
+  status: OrchestrationCheckpointStatus,
+  files: Schema.Array(OrchestrationCheckpointFile),
+  fileAttribution: Schema.optional(OrchestrationCheckpointFileAttribution),
+  assistantMessageId: Schema.NullOr(MessageId),
+  completedAt: IsoDateTime,
+});
+export type OrchestrationProjectDiffEntry = typeof OrchestrationProjectDiffEntry.Type;
+
+export const OrchestrationGetProjectDiffIndexInput = Schema.Struct({
+  projectId: ProjectId,
+  limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 200 }))),
+});
+export type OrchestrationGetProjectDiffIndexInput =
+  typeof OrchestrationGetProjectDiffIndexInput.Type;
+
+export const OrchestrationGetProjectDiffIndexResult = Schema.Struct({
+  projectId: ProjectId,
+  entries: Schema.Array(OrchestrationProjectDiffEntry),
+});
+export type OrchestrationGetProjectDiffIndexResult =
+  typeof OrchestrationGetProjectDiffIndexResult.Type;
 
 export const OrchestrationThreadSearchSource = Schema.Literals(["user", "assistant"]);
 export type OrchestrationThreadSearchSource = typeof OrchestrationThreadSearchSource.Type;
@@ -1657,6 +1708,10 @@ export const OrchestrationRpcSchemas = {
   getFullThreadDiff: {
     input: OrchestrationGetFullThreadDiffInput,
     output: OrchestrationGetFullThreadDiffResult,
+  },
+  getProjectDiffIndex: {
+    input: OrchestrationGetProjectDiffIndexInput,
+    output: OrchestrationGetProjectDiffIndexResult,
   },
   searchThreads: {
     input: OrchestrationSearchThreadsInput,

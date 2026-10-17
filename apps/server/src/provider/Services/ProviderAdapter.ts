@@ -19,17 +19,54 @@ import type {
   ThreadId,
   ProviderTurnStartResult,
   TurnId,
+  ProviderHarnessCapabilities,
 } from "@t3tools/contracts";
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 
 export type ProviderSessionModelSwitchMode = "in-session" | "unsupported";
+export type ProviderContextCompactionMode =
+  | "provider-native"
+  | "harness-owned"
+  | "unsupported";
+export type ProviderPromptCacheMode =
+  | "provider-managed"
+  | "explicit"
+  | "unsupported";
+export type ProviderToolTransport = "mcp" | "provider-native" | "opaque";
 
 export interface ProviderAdapterCapabilities {
   /**
    * Declares whether changing the model on an existing session is supported.
    */
   readonly sessionModelSwitch: ProviderSessionModelSwitchMode;
+
+  /** Whether stable instructions can be installed independently of a turn. */
+  readonly stablePromptPrefix?: boolean;
+
+  /** Context ownership is explicit so the harness never rewrites opaque histories. */
+  readonly contextCompaction?: ProviderContextCompactionMode;
+
+  /** Cache reporting is enabled only when the provider returns authoritative data. */
+  readonly promptCaching?: ProviderPromptCacheMode;
+
+  /** Whether SealCode can expose its scoped MCP/tool surface to this adapter. */
+  readonly toolTransport?: ProviderToolTransport;
+
+  /** Whether the adapter can create an isolated child session for delegation. */
+  readonly detachedDelegation?: boolean;
+}
+
+export function resolveProviderHarnessCapabilities(
+  capabilities: ProviderAdapterCapabilities,
+): ProviderHarnessCapabilities {
+  return {
+    stablePromptPrefix: capabilities.stablePromptPrefix ?? false,
+    contextCompaction: capabilities.contextCompaction ?? "unsupported",
+    promptCaching: capabilities.promptCaching ?? "unsupported",
+    toolTransport: capabilities.toolTransport ?? "opaque",
+    detachedDelegation: capabilities.detachedDelegation ?? false,
+  };
 }
 
 export interface ProviderThreadTurnSnapshot {

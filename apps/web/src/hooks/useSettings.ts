@@ -278,6 +278,11 @@ export function useLegacySidebarEnabled(): boolean {
   return settingsHydrated && legacySidebarEnabled;
 }
 
+export function useGlassSidebarEnabled(): boolean {
+  const glassSidebarEnabled = useClientSettingsValue().glassSidebarEnabled;
+  return glassSidebarEnabled;
+}
+
 /** Read current settings for one environment, merged with client-local preferences. */
 export function useEnvironmentSettings<T = UnifiedSettings>(
   environmentId: EnvironmentId,

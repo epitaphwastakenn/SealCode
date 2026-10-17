@@ -124,6 +124,14 @@ function getInitialWindowBackgroundColor(shouldUseDarkColors: boolean): string {
   return shouldUseDarkColors ? "#0a0a0a" : "#ffffff";
 }
 
+function getWindowBackgroundColor(
+  shouldUseDarkColors: boolean,
+  platform: NodeJS.Platform,
+): string {
+  if (platform === "win32") return "#00000000";
+  return getInitialWindowBackgroundColor(shouldUseDarkColors);
+}
+
 type DisplayBounds = Pick<Electron.Rectangle, "x" | "y" | "width" | "height">;
 
 function windowFitsWithinDisplay(
@@ -202,6 +210,30 @@ export function isRetryableDevelopmentRendererLoadFailure(input: {
   );
 }
 
+const DESKTOP_MAIN_WINDOW_MEDIA_PERMISSIONS = new Set([
+  "media",
+  "mediaKeySystem",
+  "audioCapture",
+  "microphone",
+]);
+
+export function isDesktopMainWindowPermissionAllowed(permission: string): boolean {
+  if (DESKTOP_MAIN_WINDOW_MEDIA_PERMISSIONS.has(permission)) {
+    return true;
+  }
+  return permission !== "serial" && permission !== "hid" && permission !== "usb";
+}
+
+function installDesktopMainWindowPermissionHandlers(window: Electron.BrowserWindow): void {
+  const { session } = window.webContents;
+  session.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(isDesktopMainWindowPermissionAllowed(permission));
+  });
+  session.setPermissionCheckHandler((_webContents, permission) =>
+    isDesktopMainWindowPermissionAllowed(permission),
+  );
+}
+
 function getWindowTitleBarOptions(
   shouldUseDarkColors: boolean,
   platform: NodeJS.Platform,
@@ -233,7 +265,7 @@ function syncWindowAppearance(
       return;
     }
 
-    window.setBackgroundColor(getInitialWindowBackgroundColor(shouldUseDarkColors));
+    window.setBackgroundColor(getWindowBackgroundColor(shouldUseDarkColors, platform));
     if (platform === "win32") {
       window.setBackgroundMaterial("acrylic");
     }
@@ -349,7 +381,8 @@ export const make = Effect.gen(function* () {
       show: false,
       autoHideMenuBar: true,
       ...(environment.platform === "darwin" ? { disableAutoHideCursor: true } : {}),
-      backgroundColor: getInitialWindowBackgroundColor(shouldUseDarkColors),
+      ...(environment.platform === "win32" ? { transparent: true } : {}),
+      backgroundColor: getWindowBackgroundColor(shouldUseDarkColors, environment.platform),
       ...getWindowBackdropOptions(environment.platform),
       ...iconOption,
       title: environment.displayName,
@@ -363,6 +396,8 @@ export const make = Effect.gen(function* () {
         webviewTag: true,
       },
     });
+
+    installDesktopMainWindowPermissionHandlers(window);
 
     if (environment.platform === "darwin") {
       window.setAutoHideCursor(false);

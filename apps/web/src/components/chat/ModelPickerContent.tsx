@@ -1,14 +1,23 @@
 import {
   type ProviderInstanceId,
   type ProviderDriverKind,
+  type ProviderOptionDescriptor,
+  type ProviderOptionSelection,
   type ResolvedKeybindingsConfig,
+  type ServerProviderModel,
 } from "@t3tools/contracts";
-import { resolveSelectableModel } from "@t3tools/shared/model";
+import {
+  applyClaudePromptEffortPrefix,
+  buildProviderOptionSelectionsFromDescriptors,
+  resolveSelectableModel,
+} from "@t3tools/shared/model";
 import { LegendList, type LegendListRef } from "@legendapp/list/react";
 import { memo, useMemo, useState, useCallback, useEffect, useLayoutEffect, useRef } from "react";
-import { ChevronRightIcon, SearchIcon } from "lucide-react";
+import { ChevronRightIcon, InfoIcon, SearchIcon } from "lucide-react";
 import { ModelListRow } from "./ModelListRow";
 import { ModelPickerSidebar } from "./ModelPickerSidebar";
+import { ReasoningEffortSlider } from "./ReasoningEffortSlider";
+import { Kbd } from "../ui/kbd";
 import {
   modelPickerLegacySectionKey,
   modelPickerModelKey,
@@ -40,6 +49,11 @@ import {
   type ProviderInstanceEntry,
 } from "../../providerInstances";
 import { providerModelKey, sortProviderModelItems } from "../../modelOrdering";
+import {
+  getDescriptorStringValue,
+  getTraitsSectionVisibility,
+  replaceDescriptorCurrentValue,
+} from "./TraitsPicker";
 
 type ModelPickerItem = {
   slug: string;
@@ -91,6 +105,11 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   onRequestClose?: () => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
+  models?: ReadonlyArray<ServerProviderModel> | undefined;
+  modelOptions?: ReadonlyArray<ProviderOptionSelection> | null | undefined;
+  onModelOptionsChange?: ((nextOptions: ReadonlyArray<ProviderOptionSelection> | undefined) => void) | undefined;
+  prompt?: string | undefined;
+  onPromptChange?: ((prompt: string) => void) | undefined;
 }) {
   const {
     keybindings: providedKeybindings,
@@ -581,6 +600,78 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     };
   }, [handleModelSelect, keybindings, modelJumpModelKeys, modelJumpShortcutContext]);
 
+  const traitsVisibility = useMemo(() => {
+    const activeEntry = entryByInstanceId.get(props.activeInstanceId);
+    if (!props.models || !activeEntry) return null;
+    return getTraitsSectionVisibility({
+      provider: activeEntry.driverKind,
+      models: props.models,
+      model: props.model,
+      prompt: props.prompt ?? "",
+      modelOptions: props.modelOptions,
+      allowPromptInjectedEffort: true,
+    });
+  }, [
+    entryByInstanceId,
+    props.activeInstanceId,
+    props.model,
+    props.modelOptions,
+    props.models,
+    props.prompt,
+  ]);
+
+  const updateDescriptors = useCallback(
+    (nextDescriptors: ReadonlyArray<ProviderOptionDescriptor>) => {
+      props.onModelOptionsChange?.(buildProviderOptionSelectionsFromDescriptors(nextDescriptors));
+    },
+    [props],
+  );
+
+  const handleSelectOptionChange = useCallback(
+    (
+      descriptor: Extract<ProviderOptionDescriptor, { type: "select" }>,
+      value: string,
+    ) => {
+      if (!value || !traitsVisibility) return;
+      if (descriptor.promptInjectedValues?.includes(value)) {
+        const nextPrompt =
+          (props.prompt ?? "").trim().length === 0
+            ? "Ultrathink:\n"
+            : applyClaudePromptEffortPrefix(props.prompt ?? "", "ultrathink");
+        props.onPromptChange?.(nextPrompt);
+        return;
+      }
+      if (
+        traitsVisibility.ultrathinkInBodyText &&
+        descriptor.id === traitsVisibility.primarySelectDescriptor?.id
+      ) {
+        return;
+      }
+      if (
+        traitsVisibility.ultrathinkPromptControlled &&
+        descriptor.id === traitsVisibility.primarySelectDescriptor?.id
+      ) {
+        const stripped = (props.prompt ?? "").replace(/^Ultrathink:\s*/i, "");
+        props.onPromptChange?.(stripped);
+      }
+      updateDescriptors(
+        replaceDescriptorCurrentValue(traitsVisibility.descriptors, descriptor.id, value),
+      );
+    },
+    [props, traitsVisibility, updateDescriptors],
+  );
+
+  const handleToggleBooleanOption = useCallback(
+    (descriptor: Extract<ProviderOptionDescriptor, { type: "boolean" }>) => {
+      if (!traitsVisibility) return;
+      const nextValue = descriptor.currentValue !== true;
+      updateDescriptors(
+        replaceDescriptorCurrentValue(traitsVisibility.descriptors, descriptor.id, nextValue),
+      );
+    },
+    [traitsVisibility, updateDescriptors],
+  );
+
   useLayoutEffect(() => {
     setShowTopScrollFade(false);
     setShowBottomScrollFade(filteredItemKeys.length > 5);
@@ -598,7 +689,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   return (
     <TooltipProvider delay={0}>
       <div
-        className="dropdown-glass model-picker-surface relative flex h-screen max-h-86.5 w-screen max-w-90 flex-row overflow-hidden rounded-lg text-popover-foreground [clip-path:inset(0_round_var(--radius-lg))]"
+        className="dropdown-glass model-picker-surface relative flex h-screen max-h-[32rem] w-screen max-w-[28rem] flex-row overflow-hidden rounded-xl border border-border/80 text-popover-foreground shadow-2xl backdrop-blur-xl [clip-path:inset(0_round_var(--radius-xl))]"
         data-model-picker-content="true"
       >
         {/* Sidebar */}
@@ -652,24 +743,17 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
             }
           }}
         >
-          <div
-            className={cn(
-              "flex min-h-0 flex-1 flex-col overflow-hidden bg-muted/40",
-              showSidebar && "border-l border-border/70",
-            )}
-          >
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background/50">
             {/* Search bar */}
-            <div className="px-2 pt-2">
-              <div className="border-b border-border/70 pb-2.5 transition-colors focus-within:border-ring">
+            <div className="p-3 pb-2">
+              <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-3 py-1.5 transition-colors focus-within:border-primary/60 focus-within:bg-background/70 focus-within:ring-1 focus-within:ring-primary/40">
+                <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
                 <ComboboxInput
                   ref={searchInputRef}
-                  className="[&_input]:h-6.5 [&_input]:font-sans [&_input]:leading-6.5"
-                  inputClassName="rounded-none bg-transparent text-sm"
+                  className="[&_input]:h-6 [&_input]:font-sans [&_input]:leading-6"
+                  inputClassName="rounded-none bg-transparent text-xs sm:text-sm text-foreground placeholder:text-muted-foreground/70"
                   placeholder="Search models..."
                   showTrigger={false}
-                  startAddon={
-                    <SearchIcon className="-translate-x-0.5 size-4 shrink-0 text-muted-foreground opacity-70" />
-                  }
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onKeyDown={(e) => {
@@ -705,11 +789,21 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                   size="sm"
                   unstyled
                 />
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery("")}
+                    className="text-xs text-muted-foreground hover:text-foreground"
+                    aria-label="Clear search"
+                  >
+                    ×
+                  </button>
+                ) : null}
               </div>
             </div>
 
             {/* Model list */}
-            <div className="relative min-h-0 flex-1 overflow-hidden pr-px">
+            <div className="relative min-h-0 flex-1 overflow-hidden px-2">
               <ComboboxListVirtualized className="size-full min-w-0 p-0 not-empty:p-0">
                 <LegendList<string>
                   ref={modelListRef}
@@ -724,18 +818,18 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                           index={index}
                           value={modelKey}
                           aria-expanded={legacySection.isExpanded}
-                          className="group w-full cursor-pointer rounded-md px-2 py-2"
+                          className="group w-full cursor-pointer rounded-lg px-2.5 py-2 hover:bg-muted/60"
                           contentClassName="flex w-full items-center gap-3"
                         >
                           <div className="min-w-0 flex-1 text-left">
-                            <div className="text-xs font-medium leading-snug">Legacy models</div>
-                            <div className="mt-1 text-xs font-normal leading-snug text-muted-foreground/70">
+                            <div className="text-xs font-semibold leading-snug">Legacy models</div>
+                            <div className="mt-0.5 text-[11px] font-normal leading-snug text-muted-foreground/70">
                               {legacySection.legacyModels.length} models
                             </div>
                           </div>
                           <ChevronRightIcon
                             className={cn(
-                              "size-4 transition-transform",
+                              "size-4 transition-transform text-muted-foreground",
                               legacySection.isExpanded && "rotate-90",
                             )}
                           />
@@ -770,27 +864,191 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                         jumpLabel={modelJumpLabelByKey.get(modelKey) ?? null}
                         disabledReason={disabledReason}
                         onToggleFavorite={() => toggleFavorite(model.instanceId, model.slug)}
+                        onDoubleClick={() => {
+                          if (disabledReason) return;
+                          handleModelSelect(model.slug, model.instanceId);
+                          props.onRequestClose?.();
+                        }}
                       />
                     );
                   }}
-                  estimatedItemSize={52}
+                  estimatedItemSize={48}
                   drawDistance={480}
                   recycleItems
-                  contentContainerClassName="pl-2 pr-px"
+                  contentContainerClassName="space-y-1 py-1"
                   ItemSeparatorComponent={ModelListSeparator}
                   onLayout={updateModelListScrollFades}
                   onScroll={updateModelListScrollFades}
                   className={cn(
-                    "model-picker-list scrollbar-gutter-stable h-full overflow-x-hidden overscroll-y-contain py-1.5 [--fade-size:1.5rem]",
+                    "model-picker-list scrollbar-gutter-stable h-full overflow-x-hidden overscroll-y-contain [--fade-size:1.5rem]",
                     showTopScrollFade && "model-picker-list-scroll-fade-top",
                     showBottomScrollFade && "model-picker-list-scroll-fade-bottom",
                   )}
                 />
               </ComboboxListVirtualized>
             </div>
-            <ComboboxEmpty className="not-empty:py-6 empty:h-0 text-xs font-normal leading-snug">
+
+            {/* Traits / Reasoning Effort & Options section if available */}
+            {traitsVisibility && traitsVisibility.hasAnyControls ? (
+              <div
+                data-model-picker-traits="true"
+                className="space-y-2.5 border-t border-border/60 bg-muted/15 px-3.5 py-2.5"
+              >
+                {traitsVisibility.selectDescriptors.map((descriptor) => {
+                  const selectedValue =
+                    traitsVisibility.ultrathinkPromptControlled &&
+                    descriptor.id === traitsVisibility.primarySelectDescriptor?.id
+                      ? "ultrathink"
+                      : (getDescriptorStringValue(descriptor) ?? "");
+
+                  const isReasoning =
+                    descriptor.label.toLowerCase().includes("effort") ||
+                    descriptor.label.toLowerCase().includes("reasoning");
+
+                  if (isReasoning && descriptor.options.length > 0) {
+                    const disabled =
+                      traitsVisibility.ultrathinkInBodyText &&
+                      descriptor.id === traitsVisibility.primarySelectDescriptor?.id;
+
+                    return (
+                      <ReasoningEffortSlider
+                        key={descriptor.id}
+                        descriptor={descriptor}
+                        selectedValue={selectedValue}
+                        disabled={disabled}
+                        promptControlled={traitsVisibility.ultrathinkPromptControlled}
+                        onSelect={(optionId) => {
+                          handleSelectOptionChange(descriptor, optionId);
+                        }}
+                      />
+                    );
+                  }
+
+                  const headerLabel = descriptor.label.toUpperCase();
+
+                  return (
+                    <div key={descriptor.id} className="space-y-1.5">
+                      <div className="flex items-center justify-between px-0.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+                          {headerLabel}
+                        </span>
+                        {traitsVisibility.ultrathinkPromptControlled && (
+                          <span className="text-[10px] font-medium text-amber-500">
+                            Prompt-controlled
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {descriptor.options.map((option) => {
+                          const isSelected = selectedValue === option.id;
+                          const disabled =
+                            traitsVisibility.ultrathinkInBodyText &&
+                            descriptor.id === traitsVisibility.primarySelectDescriptor?.id;
+
+                          return (
+                            <button
+                              key={option.id}
+                              type="button"
+                              disabled={disabled}
+                              onClick={(e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                handleSelectOptionChange(descriptor, option.id);
+                              }}
+                              className={cn(
+                                "inline-flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-150",
+                                isSelected
+                                  ? "border border-primary/60 bg-primary/15 text-primary font-semibold shadow-xs"
+                                  : "border border-border/40 bg-muted/40 text-muted-foreground hover:border-border/70 hover:bg-muted/80 hover:text-foreground",
+                                disabled && "cursor-not-allowed opacity-40",
+                              )}
+                            >
+                              <span>{option.label}</span>
+                              {option.isDefault && (
+                                <span
+                                  className={cn(
+                                    "text-[9px] opacity-70",
+                                    isSelected ? "text-primary" : "text-muted-foreground",
+                                  )}
+                                >
+                                  (default)
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {traitsVisibility.booleanDescriptors.length > 0 && (
+                  <div className="space-y-1.5">
+                    <div className="px-0.5">
+                      <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/80">
+                        SERVICE TIER / OPTIONS
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {traitsVisibility.booleanDescriptors.map((descriptor) => {
+                        const isChecked = descriptor.currentValue === true;
+                        return (
+                          <button
+                            key={descriptor.id}
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleToggleBooleanOption(descriptor);
+                            }}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 text-xs font-medium transition-all duration-150",
+                              isChecked
+                                ? "border border-primary/60 bg-primary/15 text-primary font-semibold shadow-xs"
+                                : "border border-border/40 bg-muted/40 text-muted-foreground hover:border-border/70 hover:bg-muted/80 hover:text-foreground",
+                            )}
+                          >
+                            <span>{descriptor.label}</span>
+                            <span
+                              className={cn(
+                                "rounded px-1 text-[9px] font-bold uppercase",
+                                isChecked
+                                  ? "bg-primary/20 text-primary"
+                                  : "bg-muted text-muted-foreground",
+                              )}
+                            >
+                              {isChecked ? "On" : "Off"}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            <ComboboxEmpty className="not-empty:py-6 empty:h-0 text-xs font-normal leading-snug text-muted-foreground">
               No models found
             </ComboboxEmpty>
+
+            {/* Bottom footer */}
+            <div className="flex items-center justify-between border-t border-border/60 bg-muted/25 px-3.5 py-2 text-[11px] text-muted-foreground">
+              <div className="flex items-center gap-1.5">
+                <InfoIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
+                <span>Applies to selected model</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
+                  <Kbd className="h-4 rounded border border-border/50 bg-muted/60 px-1 font-mono text-[9px]">↑↓</Kbd>
+                  <span>navigate</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Kbd className="h-4 rounded border border-border/50 bg-muted/60 px-1.5 font-mono text-[9px]">↵</Kbd>
+                  <span>select</span>
+                </div>
+              </div>
+            </div>
           </div>
         </Combobox>
       </div>

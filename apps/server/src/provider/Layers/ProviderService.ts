@@ -19,10 +19,12 @@ import {
   ProviderSendTurnInput,
   ProviderSessionStartInput,
   ProviderStopSessionInput,
+  isToolLifecycleItemType,
   type ProviderInstanceId,
   type ProviderDriverKind,
   type ProviderRuntimeEvent,
   type ProviderSession,
+  type EfficiencySnapshot,
 } from "@t3tools/contracts";
 import { causeErrorTag } from "@t3tools/shared/observability";
 import * as DateTime from "effect/DateTime";
@@ -48,7 +50,11 @@ import {
   withMetrics,
 } from "../../observability/Metrics.ts";
 import { type ProviderAdapterError, ProviderValidationError } from "../Errors.ts";
-import type { ProviderAdapterShape } from "../Services/ProviderAdapter.ts";
+import type {
+  ProviderAdapterShape,
+  ProviderContextCompactionMode,
+} from "../Services/ProviderAdapter.ts";
+import { resolveProviderHarnessCapabilities } from "../Services/ProviderAdapter.ts";
 import * as ProviderAdapterRegistry from "../Services/ProviderAdapterRegistry.ts";
 import * as ProviderService from "../Services/ProviderService.ts";
 import * as ProviderSessionDirectory from "../Services/ProviderSessionDirectory.ts";
@@ -57,6 +63,8 @@ import * as ProviderEventLoggers from "./ProviderEventLoggers.ts";
 import * as AnalyticsService from "../../telemetry/AnalyticsService.ts";
 import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 import * as McpSessionRegistry from "../../mcp/McpSessionRegistry.ts";
+import { estimateUtf8Tokens } from "../../harness/PromptAssembly.ts";
+import { decideContextCompaction } from "../../harness/ContextCompactionPolicy.ts";
 const isModelSelection = Schema.is(ModelSelection);
 
 /**
@@ -216,9 +224,32 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   const registry = yield* ProviderAdapterRegistry.ProviderAdapterRegistry;
   const directory = yield* ProviderSessionDirectory.ProviderSessionDirectory;
   const runtimeEventPubSub = yield* PubSub.unbounded<ProviderRuntimeEvent>();
+  const turnEfficiency = new Map<
+    string,
+    {
+      readonly startedAt: number;
+      readonly estimatedInputTokens: number;
+      readonly promptMetadata: ProviderSendTurnInput["promptMetadata"];
+      readonly contextCompaction: ProviderContextCompactionMode | undefined;
+      toolUses: number;
+      inlineToolResultBytes: number;
+      delegatedTasks: number;
+      toolStartedAt: Map<string, number>;
+      toolWaitMs: number;
+      firstOutputAt?: number;
+    }
+  >();
   const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
-  const prepareMcpSession = (threadId: ThreadId, providerInstanceId: ProviderInstanceId) =>
-    McpSessionRegistry.issueActiveMcpCredential({ threadId, providerInstanceId }).pipe(
+  const prepareMcpSession = (
+    threadId: ThreadId,
+    providerInstanceId: ProviderInstanceId,
+    workspaceRoot?: string,
+  ) =>
+    McpSessionRegistry.issueActiveMcpCredential({
+      threadId,
+      providerInstanceId,
+      ...(workspaceRoot === undefined ? {} : { workspaceRoot }),
+    }).pipe(
       Effect.tap((credential) =>
         credential
           ? Effect.sync(() => McpProviderSession.setMcpProviderSession(credential.config))
@@ -235,6 +266,11 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       Effect.tap((canonicalEvent) =>
         canonicalEventLogger
           ? canonicalEventLogger.write(canonicalEvent, canonicalEvent.threadId)
+          : Effect.void,
+      ),
+      Effect.tap((canonicalEvent) =>
+        canonicalEvent.type === "turn.completed" || canonicalEvent.type === "turn.aborted"
+          ? McpSessionRegistry.setActiveMcpTurn(canonicalEvent.threadId, undefined)
           : Effect.void,
       ),
       Effect.flatMap((canonicalEvent) => PubSub.publish(runtimeEventPubSub, canonicalEvent)),
@@ -284,6 +320,93 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       });
     });
 
+  const enrichEfficiency = (event: ProviderRuntimeEvent): ProviderRuntimeEvent => {
+    const state = turnEfficiency.get(event.threadId);
+    if (!state) return event;
+    const now = Date.parse(event.createdAt) || Date.now();
+    if (event.type === "item.started" && isToolLifecycleItemType(event.payload.itemType)) {
+      state.toolStartedAt.set(String(event.itemId ?? event.eventId), now);
+    }
+    if (event.type === "item.completed" && isToolLifecycleItemType(event.payload.itemType)) {
+      state.toolUses += 1;
+      state.inlineToolResultBytes += Buffer.byteLength(event.payload.detail ?? "", "utf8");
+      const startedAt = state.toolStartedAt.get(String(event.itemId ?? event.eventId));
+      if (startedAt !== undefined) {
+        state.toolWaitMs += Math.max(0, now - startedAt);
+        state.toolStartedAt.delete(String(event.itemId ?? event.eventId));
+      }
+    }
+    if (event.type === "task.started") {
+      state.delegatedTasks += 1;
+    }
+    if (event.type === "content.delta" && state.firstOutputAt === undefined) {
+      state.firstOutputAt = now;
+    }
+    if (event.type !== "thread.token-usage.updated") {
+      if (event.type === "turn.completed" || event.type === "turn.aborted") {
+        turnEfficiency.delete(event.threadId);
+      }
+      return event;
+    }
+    const providerUsage = event.payload.usage;
+    const existing = providerUsage.efficiency;
+    const cacheStatus =
+      providerUsage.cachedInputTokens === undefined
+        ? existing?.prompt?.cacheStatus ?? state.promptMetadata?.cacheStatus
+        : providerUsage.cachedInputTokens > 0
+          ? "reported-hit"
+          : "reported-miss";
+    const efficiency: EfficiencySnapshot = {
+      ...existing,
+      ...(providerUsage.inputTokens === undefined
+        ? {}
+        : { inputTokens: providerUsage.inputTokens }),
+      ...(providerUsage.cachedInputTokens === undefined
+        ? {}
+        : { cachedInputTokens: providerUsage.cachedInputTokens }),
+      ...(providerUsage.outputTokens === undefined
+        ? {}
+        : { outputTokens: providerUsage.outputTokens }),
+      ...(providerUsage.reasoningOutputTokens === undefined
+        ? {}
+        : { reasoningTokens: providerUsage.reasoningOutputTokens }),
+      ...(providerUsage.toolUses === undefined ? {} : { toolUses: providerUsage.toolUses }),
+      estimatedContextTokensBefore: state.estimatedInputTokens,
+      ...(providerUsage.usedTokens >= 0
+        ? { estimatedContextTokensAfter: providerUsage.usedTokens }
+        : {}),
+      compaction: (() => {
+        const decision = decideContextCompaction({
+          usage: providerUsage,
+          mode: state.contextCompaction,
+        });
+        return decision.kind === "none" ? undefined : decision.payload;
+      })(),
+      estimates: {
+        toolUses: state.toolUses,
+        inlineToolResultBytes: state.inlineToolResultBytes,
+        delegatedTasks: state.delegatedTasks,
+        toolWaitMs: state.toolWaitMs,
+      },
+      ...(state.firstOutputAt === undefined
+        ? {}
+        : { timeToFirstOutputMs: Math.max(0, state.firstOutputAt - state.startedAt) }),
+      durationMs: Math.max(0, now - state.startedAt),
+      prompt: {
+        ...state.promptMetadata,
+        ...(cacheStatus === undefined ? {} : { cacheStatus }),
+      },
+      providerValuesReported: true,
+    };
+    return {
+      ...event,
+      payload: {
+        ...event.payload,
+        usage: { ...providerUsage, efficiency },
+      },
+    };
+  };
+
   const processRuntimeEvent = (
     source: {
       readonly instanceId: ProviderInstanceId;
@@ -292,6 +415,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
     event: ProviderRuntimeEvent,
   ): Effect.Effect<void> =>
     Effect.sync(() => correlateRuntimeEventWithInstance(source, event)).pipe(
+      Effect.map(enrichEfficiency),
       Effect.flatMap((canonicalEvent) =>
         increment(providerRuntimeEventsTotal, {
           provider: canonicalEvent.provider,
@@ -400,7 +524,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       const persistedCwd = readPersistedCwd(input.binding.runtimePayload);
       const persistedModelSelection = readPersistedModelSelection(input.binding.runtimePayload);
 
-      yield* prepareMcpSession(input.binding.threadId, bindingInstanceId);
+      yield* prepareMcpSession(input.binding.threadId, bindingInstanceId, persistedCwd);
       const resumed = yield* adapter
         .startSession({
           threadId: input.binding.threadId,
@@ -596,7 +720,7 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
           "provider.cwd.effective": effectiveCwd ?? "",
         });
         const adapter = yield* registry.getByInstance(resolvedInstanceId);
-        yield* prepareMcpSession(threadId, resolvedInstanceId);
+        yield* prepareMcpSession(threadId, resolvedInstanceId, effectiveCwd);
         const session = yield* adapter
           .startSession({
             ...input,
@@ -732,7 +856,22 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
       // rather than issuing a new one: sessions that go a long time between
       // browser tool calls used to lose the toolkit outright.
       yield* McpSessionRegistry.touchActiveMcpThread(input.threadId);
-      const turn = yield* routed.adapter.sendTurn(input);
+      const harnessCapabilities = resolveProviderHarnessCapabilities(routed.adapter.capabilities);
+      turnEfficiency.set(input.threadId, {
+        startedAt: Date.now(),
+        estimatedInputTokens: estimateUtf8Tokens(input.input ?? ""),
+        promptMetadata: input.promptMetadata,
+        contextCompaction: harnessCapabilities.contextCompaction,
+        toolUses: 0,
+        inlineToolResultBytes: 0,
+        delegatedTasks: 0,
+        toolStartedAt: new Map(),
+        toolWaitMs: 0,
+      });
+      const turn = yield* routed.adapter.sendTurn(input).pipe(
+        Effect.tapError(() => Effect.sync(() => turnEfficiency.delete(input.threadId))),
+      );
+      yield* McpSessionRegistry.setActiveMcpTurn(input.threadId, turn.turnId);
       yield* directory.upsert({
         threadId: input.threadId,
         provider: routed.adapter.provider,
@@ -1019,7 +1158,9 @@ const makeProviderService = Effect.fn("makeProviderService")(function* (
   );
 
   const getCapabilities: ProviderServiceMethod<"getCapabilities"> = (instanceId) =>
-    registry.getByInstance(instanceId).pipe(Effect.map((adapter) => adapter.capabilities));
+    registry
+      .getByInstance(instanceId)
+      .pipe(Effect.map((adapter) => ({ ...adapter.capabilities, ...resolveProviderHarnessCapabilities(adapter.capabilities) })));
 
   const getInstanceInfo: ProviderServiceMethod<"getInstanceInfo"> = (instanceId) =>
     registry.getInstanceInfo(instanceId);

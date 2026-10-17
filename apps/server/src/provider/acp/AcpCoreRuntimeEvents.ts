@@ -13,6 +13,7 @@ import {
 } from "@t3tools/contracts";
 
 import type { AcpPermissionRequest, AcpPlanUpdate, AcpToolCallState } from "./AcpRuntimeModel.ts";
+import * as McpProviderSession from "../../mcp/McpProviderSession.ts";
 
 type AcpAdapterRawSource = Extract<
   RuntimeEventRawSource,
@@ -76,6 +77,26 @@ function runtimeItemStatusFromAcpToolStatus(
   }
 }
 
+function mcpMetadataForAcpToolCall(toolCall: AcpToolCallState) {
+  const data = toolCall.data;
+  return McpProviderSession.makeMcpToolActivityMetadata({
+    providerToolName:
+      typeof data.providerToolName === "string"
+        ? data.providerToolName
+        : typeof data.toolName === "string"
+          ? data.toolName
+          : toolCall.title,
+    serverId: typeof data.serverId === "string" ? data.serverId : undefined,
+    serverDisplayName:
+      typeof data.serverDisplayName === "string" ? data.serverDisplayName : undefined,
+    upstreamToolName:
+      typeof data.upstreamToolName === "string" ? data.upstreamToolName : undefined,
+    canonicalToolName:
+      typeof data.canonicalToolName === "string" ? data.canonicalToolName : undefined,
+    callId: toolCall.toolCallId,
+  });
+}
+
 export function makeAcpRequestOpenedEvent(input: {
   readonly stamp: AcpEventStamp;
   readonly provider: ProviderDriverKind;
@@ -89,6 +110,9 @@ export function makeAcpRequestOpenedEvent(input: {
   readonly method: string;
   readonly rawPayload: unknown;
 }): ProviderRuntimeEvent {
+  const mcp = input.permissionRequest.toolCall
+    ? mcpMetadataForAcpToolCall(input.permissionRequest.toolCall)
+    : undefined;
   return {
     type: "request.opened",
     ...input.stamp,
@@ -100,6 +124,7 @@ export function makeAcpRequestOpenedEvent(input: {
       requestType: canonicalRequestTypeFromAcpKind(input.permissionRequest.kind),
       detail: input.detail,
       args: input.args,
+      ...(mcp ? { mcp } : {}),
     },
     raw: {
       source: input.source,
@@ -166,6 +191,7 @@ export function makeAcpToolCallEvent(input: {
   readonly rawPayload: unknown;
 }): ProviderRuntimeEvent {
   const runtimeStatus = runtimeItemStatusFromAcpToolStatus(input.toolCall.status);
+  const mcp = mcpMetadataForAcpToolCall(input.toolCall);
   return {
     type:
       input.toolCall.status === "completed" || input.toolCall.status === "failed"
@@ -177,11 +203,12 @@ export function makeAcpToolCallEvent(input: {
     turnId: input.turnId,
     itemId: RuntimeItemId.make(input.toolCall.toolCallId),
     payload: {
-      itemType: canonicalItemTypeFromAcpToolKind(input.toolCall.kind),
+      itemType: mcp ? "mcp_tool_call" : canonicalItemTypeFromAcpToolKind(input.toolCall.kind),
       ...(runtimeStatus ? { status: runtimeStatus } : {}),
       ...(input.toolCall.title ? { title: input.toolCall.title } : {}),
       ...(input.toolCall.detail ? { detail: input.toolCall.detail } : {}),
       ...(Object.keys(input.toolCall.data).length > 0 ? { data: input.toolCall.data } : {}),
+      ...(mcp ? { mcp } : {}),
     },
     raw: {
       source: "acp.jsonrpc",

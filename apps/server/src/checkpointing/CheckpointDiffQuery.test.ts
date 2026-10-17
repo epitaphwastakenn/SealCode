@@ -31,6 +31,7 @@ function makeThreadCheckpointContext(input: {
         checkpointRef: input.checkpointRef,
         status: "ready",
         files: [],
+        fileAttribution: "known",
         assistantMessageId: null,
         completedAt: "2026-01-01T00:00:00.000Z",
       },
@@ -51,6 +52,7 @@ describe("CheckpointDiffQuery.layer", () => {
         readonly toCheckpointRef: CheckpointRef;
         readonly cwd: string;
         readonly ignoreWhitespace: boolean;
+        readonly paths?: ReadonlyArray<string>;
       }> = [];
 
       const checkpointStore: CheckpointStore.CheckpointStore["Service"] = {
@@ -58,13 +60,14 @@ describe("CheckpointDiffQuery.layer", () => {
         captureCheckpoint: () => Effect.void,
         hasCheckpointRef: () => Effect.succeed(true),
         restoreCheckpoint: () => Effect.succeed(true),
-        diffCheckpoints: ({ fromCheckpointRef, toCheckpointRef, cwd, ignoreWhitespace }) =>
+        diffCheckpoints: ({ fromCheckpointRef, toCheckpointRef, cwd, ignoreWhitespace, paths }) =>
           Effect.sync(() => {
             diffCheckpointsCalls.push({
               fromCheckpointRef,
               toCheckpointRef,
               cwd,
               ignoreWhitespace,
+              ...(paths === undefined ? {} : { paths }),
             });
             return "full thread diff patch";
           }),
@@ -122,7 +125,7 @@ describe("CheckpointDiffQuery.layer", () => {
         });
       }).pipe(Effect.provide(layer));
 
-      expect(getThreadCheckpointContextCalls).toBe(0);
+      expect(getThreadCheckpointContextCalls).toBe(1);
       expect(getFullThreadDiffContextCalls).toBe(1);
       expect(diffCheckpointsCalls).toEqual([
         {
@@ -151,6 +154,7 @@ describe("CheckpointDiffQuery.layer", () => {
         readonly toCheckpointRef: CheckpointRef;
         readonly cwd: string;
         readonly ignoreWhitespace: boolean;
+        readonly paths?: ReadonlyArray<string>;
       }> = [];
 
       const threadCheckpointContext = makeThreadCheckpointContext({
@@ -167,13 +171,14 @@ describe("CheckpointDiffQuery.layer", () => {
         captureCheckpoint: () => Effect.void,
         hasCheckpointRef: () => Effect.succeed(true),
         restoreCheckpoint: () => Effect.succeed(true),
-        diffCheckpoints: ({ fromCheckpointRef, toCheckpointRef, cwd, ignoreWhitespace }) =>
+        diffCheckpoints: ({ fromCheckpointRef, toCheckpointRef, cwd, ignoreWhitespace, paths }) =>
           Effect.sync(() => {
             diffCheckpointsCalls.push({
               fromCheckpointRef,
               toCheckpointRef,
               cwd,
               ignoreWhitespace,
+              ...(paths === undefined ? {} : { paths }),
             });
             return "diff patch";
           }),
@@ -224,6 +229,7 @@ describe("CheckpointDiffQuery.layer", () => {
           fromCheckpointRef: expectedFromRef,
           toCheckpointRef,
           ignoreWhitespace: true,
+          paths: [],
         },
       ]);
       expect(result).toEqual({
@@ -232,6 +238,79 @@ describe("CheckpointDiffQuery.layer", () => {
         toTurnCount: 1,
         diff: "diff patch",
       });
+    }),
+  );
+
+  it.effect("omits path filtering when checkpoint file attribution is unknown", () =>
+    Effect.gen(function* () {
+      const projectId = ProjectId.make("project-unknown-files");
+      const threadId = ThreadId.make("thread-unknown-files");
+      const toCheckpointRef = checkpointRefForThreadTurn(threadId, 1);
+      let receivedPaths: ReadonlyArray<string> | undefined = [];
+      const threadCheckpointContext = makeThreadCheckpointContext({
+        projectId,
+        threadId,
+        workspaceRoot: "/tmp/workspace",
+        worktreePath: null,
+        checkpointTurnCount: 1,
+        checkpointRef: toCheckpointRef,
+      });
+
+      const checkpointStore: CheckpointStore.CheckpointStore["Service"] = {
+        isGitRepository: () => Effect.succeed(true),
+        captureCheckpoint: () => Effect.void,
+        hasCheckpointRef: () => Effect.succeed(true),
+        restoreCheckpoint: () => Effect.succeed(true),
+        diffCheckpoints: ({ paths }) =>
+          Effect.sync(() => {
+            receivedPaths = paths;
+            return "diff patch";
+          }),
+        deleteCheckpointRefs: () => Effect.void,
+      };
+
+      const layer = CheckpointDiffQuery.layer.pipe(
+        Layer.provideMerge(Layer.succeed(CheckpointStore.CheckpointStore, checkpointStore)),
+        Layer.provideMerge(
+          Layer.succeed(ProjectionSnapshotQuery.ProjectionSnapshotQuery, {
+            getCommandReadModel: () => Effect.die("unused"),
+            getSnapshot: () => Effect.die("unused"),
+            getShellSnapshot: () => Effect.die("unused"),
+            getArchivedShellSnapshot: () => Effect.die("unused"),
+            getSnapshotSequence: () => Effect.succeed({ snapshotSequence: 0 }),
+            getCounts: () => Effect.succeed({ projectCount: 0, threadCount: 0 }),
+            getActiveProjectByWorkspaceRoot: () => Effect.succeed(Option.none()),
+            getProjectShellById: () => Effect.succeed(Option.none()),
+            getFirstActiveThreadIdByProjectId: () => Effect.succeed(Option.none()),
+            getThreadCheckpointContext: () =>
+              Effect.succeed(
+                Option.some({
+                  ...threadCheckpointContext,
+                  checkpoints: threadCheckpointContext.checkpoints.map((checkpoint) => ({
+                    ...checkpoint,
+                    fileAttribution: "unknown" as const,
+                  })),
+                }),
+              ),
+            getFullThreadDiffContext: () => Effect.die("unused"),
+            getThreadShellById: () => Effect.succeed(Option.none()),
+            getThreadDetailById: () => Effect.succeed(Option.none()),
+            getThreadDetailSnapshot: () => Effect.succeed(Option.none()),
+            searchThreads: () => Effect.succeed({ matches: [] }),
+          }),
+        ),
+      );
+
+      yield* Effect.gen(function* () {
+        const query = yield* CheckpointDiffQuery.CheckpointDiffQuery;
+        return yield* query.getTurnDiff({
+          threadId,
+          fromTurnCount: 0,
+          toTurnCount: 1,
+        });
+      }).pipe(Effect.provide(layer));
+
+      expect(receivedPaths).toBeUndefined();
     }),
   );
 

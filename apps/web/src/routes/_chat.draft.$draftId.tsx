@@ -9,8 +9,10 @@ import {
 } from "../composerDraftStore";
 import { SidebarInset } from "../components/ui/sidebar";
 import { waitForDraftHeroTransition } from "../components/chat/draftHeroTransition";
+import { lastOpenThreadRouteMatchesDraft } from "../lib/chatIndexLanding";
 import { buildThreadRouteParams } from "../threadRoutes";
 import { useThread, useThreadRefs } from "../state/entities";
+import { useUiStateStore } from "../uiStateStore";
 
 function DraftChatThreadRouteView() {
   const navigate = useNavigate();
@@ -63,8 +65,12 @@ function DraftChatThreadRouteView() {
     if (draftSession || canonicalThreadRef) {
       return;
     }
+    const lastOpenThreadRoute = useUiStateStore.getState().lastOpenThreadRoute;
+    if (lastOpenThreadRouteMatchesDraft(lastOpenThreadRoute, draftId)) {
+      useUiStateStore.getState().setLastOpenThreadRoute(null);
+    }
     void navigate({ to: "/", replace: true });
-  }, [canonicalThreadRef, draftSession, navigate]);
+  }, [canonicalThreadRef, draftId, draftSession, navigate]);
 
   if (!draftSession) {
     return null;

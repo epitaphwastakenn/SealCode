@@ -99,6 +99,13 @@ export const GlassOpacity = Schema.Int.check(
 );
 export type GlassOpacity = typeof GlassOpacity.Type;
 const DEFAULT_GLASS_OPACITY: GlassOpacity = 80;
+export const MIN_HARNESS_SOUND_VOLUME = 0;
+export const MAX_HARNESS_SOUND_VOLUME = 100;
+export const HarnessSoundVolume = Schema.Int.check(
+  Schema.isBetween({ minimum: MIN_HARNESS_SOUND_VOLUME, maximum: MAX_HARNESS_SOUND_VOLUME }),
+);
+export type HarnessSoundVolume = typeof HarnessSoundVolume.Type;
+const DEFAULT_HARNESS_SOUND_VOLUME: HarnessSoundVolume = 70;
 
 export const MIN_APPEARANCE_CONTRAST = 50;
 export const MAX_APPEARANCE_CONTRAST = 200;
@@ -292,8 +299,12 @@ export type ModelPreferences = {
 };
 
 export const ClientSettingsSchema = Schema.Struct({
+  // SealCode plays its harness sounds out of the box.
   notificationMode: NotificationMode.pipe(
-    Schema.withDecodingDefault(Effect.succeed("off" as const)),
+    Schema.withDecodingDefault(Effect.succeed("sound" as const)),
+  ),
+  harnessSoundVolume: HarnessSoundVolume.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_HARNESS_SOUND_VOLUME)),
   ),
   inAppNotificationsEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   diffColorScheme: DiffColorScheme.pipe(
@@ -1517,6 +1528,7 @@ export function requiredScopesForProjectMutation(
 
 export const ClientSettingsPatch = Schema.Struct({
   notificationMode: Schema.optionalKey(NotificationMode),
+  harnessSoundVolume: Schema.optionalKey(HarnessSoundVolume),
   inAppNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
   diffColorScheme: Schema.optionalKey(DiffColorScheme),
   chatWidth: Schema.optionalKey(ChatWidth),

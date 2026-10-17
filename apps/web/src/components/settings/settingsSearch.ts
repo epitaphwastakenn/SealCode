@@ -245,8 +245,9 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "harness-sound-volume",
-    title: "Harness sound volume",
-    to: "/settings/appearance",
+    title: "Sound volume",
+    to: "/settings/general",
+    searchTerms: ["harness notification sound volume audio"],
   },
   {
     id: "environment-identification",

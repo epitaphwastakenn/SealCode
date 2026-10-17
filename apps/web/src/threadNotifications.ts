@@ -1,7 +1,9 @@
 import type { ClientSettings } from "@t3tools/contracts/settings";
 
-import completionUrl from "./assets/notification-completion.mp3";
-import inputUrl from "./assets/notification-input.mp3";
+import errorUrl from "./assets/sealcode-error.mp3";
+import finishedUrl from "./assets/sealcode-finished.mp3";
+import permissionUrl from "./assets/sealcode-permission.mp3";
+import questionUrl from "./assets/sealcode-question.mp3";
 
 type NotificationMode = ClientSettings["notificationMode"];
 export const NOTIFICATION_MODE_LABELS = {
@@ -64,6 +66,15 @@ export function setNotificationBadge(count: number) {
   void bridge?.setNotificationBadge?.({ count, image }).catch(() => undefined);
 }
 
+export type NotificationSound = "completion" | "permission" | "question" | "error";
+
+const NOTIFICATION_SOUND_URLS = {
+  completion: finishedUrl,
+  permission: permissionUrl,
+  question: questionUrl,
+  error: errorUrl,
+} satisfies Record<NotificationSound, string>;
+
 let audioContext: AudioContext | undefined;
 const buffers = new Map<string, Promise<AudioBuffer>>();
 
@@ -74,12 +85,13 @@ export function unlockNotificationAudio() {
 }
 
 export async function playNotificationSound(
-  kind: "completion" | "input",
+  kind: NotificationSound,
   shouldPlay: () => boolean,
+  volume: number,
 ) {
-  if (!audioContext || audioContext.state !== "running") return;
+  if (volume <= 0 || !audioContext || audioContext.state !== "running") return;
   const context = audioContext;
-  const url = kind === "completion" ? completionUrl : inputUrl;
+  const url = NOTIFICATION_SOUND_URLS[kind];
   try {
     let buffer = buffers.get(url);
     if (!buffer) {
@@ -92,7 +104,9 @@ export async function playNotificationSound(
     if (!shouldPlay() || context.state !== "running") return;
     const source = context.createBufferSource();
     source.buffer = decoded;
-    source.connect(context.destination);
+    const gain = context.createGain();
+    gain.gain.value = Math.min(1, volume / 100);
+    source.connect(gain).connect(context.destination);
     source.start();
   } catch {
     buffers.delete(url);

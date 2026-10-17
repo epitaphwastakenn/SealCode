@@ -287,8 +287,9 @@ describe("ClaudeSettings auto-compaction", () => {
 });
 
 describe("ClientSettings notifications", () => {
-  it("requires opt-in when existing settings omit notification preferences", () => {
-    expect(decodeClientSettings({}).notificationMode).toBe("off");
+  it("plays SealCode sounds when existing settings omit notification preferences", () => {
+    expect(decodeClientSettings({}).notificationMode).toBe("sound");
+    expect(decodeClientSettings({}).harnessSoundVolume).toBe(70);
     expect(decodeClientSettings({}).inAppNotificationsEnabled).toBe(false);
     expect(decodeClientSettingsPatch({})).not.toHaveProperty("inAppNotificationsEnabled");
     expect(decodeClientSettingsPatch({})).not.toHaveProperty("notificationMode");

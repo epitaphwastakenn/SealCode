@@ -82,8 +82,10 @@ function GuideRunWatcher({ runKey, watch }: { runKey: string; watch: GuideRunWat
     };
     const mode = getClientSettings().notificationMode;
     if (hasNotificationSound(mode)) {
-      void playNotificationSound(failure === null ? "completion" : "input", () =>
-        hasNotificationSound(getClientSettings().notificationMode),
+      void playNotificationSound(
+        failure === null ? "completion" : "error",
+        () => hasNotificationSound(getClientSettings().notificationMode),
+        getClientSettings().harnessSoundVolume,
       );
     }
     if (looking) {

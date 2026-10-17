@@ -164,31 +164,31 @@ describe("theme files", () => {
     },
   );
 
-  it("keeps stock dark controls in the neutral-black surface hierarchy", () => {
+  it("keeps stock dark controls in the SealCode violet surface hierarchy", () => {
     expectThemeColors(getStandardThemeColors("dark"), {
-      canvas: "#0a0a0a",
-      surface: "#111111",
-      surfaceRaised: "#111111",
-      surfaceOverlay: "#111111",
-      toolbarControl: "#111111",
-      secondary: "#111111",
-      muted: "#111111",
-      accentSurface: "#141414",
+      canvas: "#120a1f",
+      surface: "#1a0e2b",
+      surfaceRaised: "#211238",
+      surfaceOverlay: "#291640",
+      toolbarControl: "#211238",
+      secondary: "#211238",
+      muted: "#211238",
+      accentSurface: "#2b1746",
     });
   });
 
   it("keeps the stock sidebar and chat on distinct surfaces in both appearances", () => {
     expectThemeColors(getStandardThemeColors("light"), {
-      canvas: "#fcfcfc",
-      sidebar: "#fafafa",
+      canvas: "#ffffff",
+      sidebar: "#faf7ff",
       sidebarRowActive: "#ffffff",
-      messageSurface: "#f4f4f5",
+      messageSurface: "#f3e8ff",
     });
     expectThemeColors(getStandardThemeColors("dark"), {
-      canvas: "#0a0a0a",
-      sidebar: "#000000",
-      sidebarRowActive: "#1a1b1b",
-      messageSurface: "#141414",
+      canvas: "#120a1f",
+      sidebar: "#10071c",
+      sidebarRowActive: "#2b1746",
+      messageSurface: "#2b1746",
     });
   });
 

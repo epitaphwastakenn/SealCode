@@ -2636,3 +2636,68 @@ html[data-glass-app="true"] [data-slot="sidebar-inset"] .bg-background {
 html.electron-windows .app-backdrop-base {
   background-color: transparent;
 }
+
+/* SealCode: smooth corners (Appearance > Corners). A squircle keeps the curve
+   continuous where an arc meets the straight edge, so rounded surfaces read as
+   soft rather than boxy. Only paints where a border-radius already exists. */
+html[data-smooth-corners="true"] *,
+html[data-smooth-corners="true"] ::before,
+html[data-smooth-corners="true"] ::after {
+  corner-shape: squircle;
+}
+
+/* SealCode: floating panels. The sidebar and the main area become separate
+   rounded cards with a gap of window behind them, instead of edge-to-edge
+   rectangles. */
+html[data-floating-panels="true"] {
+  --floating-panel-gap: 8px;
+  --floating-panel-radius: calc(var(--radius) + 8px);
+}
+
+html[data-floating-panels="true"] body {
+  background-color: color-mix(in oklab, var(--app-chrome-background) 88%, black);
+}
+
+html[data-floating-panels="true"] [data-slot="sidebar-container"][data-app-sidebar] {
+  padding: var(--floating-panel-gap) 0 var(--floating-panel-gap) var(--floating-panel-gap);
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+html[data-floating-panels="true"] [data-app-sidebar] [data-slot="sidebar-inner"] {
+  overflow: hidden;
+  border: 1px solid var(--sidebar-border);
+  border-radius: var(--floating-panel-radius);
+  background-color: var(--sidebar);
+}
+
+/* In glass modes the tint moves from the now transparent container onto the
+   card; .sidebar-glass matches the acrylic rules' specificity so these win. */
+html[data-floating-panels="true"][data-glass-sidebar="true"]
+  [data-app-sidebar].sidebar-glass
+  [data-slot="sidebar-inner"] {
+  background: color-mix(in srgb, var(--sidebar) var(--glass-opacity), transparent) !important;
+}
+
+html[data-floating-panels="true"][data-glass-app="true"]
+  [data-app-sidebar].sidebar-glass
+  [data-slot="sidebar-inner"] {
+  background: color-mix(
+    in srgb,
+    var(--sidebar) var(--panel-glass-opacity, 70%),
+    transparent
+  ) !important;
+}
+
+html[data-floating-panels="true"] [data-slot="sidebar-inset"] {
+  margin: var(--floating-panel-gap);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--floating-panel-radius);
+}
+
+html[data-floating-panels="true"][data-glass-app="true"] body,
+html[data-floating-panels="true"][data-glass-sidebar="true"] body {
+  background-color: transparent;
+}

@@ -2248,6 +2248,10 @@ const SidebarThreadRow = memo(function SidebarThreadRow(props: {
                   props.sweepAction !== null && "hidden",
                 )}
               >
+                <SidebarProviderStack
+                  thread={thread}
+                  providerEntryByInstanceId={props.providerEntryByInstanceId}
+                />
                 {compactStatus}
                 {props.settlementSupported ? (
                   <Tooltip>

@@ -185,6 +185,7 @@ import {
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 import { BackgroundSettingsSection } from "./BackgroundSettings";
+import { CornerSettingsSection } from "./CornerSettings";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
 
@@ -1400,6 +1401,8 @@ export function AppearanceSettingsPanel() {
       </SettingsSection>
 
       <BackgroundSettingsSection />
+
+      <CornerSettingsSection />
 
       <SettingsSection id="appearance-interface" title="Interface">
         <SettingsRow

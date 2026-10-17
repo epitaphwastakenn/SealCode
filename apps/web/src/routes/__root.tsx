@@ -302,6 +302,18 @@ function GlassAppearanceSync() {
   const glassAppEnabled = useClientSettings((settings) => settings.glassAppEnabled);
   const panelGlassOpacity = useClientSettings((settings) => settings.panelGlassOpacity);
 
+  const cornerRadius = useClientSettings((settings) => settings.cornerRadius);
+  const smoothCorners = useClientSettings((settings) => settings.smoothCorners);
+  const floatingPanels = useClientSettings((settings) => settings.floatingPanels);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    // Every radius token derives from --radius, so this one value rounds the whole app.
+    root.style.setProperty("--radius", `${cornerRadius}px`);
+    root.dataset.smoothCorners = smoothCorners ? "true" : "false";
+    root.dataset.floatingPanels = floatingPanels ? "true" : "false";
+  }, [cornerRadius, floatingPanels, smoothCorners]);
+
   useEffect(() => {
     document.documentElement.dataset.glassApp = glassAppEnabled ? "true" : "false";
     document.documentElement.style.setProperty("--panel-glass-opacity", `${panelGlassOpacity}%`);

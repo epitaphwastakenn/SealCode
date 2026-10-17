@@ -231,6 +231,24 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["transparency tint panels solid see through glass amount"],
   },
   {
+    id: "corner-radius",
+    title: "Corner roundness",
+    to: "/settings/appearance",
+    searchTerms: ["rounded radius round corners square boxy shape"],
+  },
+  {
+    id: "smooth-corners",
+    title: "Smooth corners",
+    to: "/settings/appearance",
+    searchTerms: ["squircle continuous rounded corners shape"],
+  },
+  {
+    id: "floating-panels",
+    title: "Floating panels",
+    to: "/settings/appearance",
+    searchTerms: ["rounded panels cards gap sidebar inset layout"],
+  },
+  {
     id: "backdrop-image",
     title: "Background image",
     to: "/settings/appearance",

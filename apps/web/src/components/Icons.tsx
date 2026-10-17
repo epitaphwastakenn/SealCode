@@ -1,5 +1,7 @@
 import React, { type SVGProps, useId } from "react";
 import { cn } from "~/lib/utils";
+import antigravityIconUrl from "../assets/provider-icons/antigravity.png";
+import commandCodeIconUrl from "../assets/provider-icons/commandcode.png";
 export type Icon = React.FC<SVGProps<SVGSVGElement>>;
 
 export const UltrafastIcon: Icon = (props) => (
@@ -662,13 +664,13 @@ export const ClaudeAI: Icon = ({ className, ...props }) => (
 
 export const AntigravityIcon: Icon = (props) => (
   <svg {...props} viewBox="0 0 512 512" fill="none">
-    <image href="/provider-icons/antigravity.png" width="512" height="512" />
+    <image href={antigravityIconUrl} width="512" height="512" />
   </svg>
 );
 
 export const CommandCodeIcon: Icon = (props) => (
   <svg {...props} viewBox="0 0 1600 1600" fill="none">
-    <image href="/provider-icons/commandcode.png" width="1600" height="1600" />
+    <image href={commandCodeIconUrl} width="1600" height="1600" />
   </svg>
 );
 

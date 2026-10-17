@@ -1,299 +1,1499 @@
+import { ChatGptUsageButton } from "../settings/ChatGptUsageButton";
+import { usesChatGptSharing } from "@t3tools/shared/usageLimits";
+import { RefreshIcon } from "~/components/ui/refresh-icon";
 import { useAtomValue } from "@effect/atom-react";
-import type { EnvironmentId, ServerProvider, SubscriptionUsageWindow } from "@t3tools/contracts";
-import { useCanGoBack, useNavigate, useRouter } from "@tanstack/react-router";
-import { ArrowLeftIcon, RefreshCwIcon } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  ProviderDriverKind,
+  USAGE_CONTRACT_VERSION,
+  type EnvironmentId,
+  type UsageProviderKind,
+} from "@t3tools/contracts";
+import { CircleAlertIcon, ChevronDownIcon, InfoIcon, SlidersHorizontalIcon } from "lucide-react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { settlePromise } from "@t3tools/client-runtime/state/runtime";
+import * as AsyncResult from "effect/reactivity/AsyncResult";
+import * as Cause from "effect/Cause";
+import {
+  cursorKeychainAccessEnvironments,
+  refreshUsageLimits,
+} from "@t3tools/client-runtime/state/usage";
+import {
+  updatingProvidersLabel,
+  usageEnvironmentProgress,
+  usageLoadingState,
+} from "@t3tools/client-runtime/state/usage-progress";
 
-import { formatProviderDriverKindLabel } from "../../providerModels";
+import {
+  isCompatibleUsageContractVersion,
+  isModelCostUnknown,
+  type DailyTotals,
+  type HourlyTotals,
+  type MergedUsage,
+} from "@t3tools/shared/usageMerge";
+
+import { isElectron } from "../../env";
+import { cn } from "../../lib/utils";
 import { environmentPresentations } from "../../state/presentation";
-import { environmentServerConfigsAtom, serverEnvironment } from "../../state/server";
+import { primaryServerKeybindingsAtom, serverEnvironment } from "../../state/server";
+import { isCommandPaletteOpen } from "../../commandPaletteBus";
+import { isModelPickerOpen } from "../../modelPickerVisibility";
+import { shortcutLabelForCommand } from "../../keybindings";
+import { useUsage, type EnvironmentUsageStatus } from "../../state/usage";
 import { useAtomCommand } from "../../state/use-atom-command";
 import {
-  clampSubscriptionPercent,
-  formatSubscriptionPercent,
-  formatSubscriptionReset,
-} from "../../usage/subscriptionUsage";
-import { cn } from "../../lib/utils";
+  enumerateDays,
+  enumerateHourStarts,
+  formatCount,
+  formatDateTimeShort,
+  formatDayShort,
+  formatHourShort,
+  formatPercent,
+  formatTokens,
+  formatUsageContractMismatch,
+  formatUsd,
+  makeWindow,
+} from "@t3tools/shared/usageFormat";
+import { Button, InlineButton } from "../ui/button";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
+import {
+  Menu,
+  MenuCheckboxItem,
+  MenuItem,
+  MenuPopup,
+  MenuSeparator,
+  MenuTrigger,
+} from "../ui/menu";
 import { ScrollArea } from "../ui/scroll-area";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { SidebarInset } from "../ui/sidebar";
+import { Skeleton } from "../ui/skeleton";
+import { Toggle, ToggleGroup } from "../ui/toggle-group";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import {
+  WorkspaceBreadcrumb,
+  WorkspaceBreadcrumbItem,
+  WorkspaceBreadcrumbSeparator,
+  WorkspaceBreadcrumbText,
+} from "../WorkspaceBreadcrumb";
+import { WorkspacePageContainer } from "../WorkspacePageContainer";
+import { WorkspacePageHeader } from "../WorkspacePageHeader";
+import { UsageLimitsSection } from "./UsageLimits";
+import { UsagePriceOverrides } from "./UsagePriceOverrides";
+import { UsageProviderChart } from "./UsageProviderChart";
+import { SpeedPremium, UsageModelDialog } from "./UsageModelDialog";
+import { UsageShareBar } from "./UsageShareBar";
+import {
+  costTypeSegments,
+  modelShare,
+  sortModelsByTokens,
+  speedCostSegments,
+  tokenTypeSegments,
+} from "./usageBreakdown";
+import {
+  METRIC_OPTIONS,
+  WINDOW_OPTIONS,
+  resolveUsageShortcut,
+  type UsageMetric,
+} from "./usageShortcuts";
+import { useEscapeToGoBack } from "../../hooks/useNavigateBack";
+import { PROVIDER_ORDER, PROVIDER_PRESENTATION, providersWithUsage } from "./usageProviders";
+import {
+  readUsagePagePreferences,
+  saveUsagePagePreferences,
+  type UsagePagePreferences,
+} from "./usagePagePreferences";
 
-interface SubscriptionProviderEntry {
-  readonly environmentId: EnvironmentId;
-  readonly environmentLabel: string;
-  readonly provider: ServerProvider;
+function isUsageMetric(value: string | null | undefined): value is UsageMetric {
+  return METRIC_OPTIONS.some((option) => option.value === value);
+}
+
+function isUsageWindowDays(value: number): value is UsagePagePreferences["windowDays"] {
+  return WINDOW_OPTIONS.some((option) => option.days === value);
+}
+
+const providerLabel = (provider: UsageProviderKind) => PROVIDER_PRESENTATION[provider].label;
+
+// useUsage keys its queries on this set, so it must keep its identity.
+function useHiddenProviderSet(hiddenProviders: UsagePagePreferences["hiddenProviders"]) {
+  "use memo";
+  return new Set(hiddenProviders);
+}
+
+function usageLoading(
+  showingKept: boolean,
+  selectedEnvironments: Parameters<typeof usageLoadingState>[0],
+  refreshingUsage: boolean,
+  hiddenProviders: ReadonlySet<UsageProviderKind>,
+) {
+  if (showingKept) {
+    return { partial: true, everyProvider: true, providers: new Set<UsageProviderKind>() };
+  }
+  const state = usageLoadingState(selectedEnvironments, refreshingUsage);
+  const providers = new Set([...state.providers].filter((p) => !hiddenProviders.has(p)));
+  return {
+    partial: state.everyProvider || providers.size > 0,
+    everyProvider: state.everyProvider,
+    providers,
+  };
+}
+
+// UsageProviderChart memoizes on the provider collections, so they must keep their identity.
+function useUsageProviders(
+  showingKept: boolean,
+  selectedEnvironments: Parameters<typeof usageLoadingState>[0],
+  refreshingUsage: boolean,
+  hiddenProviders: ReadonlySet<UsageProviderKind>,
+  mergedProviders: MergedUsage["providers"],
+) {
+  "use memo";
+  const loading = usageLoading(showingKept, selectedEnvironments, refreshingUsage, hiddenProviders);
+  const providersWithData = providersWithUsage(mergedProviders);
+  const activeProviders = PROVIDER_ORDER.filter(
+    (provider) => providersWithData.includes(provider) || loading.providers.has(provider),
+  );
+  const chartLoadingProviders = new Set(
+    activeProviders.filter((provider) => loading.everyProvider || loading.providers.has(provider)),
+  );
+  return { loading, providersWithData, activeProviders, chartLoadingProviders };
+}
+
+// UsageProviderChart memoizes on these arrays, so they must keep their identity.
+function useUsagePeriods(usageWindow: ReturnType<typeof makeWindow>) {
+  "use memo";
+  const days = enumerateDays(usageWindow.sinceDay, usageWindow.untilDay);
+  const hours =
+    usageWindow.sinceTime === undefined || usageWindow.untilTime === undefined
+      ? []
+      : enumerateHourStarts(usageWindow.sinceTime, usageWindow.untilTime);
+  return { days, hours };
 }
 
 export function UsagePage() {
-  const canGoBack = useCanGoBack();
-  const navigate = useNavigate();
-  const router = useRouter();
-  const configs = useAtomValue(environmentServerConfigsAtom);
+  const [preferences, setPreferences] = useState(readUsagePagePreferences);
+  useEscapeToGoBack();
+  const keybindings = useAtomValue(primaryServerKeybindingsAtom);
+  const shortcutTitle = (
+    option: (typeof METRIC_OPTIONS)[number] | (typeof WINDOW_OPTIONS)[number],
+  ) => {
+    const shortcut = shortcutLabelForCommand(keybindings, option.command, {
+      context: { usagePageOpen: true },
+    });
+    return shortcut ? `${option.label} (${shortcut})` : option.label;
+  };
+  const [windowSelection, setWindowSelection] = useState(() => ({
+    days: preferences.windowDays,
+    window: makeWindow(
+      preferences.windowDays,
+      undefined,
+      preferences.windowDays === 1 ? "hour" : "day",
+    ),
+  }));
+  const metric = preferences.metric;
+  const showingLimits = metric === "limits";
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [limitsNow, setLimitsNow] = useState(() => Date.now());
+  const refreshingRef = useRef(false);
+  const [breakdown, setBreakdown] = useState<"model" | "time">("model");
+  const [priceDialog, setPriceDialog] = useState<{ readonly model?: string } | null>(null);
+  const [selectedModelKey, setSelectedModelKey] = useState<string | null>(null);
+  const [selectedEnvironmentIds, setSelectedEnvironmentIds] =
+    useState<ReadonlySet<EnvironmentId> | null>(null);
+  const hiddenProviders = useHiddenProviderSet(preferences.hiddenProviders);
+  const { days: windowDays, window } = windowSelection;
+  const isPast24Hours = windowDays === 1;
+  const {
+    merged: answeredUsage,
+    environments,
+    selectedEnvironments,
+    shown,
+    isPartial,
+    refresh,
+  } = useUsage(window, selectedEnvironmentIds, hiddenProviders);
+  const merged = shown?.merged ?? answeredUsage;
+  const shownWindow = shown?.window ?? window;
+  const shownHourly = shownWindow.resolution === "hour";
+  const refreshingUsage = isRefreshing && !showingLimits;
+  const showingKept = shown !== null && shown.window !== window;
+  const { loading, providersWithData, activeProviders, chartLoadingProviders } = useUsageProviders(
+    showingKept,
+    selectedEnvironments,
+    refreshingUsage,
+    hiddenProviders,
+    merged.providers,
+  );
+  const isProviderLoading = (provider: UsageProviderKind) =>
+    loading.everyProvider || loading.providers.has(provider);
   const presentations = useAtomValue(environmentPresentations.presentationsAtom);
+  const cursorAccessEnvironments = hiddenProviders.has("cursor")
+    ? []
+    : cursorKeychainAccessEnvironments(selectedEnvironments);
+  const sourceMessages = [
+    ...new Set(
+      selectedEnvironments.flatMap(
+        (environment) =>
+          environment.summary?.sources.flatMap((source) =>
+            source.message &&
+            !source.action &&
+            !hiddenProviders.has(source.fingerprint.provider) &&
+            (source.status === "partial" ||
+              source.status === "failed" ||
+              source.fingerprint.provider === "cursor")
+              ? [source.message]
+              : [],
+          ) ?? [],
+      ),
+    ),
+  ];
   const refreshProviders = useAtomCommand(serverEnvironment.refreshProviders, {
     reportFailure: false,
   });
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const refreshedEnvironmentKey = useRef<string | null>(null);
 
-  const providers = useMemo<readonly SubscriptionProviderEntry[]>(
-    () =>
-      [...configs.entries()].flatMap(([environmentId, config]) => {
-        const presentation = presentations.get(environmentId);
-        const environmentLabel = presentation?.entry.target.label ?? "Connected environment";
-        return config.providers
-          .filter((provider) => provider.enabled)
-          .map((provider) => ({ environmentId, environmentLabel, provider }));
-      }),
-    [configs, presentations],
+  const canReadDiagnostics = selectedEnvironments.some(
+    (environment) => environment.canReadDiagnostics,
   );
 
-  const orderedProviders = useMemo(
-    () =>
-      [...providers].sort((left, right) => {
-        const leftHasUsage = left.provider.subscriptionUsage !== undefined;
-        const rightHasUsage = right.provider.subscriptionUsage !== undefined;
-        if (leftHasUsage !== rightHasUsage) return leftHasUsage ? -1 : 1;
-        return providerDisplayName(left.provider).localeCompare(
-          providerDisplayName(right.provider),
-        );
-      }),
-    [providers],
+  const { days, hours } = useUsagePeriods(shownWindow);
+  const breakdownPeriods: readonly (DailyTotals | HourlyTotals)[] = (
+    shownHourly ? merged.hourly : merged.daily
+  ).toReversed();
+  const breakdownModels =
+    breakdown === "model" && metric === "tokens"
+      ? sortModelsByTokens(merged.models)
+      : merged.models;
+  const selectedModel =
+    selectedModelKey === null
+      ? undefined
+      : merged.models.find((model) => `${model.provider}:${model.model}` === selectedModelKey);
+  const breakdownPeak = breakdownModels.reduce(
+    (peak, model) => Math.max(peak, metric === "tokens" ? model.totalTokens : model.costUsd),
+    0,
   );
+  const summaryRows: Array<
+    | { readonly kind: "usage"; readonly provider: UsageProviderKind }
+    | { readonly kind: "enable"; readonly environment: EnvironmentUsageStatus }
+  > = activeProviders.map((provider) => ({ kind: "usage", provider }));
+  const cursorInsertAt =
+    Math.max(activeProviders.indexOf("codex"), activeProviders.indexOf("claude")) + 1;
+  summaryRows.splice(
+    cursorInsertAt,
+    0,
+    ...cursorAccessEnvironments.map((environment) => ({ kind: "enable" as const, environment })),
+  );
+  const timeValueColumnWidth = `${60 / (activeProviders.length + 2)}%`;
 
-  const handleRefresh = useCallback(async () => {
-    if (isRefreshing) return;
-    setIsRefreshing(true);
-    try {
-      await Promise.all(
-        [...configs.keys()].map((environmentId) => refreshProviders({ environmentId, input: {} })),
-      );
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [configs, isRefreshing, refreshProviders]);
+  const updatePreferences = (patch: Partial<UsagePagePreferences>) => {
+    const nextPreferences = { ...preferences, ...patch };
+    setPreferences(nextPreferences);
+    saveUsagePagePreferences(nextPreferences);
+  };
+  const selectWindow = (days: number) => {
+    if (!isUsageWindowDays(days)) return;
+    updatePreferences({ windowDays: days });
+    setWindowSelection({
+      days,
+      window: makeWindow(days, undefined, days === 1 ? "hour" : "day"),
+    });
+  };
+  const selectMetric = (nextMetric: UsageMetric) => {
+    if (nextMetric === "limits") setLimitsNow(Date.now());
+    updatePreferences({ metric: nextMetric });
+  };
+  const refreshLimits = (automatic = false, afterPending = false) =>
+    // Settled so the timestamp still advances when a refresh throws.
+    settlePromise(() =>
+      Promise.all(
+        Array.from(presentations, ([environmentId, presentation]) => {
+          if (selectedEnvironmentIds !== null && !selectedEnvironmentIds.has(environmentId)) return;
+          if (presentation.connection.phase === "connected" && presentation.serverConfig !== null) {
+            return refreshUsageLimits(
+              environmentId,
+              () => refreshProviders({ environmentId, input: {} }),
+              automatic,
+              afterPending,
+            );
+          }
+        }),
+      ),
+    ).then((result) => {
+      setLimitsNow(Date.now());
+      if (!AsyncResult.isSuccess(result)) throw Cause.squash(result.cause);
+    });
+  const onUsageKeyDown = useEffectEvent((event: KeyboardEvent) => {
+    if (
+      event.defaultPrevented ||
+      event.repeat ||
+      event.isComposing ||
+      isCommandPaletteOpen() ||
+      isModelPickerOpen()
+    )
+      return;
+
+    const command = resolveUsageShortcut(event, keybindings);
+    const metricOption = METRIC_OPTIONS.find((option) => option.command === command);
+    const periodOption = WINDOW_OPTIONS.find((option) => option.command === command);
+    if (!metricOption && !periodOption) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+    if (metricOption) selectMetric(metricOption.value);
+    if (periodOption && !showingLimits) selectWindow(periodOption.days);
+  });
 
   useEffect(() => {
-    const environmentKey = [...configs.keys()].join(",");
-    if (environmentKey.length === 0 || refreshedEnvironmentKey.current === environmentKey) {
+    globalThis.window.addEventListener("keydown", onUsageKeyDown, true);
+    return () => globalThis.window.removeEventListener("keydown", onUsageKeyDown, true);
+  }, []);
+
+  const refreshWindow = () => {
+    if (refreshingRef.current) return;
+
+    if (showingLimits) {
+      refreshingRef.current = true;
+      setIsRefreshing(true);
+      void refreshLimits().finally(() => {
+        refreshingRef.current = false;
+        setIsRefreshing(false);
+      });
       return;
     }
-    refreshedEnvironmentKey.current = environmentKey;
-    void handleRefresh();
-  }, [configs, handleRefresh]);
+    const nextWindow = makeWindow(windowDays, undefined, isPast24Hours ? "hour" : "day");
+    if (
+      nextWindow.sinceDay !== window.sinceDay ||
+      nextWindow.untilDay !== window.untilDay ||
+      nextWindow.sinceTime !== window.sinceTime ||
+      nextWindow.untilTime !== window.untilTime
+    ) {
+      setWindowSelection({ days: windowDays, window: nextWindow });
+    }
+    refreshingRef.current = true;
+    setIsRefreshing(true);
+    void refresh(nextWindow).finally(() => {
+      refreshingRef.current = false;
+      setIsRefreshing(false);
+    });
+  };
+  const connectedLimitsEnvironments = [...presentations]
+    .filter(
+      ([environmentId, presentation]) =>
+        presentation.connection.phase === "connected" &&
+        presentation.serverConfig !== null &&
+        (selectedEnvironmentIds === null || selectedEnvironmentIds.has(environmentId)),
+    )
+    .map(([environmentId]) => environmentId)
+    .sort()
+    .join(",");
+  const autoRefreshLimits = useEffectEvent(() => {
+    void refreshLimits(true);
+  });
+  useEffect(() => {
+    if (showingLimits && connectedLimitsEnvironments) autoRefreshLimits();
+  }, [showingLimits, connectedLimitsEnvironments]);
+
+  const windowLabel =
+    shownHourly && shownWindow.sinceTime !== undefined && shownWindow.untilTime !== undefined
+      ? `${formatDateTimeShort(shownWindow.sinceTime, shownWindow.timeZone)} to ${formatDateTimeShort(shownWindow.untilTime, shownWindow.timeZone)}`
+      : `${formatDayShort(shownWindow.sinceDay)} to ${formatDayShort(shownWindow.untilDay)}`;
+  const topbarContent = (
+    <div className="grid w-full min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 py-2 xl:flex">
+      <WorkspaceBreadcrumb ariaLabel="Usage breadcrumb" className="min-w-0">
+        <WorkspaceBreadcrumbItem>
+          <h1>Usage</h1>
+        </WorkspaceBreadcrumbItem>
+        <WorkspaceBreadcrumbSeparator />
+        <WorkspaceBreadcrumbItem className="min-w-10 shrink">
+          <UsageEnvironmentFilter
+            environments={environments}
+            selectedEnvironments={selectedEnvironments}
+            selectedEnvironmentIds={selectedEnvironmentIds}
+            onSelectionChange={setSelectedEnvironmentIds}
+            showUsageStatus={!showingLimits}
+            refreshing={refreshingUsage}
+            isPartial={isPartial}
+            duplicateSources={merged.duplicateSources}
+            contractMismatches={merged.contractMismatches}
+            onOpenModelPrices={() => setPriceDialog({})}
+          />
+        </WorkspaceBreadcrumbItem>
+        <WorkspaceBreadcrumbSeparator />
+        <WorkspaceBreadcrumbItem current className="min-w-10">
+          <UsageProviderFilter
+            hiddenProviders={hiddenProviders}
+            onChange={(next) => updatePreferences({ hiddenProviders: next })}
+          />
+        </WorkspaceBreadcrumbItem>
+      </WorkspaceBreadcrumb>
+      {!showingLimits ? (
+        <span className="hidden min-w-0 truncate text-xs text-muted-foreground 2xl:block">
+          {windowLabel}
+        </span>
+      ) : null}
+      <div className="ms-auto hidden min-w-0 items-center justify-end gap-2 xl:flex">
+        <ToggleGroup
+          aria-label="Usage metric"
+          variant="segmented"
+          value={[metric]}
+          onValueChange={(next) => {
+            const value = next[0];
+            if (isUsageMetric(value)) selectMetric(value);
+          }}
+        >
+          {METRIC_OPTIONS.map((option) => (
+            <Toggle key={option.value} value={option.value} title={shortcutTitle(option)}>
+              {option.label}
+            </Toggle>
+          ))}
+        </ToggleGroup>
+        <ToggleGroup
+          aria-label="Usage period"
+          variant="segmented"
+          value={[String(windowDays)]}
+          disabled={showingLimits}
+          onValueChange={(next) => {
+            const value = next[0];
+            if (value) selectWindow(Number(value));
+          }}
+        >
+          {WINDOW_OPTIONS.map((option) => (
+            <Toggle key={option.days} value={String(option.days)} title={shortcutTitle(option)}>
+              {option.label}
+            </Toggle>
+          ))}
+        </ToggleGroup>
+        <Button
+          onClick={refreshWindow}
+          aria-label={showingLimits ? "Refresh limits" : "Refresh usage"}
+          aria-busy={isRefreshing}
+          disabled={isRefreshing || (!showingLimits && !canReadDiagnostics)}
+          size="icon-sm"
+          variant="ghost"
+        >
+          <RefreshIcon size="sm" refreshing={isRefreshing} />
+        </Button>
+      </div>
+      <div className="ms-auto flex min-w-0 items-center justify-end gap-1 xl:hidden">
+        <Select
+          value={metric}
+          onValueChange={(value) => {
+            if (isUsageMetric(value)) selectMetric(value);
+          }}
+        >
+          <SelectTrigger
+            aria-label="Usage metric"
+            size="compact"
+            variant="ghost"
+            className="w-auto min-w-0"
+          >
+            <SelectValue>
+              {METRIC_OPTIONS.find((option) => option.value === metric)?.label}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup align="end" alignItemWithTrigger={false}>
+            {METRIC_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value} title={shortcutTitle(option)}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+        <Select
+          value={String(windowDays)}
+          disabled={showingLimits}
+          onValueChange={(value) => selectWindow(Number(value))}
+        >
+          <SelectTrigger
+            aria-label="Usage period"
+            size="compact"
+            variant="ghost"
+            className="w-auto min-w-0"
+          >
+            <SelectValue>
+              {WINDOW_OPTIONS.find((option) => option.days === windowDays)?.label}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup align="end" alignItemWithTrigger={false}>
+            {WINDOW_OPTIONS.map((option) => (
+              <SelectItem
+                key={option.days}
+                value={String(option.days)}
+                title={shortcutTitle(option)}
+              >
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+        <Button
+          onClick={refreshWindow}
+          aria-label={showingLimits ? "Refresh limits" : "Refresh usage"}
+          aria-busy={isRefreshing}
+          disabled={isRefreshing || (!showingLimits && !canReadDiagnostics)}
+          size="icon-sm"
+          variant="ghost"
+        >
+          <RefreshIcon size="sm" refreshing={isRefreshing} />
+        </Button>
+      </div>
+    </div>
+  );
 
   return (
-    <ScrollArea className="h-full">
-      <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-6 py-6">
-        <header className="flex flex-wrap items-start justify-between gap-4">
-          <div className="flex items-start gap-3">
-            <button
-              type="button"
-              aria-label="Back"
-              onClick={() => {
-                if (canGoBack) {
-                  router.history.back();
-                  return;
-                }
-                void navigate({ to: "/" });
-              }}
-              className="mt-1 cursor-pointer rounded-md border border-border p-2 text-muted-foreground transition-colors hover:text-foreground"
-            >
-              <ArrowLeftIcon className="size-3.5" />
-            </button>
-            <div className="flex flex-col gap-1">
-              <h1 className="text-2xl font-semibold text-foreground">Subscription usage</h1>
-              <p className="max-w-xl text-sm text-muted-foreground">
-                Live quota windows and reported activity from your connected providers.
+    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none isolate">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
+        <WorkspacePageHeader electron={isElectron}>{topbarContent}</WorkspacePageHeader>
+
+        <ScrollArea className="min-h-0 flex-1">
+          <WorkspacePageContainer width="wide">
+            {selectedEnvironments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                {environments.length === 0
+                  ? `Connect an environment to see ${showingLimits ? "limits" : "usage"}.`
+                  : `Select an environment to see ${showingLimits ? "limits" : "usage"}.`}
               </p>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => void handleRefresh()}
-            disabled={isRefreshing}
-            aria-label="Refresh subscription usage"
-            className="cursor-pointer rounded-md border border-border p-2 text-muted-foreground transition-colors hover:text-foreground disabled:cursor-default disabled:opacity-50"
-          >
-            <RefreshCwIcon className={cn("size-3.5", isRefreshing && "animate-spin")} />
-          </button>
-        </header>
-
-        {orderedProviders.length === 0 ? (
-          <EmptySubscriptionUsage />
-        ) : (
-          <section className="grid gap-4 md:grid-cols-2" aria-label="Provider subscription usage">
-            {orderedProviders.map((entry) => (
-              <SubscriptionProviderCard
-                key={`${entry.environmentId}:${entry.provider.instanceId}`}
-                entry={entry}
+            ) : showingLimits ? (
+              <UsageLimitsSection
+                selectedEnvironmentIds={selectedEnvironmentIds}
+                hiddenProviders={hiddenProviders}
+                now={limitsNow}
+                cursorPrompt={
+                  cursorAccessEnvironments.length > 0 ? (
+                    <CursorEnableLimits
+                      environments={cursorAccessEnvironments}
+                      onEnabled={() => {
+                        void refresh();
+                        void refreshLimits(false, true);
+                      }}
+                    />
+                  ) : null
+                }
               />
-            ))}
-          </section>
-        )}
+            ) : shown === null ? (
+              <UsageSkeleton />
+            ) : !canReadDiagnostics ? (
+              <div className="space-y-2 py-12 text-center text-sm text-muted-foreground">
+                {selectedEnvironments.map((environment) => (
+                  <p key={environment.environmentId}>
+                    {selectedEnvironments.length > 1 ? `${environment.label}: ` : null}
+                    {environment.error}
+                  </p>
+                ))}
+              </div>
+            ) : (
+              <div aria-busy={loading.partial} className="flex flex-col gap-6">
+                {sourceMessages.map((message) => (
+                  <p key={message} className="mb-4 text-sm text-muted-foreground">
+                    {message}
+                  </p>
+                ))}
+                <section className="grid gap-6 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+                  <div className="flex min-w-0 flex-col gap-5">
+                    <div className="flex flex-col gap-1">
+                      <span
+                        className={cn(
+                          "text-4xl font-semibold text-foreground tabular-nums",
+                          figureClass(loading.partial),
+                        )}
+                      >
+                        {metric === "cost"
+                          ? formatUsd(merged.costUsd)
+                          : formatTokens(merged.totalTokens)}
+                      </span>
+                      <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+                        <span>
+                          <span className={figureClass(loading.partial)}>
+                            {formatCount(merged.sessions)} sessions
+                          </span>
+                          {metric === "cost" && " · API estimate"}
+                        </span>
+                        {metric === "cost" && merged.costQuality.unpricedShare > 0 && (
+                          <Popover>
+                            <PopoverTrigger
+                              openOnHover
+                              render={<InlineButton tone="muted" />}
+                              aria-label="Unpriced usage details"
+                            >
+                              <InfoIcon className="size-3" aria-hidden />
+                            </PopoverTrigger>
+                            <PopoverPopup side="top" tooltipStyle>
+                              API estimate excludes{" "}
+                              {formatPercent(merged.costQuality.unpricedShare)} unpriced records.
+                            </PopoverPopup>
+                          </Popover>
+                        )}
+                      </span>
+                    </div>
 
-        <p className="border-t border-border pt-4 text-xs leading-relaxed text-muted-foreground">
-          Percentages and reset times come from the provider account. SealCode does not estimate
-          subscription limits from token counts. Providers without a quota denominator show their
-          reported activity instead of a fabricated percentage.
-        </p>
+                    {!hiddenProviders.has("codex") &&
+                    [...presentations].some(
+                      ([id, presentation]) =>
+                        (selectedEnvironmentIds === null || selectedEnvironmentIds.has(id)) &&
+                        presentation.serverConfig?.providers.some(usesChatGptSharing),
+                    ) ? (
+                      <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+                        <span>ChatGPT shared usage</span>
+                        <ChatGptUsageButton size="xs" />
+                      </div>
+                    ) : null}
+
+                    {summaryRows.map((row) => {
+                      if (row.kind === "enable") {
+                        return (
+                          <CursorEnableRow
+                            key={`enable:${row.environment.environmentId}`}
+                            environmentId={row.environment.environmentId}
+                            label={row.environment.label}
+                            showEnvironment={selectedEnvironments.length > 1}
+                            onEnabled={() => {
+                              void refresh();
+                              void refreshLimits(false, true);
+                            }}
+                          />
+                        );
+                      }
+                      const provider = row.provider;
+                      const totals = merged.providers.find((entry) => entry.provider === provider);
+                      const share =
+                        metric === "cost" ? (totals?.costShare ?? 0) : (totals?.tokenShare ?? 0);
+                      const providerSessions = totals?.sessions ?? 0;
+                      const sessionLabel = `${formatCount(providerSessions)} ${
+                        providerSessions === 1 ? "session" : "sessions"
+                      }`;
+                      const providerLoading = isProviderLoading(provider);
+                      const awaitingData = providerLoading && !providersWithData.includes(provider);
+                      return (
+                        <div key={provider} className="flex flex-col gap-1">
+                          <div className="flex items-baseline justify-between gap-4">
+                            <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
+                              <span
+                                aria-hidden
+                                className="size-2 shrink-0 rounded-full"
+                                style={{
+                                  backgroundColor: PROVIDER_PRESENTATION[provider].color,
+                                }}
+                              />
+                              <ProviderMark provider={provider} className="size-4" />
+                              <span className="flex min-w-0 items-baseline gap-1.5">
+                                <span className="truncate">
+                                  {PROVIDER_PRESENTATION[provider].label}
+                                </span>
+                                <span
+                                  className={cn(
+                                    "shrink-0 whitespace-nowrap text-2xs text-muted-foreground tabular-nums",
+                                    figureClass(providerLoading),
+                                    awaitingData && "invisible",
+                                  )}
+                                >
+                                  {sessionLabel}
+                                </span>
+                              </span>
+                            </span>
+                            <span
+                              className={cn(
+                                "shrink-0 text-sm font-medium text-foreground tabular-nums",
+                                figureClass(providerLoading),
+                              )}
+                            >
+                              {awaitingData
+                                ? "—"
+                                : metric === "cost"
+                                  ? formatUsd(totals?.costUsd ?? 0)
+                                  : formatTokens(totals?.totalTokens ?? 0)}
+                            </span>
+                          </div>
+                          <span
+                            className={cn(
+                              "text-xs text-muted-foreground",
+                              figureClass(providerLoading),
+                              awaitingData && "invisible",
+                            )}
+                          >
+                            {metric === "cost"
+                              ? `${formatPercent(share)} of cost · ${formatTokens(totals?.totalTokens ?? 0)} tokens`
+                              : `${formatPercent(share)} of tokens · ${formatUsd(totals?.costUsd ?? 0)}`}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex min-w-0 flex-col gap-3">
+                    <h2 className="text-sm font-medium text-foreground">
+                      {shownHourly ? "Hourly" : "Daily"}{" "}
+                      {metric === "tokens" ? "processed tokens" : "cost"}
+                    </h2>
+                    <UsageProviderChart
+                      providers={activeProviders}
+                      loadingProviders={chartLoadingProviders}
+                      days={days}
+                      daily={merged.daily}
+                      hours={hours}
+                      hourly={merged.hourly}
+                      metric={metric}
+                      referenceTime={shownWindow.untilTime}
+                      resolution={shownHourly ? "hour" : "day"}
+                      timeZone={shownWindow.timeZone}
+                    />
+                  </div>
+                </section>
+
+                <section className="flex flex-col gap-2">
+                  <h2 className="text-sm font-medium text-foreground">Totals</h2>
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-4 py-1 md:grid-cols-5">
+                    <Metric
+                      loading={loading.partial}
+                      label="Processed tokens"
+                      value={formatTokens(merged.totalTokens)}
+                    />
+                    <Metric
+                      loading={loading.partial}
+                      label="Cached input"
+                      value={formatTokens(merged.cachedInputTokens)}
+                    />
+                    <Metric
+                      loading={loading.partial}
+                      label="Uncached input"
+                      value={formatTokens(merged.uncachedInputTokens)}
+                    />
+                    <Metric
+                      loading={loading.partial}
+                      label="Output"
+                      value={formatTokens(merged.outputTokens)}
+                    />
+                    <Metric
+                      loading={loading.partial}
+                      label="Cache savings"
+                      value={formatUsd(merged.costQuality.cacheSavingsUsd)}
+                    />
+                  </div>
+                </section>
+
+                {merged.totalTokens > 0 ? (
+                  <section
+                    className={cn(
+                      "grid gap-x-12 gap-y-8 lg:grid-cols-2",
+                      figureClass(loading.partial),
+                    )}
+                  >
+                    {metric === "tokens" ? (
+                      <UsageShareBar
+                        label="Tokens by type"
+                        segments={tokenTypeSegments(merged)}
+                        format={formatTokens}
+                      />
+                    ) : (
+                      <>
+                        <UsageShareBar
+                          label="Cost by type"
+                          segments={costTypeSegments(merged.categoryCost)}
+                          format={formatUsd}
+                        />
+                        {merged.speedCost.fast + merged.speedCost.ultrafast > 0 ? (
+                          <UsageShareBar
+                            label="Cost by speed"
+                            segments={speedCostSegments(merged.speedCost)}
+                            format={formatUsd}
+                            aside={<SpeedPremium premiumUsd={merged.speedCost.premium} />}
+                          />
+                        ) : null}
+                      </>
+                    )}
+                  </section>
+                ) : null}
+
+                <section className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <h2 className="text-sm font-medium text-foreground">Breakdown</h2>
+                    <ToggleGroup
+                      aria-label="Usage breakdown"
+                      variant="segmented"
+                      value={[breakdown]}
+                      onValueChange={(next) => {
+                        const value = next[0];
+                        if (value === "model" || value === "time") setBreakdown(value);
+                      }}
+                    >
+                      {(
+                        [
+                          { value: "model", label: "Model" },
+                          { value: "time", label: shownHourly ? "Hour" : "Day" },
+                        ] as const
+                      ).map((option) => (
+                        <Toggle key={option.value} value={option.value}>
+                          {option.label}
+                        </Toggle>
+                      ))}
+                    </ToggleGroup>
+                  </div>
+
+                  {breakdown === "model" ? (
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border text-right text-xs text-muted-foreground">
+                          <th className="py-2 pr-3 text-left font-normal">#</th>
+                          <th className="w-full py-2 text-left font-normal">Model</th>
+                          <th className="py-2 pl-6 font-normal">Cost</th>
+                          <th className="hidden py-2 pl-6 font-normal sm:table-cell">Share</th>
+                          <th className="py-2 pl-6 font-normal">Tokens</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {breakdownModels.length === 0 ? (
+                          <tr>
+                            <td colSpan={5} className="py-6 text-center text-muted-foreground">
+                              No activity in this window.
+                            </td>
+                          </tr>
+                        ) : (
+                          breakdownModels.map((model, index) => {
+                            const key = `${model.provider}:${model.model}`;
+                            const value = metric === "tokens" ? model.totalTokens : model.costUsd;
+                            const share = modelShare(
+                              model,
+                              metric === "tokens" ? "tokens" : "cost",
+                            );
+                            const rowFigures = figureClass(isProviderLoading(model.provider));
+                            return (
+                              <tr
+                                key={key}
+                                className="relative border-b border-border/50 text-right whitespace-nowrap text-muted-foreground tabular-nums transition-colors hover:bg-muted/50 has-focus-visible:bg-muted/50"
+                              >
+                                <td className="py-2.5 pr-3 text-left text-xs">{index + 1}</td>
+                                <td className="py-2.5 text-left whitespace-normal">
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedModelKey(key)}
+                                    className="flex items-center gap-2 text-left text-foreground outline-none after:absolute after:inset-0"
+                                  >
+                                    <ProviderMark provider={model.provider} className="size-3.5" />
+                                    {model.model}
+                                  </button>
+                                  <div
+                                    aria-hidden
+                                    className={cn("mt-1.5 h-0.5 max-w-48", rowFigures)}
+                                  >
+                                    <div
+                                      className="h-full rounded-full"
+                                      style={{
+                                        width:
+                                          value > 0 && breakdownPeak > 0
+                                            ? `max(0.5rem, ${(value / breakdownPeak) * 100}%)`
+                                            : 0,
+                                        backgroundColor:
+                                          PROVIDER_PRESENTATION[model.provider].color,
+                                      }}
+                                    />
+                                  </div>
+                                </td>
+                                <td className={cn("py-2.5 pl-6 text-foreground", rowFigures)}>
+                                  {isModelCostUnknown(model) ? (
+                                    <span className="text-muted-foreground">Unpriced</span>
+                                  ) : (
+                                    formatUsd(model.costUsd)
+                                  )}
+                                </td>
+                                <td className={cn("hidden py-2.5 pl-6 sm:table-cell", rowFigures)}>
+                                  {share === null ? "" : formatPercent(share)}
+                                </td>
+                                <td className={cn("py-2.5 pl-6", rowFigures)}>
+                                  {formatTokens(model.totalTokens)}
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  ) : (
+                    <table className="w-full table-fixed text-sm">
+                      <colgroup>
+                        <col className="w-2/5" />
+                        {activeProviders.map((provider) => (
+                          <col key={provider} style={{ width: timeValueColumnWidth }} />
+                        ))}
+                        <col style={{ width: timeValueColumnWidth }} />
+                        <col style={{ width: timeValueColumnWidth }} />
+                      </colgroup>
+                      <thead>
+                        <tr className="border-b border-border text-left text-xs text-muted-foreground">
+                          <th className="py-2 font-normal">{shownHourly ? "Hour" : "Day"}</th>
+                          {activeProviders.map((provider) => (
+                            <th key={provider} className="py-2 text-right font-normal">
+                              {PROVIDER_PRESENTATION[provider].label}
+                            </th>
+                          ))}
+                          <th className="py-2 text-right font-normal">Total</th>
+                          <th className="py-2 text-right font-normal">Tokens</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {breakdownPeriods.length === 0 ? (
+                          <tr>
+                            <td
+                              colSpan={activeProviders.length + 3}
+                              className="py-6 text-center text-muted-foreground"
+                            >
+                              No activity in this window.
+                            </td>
+                          </tr>
+                        ) : (
+                          breakdownPeriods.map((period) => (
+                            <tr
+                              key={"hourStart" in period ? period.hourStart : period.day}
+                              className="border-b border-border/50 transition-colors hover:bg-muted/50"
+                            >
+                              <td className="py-2 text-foreground">
+                                {"hourStart" in period
+                                  ? formatHourShort(period.hourStart, shownWindow.timeZone)
+                                  : formatDayShort(period.day)}
+                              </td>
+                              {activeProviders.map((provider) => (
+                                <td
+                                  key={provider}
+                                  className={cn(
+                                    "py-2 text-right text-muted-foreground tabular-nums",
+                                    figureClass(isProviderLoading(provider)),
+                                  )}
+                                >
+                                  {formatUsd(period.byProvider.get(provider)?.costUsd ?? 0)}
+                                </td>
+                              ))}
+                              <td
+                                className={cn(
+                                  "py-2 text-right text-foreground tabular-nums",
+                                  figureClass(loading.partial),
+                                )}
+                              >
+                                {formatUsd(period.costUsd)}
+                              </td>
+                              <td
+                                className={cn(
+                                  "py-2 text-right text-muted-foreground tabular-nums",
+                                  figureClass(loading.partial),
+                                )}
+                              >
+                                {formatTokens(period.totalTokens)}
+                              </td>
+                            </tr>
+                          ))
+                        )}
+                      </tbody>
+                    </table>
+                  )}
+                </section>
+              </div>
+            )}
+          </WorkspacePageContainer>
+        </ScrollArea>
       </div>
-    </ScrollArea>
+      {selectedModel !== undefined && !showingLimits ? (
+        <UsageModelDialog
+          model={selectedModel}
+          environments={selectedEnvironments}
+          metric={metric === "tokens" ? "tokens" : "cost"}
+          chartWindow={{
+            days,
+            hours,
+            resolution: shownHourly ? "hour" : "day",
+            timeZone: shownWindow.timeZone,
+            referenceTime: shownWindow.untilTime,
+          }}
+          onSetPrice={() => {
+            setSelectedModelKey(null);
+            setPriceDialog({ model: selectedModel.model });
+          }}
+          onClose={() => setSelectedModelKey(null)}
+        />
+      ) : null}
+      {priceDialog ? (
+        <UsagePriceOverrides
+          usage={environments}
+          initialSelectedEnvironmentIds={selectedEnvironmentIds}
+          initialModel={priceDialog.model}
+          onOpenChange={(open) => {
+            if (!open) setPriceDialog(null);
+          }}
+        />
+      ) : null}
+    </SidebarInset>
   );
 }
 
-function providerDisplayName(provider: ServerProvider): string {
-  return provider.displayName?.trim() || formatProviderDriverKindLabel(provider.driver);
+const CURSOR_KEYCHAIN_COPY = "Requires access to your Cursor login in macOS Keychain.";
+
+function CursorEnableButton({
+  environmentId,
+  label,
+  onEnabled,
+  tooltip,
+  buttonText = "Enable",
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly label: string;
+  readonly onEnabled: () => void;
+  readonly tooltip: boolean;
+  readonly buttonText?: string;
+}) {
+  const updateSettings = useAtomCommand(serverEnvironment.updateSettings, {
+    label: "enable Cursor account usage",
+  });
+  const [pending, setPending] = useState(false);
+  const enable = async () => {
+    setPending(true);
+    const result = await updateSettings({
+      environmentId,
+      input: { patch: { cursorKeychainUsageEnabled: true } },
+    });
+    if (result._tag === "Success") onEnabled();
+    setPending(false);
+  };
+  const button = tooltip ? (
+    <InlineButton
+      disabled={pending}
+      aria-busy={pending}
+      aria-label={`Enable Cursor usage from ${label}`}
+      onClick={() => void enable()}
+    >
+      {buttonText}
+    </InlineButton>
+  ) : (
+    <Button
+      size="sm"
+      variant="outline"
+      disabled={pending}
+      aria-busy={pending}
+      aria-label={`Enable Cursor usage from ${label}`}
+      onClick={() => void enable()}
+    >
+      {buttonText}
+    </Button>
+  );
+  if (!tooltip) return button;
+  return (
+    <Tooltip>
+      <TooltipTrigger render={button} />
+      <TooltipPopup>{CURSOR_KEYCHAIN_COPY}</TooltipPopup>
+    </Tooltip>
+  );
 }
 
-function EmptySubscriptionUsage() {
+function CursorEnableRow({
+  environmentId,
+  label,
+  showEnvironment,
+  onEnabled,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly label: string;
+  readonly showEnvironment: boolean;
+  readonly onEnabled: () => void;
+}) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 border border-dashed border-border px-6 py-16 text-center">
-      <span className="text-sm font-medium text-foreground">No connected subscriptions</span>
-      <span className="max-w-md text-sm text-muted-foreground">
-        Connect a provider in Settings to see the quota windows or activity it makes available.
+    <div className="flex min-w-0 items-baseline justify-between gap-4 text-sm">
+      <span className="flex min-w-0 items-center gap-2 text-sm text-foreground">
+        <span
+          aria-hidden
+          className="size-2 shrink-0 rounded-full"
+          style={{ backgroundColor: PROVIDER_PRESENTATION.cursor.color }}
+        />
+        <ProviderMark provider="cursor" className="size-4" />
+        <span className="truncate">Cursor{showEnvironment ? ` · ${label}` : ""}</span>
+      </span>
+      <CursorEnableButton
+        environmentId={environmentId}
+        label={label}
+        onEnabled={onEnabled}
+        tooltip
+      />
+    </div>
+  );
+}
+
+function CursorEnableLimits({
+  environments,
+  onEnabled,
+}: {
+  readonly environments: readonly EnvironmentUsageStatus[];
+  readonly onEnabled: () => void;
+}) {
+  return (
+    <section className="flex flex-col gap-3">
+      <h2 className="flex items-center gap-2 text-sm font-medium text-foreground">
+        <ProviderInstanceIcon
+          driverKind={ProviderDriverKind.make("cursor")}
+          displayName="Cursor"
+          indicatorBackground="var(--background)"
+          className="size-5"
+          iconClassName="size-4 text-foreground/80"
+        />
+        Cursor
+      </h2>
+      <div className="flex flex-col items-start gap-3 rounded-lg border border-border/60 p-4">
+        <p className="text-xs text-muted-foreground">{CURSOR_KEYCHAIN_COPY}</p>
+        <div className="flex flex-wrap gap-2">
+          {environments.map((environment) => (
+            <CursorEnableButton
+              key={environment.environmentId}
+              environmentId={environment.environmentId}
+              label={environment.label}
+              buttonText={environments.length > 1 ? `Enable on ${environment.label}` : "Enable"}
+              onEnabled={onEnabled}
+              tooltip={false}
+            />
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ProviderMark({
+  provider,
+  className,
+}: {
+  readonly provider: UsageProviderKind;
+  readonly className: string;
+}) {
+  const presentation = PROVIDER_PRESENTATION[provider];
+  return (
+    <ProviderInstanceIcon
+      driverKind={presentation.driverKind}
+      displayName={presentation.label}
+      iconClassName={className}
+    />
+  );
+}
+
+function figureClass(loading: boolean) {
+  return cn("transition-opacity", loading && "opacity-40 delay-150");
+}
+
+function Metric({
+  label,
+  value,
+  loading,
+}: {
+  readonly label: string;
+  readonly value: string;
+  readonly loading: boolean;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span
+        className={cn("text-base font-medium text-foreground tabular-nums", figureClass(loading))}
+      >
+        {value}
       </span>
     </div>
   );
 }
 
-function SubscriptionProviderCard({ entry }: { readonly entry: SubscriptionProviderEntry }) {
-  const { provider } = entry;
-  const usage = provider.subscriptionUsage;
-  const name = providerDisplayName(provider);
+function UsageCoverageNotice({
+  environments,
+  duplicateSources,
+  contractMismatches,
+}: {
+  readonly environments: readonly EnvironmentUsageStatus[];
+  readonly duplicateSources: readonly string[];
+  readonly contractMismatches: MergedUsage["contractMismatches"];
+}) {
+  const failed = environments.filter((environment) => environment.error !== null);
+  const mismatchByEnvironment = new Map(
+    contractMismatches.map((mismatch) => [mismatch.environmentId, mismatch]),
+  );
+  const incompatible = environments.flatMap((environment) => {
+    const mismatch = mismatchByEnvironment.get(environment.environmentId);
+    return mismatch === undefined ? [] : [{ environment, mismatch }];
+  });
+  if (failed.length === 0 && incompatible.length === 0 && duplicateSources.length === 0) {
+    return null;
+  }
 
   return (
-    <article className="flex min-w-0 flex-col gap-5 rounded-xl border border-border bg-card/35 p-5">
-      <header className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-3">
-          <ProviderInstanceIcon
-            driverKind={provider.driver}
-            displayName={name}
-            accentColor={provider.accentColor}
-            className="size-8"
-            iconClassName="size-6"
-          />
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-medium text-foreground">{name}</h2>
-            <p className="truncate text-xs text-muted-foreground">{entry.environmentLabel}</p>
-          </div>
-        </div>
-        {usage?.plan ? <span className="text-xs text-muted-foreground">{usage.plan}</span> : null}
-      </header>
-
-      {usage ? (
-        usage.windows.length > 0 ? (
-          <div className="flex flex-col gap-4">
-            {usage.windows.map((window) => (
-              <SubscriptionUsageBar key={window.id} window={window} />
-            ))}
-          </div>
-        ) : usage.metrics.length > 0 ? (
-          <SubscriptionUsageMetrics metrics={usage.metrics} />
-        ) : (
-          <UnavailableUsage message="The provider did not return any active quota windows." />
-        )
-      ) : (
-        <UnavailableUsage message={unavailableUsageMessage(provider)} />
-      )}
-
-      <p className="text-[11px] text-muted-foreground">
-        Last checked {formatCheckedAt(usage?.checkedAt ?? provider.checkedAt)}
-      </p>
-    </article>
+    <div className="flex flex-col gap-1 border-t border-border px-2 py-2 text-xs text-muted-foreground">
+      {failed.map((environment) => (
+        <span key={environment.label}>
+          {environment.label}: {environment.error}
+        </span>
+      ))}
+      {incompatible.map(({ environment, mismatch }) => (
+        <span key={environment.environmentId}>
+          {formatUsageContractMismatch(environment.label, mismatch)}
+        </span>
+      ))}
+      {duplicateSources.length > 0 ? (
+        <span>
+          Counted once across environments sharing a transcript directory:{" "}
+          {duplicateSources.join(", ")}
+        </span>
+      ) : null}
+    </div>
   );
 }
 
-function unavailableUsageMessage(provider: ServerProvider): string {
-  if (provider.availability === "unavailable") {
-    return provider.unavailableReason ?? "This provider is unavailable in the current environment.";
-  }
-  if (!provider.enabled || provider.status === "disabled") {
-    return "This provider is disabled in SealCode settings. Enable it to read account usage.";
-  }
-  if (!provider.installed) {
-    return "The provider CLI is not installed or could not be found on this environment.";
-  }
-  if (provider.status === "error" && provider.message?.trim()) {
-    return provider.message.trim();
-  }
-  switch (provider.driver) {
-    case "antigravity":
-      return "Antigravity's local language-server quota service is not running. Open the Antigravity desktop app, then refresh; a CLI-only session does not expose this quota service.";
-    case "commandcode":
-      return "CommandCode quota is unavailable. Sign in through the CommandCode CLI and refresh.";
-    case "opencode":
-      return "OpenCode did not return local session statistics. Run OpenCode once, then refresh.";
-    case "cursor":
-      return "Cursor's signed-in session could not be read or has expired. Sign in to Cursor (or run `agent login`), then refresh.";
-    default:
-      return "This provider does not expose subscription quota data to SealCode.";
-  }
+function UsageEnvironmentFilter({
+  environments,
+  selectedEnvironments,
+  selectedEnvironmentIds,
+  onSelectionChange,
+  showUsageStatus,
+  refreshing,
+  isPartial,
+  duplicateSources,
+  contractMismatches,
+  onOpenModelPrices,
+}: {
+  readonly environments: readonly EnvironmentUsageStatus[];
+  readonly selectedEnvironments: readonly EnvironmentUsageStatus[];
+  readonly selectedEnvironmentIds: ReadonlySet<EnvironmentId> | null;
+  readonly onSelectionChange: (ids: ReadonlySet<EnvironmentId> | null) => void;
+  readonly showUsageStatus: boolean;
+  readonly refreshing: boolean;
+  readonly isPartial: boolean;
+  readonly duplicateSources: readonly string[];
+  readonly contractMismatches: MergedUsage["contractMismatches"];
+  readonly onOpenModelPrices: () => void;
+}) {
+  const allSelected = selectedEnvironmentIds === null;
+  const label = allSelected
+    ? "All environments"
+    : selectedEnvironments.length === 1
+      ? selectedEnvironments[0]!.label
+      : `${selectedEnvironments.length} environments`;
+  const hasIssue =
+    selectedEnvironments.some((environment) => environment.error !== null) ||
+    contractMismatches.length > 0;
+
+  return (
+    <Menu>
+      <MenuTrigger render={<InlineButton />} className="group/usage-environment min-w-0 max-w-full">
+        <WorkspaceBreadcrumbText>{label}</WorkspaceBreadcrumbText>
+        <span className="flex size-3.5 shrink-0 items-center justify-center text-muted-foreground">
+          {showUsageStatus && hasIssue ? (
+            <CircleAlertIcon
+              className="size-3.5 text-warning-foreground"
+              aria-label="Some environments could not report usage"
+            />
+          ) : (
+            <ChevronDownIcon
+              className="size-3.5 opacity-0 transition-opacity group-hover/usage-environment:opacity-100 group-focus-visible/usage-environment:opacity-100 group-data-popup-open/usage-environment:opacity-100"
+              aria-hidden
+            />
+          )}
+        </span>
+      </MenuTrigger>
+      <MenuPopup align="start">
+        <MenuCheckboxItem
+          checked={allSelected}
+          closeOnClick={false}
+          onCheckedChange={(checked) => onSelectionChange(checked ? null : new Set())}
+        >
+          All environments
+        </MenuCheckboxItem>
+        <MenuSeparator />
+        {environments.map((environment) => {
+          const checked =
+            selectedEnvironmentIds === null ||
+            selectedEnvironmentIds.has(environment.environmentId);
+          const progress = usageEnvironmentProgress(environment, refreshing);
+          const status =
+            environment.error !== null
+              ? "Unavailable"
+              : environment.summary !== null &&
+                  !isCompatibleUsageContractVersion(
+                    environment.summary.contractVersion,
+                    USAGE_CONTRACT_VERSION,
+                  )
+                ? "Update required"
+                : !environment.isConnected
+                  ? "Connecting…"
+                  : progress.phase === "loading"
+                    ? "Scanning…"
+                    : progress.phase === "stale"
+                      ? "Refreshing…"
+                      : progress.phase === "partway"
+                        ? updatingProvidersLabel(progress.providers, providerLabel)
+                        : "Ready";
+          return (
+            <MenuCheckboxItem
+              key={environment.environmentId}
+              checked={checked}
+              closeOnClick={false}
+              onCheckedChange={(nextChecked) => {
+                const next = new Set(selectedEnvironments.map((entry) => entry.environmentId));
+                if (nextChecked) next.add(environment.environmentId);
+                else next.delete(environment.environmentId);
+                onSelectionChange(next.size === environments.length ? null : next);
+              }}
+            >
+              <span className="flex min-w-0 items-center gap-3">
+                <span className="min-w-0 flex-1 truncate">{environment.label}</span>
+                {showUsageStatus ? (
+                  <span
+                    className={cn(
+                      "shrink-0 text-xs text-muted-foreground",
+                      environment.error !== null && "text-destructive",
+                    )}
+                  >
+                    {status}
+                  </span>
+                ) : null}
+              </span>
+            </MenuCheckboxItem>
+          );
+        })}
+        {environments.length === 0 ? (
+          <p className="px-2 py-2 text-xs text-muted-foreground">No environments connected.</p>
+        ) : null}
+        {showUsageStatus && isPartial ? (
+          <p className="px-2 py-2 text-xs text-muted-foreground">
+            Totals are partial while selected environments scan.
+          </p>
+        ) : null}
+        {showUsageStatus ? (
+          <UsageCoverageNotice
+            environments={selectedEnvironments}
+            duplicateSources={duplicateSources}
+            contractMismatches={contractMismatches}
+          />
+        ) : null}
+        <MenuSeparator />
+        <MenuItem onClick={onOpenModelPrices}>
+          <SlidersHorizontalIcon aria-hidden />
+          Model prices
+        </MenuItem>
+      </MenuPopup>
+    </Menu>
+  );
 }
 
-function SubscriptionUsageMetrics({
-  metrics,
+function UsageProviderFilter({
+  hiddenProviders,
+  onChange,
 }: {
-  readonly metrics: ReadonlyArray<{
-    readonly id: string;
-    readonly label: string;
-    readonly value: string;
-  }>;
+  readonly hiddenProviders: ReadonlySet<UsageProviderKind>;
+  readonly onChange: (hiddenProviders: readonly UsageProviderKind[]) => void;
 }) {
+  const visible = PROVIDER_ORDER.filter((provider) => !hiddenProviders.has(provider));
+  const label =
+    visible.length === PROVIDER_ORDER.length
+      ? "All providers"
+      : visible.length === 0
+        ? "No providers"
+        : visible.length === 1
+          ? PROVIDER_PRESENTATION[visible[0]!].label
+          : `${visible.length} providers`;
+
   return (
-    <div className="grid grid-cols-2 gap-2">
-      {metrics.map((metric) => (
-        <div key={metric.id} className="rounded-md bg-muted/50 px-3 py-2">
-          <div className="text-[11px] text-muted-foreground">{metric.label}</div>
-          <div className="mt-0.5 truncate text-sm font-medium tabular-nums text-foreground">
-            {metric.value}
+    <Menu>
+      <MenuTrigger render={<InlineButton />} className="group/usage-provider min-w-0 max-w-full">
+        <span className="min-w-0 truncate">{label}</span>
+        <ChevronDownIcon
+          className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/usage-provider:opacity-100 group-focus-visible/usage-provider:opacity-100 group-data-popup-open/usage-provider:opacity-100"
+          aria-hidden
+        />
+      </MenuTrigger>
+      <MenuPopup align="start">
+        <MenuCheckboxItem
+          checked={hiddenProviders.size === 0}
+          closeOnClick={false}
+          onCheckedChange={(checked) => onChange(checked ? [] : PROVIDER_ORDER)}
+        >
+          All providers
+        </MenuCheckboxItem>
+        <MenuSeparator />
+        {PROVIDER_ORDER.map((provider) => (
+          <MenuCheckboxItem
+            key={provider}
+            checked={!hiddenProviders.has(provider)}
+            closeOnClick={false}
+            onCheckedChange={(checked) =>
+              onChange(
+                PROVIDER_ORDER.filter((entry) =>
+                  entry === provider ? !checked : hiddenProviders.has(entry),
+                ),
+              )
+            }
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <ProviderMark provider={provider} className="size-3.5" />
+              <span className="truncate">{PROVIDER_PRESENTATION[provider].label}</span>
+            </span>
+          </MenuCheckboxItem>
+        ))}
+      </MenuPopup>
+    </Menu>
+  );
+}
+
+function UsageSkeleton() {
+  return (
+    <>
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,18rem)_minmax(0,1fr)]">
+        <div className="flex flex-col gap-5">
+          <div className="flex flex-col gap-1">
+            <Skeleton className="h-10 w-36" />
+            <Skeleton className="h-4 w-32" />
           </div>
+          {PROVIDER_ORDER.map((provider) => (
+            <div key={provider} className="flex flex-col gap-1">
+              <div className="flex min-h-5 items-center justify-between gap-4">
+                <span className="flex items-center gap-2">
+                  <Skeleton shape="pill" className="size-2 shrink-0" />
+                  <Skeleton shape="pill" className="size-4 shrink-0" />
+                  <Skeleton className="h-3.5 w-20" />
+                </span>
+                <Skeleton className="h-3.5 w-14" />
+              </div>
+              <Skeleton className="h-4 w-36" />
+            </div>
+          ))}
+        </div>
+
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-5 w-24" />
+          <div className="flex flex-col gap-1">
+            <Skeleton className="ml-16 h-56" />
+            <Skeleton className="ml-16 h-4" />
+          </div>
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-sm font-medium text-foreground">Totals</h2>
+        <MetricSkeletons
+          labels={["Processed tokens", "Cached input", "Uncached input", "Output", "Cache savings"]}
+        />
+      </section>
+
+      <section className="grid gap-x-12 gap-y-8 lg:grid-cols-2">
+        <div className="flex flex-col gap-2.5">
+          <Skeleton className="h-5 w-28" />
+          <Skeleton className="h-2" />
+          <Skeleton className="h-4 w-72" />
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-sm font-medium text-foreground">Breakdown</h2>
+          <Skeleton shape="card" className="h-7 w-28" />
+        </div>
+        <Skeleton className="h-44" />
+      </section>
+    </>
+  );
+}
+
+function MetricSkeletons({ labels }: { readonly labels: readonly string[] }) {
+  return (
+    <div className="grid grid-cols-2 gap-x-6 gap-y-4 py-1 md:grid-cols-5">
+      {labels.map((label) => (
+        <div key={label} className="flex flex-col gap-0.5">
+          <span className="text-xs text-muted-foreground">{label}</span>
+          <Skeleton className="h-6 w-16" />
         </div>
       ))}
     </div>
   );
-}
-
-function SubscriptionUsageBar({ window }: { readonly window: SubscriptionUsageWindow }) {
-  const percent = clampSubscriptionPercent(window.usedPercent);
-  const barClass = percent >= 90 ? "bg-destructive" : percent >= 70 ? "bg-amber-400" : "bg-primary";
-
-  return (
-    <div className="flex flex-col gap-2" data-testid={`subscription-usage-${window.id}`}>
-      <div className="flex items-baseline justify-between gap-3">
-        <span className="text-sm text-foreground">{window.label}</span>
-        <span className="text-sm font-medium tabular-nums text-foreground">
-          {formatSubscriptionPercent(percent)} used
-        </span>
-      </div>
-      <div
-        className="h-2 w-full overflow-hidden rounded-full bg-muted"
-        role="progressbar"
-        aria-label={`${window.label} usage`}
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(percent)}
-      >
-        <div
-          className={cn("h-full rounded-full transition-[width]", barClass)}
-          style={{ width: `${percent}%` }}
-        />
-      </div>
-      <div className="flex items-center justify-between gap-3 text-[11px] text-muted-foreground">
-        <span>{formatSubscriptionReset(window.resetsAt)}</span>
-        <span className="tabular-nums">{formatSubscriptionPercent(100 - percent)} remaining</span>
-      </div>
-    </div>
-  );
-}
-
-function UnavailableUsage({ message }: { readonly message: string }) {
-  return (
-    <p className="rounded-md bg-muted/50 px-3 py-3 text-xs text-muted-foreground">{message}</p>
-  );
-}
-
-function formatCheckedAt(value: string): string {
-  const checkedAt = new Date(value);
-  if (Number.isNaN(checkedAt.getTime())) return "recently";
-  return checkedAt.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 }

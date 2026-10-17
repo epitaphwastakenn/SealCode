@@ -1,7 +1,9 @@
-import type { EnvironmentId } from "@t3tools/contracts";
+import type { ClientConnectionMethod, EnvironmentId } from "@t3tools/contracts";
 import type { RelayProtectedError } from "@t3tools/contracts/relay";
 import type { ManagedRelayClientError } from "../relay/managedRelay.ts";
+import { dpopFailureMessage, relayProtectedErrorMessage } from "../relay/errorPresentation.ts";
 import type { RemoteEnvironmentAuthError } from "../authorization/remote.ts";
+import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
 import {
   ConnectionBlockedError,
   type ConnectionAttemptError,
@@ -40,35 +42,49 @@ function relayProtectedError(error: RelayProtectedError): ConnectionAttemptError
     case "RelayAgentActivityPublishProofInvalidError":
       return new ConnectionBlockedError({
         reason: "authentication",
-        detail: error.message,
+        detail: relayProtectedErrorMessage(error),
         traceId: error.traceId,
       });
     case "RelayEnvironmentConnectNotAuthorizedError":
+      // A host swapping in a new tunnel leaves its allocation unready until
+      // the tunnel is up, and nothing on the client changes when it is.
+      if (error.reason === "managed_endpoint_allocation_not_ready") {
+        return new ConnectionTransientError({
+          reason: "endpoint-unavailable",
+          detail: relayProtectedErrorMessage(error),
+          traceId: error.traceId,
+        });
+      }
+      return new ConnectionBlockedError({
+        reason: "permission",
+        detail: relayProtectedErrorMessage(error),
+        traceId: error.traceId,
+      });
     case "RelayEnvironmentLinkProofInvalidError":
     case "RelayEnvironmentLinkLimitExceededError":
       return new ConnectionBlockedError({
         reason: "permission",
-        detail: error.message,
+        detail: relayProtectedErrorMessage(error),
         traceId: error.traceId,
       });
     case "RelayEnvironmentEndpointTimedOutError":
       return new ConnectionTransientError({
         reason: "timeout",
-        detail: error.message,
+        detail: relayProtectedErrorMessage(error),
         traceId: error.traceId,
       });
     case "RelayEnvironmentEndpointUnavailableError":
     case "RelayEnvironmentLinkUnavailableError":
       return new ConnectionTransientError({
         reason: "endpoint-unavailable",
-        detail: error.message,
+        detail: relayProtectedErrorMessage(error),
         traceId: error.traceId,
       });
     case "RelayEnvironmentLinkFailedError":
     case "RelayInternalError":
       return new ConnectionTransientError({
         reason: "relay-unavailable",
-        detail: error.message,
+        detail: relayProtectedErrorMessage(error),
         traceId: error.traceId,
       });
   }
@@ -112,7 +128,9 @@ export function mapManagedRelayError(error: ManagedRelayClientError): Connection
 
 export function mapRemoteEnvironmentError(
   error: RemoteEnvironmentAuthError,
+  connectionMethod: ClientConnectionMethod = "direct",
 ): ConnectionAttemptError {
+  const networkHint = connectionMethod === "relay" ? ` ${NETWORK_BLOCKING_HINT}` : "";
   switch (error._tag) {
     case "EnvironmentAuthInvalidError":
       return new ConnectionBlockedError({
@@ -134,9 +152,6 @@ export function mapRemoteEnvironmentError(
         traceId: error.traceId,
       });
     case "EnvironmentResourceNotFoundError":
-      // Not expected during connection authorization, but the shared request
-      // error type now includes it (used by resource fetches like the thread
-      // snapshot). Treat it as a configuration issue with the endpoint.
       return new ConnectionBlockedError({
         reason: "configuration",
         detail: "The environment endpoint could not be found.",
@@ -145,12 +160,12 @@ export function mapRemoteEnvironmentError(
     case "RemoteEnvironmentAuthTimeoutError":
       return new ConnectionTransientError({
         reason: "timeout",
-        detail: error.message,
+        detail: `${error.message}${networkHint}`,
       });
     case "RemoteEnvironmentAuthFetchError":
       return new ConnectionTransientError({
         reason: "network",
-        detail: error.message,
+        detail: `${error.message}${networkHint}`,
       });
     case "EnvironmentInternalError":
       return new ConnectionTransientError({
@@ -165,4 +180,22 @@ export function mapRemoteEnvironmentError(
         detail: error.message,
       });
   }
+}
+
+/**
+ * An older environment server reports a DPoP clock failure as the same generic
+ * invalid-credential response as other failures, so keep the compatibility hint
+ * cautious when the server omits the category.
+ */
+export function mapRemoteDpopEnvironmentError(
+  error: RemoteEnvironmentAuthError,
+): ConnectionAttemptError {
+  if (error._tag === "EnvironmentAuthInvalidError" && error.reason === "invalid_credential") {
+    return new ConnectionBlockedError({
+      reason: "authentication",
+      detail: dpopFailureMessage("The environment credential is invalid.", error.dpopFailureReason),
+      traceId: error.traceId,
+    });
+  }
+  return mapRemoteEnvironmentError(error, "relay");
 }

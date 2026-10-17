@@ -225,9 +225,6 @@ describe("LiveActivities", () => {
       yield* mark("live_activity_update");
       yield* mark("live_activity_end");
 
-      // A start begins a new activity generation and an end retires the
-      // current one; both must drop the stored update token so later
-      // deliveries can't route to the dead activity. Plain updates keep it.
       expect(conflictConfigs[0]?.set).toEqual(
         expect.objectContaining({
           activityPushToken: null,
@@ -276,7 +273,7 @@ describe("LiveActivities", () => {
         liveActivities.register({ userId: "user-1", registration }),
       );
       const targetListError = yield* Effect.flip(liveActivities.listTargets({ userId: "user-1" }));
-      const deliveryErrors = yield* Effect.all(
+      const deliveryErrors = yield* Effect.forEach(
         [
           liveActivities.markDelivery({
             userId: "user-1",
@@ -297,7 +294,8 @@ describe("LiveActivities", () => {
             kind: "push_notification",
             invalidatedAt: "2026-05-25T00:00:10.000Z",
           }),
-        ].map(Effect.flip),
+        ],
+        (effect) => Effect.flip(effect),
         { concurrency: 1 },
       );
 

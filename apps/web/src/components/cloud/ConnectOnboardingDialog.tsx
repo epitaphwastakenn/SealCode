@@ -1,6 +1,7 @@
 import { useAuth } from "@clerk/react";
-import { AuthAdministrativeScopes, AuthRelayWriteScope } from "@t3tools/contracts";
-import { CheckIcon } from "lucide-react";
+import { useAtomValue } from "@effect/atom-react";
+import { AuthRelayReadScope, AuthRelayWriteScope, type AuthSessionState } from "@t3tools/contracts";
+import { AsyncResult, Atom } from "effect/reactivity";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -10,34 +11,21 @@ import {
 } from "~/cloud/connectOnboarding";
 import { hasCloudPublicConfig } from "~/cloud/publicConfig";
 import { useCloudLinkController } from "~/cloud/useCloudLinkController";
-import { usePrimarySessionState } from "~/environments/primary";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
-import { cn } from "~/lib/utils";
-import { useEnvironments, usePrimaryEnvironment } from "~/state/environments";
+import {
+  useEnvironments,
+  usePrimaryEnvironment,
+  usePrimaryEnvironmentId,
+} from "~/state/environments";
+import { environmentSession, readEnvironmentScope, useEnvironmentScope } from "~/state/session";
 import { CloudEnvironmentConnectRows } from "./CloudEnvironmentConnectList";
 import { Button } from "../ui/button";
 import { Checkbox } from "../ui/checkbox";
-import {
-  Dialog,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogPanel,
-  DialogPopup,
-  DialogTitle,
-} from "../ui/dialog";
+import { Dialog } from "../ui/dialog";
 import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
+import { WizardSteps, WizardPopup, WizardHeader, WizardPanel, WizardFooter } from "../ui/wizard";
 
-/**
- * Post-sign-in onboarding wizard for T3 Connect. Opens on every in-session
- * sign-in — sign-out removes the connected relay environments, so each new
- * session starts with no devices to reach. It first prompts to publish this
- * environment (managed tunnel + agent activity, both defaulting on) when the
- * current session is authorized to manage the relay link, then lists the
- * account's T3 Connect environments so every device can be connected right
- * away. A cold load with a restored session does not count as a sign-in.
- */
 export function ConnectOnboardingDialog() {
   if (!hasCloudPublicConfig()) return null;
 
@@ -45,6 +33,8 @@ export function ConnectOnboardingDialog() {
 }
 
 type OnboardingStep = "publish" | "devices";
+
+const EMPTY_SESSION_STATE_ATOM = Atom.make(AsyncResult.initial<AuthSessionState>());
 
 function ConfiguredConnectOnboardingDialog() {
   // Mirrors ManagedRelayAuthProvider: a pending Clerk session must not read as
@@ -56,22 +46,18 @@ function ConfiguredConnectOnboardingDialog() {
     ConnectOnboardingOptOutSchema,
   );
 
-  const desktopBridge = window.desktopBridge;
-  const primarySessionState = usePrimarySessionState();
-  const currentSessionScopes = desktopBridge
-    ? AuthAdministrativeScopes
-    : primarySessionState.data?.authenticated
-      ? (primarySessionState.data.scopes ?? null)
-      : null;
-  const canManageRelay = currentSessionScopes?.includes(AuthRelayWriteScope) ?? false;
-  // The publish step is only offered when we know the answer; opening the
-  // wizard before the session state resolves would let the step set change
-  // mid-flight. A failed session read still opens the wizard — it just means
-  // no publish step.
+  const { isReady: environmentsReady } = useEnvironments();
+  const primaryEnvironmentId = usePrimaryEnvironmentId();
+  const primarySessionState = useAtomValue(
+    primaryEnvironmentId === null
+      ? EMPTY_SESSION_STATE_ATOM
+      : environmentSession.sessionStateAtom(primaryEnvironmentId),
+  );
+  const canReadRelay = useEnvironmentScope(primaryEnvironmentId, AuthRelayReadScope);
+  const canWriteRelay = useEnvironmentScope(primaryEnvironmentId, AuthRelayWriteScope);
+  const canManageRelay = canReadRelay && canWriteRelay;
   const sessionScopesKnown =
-    Boolean(desktopBridge) ||
-    primarySessionState.data !== null ||
-    primarySessionState.error !== null;
+    primaryEnvironmentId === null ? environmentsReady : primarySessionState._tag !== "Initial";
 
   const controller = useCloudLinkController();
   const showPublishStep = canManageRelay && controller.linkState.target !== null;
@@ -89,12 +75,14 @@ function ConfiguredConnectOnboardingDialog() {
   const prefilledFromLinkStateRef = useRef(false);
   const observedAccountRef = useRef<string | null | undefined>(undefined);
 
+  useEffect(() => {
+    if (step === "publish" && sessionScopesKnown && !showPublishStep && !isApplying) {
+      setStep("devices");
+    }
+  }, [isApplying, sessionScopesKnown, showPublishStep, step]);
+
   const optOutAccounts = optOutState.optOutAccounts;
 
-  // Every sign-in or account switch that completes during this session
-  // requests the wizard — account transitions clear the connected relay
-  // environments, so each new session starts with no devices to reach. A cold
-  // load observes undefined → account and must not re-prompt.
   useEffect(() => {
     if (!isLoaded) return;
     // A loaded-but-incomplete snapshot (signed in, user id not yet populated)
@@ -115,8 +103,6 @@ function ConfiguredConnectOnboardingDialog() {
   // becomes available and freeze there.
   const publishStepDecided = !canManageRelay || controller.linkState.target !== null;
 
-  // Open once the session scopes resolve so the step set is stable. Accounts
-  // that chose "Don't show this again" are skipped.
   useEffect(() => {
     if (requestedAccount === null || openForAccount !== null) return;
     if (optOutAccounts.includes(requestedAccount)) {
@@ -141,8 +127,6 @@ function ConfiguredConnectOnboardingDialog() {
     sessionScopesKnown,
   ]);
 
-  // Signing out (or switching accounts) mid-wizard invalidates everything the
-  // wizard would do — close it and let the sign-in trigger re-evaluate.
   useEffect(() => {
     if (openForAccount !== null && (!isSignedIn || userId !== openForAccount)) {
       setOpenForAccount(null);
@@ -152,26 +136,23 @@ function ConfiguredConnectOnboardingDialog() {
     }
   }, [isSignedIn, openForAccount, requestedAccount, userId]);
 
-  // Toggles default on, but an environment that is already linked should show
-  // its actual configuration instead of silently proposing to rewrite it.
-  // Only when the link belongs to the account being onboarded, though — after
-  // an account switch the cached link state can still describe the previous
-  // account's setup.
   const linkStateData = controller.linkState.data;
   useEffect(() => {
     if (openForAccount === null || prefilledFromLinkStateRef.current || linkStateData === null) {
       return;
     }
     prefilledFromLinkStateRef.current = true;
-    if (linkStateData.linked && linkStateData.cloudUserId === openForAccount) {
+    if (
+      linkStateData.linked &&
+      linkStateData.linkRevoked !== true &&
+      linkStateData.cloudUserId === openForAccount
+    ) {
       setExposeEnvironment(linkStateData.managedTunnelActive ?? linkStateData.linked);
       setPublishAgentActivity(linkStateData.publishAgentActivity);
     }
   }, [linkStateData, openForAccount]);
 
   const complete = () => {
-    // Keep the wizard up while a link request is in flight so its outcome
-    // (and any failure) stays visible.
     if (isApplying) return;
     const account = openForAccount;
     setOpenForAccount(null);
@@ -185,6 +166,16 @@ function ConfiguredConnectOnboardingDialog() {
   };
 
   const applyPublishSelection = async () => {
+    if (isApplying) return;
+    if (
+      primaryEnvironmentId === null ||
+      !readEnvironmentScope(primaryEnvironmentId, AuthRelayReadScope) ||
+      !readEnvironmentScope(primaryEnvironmentId, AuthRelayWriteScope)
+    ) {
+      setStep("devices");
+      return;
+    }
+    if (linkStateData === null || controller.linkState.error !== null) return;
     // The wizard only ever enables — with both toggles off there is nothing to
     // apply, and an existing link must not be torn down from onboarding.
     if (!exposeEnvironment && !publishAgentActivity) {
@@ -212,72 +203,96 @@ function ConfiguredConnectOnboardingDialog() {
     <Dialog
       open={openForAccount !== null}
       onOpenChange={(open) => {
-        // Keep the dialog up while a link request is in flight so its outcome
-        // (and any failure) stays visible.
         if (!open && !isApplying) complete();
       }}
     >
-      <DialogPopup className="max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Set up T3 Connect</DialogTitle>
-          <DialogDescription>
-            Mesh your devices together — publish this environment and connect the rest, all in one
-            place.
-          </DialogDescription>
+      <WizardPopup>
+        <WizardHeader
+          title="Set up T3 Connect"
+          description={
+            <>
+              Mesh your devices together — publish this environment and connect the rest, all in one
+              place.
+            </>
+          }
+        >
           {steps.length > 1 ? (
-            <OnboardingStepper
-              steps={steps}
-              currentStep={step}
-              disabled={isApplying}
-              onStepSelect={setStep}
+            <WizardSteps
+              steps={steps.map((id) => STEP_LABELS[id])}
+              currentStep={steps.indexOf(step)}
+              isStepDisabled={() => isApplying}
+              onStepChange={(index) => {
+                const next = steps[index];
+                if (
+                  next === "publish" &&
+                  (primaryEnvironmentId === null ||
+                    !readEnvironmentScope(primaryEnvironmentId, AuthRelayReadScope) ||
+                    !readEnvironmentScope(primaryEnvironmentId, AuthRelayWriteScope))
+                )
+                  return;
+                if (next) setStep(next);
+              }}
             />
           ) : null}
-        </DialogHeader>
-        <DialogPanel>
+        </WizardHeader>
+        <WizardPanel>
           {step === "publish" ? (
             <PublishStep
               exposeEnvironment={exposeEnvironment}
               publishAgentActivity={publishAgentActivity}
-              disabled={isApplying}
-              operationError={controller.operationError}
-              onExposeEnvironmentChange={setExposeEnvironment}
-              onPublishAgentActivityChange={setPublishAgentActivity}
+              disabled={isApplying || !canManageRelay || linkStateData === null}
+              operationError={controller.operationError ?? controller.linkState.error}
+              onExposeEnvironmentChange={(enabled) => {
+                if (
+                  primaryEnvironmentId !== null &&
+                  readEnvironmentScope(primaryEnvironmentId, AuthRelayReadScope) &&
+                  readEnvironmentScope(primaryEnvironmentId, AuthRelayWriteScope)
+                )
+                  setExposeEnvironment(enabled);
+              }}
+              onPublishAgentActivityChange={(enabled) => {
+                if (
+                  primaryEnvironmentId !== null &&
+                  readEnvironmentScope(primaryEnvironmentId, AuthRelayReadScope) &&
+                  readEnvironmentScope(primaryEnvironmentId, AuthRelayWriteScope)
+                )
+                  setPublishAgentActivity(enabled);
+              }}
             />
           ) : (
             <DevicesStep />
           )}
-        </DialogPanel>
-        <DialogFooter variant="bare" className="sm:justify-between">
-          <label className="flex cursor-pointer items-center gap-2 self-start text-xs text-muted-foreground sm:self-center">
-            <Checkbox
-              checked={dontShowAgain}
-              onCheckedChange={(checked) => setDontShowAgain(checked === true)}
-            />
-            Don&apos;t show this again
-          </label>
-          <div className="flex flex-col-reverse gap-2 sm:flex-row">
-            {step === "publish" ? (
-              <>
-                <Button variant="ghost" disabled={isApplying} onClick={() => setStep("devices")}>
-                  Not now
-                </Button>
-                <Button
-                  disabled={
-                    isApplying || (controller.linkState.isPending && linkStateData === null)
-                  }
-                  onClick={() => void applyPublishSelection()}
-                >
-                  {isApplying ? "Enabling…" : "Continue"}
-                </Button>
-              </>
-            ) : (
-              <Button disabled={isApplying} onClick={complete}>
-                Done
+        </WizardPanel>
+        <WizardFooter
+          leading={
+            <label className="flex cursor-pointer items-center gap-2 self-start text-xs text-muted-foreground sm:self-center">
+              <Checkbox
+                checked={dontShowAgain}
+                onCheckedChange={(checked) => setDontShowAgain(checked === true)}
+              />
+              Don&apos;t show this again
+            </label>
+          }
+        >
+          {step === "publish" ? (
+            <>
+              <Button variant="ghost" disabled={isApplying} onClick={() => setStep("devices")}>
+                Not now
               </Button>
-            )}
-          </div>
-        </DialogFooter>
-      </DialogPopup>
+              <Button
+                disabled={isApplying || !canManageRelay || linkStateData === null}
+                onClick={() => void applyPublishSelection()}
+              >
+                {isApplying ? "Enabling…" : "Continue"}
+              </Button>
+            </>
+          ) : (
+            <Button disabled={isApplying} onClick={complete}>
+              Done
+            </Button>
+          )}
+        </WizardFooter>
+      </WizardPopup>
     </Dialog>
   );
 }
@@ -286,60 +301,6 @@ const STEP_LABELS: Record<OnboardingStep, string> = {
   publish: "Publish",
   devices: "Connect devices",
 };
-
-function OnboardingStepper({
-  steps,
-  currentStep,
-  disabled,
-  onStepSelect,
-}: {
-  readonly steps: ReadonlyArray<OnboardingStep>;
-  readonly currentStep: OnboardingStep;
-  readonly disabled: boolean;
-  readonly onStepSelect: (step: OnboardingStep) => void;
-}) {
-  const currentIndex = steps.indexOf(currentStep);
-  return (
-    <div className="grid grid-cols-2 gap-2">
-      {steps.map((step, index) => (
-        <button
-          key={step}
-          type="button"
-          disabled={disabled}
-          className={cn(
-            "grid min-w-0 grid-cols-[1rem_minmax(0,1fr)] gap-x-2 rounded-lg border px-3 py-2 text-left",
-            index === currentIndex
-              ? "border-primary bg-primary/10 ring-1 ring-primary/25"
-              : index < currentIndex
-                ? "border-border bg-background"
-                : "border-border bg-muted/40",
-          )}
-          onClick={() => onStepSelect(step)}
-        >
-          <span
-            className={cn(
-              "row-span-2 mt-0.5 grid size-4 place-items-center rounded-full border",
-              index < currentIndex
-                ? "border-primary bg-primary text-primary-foreground"
-                : index === currentIndex
-                  ? "border-primary bg-background"
-                  : "border-muted-foreground/35 bg-background",
-            )}
-            aria-hidden
-          >
-            {index < currentIndex ? <CheckIcon className="size-3" /> : null}
-          </span>
-          <span className="text-[10px] font-medium uppercase text-muted-foreground">
-            Step {index + 1}
-          </span>
-          <span className="truncate text-xs font-semibold text-foreground">
-            {STEP_LABELS[step]}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
 
 function PublishStep({
   exposeEnvironment,

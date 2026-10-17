@@ -2,21 +2,22 @@ import { describe, expect, it } from "vite-plus/test";
 
 import { resolveSnoozePresets, snoozeWakeDescription } from "./Sidebar.snooze";
 
-// Local-time constructor so preset math is timezone-stable in tests.
 function localDate(year: number, month: number, day: number, hour: number, minute = 0): Date {
   return new Date(year, month - 1, day, hour, minute, 0, 0);
 }
 
 describe("resolveSnoozePresets", () => {
-  it("offers hour, evening, tomorrow, next week in the morning", () => {
-    // Wednesday 2026-04-08 10:00 local.
+  it("offers one hour, three hours, evening, tomorrow, and next week in the morning", () => {
     const presets = resolveSnoozePresets(localDate(2026, 4, 8, 10), "locale");
     expect(presets.map((preset) => preset.id)).toEqual([
       "hour",
+      "three-hours",
       "evening",
       "tomorrow",
       "next-week",
     ]);
+    const threeHours = presets.find((preset) => preset.id === "three-hours");
+    expect(new Date(threeHours!.snoozedUntil).getHours()).toBe(13);
     const evening = presets.find((preset) => preset.id === "evening");
     expect(new Date(evening!.snoozedUntil).getHours()).toBe(18);
     const tomorrow = presets.find((preset) => preset.id === "tomorrow");
@@ -32,8 +33,6 @@ describe("resolveSnoozePresets", () => {
   it("whenLabel complements the label instead of repeating it", () => {
     const presets = resolveSnoozePresets(localDate(2026, 4, 8, 10), "locale");
     for (const preset of presets) {
-      // Day words live in the label column; the time column is time-only
-      // (plus a weekday for next week, which names a different day).
       expect(preset.whenLabel.toLowerCase()).not.toContain("tomorrow");
     }
     const tomorrow = presets.find((preset) => preset.id === "tomorrow");
@@ -45,14 +44,13 @@ describe("resolveSnoozePresets", () => {
   it("drops the evening preset once evening is near or past", () => {
     expect(
       resolveSnoozePresets(localDate(2026, 4, 8, 17, 30), "locale").map((preset) => preset.id),
-    ).toEqual(["hour", "tomorrow", "next-week"]);
+    ).toEqual(["hour", "three-hours", "tomorrow", "next-week"]);
     expect(
       resolveSnoozePresets(localDate(2026, 4, 8, 21), "locale").map((preset) => preset.id),
-    ).toEqual(["hour", "tomorrow", "next-week"]);
+    ).toEqual(["hour", "three-hours", "tomorrow", "next-week"]);
   });
 
   it("puts next week a full week out when today is Monday", () => {
-    // Monday 2026-04-06.
     const presets = resolveSnoozePresets(localDate(2026, 4, 6, 10), "locale");
     const nextWeek = new Date(presets.find((preset) => preset.id === "next-week")!.snoozedUntil);
     expect(nextWeek.getDay()).toBe(1);

@@ -23,7 +23,6 @@ const emptyCapabilities = createModelCapabilities({ optionDescriptors: [] });
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
 const CLAUDE_AGENT_DRIVER = ProviderDriverKind.make("claudeAgent");
 const OPENCODE_DRIVER = ProviderDriverKind.make("opencode");
-const ANTIGRAVITY_DRIVER = ProviderDriverKind.make("antigravity");
 
 const makeProvider = (
   provider: ProviderDriverKind,
@@ -183,58 +182,32 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
     );
   });
 
-  it("drops cached Antigravity effort variants while preserving the base model", () => {
-    const cachedAntigravity = makeProvider(ANTIGRAVITY_DRIVER, {
+  it("does not resurrect cached custom models that settings no longer declare", () => {
+    const builtIn = {
+      slug: "gpt-5.4",
+      name: "GPT-5.4",
+      isCustom: false,
+      capabilities: emptyCapabilities,
+    } as const;
+    const cachedCodex = makeProvider(CODEX_DRIVER, {
       models: [
+        builtIn,
         {
-          slug: "gemini-3.6-flash",
-          name: "Gemini 3.6 Flash",
-          isCustom: false,
-          capabilities: emptyCapabilities,
-        },
-        {
-          slug: "gemini-3.6-flash-high",
-          name: "Gemini 3.6 Flash (High)",
-          isCustom: false,
-          capabilities: emptyCapabilities,
-        },
-        {
-          slug: "gemini-3.6-flash-medium",
-          name: "Gemini 3.6 Flash (Medium)",
-          isCustom: false,
-          capabilities: emptyCapabilities,
-        },
-        {
-          slug: "gemini-3.6-flash-low",
-          name: "Gemini 3.6 Flash (Low)",
-          isCustom: false,
-          capabilities: emptyCapabilities,
-        },
-        {
-          slug: "my-antigravity-model-high",
-          name: "my-antigravity-model-high",
+          slug: "removed-custom",
+          name: "removed-custom",
           isCustom: true,
           capabilities: emptyCapabilities,
         },
       ],
     });
-    const fallbackAntigravity = makeProvider(ANTIGRAVITY_DRIVER, {
-      models: [
-        {
-          slug: "gemini-3.6-flash",
-          name: "Gemini 3.6 Flash",
-          isCustom: false,
-          capabilities: emptyCapabilities,
-        },
-      ],
-    });
+    const fallbackCodex = makeProvider(CODEX_DRIVER, { models: [builtIn] });
 
     assert.deepStrictEqual(
       hydrateCachedProvider({
-        cachedProvider: cachedAntigravity,
-        fallbackProvider: fallbackAntigravity,
-      }).models.map((model) => model.slug),
-      ["gemini-3.6-flash", "my-antigravity-model-high"],
+        cachedProvider: cachedCodex,
+        fallbackProvider: fallbackCodex,
+      }).models,
+      [builtIn],
     );
   });
 
@@ -249,7 +222,7 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
       version: null,
       status: "disabled",
       auth: { status: "unknown" },
-      message: "Codex is disabled in SealCode settings.",
+      message: "Codex is disabled in T3 Code settings.",
     });
 
     assert.deepStrictEqual(

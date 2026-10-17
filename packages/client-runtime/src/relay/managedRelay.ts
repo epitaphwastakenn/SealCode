@@ -41,9 +41,10 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SynchronizedRef from "effect/SynchronizedRef";
-import * as HttpClientError from "effect/unstable/http/HttpClientError";
-import type * as HttpMethod from "effect/unstable/http/HttpMethod";
-import * as HttpApiClient from "effect/unstable/httpapi/HttpApiClient";
+import * as HttpClientError from "effect/http/HttpClientError";
+import type * as HttpMethod from "effect/http/HttpMethod";
+import * as HttpApiClient from "effect/http-api/HttpApiClient";
+import { NETWORK_BLOCKING_HINT } from "../errors/network.ts";
 
 export interface ManagedRelayDpopProofInput {
   readonly method: HttpMethod.HttpMethod;
@@ -51,7 +52,7 @@ export interface ManagedRelayDpopProofInput {
   readonly accessToken?: string;
 }
 
-export class ManagedRelayDpopKeyLoadError extends Schema.TaggedErrorClass<ManagedRelayDpopKeyLoadError>()(
+export class ManagedRelayDpopKeyLoadError extends Schema.TaggedError<ManagedRelayDpopKeyLoadError>()(
   "ManagedRelayDpopKeyLoadError",
   {
     keyStore: Schema.Literals(["expo-secure-store", "indexed-db"]),
@@ -63,7 +64,7 @@ export class ManagedRelayDpopKeyLoadError extends Schema.TaggedErrorClass<Manage
   }
 }
 
-export class ManagedRelayDpopProofCreationError extends Schema.TaggedErrorClass<ManagedRelayDpopProofCreationError>()(
+export class ManagedRelayDpopProofCreationError extends Schema.TaggedError<ManagedRelayDpopProofCreationError>()(
   "ManagedRelayDpopProofCreationError",
   {
     method: Schema.String,
@@ -114,23 +115,20 @@ export const ManagedRelayRequestActivity = Schema.Literals([
 ]);
 export type ManagedRelayRequestActivity = typeof ManagedRelayRequestActivity.Type;
 
-export class ManagedRelayRequestTimeoutError extends Schema.TaggedErrorClass<ManagedRelayRequestTimeoutError>()(
+export class ManagedRelayRequestTimeoutError extends Schema.TaggedError<ManagedRelayRequestTimeoutError>()(
   "ManagedRelayRequestTimeoutError",
   {
     activity: ManagedRelayRequestActivity,
     timeoutMs: Schema.Number,
-    // The CLIENT span's trace id. A timed-out request has no server response
-    // to take an id from, but the client span was exported, so carrying its id
-    // makes the failure searchable instead of logging `traceId: null`.
     traceId: Schema.NullOr(Schema.String),
   },
 ) {
   override get message(): string {
-    return `${this.activity} timed out.`;
+    return `${this.activity} timed out. ${NETWORK_BLOCKING_HINT}`;
   }
 }
 
-export class ManagedRelayUrlInvalidError extends Schema.TaggedErrorClass<ManagedRelayUrlInvalidError>()(
+export class ManagedRelayUrlInvalidError extends Schema.TaggedError<ManagedRelayUrlInvalidError>()(
   "ManagedRelayUrlInvalidError",
   {
     relayUrl: Schema.String,
@@ -141,21 +139,24 @@ export class ManagedRelayUrlInvalidError extends Schema.TaggedErrorClass<Managed
   }
 }
 
-export class ManagedRelayRequestFailedError extends Schema.TaggedErrorClass<ManagedRelayRequestFailedError>()(
+export class ManagedRelayRequestFailedError extends Schema.TaggedError<ManagedRelayRequestFailedError>()(
   "ManagedRelayRequestFailedError",
   {
     action: ManagedRelayRequestAction,
+    transportFailed: Schema.optionalKey(Schema.Boolean),
     cause: Schema.Defect(),
     relayError: Schema.optional(RelayProtectedError),
+    status: Schema.optional(Schema.Number),
     traceId: Schema.optional(Schema.String),
   },
 ) {
   override get message(): string {
-    return `Could not ${this.action}.`;
+    const message = `Could not ${this.action}.`;
+    return this.transportFailed ? `${message} ${NETWORK_BLOCKING_HINT}` : message;
   }
 }
 
-export class ManagedRelayAccessTokenScopesUnexpectedError extends Schema.TaggedErrorClass<ManagedRelayAccessTokenScopesUnexpectedError>()(
+export class ManagedRelayAccessTokenScopesUnexpectedError extends Schema.TaggedError<ManagedRelayAccessTokenScopesUnexpectedError>()(
   "ManagedRelayAccessTokenScopesUnexpectedError",
   {
     requestedScopes: Schema.Array(RelayDpopAccessTokenScope),
@@ -167,7 +168,7 @@ export class ManagedRelayAccessTokenScopesUnexpectedError extends Schema.TaggedE
   }
 }
 
-export class ManagedRelayTokenProofCreationError extends Schema.TaggedErrorClass<ManagedRelayTokenProofCreationError>()(
+export class ManagedRelayTokenProofCreationError extends Schema.TaggedError<ManagedRelayTokenProofCreationError>()(
   "ManagedRelayTokenProofCreationError",
   {
     method: Schema.String,
@@ -180,7 +181,7 @@ export class ManagedRelayTokenProofCreationError extends Schema.TaggedErrorClass
   }
 }
 
-export class ManagedRelayRequestProofCreationError extends Schema.TaggedErrorClass<ManagedRelayRequestProofCreationError>()(
+export class ManagedRelayRequestProofCreationError extends Schema.TaggedError<ManagedRelayRequestProofCreationError>()(
   "ManagedRelayRequestProofCreationError",
   {
     method: Schema.String,
@@ -303,12 +304,25 @@ export class ManagedRelayClient extends Context.Service<
 
 const isRelayProtectedError = Schema.is(RelayProtectedError);
 
+const TRACEPARENT_TRACE_ID = /^[\da-f]{2}-([\da-f]{32})-[\da-f]{16}-[\da-f]{2}$/i;
+
+function untypedResponseFields(cause: RelayHttpRequestError) {
+  const response = HttpClientError.isHttpClientError(cause) ? cause.response : undefined;
+  if (!response) return {};
+  const traceId = TRACEPARENT_TRACE_ID.exec(response.headers.traceparent ?? "")?.[1];
+  return { status: response.status, ...(traceId ? { traceId } : {}) };
+}
+
 function relayRequestError(action: ManagedRelayRequestAction) {
   return (cause: RelayHttpRequestError): ManagedRelayClientError =>
     new ManagedRelayRequestFailedError({
       action,
+      transportFailed:
+        HttpClientError.isHttpClientError(cause) && cause.reason._tag === "TransportError",
       cause,
-      ...(isRelayProtectedError(cause) ? { relayError: cause, traceId: cause.traceId } : {}),
+      ...(isRelayProtectedError(cause)
+        ? { relayError: cause, traceId: cause.traceId }
+        : untypedResponseFields(cause)),
     });
 }
 
@@ -424,6 +438,7 @@ function disabledManagedRelayClient(relayUrl: string): ManagedRelayClient["Servi
   });
 }
 
+/** @public Service construction is part of the canonical Effect module API. */
 export const make = Effect.fn("ManagedRelayClient.make")(function* (
   options: ManagedRelayClientLayerOptions,
 ) {
@@ -546,18 +561,31 @@ export const make = Effect.fn("ManagedRelayClient.make")(function* (
           expiresAtMillis: nowMillis + response.expires_in * 1_000,
         } satisfies ManagedRelayAccessTokenCacheEntry;
       }
+      const match = {
+        accountId: accountId.value,
+        clientId: options.clientId,
+        relayUrl,
+        thumbprint: input.thumbprint,
+        scopes: input.scopes,
+        nowMillis,
+      };
+      const cached = (yield* SynchronizedRef.get(cachedTokens)).find((token) =>
+        tokenMatches(token, match),
+      );
+      if (cached) {
+        yield* Effect.annotateCurrentSpan({
+          "relay.token_cache.result": "hit",
+        });
+        return cached;
+      }
       return yield* SynchronizedRef.modifyEffect(cachedTokens, (tokens) =>
         Effect.gen(function* () {
-          const activeTokens = tokens.filter((token) => token.expiresAtMillis > nowMillis + 5_000);
+          const lookupMillis = yield* Clock.currentTimeMillis;
+          const activeTokens = tokens.filter(
+            (token) => token.expiresAtMillis > lookupMillis + 5_000,
+          );
           const cached = activeTokens.find((token) =>
-            tokenMatches(token, {
-              accountId: accountId.value,
-              clientId: options.clientId,
-              relayUrl,
-              thumbprint: input.thumbprint,
-              scopes: input.scopes,
-              nowMillis,
-            }),
+            tokenMatches(token, { ...match, nowMillis: lookupMillis }),
           );
           if (cached) {
             yield* Effect.annotateCurrentSpan({
@@ -576,7 +604,7 @@ export const make = Effect.fn("ManagedRelayClient.make")(function* (
             thumbprint: input.thumbprint,
             scopes: input.scopes,
             accessToken: response.access_token,
-            expiresAtMillis: nowMillis + response.expires_in * 1_000,
+            expiresAtMillis: lookupMillis + response.expires_in * 1_000,
           };
           const nextTokens = [...activeTokens, next];
           if (options.accessTokenStore) {
@@ -646,11 +674,8 @@ export const make = Effect.fn("ManagedRelayClient.make")(function* (
       authorize(input).pipe(
         Effect.flatMap((authorization) =>
           request(authorization).pipe(
-            Effect.catch((error) => {
-              if (!isRejectedDpopAccessToken(error)) {
-                return Effect.fail(error);
-              }
-              return invalidateAccessToken(authorization.accessToken).pipe(
+            Effect.catchIf(isRejectedDpopAccessToken, (error) =>
+              invalidateAccessToken(authorization.accessToken).pipe(
                 Effect.tap((invalidated) =>
                   Effect.annotateCurrentSpan({
                     "relay.token_cache.invalidated": invalidated,
@@ -666,8 +691,8 @@ export const make = Effect.fn("ManagedRelayClient.make")(function* (
                     : Effect.void,
                 ),
                 Effect.andThen(refreshRejectedToken ? attempt(false) : Effect.fail(error)),
-              );
-            }),
+              ),
+            ),
           ),
         ),
       );
@@ -709,7 +734,7 @@ export const make = Effect.fn("ManagedRelayClient.make")(function* (
     listDevices: Effect.fnUntraced(
       function* (input) {
         return yield* client.client
-          .listDevices({
+          .listDevicesV2({
             headers: bearerHeaders(input.clerkToken),
           })
           .pipe(

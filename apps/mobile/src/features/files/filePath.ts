@@ -1,6 +1,6 @@
 import {
-  isWorkspaceBrowserPreviewPath,
-  isWorkspaceImagePreviewPath,
+  isWorkspaceAudioPreviewPath,
+  isWorkspaceVideoPreviewPath,
 } from "@t3tools/shared/filePreview";
 
 export interface FileBreadcrumb {
@@ -13,8 +13,13 @@ function isWindowsAbsolutePath(value: string): boolean {
   return /^[A-Za-z]:[\\/]/.test(value) || value.startsWith("\\\\");
 }
 
-function isAbsolutePath(value: string): boolean {
+export function isAbsolutePath(value: string): boolean {
   return value.startsWith("/") || isWindowsAbsolutePath(value);
+}
+
+export function fileRoutePathSegments(path: string): string[] {
+  const segments = path.split("/").filter((segment) => segment.length > 0);
+  return path.startsWith("/") ? ["", ...segments] : segments;
 }
 
 function isWindowsPathStyle(value: string): boolean {
@@ -84,15 +89,19 @@ export function resolveWorkspaceRelativeFilePath(
     return null;
   }
 
-  return normalizeRelativePath(normalizedTarget.slice(normalizedRoot.length + 1));
+  const relativePath = normalizedTarget.slice(normalizedRoot.length + 1);
+  if (relativePath.split("/").includes("..")) {
+    return null;
+  }
+  return normalizeRelativePath(relativePath);
 }
 
-export function isBrowserPreviewFile(path: string): boolean {
-  return isWorkspaceBrowserPreviewPath(path);
+export function isVideoPreviewFile(path: string): boolean {
+  return isWorkspaceVideoPreviewPath(path);
 }
 
-export function isImagePreviewFile(path: string): boolean {
-  return isWorkspaceImagePreviewPath(path);
+export function isAudioPreviewFile(path: string): boolean {
+  return isWorkspaceAudioPreviewPath(path.split(/[?#]/, 1)[0] ?? "");
 }
 
 export function isSvgImagePreviewFile(path: string): boolean {
@@ -113,4 +122,14 @@ export function fileBreadcrumbs(projectName: string, relativePath: string): File
       kind: index === parts.length - 1 ? ("file" as const) : ("directory" as const),
     })),
   ];
+}
+
+export function fileHeaderSubtitle(projectName: string, relativePath: string): string {
+  const parentDir = relativePath.slice(
+    0,
+    Math.max(relativePath.lastIndexOf("/"), relativePath.lastIndexOf("\\"), 0),
+  );
+  return isAbsolutePath(relativePath)
+    ? parentDir
+    : [projectName, parentDir].filter(Boolean).join(" · ");
 }

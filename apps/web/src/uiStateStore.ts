@@ -1,9 +1,10 @@
 import { Debouncer } from "@tanstack/react-pacer";
+import type { PullRequestMergeMethod } from "@t3tools/contracts";
 import { create } from "zustand";
 import { normalizeProjectPathForComparison } from "./lib/projectPaths";
 
 export const PERSISTED_STATE_KEY = "t3code:ui-state:v1";
-const THREAD_CHANGED_FILES_EXPANSION_VERSION = 1;
+const THREAD_CHANGED_FILES_EXPANSION_VERSION = 2;
 const LEGACY_PERSISTED_STATE_KEYS = [
   "t3code:renderer-state:v8",
   "t3code:renderer-state:v7",
@@ -20,22 +21,21 @@ const LEGACY_PERSISTED_STATE_KEYS = [
 export interface PersistedUiState {
   projectExpandedById?: Record<string, boolean>;
   projectOrder?: string[];
-  pinnedProjectKeys?: string[];
-  threadOrderByGroup?: Record<string, string[]>;
   threadLastVisitedAtById?: Record<string, string>;
   collapsedProjectCwds?: string[];
   expandedProjectCwds?: string[];
   projectOrderCwds?: string[];
   defaultAdvertisedEndpointKey?: string | null;
-  threadChangedFilesExpansionVersion?: typeof THREAD_CHANGED_FILES_EXPANSION_VERSION;
+  sidebarProjectScopeKey?: string | null;
+  threadChangedFilesExpansionVersion?: number;
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
+  pullRequestMergeMethod?: string;
 }
 
 export interface UiProjectState {
   projectExpandedById: Record<string, boolean>;
   projectOrder: string[];
-  pinnedProjectKeys: string[];
-  threadOrderByGroup: Record<string, string[]>;
+  sidebarProjectScopeKey: string | null;
 }
 
 export interface UiThreadState {
@@ -47,16 +47,21 @@ export interface UiEndpointState {
   defaultAdvertisedEndpointKey: string | null;
 }
 
-export interface UiState extends UiProjectState, UiThreadState, UiEndpointState {}
+export interface UiPullRequestState {
+  pullRequestMergeMethod: PullRequestMergeMethod;
+}
+
+export interface UiState
+  extends UiProjectState, UiThreadState, UiEndpointState, UiPullRequestState {}
 
 const initialState: UiState = {
   projectExpandedById: {},
   projectOrder: [],
-  pinnedProjectKeys: [],
-  threadOrderByGroup: {},
+  sidebarProjectScopeKey: null,
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},
   defaultAdvertisedEndpointKey: null,
+  pullRequestMergeMethod: "merge",
 };
 
 const LEGACY_PROJECT_CWD_PREFERENCE_PREFIX = "legacy-project-cwd:";
@@ -89,6 +94,10 @@ function sanitizeBooleanRecord(value: unknown): Record<string, boolean> {
   );
 }
 
+function sanitizeOptionalKey(value: unknown): string | null {
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
 function sanitizeTimestampRecord(value: unknown): Record<string, string> {
   if (!value || typeof value !== "object") {
     return {};
@@ -104,15 +113,8 @@ function sanitizeTimestampRecord(value: unknown): Record<string, string> {
   );
 }
 
-function sanitizeStringArrayRecord(value: unknown): Record<string, string[]> {
-  if (!value || typeof value !== "object") {
-    return {};
-  }
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([key, entries]) => key.length > 0 && Array.isArray(entries))
-      .map(([key, entries]) => [key, sanitizeStringArray(entries)]),
-  );
+function isPullRequestMergeMethod(value: unknown): value is PullRequestMergeMethod {
+  return value === "merge" || value === "squash" || value === "rebase";
 }
 
 export function parsePersistedState(parsed: PersistedUiState): UiState {
@@ -142,18 +144,16 @@ export function parsePersistedState(parsed: PersistedUiState): UiState {
   return {
     projectExpandedById,
     projectOrder,
-    pinnedProjectKeys: sanitizeStringArray(parsed.pinnedProjectKeys),
-    threadOrderByGroup: sanitizeStringArrayRecord(parsed.threadOrderByGroup),
     threadLastVisitedAtById: sanitizeTimestampRecord(parsed.threadLastVisitedAtById),
     threadChangedFilesExpandedById:
       parsed.threadChangedFilesExpansionVersion === THREAD_CHANGED_FILES_EXPANSION_VERSION
         ? sanitizePersistedThreadChangedFilesExpanded(parsed.threadChangedFilesExpandedById)
         : {},
-    defaultAdvertisedEndpointKey:
-      typeof parsed.defaultAdvertisedEndpointKey === "string" &&
-      parsed.defaultAdvertisedEndpointKey.length > 0
-        ? parsed.defaultAdvertisedEndpointKey
-        : null,
+    defaultAdvertisedEndpointKey: sanitizeOptionalKey(parsed.defaultAdvertisedEndpointKey),
+    sidebarProjectScopeKey: sanitizeOptionalKey(parsed.sidebarProjectScopeKey),
+    pullRequestMergeMethod: isPullRequestMergeMethod(parsed.pullRequestMergeMethod)
+      ? parsed.pullRequestMergeMethod
+      : initialState.pullRequestMergeMethod,
   };
 }
 
@@ -222,12 +222,12 @@ export function persistState(state: UiState): void {
       JSON.stringify({
         projectExpandedById,
         projectOrder: state.projectOrder,
-        pinnedProjectKeys: state.pinnedProjectKeys,
-        threadOrderByGroup: state.threadOrderByGroup,
         threadLastVisitedAtById: state.threadLastVisitedAtById,
         defaultAdvertisedEndpointKey: state.defaultAdvertisedEndpointKey,
+        sidebarProjectScopeKey: state.sidebarProjectScopeKey,
         threadChangedFilesExpansionVersion: THREAD_CHANGED_FILES_EXPANSION_VERSION,
         threadChangedFilesExpandedById: state.threadChangedFilesExpandedById,
+        pullRequestMergeMethod: state.pullRequestMergeMethod,
       } satisfies PersistedUiState),
     );
     if (!legacyKeysCleanedUp) {
@@ -236,9 +236,7 @@ export function persistState(state: UiState): void {
         window.localStorage.removeItem(legacyKey);
       }
     }
-  } catch {
-    // Ignore quota/storage errors to avoid breaking chat UX.
-  }
+  } catch {}
 }
 
 const debouncedPersistState = new Debouncer(persistState, { wait: 500 });
@@ -325,6 +323,23 @@ export function setDefaultAdvertisedEndpointKey(state: UiState, key: string | nu
   };
 }
 
+export function setSidebarProjectScopeKey(state: UiState, projectKey: string | null): UiState {
+  const nextKey = sanitizeOptionalKey(projectKey);
+  if (state.sidebarProjectScopeKey === nextKey) {
+    return state;
+  }
+  return {
+    ...state,
+    sidebarProjectScopeKey: nextKey,
+  };
+}
+
+function setPullRequestMergeMethod(state: UiState, method: PullRequestMergeMethod): UiState {
+  return state.pullRequestMergeMethod === method
+    ? state
+    : { ...state, pullRequestMergeMethod: method };
+}
+
 export function resolveProjectExpanded(
   projectExpandedById: Readonly<Record<string, boolean>>,
   preferenceKeys: readonly string[],
@@ -355,19 +370,6 @@ export function setProjectExpanded(
   return {
     ...state,
     projectExpandedById,
-  };
-}
-
-export function setProjectPinned(state: UiState, projectKey: string, pinned: boolean): UiState {
-  const isPinned = state.pinnedProjectKeys.includes(projectKey);
-  if (isPinned === pinned) {
-    return state;
-  }
-  return {
-    ...state,
-    pinnedProjectKeys: pinned
-      ? [...state.pinnedProjectKeys, projectKey]
-      : state.pinnedProjectKeys.filter((key) => key !== projectKey),
   };
 }
 
@@ -415,61 +417,18 @@ export function reorderProjects(
   };
 }
 
-export function reorderThreads(
-  state: UiState,
-  groupKey: string,
-  currentThreadOrder: readonly string[],
-  draggedThreadId: string,
-  targetThreadId: string,
-): UiState {
-  if (!groupKey || draggedThreadId === targetThreadId) {
-    return state;
-  }
-  const fromIndex = currentThreadOrder.indexOf(draggedThreadId);
-  const toIndex = currentThreadOrder.indexOf(targetThreadId);
-  if (fromIndex < 0 || toIndex < 0) {
-    return state;
-  }
-  const nextOrder = [...currentThreadOrder];
-  const [moved] = nextOrder.splice(fromIndex, 1);
-  if (moved === undefined) {
-    return state;
-  }
-  nextOrder.splice(toIndex, 0, moved);
-  if (
-    nextOrder.every(
-      (threadId, index) => threadId === state.threadOrderByGroup[groupKey]?.[index],
-    ) &&
-    nextOrder.length === state.threadOrderByGroup[groupKey]?.length
-  ) {
-    return state;
-  }
-  return {
-    ...state,
-    threadOrderByGroup: {
-      ...state.threadOrderByGroup,
-      [groupKey]: nextOrder,
-    },
-  };
-}
-
 interface UiStateStore extends UiState {
   markThreadVisited: (threadId: string, visitedAt: string) => void;
   markThreadUnread: (threadId: string, latestTurnCompletedAt: string | null | undefined) => void;
   setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
+  setSidebarProjectScopeKey: (projectKey: string | null) => void;
+  setPullRequestMergeMethod: (method: PullRequestMergeMethod) => void;
   setProjectExpanded: (projectIds: string | readonly string[], expanded: boolean) => void;
-  setProjectPinned: (projectKey: string, pinned: boolean) => void;
   reorderProjects: (
     currentProjectOrder: readonly string[],
     draggedProjectIds: readonly string[],
     targetProjectIds: readonly string[],
-  ) => void;
-  reorderThreads: (
-    groupKey: string,
-    currentThreadOrder: readonly string[],
-    draggedThreadId: string,
-    targetThreadId: string,
   ) => void;
 }
 
@@ -483,17 +442,14 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
   setDefaultAdvertisedEndpointKey: (key) =>
     set((state) => setDefaultAdvertisedEndpointKey(state, key)),
+  setSidebarProjectScopeKey: (projectKey) =>
+    set((state) => setSidebarProjectScopeKey(state, projectKey)),
+  setPullRequestMergeMethod: (method) => set((state) => setPullRequestMergeMethod(state, method)),
   setProjectExpanded: (projectIds, expanded) =>
     set((state) => setProjectExpanded(state, projectIds, expanded)),
-  setProjectPinned: (projectKey, pinned) =>
-    set((state) => setProjectPinned(state, projectKey, pinned)),
   reorderProjects: (currentProjectOrder, draggedProjectIds, targetProjectIds) =>
     set((state) =>
       reorderProjects(state, currentProjectOrder, draggedProjectIds, targetProjectIds),
-    ),
-  reorderThreads: (groupKey, currentThreadOrder, draggedThreadId, targetThreadId) =>
-    set((state) =>
-      reorderThreads(state, groupKey, currentThreadOrder, draggedThreadId, targetThreadId),
     ),
 }));
 

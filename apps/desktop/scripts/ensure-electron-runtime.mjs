@@ -129,10 +129,6 @@ function installElectronRuntime(electronDir, version) {
     ]);
     if (hostPlatform === "darwin") {
       runChecked("ditto", ["-x", "-k", zipPath, NodePath.join(electronDir, "dist")]);
-    } else if (hostPlatform === "win32") {
-      const distDir = NodePath.join(electronDir, "dist");
-      NodeFS.mkdirSync(distDir, { recursive: true });
-      runChecked("tar", ["-xf", zipPath, "-C", distDir]);
     } else {
       runChecked("python3", [
         "-c",
@@ -181,7 +177,8 @@ export function ensureElectronRuntime() {
   return electronPath;
 }
 
-if (NodeURL.fileURLToPath(import.meta.url) === NodePath.resolve(process.argv[1])) {
+// `file://${argv[1]}` never matches on Windows (drive letters need `file:///C:/`).
+if (process.argv[1] && NodeURL.pathToFileURL(process.argv[1]).href === import.meta.url) {
   const electronPath = ensureElectronRuntime();
   process.stdout.write(`${electronPath}\n`);
 }

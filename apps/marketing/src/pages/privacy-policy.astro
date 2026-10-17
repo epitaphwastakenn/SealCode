@@ -17,12 +17,12 @@ const sections = [
 ---
 
 <LegalPage
-  title="Privacy Policy — SealCode"
-  description="How T3 Tools, Inc. handles information when you use SealCode, app.t3.codes, and t3.codes."
-  heading="SealCode Privacy Policy"
-  lede="This Privacy Policy describes how T3 Tools, Inc. collects, uses, and shares personal information when you use the SealCode desktop, mobile, and hosted web applications, visit the t3.codes marketing site, or use the optional T3 Connect service."
-  effectiveDate="2026-07-14"
-  lastUpdated="2026-07-14"
+  title="Privacy Policy — T3 Code"
+  description="How T3 Tools, Inc. handles information when you use T3 Code, app.t3.codes, and t3.codes."
+  heading="T3 Code Privacy Policy"
+  lede="This Privacy Policy describes how T3 Tools, Inc. collects, uses, and shares personal information when you use the T3 Code desktop, mobile, and hosted web applications, visit the t3.codes marketing site, or use the optional T3 Connect service."
+  effectiveDate="2026-10-06"
+  lastUpdated="2026-10-06"
   sections={sections}
 >
   <section id="introduction">
@@ -31,9 +31,9 @@ const sections = [
           <p>
             This Privacy Policy (the “Policy”) describes how T3 Tools, Inc. (the “Company,” “T3
             Tools,” “we,” or “us”) collects, uses, and shares personal information when you use the T3
-            Code desktop and mobile applications, the hosted SealCode web application located at
+            Code desktop and mobile applications, the hosted T3 Code web application located at
             {" "}<a href="https://app.t3.codes">https://app.t3.codes</a>, or the optional T3 Connect
-            service (together, the “Services”), or visit the SealCode marketing website located at
+            service (together, the “Services”), or visit the T3 Code marketing website located at
             {" "}<a href="https://t3.codes">https://t3.codes</a> (the “Site”). This Policy applies to
             personal information we collect through the Site and the Services, as well as personal
             information you provide to us directly.
@@ -42,7 +42,7 @@ const sections = [
             By using the Site or the Services, you acknowledge the practices described in this
             Policy. If you do not agree with this Policy, please do not use the Site or the Services.
             This Policy does not govern third-party coding agents, artificial-intelligence providers,
-            identity providers, or environments that you choose to connect to SealCode; those third
+            identity providers, or environments that you choose to connect to T3 Code; those third
             parties process information under their own terms and privacy policies.
           </p>
         </section>
@@ -53,13 +53,13 @@ const sections = [
 
           <p>
             We collect personal information about you in different ways depending on how you use
-            SealCode and which optional features you enable.
+            T3 Code and which optional features you enable.
           </p>
 
-          <h3>Personal Information From Users of SealCode</h3>
+          <h3>Personal Information From Users of T3 Code</h3>
 
           <p>
-            When you use SealCode, we may collect the following categories of personal information:
+            When you use T3 Code, we may collect the following categories of personal information:
           </p>
           <ul>
             <li>
@@ -80,6 +80,12 @@ const sections = [
               Activities, we process push tokens and limited activity information needed to provide
               those features, such as project and thread titles, model name, status, and activity
               headline.
+            </li>
+            <li>
+              <strong>Product usage data.</strong> By default, T3 Code sends us anonymous usage
+              data, such as which provider and model a turn used, whether it succeeded, and your app
+              version and operating system. We use it to improve the product. You can turn this off
+              at any time; see “Product Usage Data” under Your Choices below.
             </li>
             <li>
               <strong>Information you provide to us.</strong> We collect information that you choose
@@ -113,7 +119,7 @@ const sections = [
           <p>
             The Site and online portions of the Services may use cookies or similar technologies to
             operate essential features, maintain sessions, remember preferences, and understand
-            whether the Services are functioning correctly. SealCode also stores connection settings,
+            whether the Services are functioning correctly. T3 Code also stores connection settings,
             credentials, preferences, drafts, and cached thread, file, branch, and server metadata on
             your device. Credentials and session tokens use platform-provided protected storage where
             supported. Information stored only on your device is not collected by T3 Tools unless it
@@ -135,7 +141,7 @@ const sections = [
               Live Activities.
             </li>
             <li>
-              <strong>Local network.</strong> Used to discover or connect to SealCode environments
+              <strong>Local network.</strong> Used to discover or connect to T3 Code environments
               accessible from your machine over the network.
             </li>
           </ul>
@@ -157,8 +163,8 @@ const sections = [
             <li>To monitor reliability, prevent abuse, and investigate security incidents;</li>
             <li>To comply with applicable law and enforce the terms governing the Services; and</li>
             <li>
-              To analyze and improve SealCode using aggregated, de-identified, or other anonymous
-              operational information.
+              To analyze and improve T3 Code using product usage data and aggregated,
+              de-identified, or other anonymous operational information.
             </li>
           </ul>
 
@@ -233,10 +239,17 @@ const sections = [
             </li>
             <li>
               <strong>Vercel</strong> <em>(Vercel Inc.)</em>.<br />
-              We use Vercel to host and deploy the SealCode Site.<br />
+              We use Vercel to host and deploy the T3 Code Site.<br />
               You can view Vercel's privacy notice here:{" "}<a
                 href="https://vercel.com/legal/privacy-notice"
                 >https://vercel.com/legal/privacy-notice</a
+              >.
+            </li>
+            <li>
+              <strong>PostHog</strong> <em>(PostHog, Inc.)</em>.<br />
+              We use PostHog to receive and analyze product usage data.<br />
+              You can view PostHog's privacy policy here:{" "}<a href="https://posthog.com/privacy"
+                >https://posthog.com/privacy</a
               >.
             </li>
             <li>
@@ -264,7 +277,8 @@ const sections = [
             </li>
             <li>
               <strong>Google</strong> <em>(Google LLC)</em>.<br />
-              We use Google services for app distribution and optional authentication.<br />
+              We use Google services for app distribution, optional authentication, and Android
+              notifications.<br />
               You can view Google's privacy policy here:{" "}<a
                 href="https://policies.google.com/privacy">https://policies.google.com/privacy</a
               >.
@@ -328,6 +342,13 @@ const sections = [
             and notification permissions in your device settings.
           </p>
 
+          <h3>Product Usage Data</h3>
+          <p>
+            To stop sending product usage data, set the environment variable{" "}
+            <code>T3CODE_TELEMETRY_ENABLED=false</code>{" "}where T3 Code runs, for example in your
+            shell profile, and restart T3 Code.
+          </p>
+
           <h3>Cookies and Local Data</h3>
           <p>
             You can use your browser settings to stop accepting or to delete cookies, although some
@@ -380,7 +401,7 @@ const sections = [
             No method of transmission over the Internet or method of electronic storage is completely
             secure. While we use reasonable efforts to protect personal information, we cannot
             guarantee its absolute security. You are responsible for securing the environments,
-            coding-agent accounts, credentials, and networks that you connect to SealCode.
+            coding-agent accounts, credentials, and networks that you connect to T3 Code.
           </p>
         </section>
 
@@ -411,7 +432,7 @@ const sections = [
           <p class="section-number">09</p>
           <h2>Do Not Track</h2>
           <p>
-            We currently do not respond to browser “Do Not Track” signals. SealCode does not use
+            We currently do not respond to browser “Do Not Track” signals. T3 Code does not use
             personal information for cross-context behavioral or targeted advertising.
           </p>
         </section>

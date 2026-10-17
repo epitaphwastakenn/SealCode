@@ -11,7 +11,14 @@ export const SHOWCASE_PROJECT_ID = "t3code";
 export const SHOWCASE_THREAD_ID = "remote-command-center";
 export const SHOWCASE_TERMINAL_ID = "term-1";
 
-export const SHOWCASE_SCENES = ["threads", "thread", "terminal", "review", "environments"] as const;
+export const SHOWCASE_SCENES = [
+  "threads",
+  "thread",
+  "terminal",
+  "review",
+  "environments",
+  "agent-activity",
+] as const;
 export type ShowcaseScene = (typeof SHOWCASE_SCENES)[number];
 
 const PROJECTOR_NAMES = [
@@ -47,10 +54,6 @@ const PROJECT_SCRIPTS = JSON.stringify([
 const SHOWCASE_TERMINAL_PROMPT =
   "\u001b[1;32m→\u001b[0m \u001b[1;36mt3code\u001b[0m \u001b[1;34mgit:(\u001b[1;31mfeat/remote-command-center\u001b[1;34m)\u001b[0m \u001b[1;33m✗\u001b[0m ";
 
-// A dev-server startup mirroring the web settings' terminal font preview:
-// zsh-style prompt, brand line, addresses, the thread's 612-test summary,
-// and a READY badge, so the scene exercises bold, dim, underline, the six
-// accent colors, and a background cell.
 export const SHOWCASE_TERMINAL_BUFFER = [
   `${SHOWCASE_TERMINAL_PROMPT}vpr dev`,
   "",
@@ -198,6 +201,7 @@ export const SHOWCASE_THREADS = [
       "Keep hydration errors precise, but make the development copy unexpectedly delightful.",
     response:
       "The diagnostics still lead with the exact mismatch and component stack. A tiny optional haiku now closes the expanded explanation.",
+    snoozeMinutes: 90,
   },
   {
     id: "beautiful-boot",
@@ -211,10 +215,17 @@ export const SHOWCASE_THREADS = [
     response:
       "The plan groups milestones without changing the underlying log stream, preserves plain-text output, and adds zero work to the hot path.",
   },
-  // Finished work, settled by hand: the list keeps it as a receded tail so
-  // the active block above reads as everything still in flight. The active
-  // block stays small enough that the settled tail begins above the fold —
-  // a store screenshot has to show that history exists, not just imply it.
+  {
+    id: "patient-penguins",
+    projectId: "linux",
+    title: "Teach penguins to wait patiently",
+    branch: "feat/patient-penguins",
+    minutesAgo: 52,
+    request: "Make delayed work easier to follow without adding noise to the scheduler trace.",
+    response:
+      "Delayed work now carries a concise reason through the trace, so the wait is legible without changing scheduling behavior.",
+    snoozeMinutes: 8 * 60,
+  },
   {
     id: "handoff-haptics",
     projectId: "t3code",
@@ -337,20 +348,29 @@ function insertThread(
     readonly minutesAgo: number;
     readonly state?: "working" | "approval" | "plan";
     readonly settled?: boolean;
+    readonly snoozeMinutes?: number;
     readonly workspaceRoot: string;
   },
 ): void {
   const turnId = `${input.id}-turn`;
   const updatedAt = minutesBefore(now, input.minutesAgo);
   const isWorking = input.state === "working";
+  const snoozedUntil =
+    input.snoozeMinutes === undefined
+      ? null
+      : new Date(now + input.snoozeMinutes * 60_000).toISOString();
+  const snoozedAt =
+    input.snoozeMinutes === undefined
+      ? null
+      : minutesBefore(now, Math.max(1, Math.floor(input.minutesAgo / 2)));
   database
     .prepare(
       `INSERT INTO projection_threads (
         thread_id, project_id, title, model_selection_json, runtime_mode, interaction_mode,
         branch, worktree_path, latest_turn_id, latest_user_message_at, pending_approval_count,
         pending_user_input_count, has_actionable_proposed_plan, created_at, updated_at,
-        archived_at, deleted_at, settled_override, settled_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, NULL, NULL, ?, ?)`,
+        archived_at, deleted_at, settled_override, settled_at, snoozed_until, snoozed_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, NULL, NULL, ?, ?, ?, ?)`,
     )
     .run(
       input.id,
@@ -369,6 +389,8 @@ function insertThread(
       updatedAt,
       input.settled ? "settled" : null,
       input.settled ? updatedAt : null,
+      snoozedUntil,
+      snoozedAt,
     );
   database
     .prepare(
@@ -397,7 +419,11 @@ function insertThread(
     .run(input.id, isWorking ? "running" : "ready", isWorking ? turnId : null, updatedAt);
 }
 
-const SEEDED_PROJECTION_TABLES = [
+// V1 tables this seed owns. `projection_projects` is not listed: V2 still
+// stores projects there, so the seed upserts its own rows instead. V2 clients
+// do not read the V1 thread rows; moving the seed to V2 is tracked in
+// https://github.com/pingdotgg/t3code/issues/15013.
+const SEEDED_V1_TABLES = [
   "projection_pending_approvals",
   "projection_thread_proposed_plans",
   "projection_thread_activities",
@@ -405,9 +431,12 @@ const SEEDED_PROJECTION_TABLES = [
   "projection_thread_sessions",
   "projection_turns",
   "projection_threads",
-  "projection_projects",
   "projection_state",
 ] as const;
+
+const SEEDED_PROJECTION_TABLES = [...SEEDED_V1_TABLES, "projection_projects"] as const;
+
+const SEEDED_THREAD_COLUMNS = ["snoozed_until", "snoozed_at"] as const;
 
 function hasSeedableSchema(dbPath: string): boolean {
   let database: NodeSqlite.DatabaseSync;
@@ -417,12 +446,18 @@ function hasSeedableSchema(dbPath: string): boolean {
     return false;
   }
   try {
-    const row = database
+    const tableCount = database
       .prepare(
         `SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name IN (${SEEDED_PROJECTION_TABLES.map(() => "?").join(", ")})`,
       )
       .get(...SEEDED_PROJECTION_TABLES) as { count: number };
-    return row.count === SEEDED_PROJECTION_TABLES.length;
+    if (tableCount.count !== SEEDED_PROJECTION_TABLES.length) return false;
+
+    const threadColumns = database.prepare("PRAGMA table_info(projection_threads)").all() as Array<{
+      name: string;
+    }>;
+    const threadColumnNames = new Set(threadColumns.map((column) => column.name));
+    return SEEDED_THREAD_COLUMNS.every((column) => threadColumnNames.has(column));
   } catch {
     return false;
   } finally {
@@ -453,11 +488,11 @@ function seedDatabase(
   const database = new NodeSqlite.DatabaseSync(dbPath, { timeout: 30_000 });
   try {
     database.exec("BEGIN IMMEDIATE");
-    for (const table of SEEDED_PROJECTION_TABLES) {
+    for (const table of SEEDED_V1_TABLES) {
       database.exec(`DELETE FROM ${table}`);
     }
     const insertProject = database.prepare(
-      `INSERT INTO projection_projects (
+      `INSERT OR REPLACE INTO projection_projects (
           project_id, title, workspace_root, default_model_selection_json, scripts_json,
           created_at, updated_at, deleted_at
         ) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)`,
@@ -586,9 +621,7 @@ function seedDatabase(
     // replace the one that actually explains the failure.
     try {
       database.exec("ROLLBACK");
-    } catch {
-      // Nothing to roll back.
-    }
+    } catch {}
     throw error;
   } finally {
     database.close();
@@ -618,7 +651,7 @@ export async function seedShowcaseEnvironment(input: {
   if (!primaryProject) throw new Error("The primary showcase workspace is not configured.");
   const workspaceRoot = workspaceRoots.get(primaryProject.id);
   if (!workspaceRoot) throw new Error("The primary showcase workspace is not configured.");
-  const dbPath = NodePath.join(input.baseDir, "userdata", "state.sqlite");
+  const dbPath = NodePath.join(input.baseDir, "userdata", "statev2.sqlite");
   if (primaryProject.id === SHOWCASE_PROJECT_ID) {
     await seedT3CodeWorkspace(workspaceRoot);
   }

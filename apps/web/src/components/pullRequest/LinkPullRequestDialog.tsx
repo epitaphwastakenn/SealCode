@@ -1,0 +1,257 @@
+import { pullRequestHostOf, type ScopedThreadRef } from "@t3tools/contracts";
+import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
+import { useAtomValue } from "@effect/atom-react";
+import { settlePromise, squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import { useEffect, useRef, useState } from "react";
+
+import { parseChangeRequestUrl } from "~/lib/openPullRequestLink";
+import { parsePullRequestReference } from "~/pullRequestReference";
+import { useProjects, useThreadShell } from "~/state/entities";
+import { usePullRequestLinking } from "~/hooks/usePullRequestLinking";
+import { appAtomRegistry } from "~/rpc/atomRegistry";
+import { Atom } from "effect/reactivity";
+import { Button } from "../ui/button";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "../ui/dialog";
+import { Input } from "../ui/input";
+
+/**
+ * Which thread has the link dialog open, set by whichever entry point asked (command palette,
+ * pull-requests surface, detail panel) and rendered once by the chat view so the dialog outlives
+ * a palette that closes the moment its command runs.
+ */
+const linkPullRequestDialogThreadAtom = Atom.make<ScopedThreadRef | null>(null).pipe(
+  Atom.keepAlive,
+  Atom.withLabel("pull-requests:link-dialog-thread"),
+);
+
+export function openLinkPullRequestDialog(threadRef: ScopedThreadRef): void {
+  appAtomRegistry.set(linkPullRequestDialogThreadAtom, threadRef);
+}
+
+interface LinkPullRequestDialogProps {
+  open: boolean;
+  threadRef: ScopedThreadRef;
+  projectId: string | null;
+  onOpenChange: (open: boolean) => void;
+}
+
+export function LinkPullRequestDialogHost() {
+  const threadRef = useAtomValue(linkPullRequestDialogThreadAtom);
+  const thread = useThreadShell(threadRef);
+  const linking = usePullRequestLinking(threadRef?.environmentId);
+  if (threadRef === null || linking.mode === "unsupported") return null;
+  return (
+    <LinkPullRequestDialog
+      open
+      threadRef={threadRef}
+      projectId={thread?.projectId ?? null}
+      onOpenChange={(open) => {
+        if (!open) appAtomRegistry.set(linkPullRequestDialogThreadAtom, null);
+      }}
+    />
+  );
+}
+
+interface ResolvedLink {
+  readonly host: string;
+  readonly repository: string;
+  readonly number: number;
+  readonly url: string;
+}
+
+export function resolveLinkPullRequestInput(input: {
+  readonly reference: string;
+  readonly project: {
+    readonly host: string;
+    readonly repository: string;
+    readonly webUrl: (number: number) => string | null;
+  } | null;
+  readonly hasProject: (reference: ResolvedLink) => boolean;
+}): { link: ResolvedLink } | { error: string } | null {
+  const parsed =
+    parseChangeRequestUrl(input.reference.trim()) !== null
+      ? input.reference.trim()
+      : parsePullRequestReference(input.reference);
+  if (parsed === null) return null;
+  const url = parseChangeRequestUrl(parsed);
+  if (url !== null) {
+    if (!input.hasProject({ ...url, url: parsed })) {
+      return { error: `No project in this environment can read ${url.host}/${url.repository}.` };
+    }
+    return {
+      link: { host: url.host, repository: url.repository, number: url.number, url: parsed },
+    };
+  }
+  const number = Number(parsed);
+  if (!Number.isSafeInteger(number) || number < 1) return null;
+  if (input.project === null) {
+    return { error: "Paste a full URL to link a pull request from another repository." };
+  }
+  const webUrl = input.project.webUrl(number);
+  const webReference = webUrl === null ? null : parseChangeRequestUrl(webUrl);
+  if (webUrl === null || webReference === null) {
+    return { error: "Paste a full URL; this project's host has no known pull request URL." };
+  }
+  return {
+    link: { ...webReference, url: webUrl },
+  };
+}
+
+function resolveOwnProject(
+  environmentProjects: ReturnType<typeof useProjects>,
+  projectId: LinkPullRequestDialogProps["projectId"],
+) {
+  const project = environmentProjects.find((candidate) => candidate.id === projectId);
+  const identity = project?.repositoryIdentity;
+  if (!project || !identity) return null;
+  const repository =
+    identity.displayName ??
+    (identity.owner && identity.name ? `${identity.owner}/${identity.name}` : null);
+  if (repository === null) return null;
+  const definition = sourceControlClients.get(identity.provider ?? "unknown");
+  const host = pullRequestHostOf(identity, definition.kind);
+  return {
+    host,
+    repository,
+    webUrl: (number: number) =>
+      definition.changeRequestUrl({
+        host,
+        repository,
+        number,
+        remoteUrl: identity.locator.remoteUrl,
+        webUrl: identity.webUrl,
+      }),
+  };
+}
+
+function LinkPullRequestDialog({
+  open,
+  threadRef,
+  projectId,
+  onOpenChange,
+}: LinkPullRequestDialogProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [reference, setReference] = useState("");
+  const [dirty, setDirty] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const projects = useProjects();
+  const ownProject = resolveOwnProject(
+    projects.filter((project) => project.environmentId === threadRef.environmentId),
+    projectId,
+  );
+  const linking = usePullRequestLinking(threadRef.environmentId);
+  const [pending, setPending] = useState(false);
+
+  const [openSeen, setOpenSeen] = useState(open);
+  if (openSeen !== open) {
+    setOpenSeen(open);
+    if (open) {
+      setReference("");
+      setDirty(false);
+      setSubmitError(null);
+    }
+  }
+  useEffect(() => {
+    if (!open) return;
+    const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [open]);
+
+  const resolved = resolveLinkPullRequestInput({
+    reference,
+    project: ownProject,
+    hasProject: (reference) => linking.canLink(reference.url),
+  });
+
+  const submit = async () => {
+    setDirty(true);
+    if (resolved === null || "error" in resolved) return;
+    setSubmitError(null);
+    setPending(true);
+    const result = await settlePromise(() =>
+      linking.changeLink(threadRef, resolved.link.url, true),
+    );
+    setPending(false);
+    if (result._tag === "Failure") {
+      const error = squashAtomCommandFailure(result);
+      setSubmitError(error instanceof Error ? error.message : "Could not link the pull request.");
+      return;
+    }
+    onOpenChange(false);
+  };
+
+  const validation = !dirty
+    ? null
+    : reference.trim().length === 0
+      ? "Paste a pull request URL or enter 123 / #123."
+      : resolved === null
+        ? "Use a pull request URL, 123, or #123."
+        : "error" in resolved
+          ? resolved.error
+          : null;
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => (pending ? undefined : onOpenChange(next))}>
+      <DialogPopup className="max-w-xl">
+        <DialogHeader>
+          <DialogTitle>Link pull request</DialogTitle>
+          <DialogDescription>
+            Attach a pull request to this thread by its URL, or by its number for this thread's
+            repository.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogPanel>
+          <Input
+            ref={inputRef}
+            placeholder="Pull request URL or #42"
+            value={reference}
+            onChange={(event) => {
+              setDirty(true);
+              setReference(event.target.value);
+            }}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              event.preventDefault();
+              void submit();
+            }}
+          />
+          {resolved !== null && "link" in resolved ? (
+            <p className="truncate text-muted-foreground text-xs">
+              {resolved.link.host}/{resolved.link.repository} #{resolved.link.number}
+            </p>
+          ) : null}
+          {(validation ?? submitError) ? (
+            <p className="text-destructive text-xs">{validation ?? submitError}</p>
+          ) : null}
+        </DialogPanel>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => onOpenChange(false)}
+            disabled={pending}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            onClick={() => void submit()}
+            disabled={pending || resolved === null || "error" in resolved}
+          >
+            {pending ? "Linking..." : "Link"}
+          </Button>
+        </DialogFooter>
+      </DialogPopup>
+    </Dialog>
+  );
+}

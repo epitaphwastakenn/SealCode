@@ -2,9 +2,22 @@ import type { ScopedThreadRef } from "@t3tools/contracts";
 import { assert, describe, it } from "vite-plus/test";
 import {
   buildVisibleToastLayout,
+  hasVisibleToastAction,
   shouldHideCollapsedToastContent,
   shouldRenderThreadScopedToast,
 } from "./toast.logic";
+
+describe("hasVisibleToastAction", () => {
+  it("treats a labeled action as visible", () => {
+    assert.equal(hasVisibleToastAction({ children: "Update" }), true);
+  });
+
+  it("hides an explicit empty action used to clear a previous CTA", () => {
+    assert.equal(hasVisibleToastAction({ children: null }), false);
+    assert.equal(hasVisibleToastAction({ children: "" }), false);
+    assert.equal(hasVisibleToastAction(undefined), false);
+  });
+});
 
 describe("shouldHideCollapsedToastContent", () => {
   it("keeps a single visible toast readable", () => {
@@ -54,7 +67,6 @@ describe("buildVisibleToastLayout", () => {
 
     const layout = buildVisibleToastLayout(visibleToasts);
 
-    // frontmost height should be the first live toast, not the ending one
     assert.equal(layout.frontmostHeight, 72);
     assert.deepEqual(
       layout.items.map(({ toast, visibleIndex, offsetY }) => ({
@@ -63,9 +75,7 @@ describe("buildVisibleToastLayout", () => {
         offsetY,
       })),
       [
-        // Ending toast stays at its front slot; data-ending-style drives its exit
         { id: "a", visibleIndex: 0, offsetY: 0 },
-        // Live toasts get fresh indices starting at 0 so they move up in sync
         { id: "b", visibleIndex: 0, offsetY: 0 },
         { id: "c", visibleIndex: 1, offsetY: 72 },
       ],
@@ -81,7 +91,6 @@ describe("buildVisibleToastLayout", () => {
 
     const layout = buildVisibleToastLayout(visibleToasts);
 
-    // front toast stays, so frontmost height is unchanged
     assert.equal(layout.frontmostHeight, 48);
     assert.deepEqual(
       layout.items.map(({ toast, visibleIndex, offsetY }) => ({
@@ -90,12 +99,8 @@ describe("buildVisibleToastLayout", () => {
         offsetY,
       })),
       [
-        // Front live toast — unaffected
         { id: "a", visibleIndex: 0, offsetY: 0 },
-        // Ending toast keeps its pre-dismissal slot so its horizontal exit
-        // originates from where the user saw it (not from Y=0).
         { id: "b", visibleIndex: 1, offsetY: 48 },
-        // Live toast behind "b" slides forward into the vacated slot.
         { id: "c", visibleIndex: 1, offsetY: 48 },
       ],
     );

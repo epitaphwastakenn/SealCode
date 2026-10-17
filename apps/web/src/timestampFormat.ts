@@ -1,6 +1,6 @@
 import { type TimestampFormat } from "@t3tools/contracts/settings";
 
-export function getTimestampFormatOptions(
+function getTimestampFormatOptions(
   timestampFormat: TimestampFormat,
   includeSeconds: boolean,
 ): Intl.DateTimeFormatOptions {
@@ -20,6 +20,59 @@ export function getTimestampFormatOptions(
   };
 }
 
+export function resolveTimestampLocale(
+  systemLocale: string | null | undefined,
+): string | undefined {
+  const tag = systemLocale?.trim();
+  if (!tag) return undefined;
+
+  try {
+    // Every timestamp in the UI runs through this formatter, so a tag the host
+    // could not normalize falls back rather than throwing. Throws on a
+    // structurally invalid tag; a well-formed tag ICU has no data for resolves
+    // here and is left to ICU's own fallback.
+    Intl.DateTimeFormat.supportedLocalesOf([tag]);
+    return tag;
+  } catch {
+    return undefined;
+  }
+}
+
+function readHostSystemLocale(): string | null {
+  if (typeof window === "undefined") return null;
+  return window.desktopBridge?.getSystemLocale?.() ?? null;
+}
+
+const timestampLocale = resolveTimestampLocale(readHostSystemLocale());
+
+const WEEKDAY_INDEXES = [0, 1, 2, 3, 4, 5, 6] as const;
+type WeekdayIndex = (typeof WEEKDAY_INDEXES)[number];
+
+type LocaleWithWeekInfo = Intl.Locale & {
+  readonly weekInfo?: { readonly firstDay: number };
+  getWeekInfo?: () => { readonly firstDay: number };
+};
+
+/**
+ * First weekday of a locale as a `Date#getDay` index (0 is Sunday), or
+ * `undefined` when the runtime has no week data, so callers keep their own
+ * default.
+ */
+export function resolveWeekStartsOn(locale: string | undefined): WeekdayIndex | undefined {
+  try {
+    const resolved: LocaleWithWeekInfo = new Intl.Locale(
+      locale ?? Intl.DateTimeFormat().resolvedOptions().locale,
+    );
+    // Week info counts Monday as 1 and Sunday as 7.
+    const firstDay = resolved.getWeekInfo?.().firstDay ?? resolved.weekInfo?.firstDay;
+    return firstDay === undefined ? undefined : WEEKDAY_INDEXES[firstDay % 7];
+  } catch {
+    return undefined;
+  }
+}
+
+export const weekStartsOn = resolveWeekStartsOn(timestampLocale);
+
 const timestampFormatterCache = new Map<string, Intl.DateTimeFormat>();
 
 function getTimestampFormatter(
@@ -33,7 +86,7 @@ function getTimestampFormatter(
   }
 
   const formatter = new Intl.DateTimeFormat(
-    undefined,
+    timestampLocale,
     getTimestampFormatOptions(timestampFormat, includeSeconds),
   );
   timestampFormatterCache.set(cacheKey, formatter);
@@ -51,7 +104,10 @@ export function formatTimestamp(isoDate: string, timestampFormat: TimestampForma
   return getTimestampFormatter(timestampFormat, true).format(date);
 }
 
-const monthNameFormatter = new Intl.DateTimeFormat(undefined, { month: "long" });
+// Deliberately not the host locale: the tooltip's ordinal suffix and
+// day-before-month order below are English, so a localized month alone would
+// read "4th Juni 2026".
+const monthNameFormatter = new Intl.DateTimeFormat("en-US", { month: "long" });
 
 function ordinalSuffix(day: number): string {
   const lastTwo = day % 100;
@@ -68,10 +124,6 @@ function ordinalSuffix(day: number): string {
   }
 }
 
-/**
- * Long-form tooltip label, e.g. `12:04, 4th June`.
- * Renders the wall-clock time without seconds followed by the ordinal day and month name.
- */
 export function formatChatTimestampTooltip(
   isoDate: string,
   timestampFormat: TimestampFormat,
@@ -91,11 +143,60 @@ export function formatShortTimestamp(isoDate: string, timestampFormat: Timestamp
   return getTimestampFormatter(timestampFormat, false).format(date);
 }
 
-/**
- * Format a relative time string from an ISO date.
- * Returns `{ value: "20s", suffix: "ago" }` or `{ value: "just now", suffix: null }`
- * so callers can style the numeric portion independently.
- */
+const numericDateFormatter = new Intl.DateTimeFormat(timestampLocale, {
+  month: "numeric",
+  day: "numeric",
+});
+const numericDateWithYearFormatter = new Intl.DateTimeFormat(timestampLocale, {
+  month: "numeric",
+  day: "numeric",
+  year: "numeric",
+});
+
+export function formatDayAwareTimestamp(
+  isoDate: string,
+  timestampFormat: TimestampFormat,
+  nowMs: number = Date.now(),
+): string {
+  const date = parseTimestampDate(isoDate);
+  if (!date) return "";
+  const time = getTimestampFormatter(timestampFormat, false).format(date);
+
+  const now = new Date(nowMs);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfMessageDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  // Round so DST-shifted 23/25 hour days still count as whole days.
+  const dayDiff = Math.round((startOfToday - startOfMessageDay) / 86_400_000);
+
+  if (dayDiff <= 0) return time;
+  if (dayDiff === 1) return `yesterday at ${time}`;
+  const dateFormatter =
+    date.getFullYear() === now.getFullYear() ? numericDateFormatter : numericDateWithYearFormatter;
+  return `${dateFormatter.format(date)} ${time}`;
+}
+
+export function formatUpcomingTimestamp(
+  isoDate: string,
+  timestampFormat: TimestampFormat,
+  nowMs: number = Date.now(),
+): string {
+  const date = parseTimestampDate(isoDate);
+  if (!date) return "";
+  const time = getTimestampFormatter(timestampFormat, false).format(date);
+
+  const now = new Date(nowMs);
+  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const startOfTargetDay = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+  const dayDiff = Math.round((startOfTargetDay - startOfToday) / 86_400_000);
+
+  if (dayDiff < 0) return formatDayAwareTimestamp(isoDate, timestampFormat, nowMs);
+  if (dayDiff === 0) return time;
+  if (dayDiff === 1) return `tomorrow at ${time}`;
+  const dateFormatter =
+    date.getFullYear() === now.getFullYear() ? numericDateFormatter : numericDateWithYearFormatter;
+  return `${dateFormatter.format(date)} ${time}`;
+}
+
 type RelativeTimeParts = { value: string; suffix: string | null };
 export type RelativeTimeState =
   | { status: "missing" }
@@ -130,10 +231,6 @@ export function getRelativeTimeState(isoDate: string | null): RelativeTimeState 
   return { status: "relative", ...relative };
 }
 
-/**
- * Relative elapsed duration since an ISO instant, without an "ago" suffix.
- * Useful for labels like "Connected for 3m".
- */
 export function formatElapsedDurationLabel(isoDate: string, nowMs: number = Date.now()): string {
   const date = parseTimestampDate(isoDate);
   if (!date) return "";
@@ -154,9 +251,6 @@ export function formatElapsedDurationLabel(isoDate: string, nowMs: number = Date
   return `${days}d`;
 }
 
-/**
- * Relative time until an ISO instant (e.g. expiry). Mirrors {@link formatRelativeTime} but for future times.
- */
 export function formatRelativeTimeUntil(isoDate: string): RelativeTimeParts | null {
   const date = parseTimestampDate(isoDate);
   if (!date) return null;
@@ -180,7 +274,6 @@ export function formatRelativeTimeUntilLabel(isoDate: string): string {
 }
 
 /**
- * Countdown for a future instant (e.g. link expiry): "Expires in 4m 12s", with second precision under one hour.
  * Pass `nowMs` when a parent tick drives re-renders so the diff matches that snapshot.
  */
 export function formatExpiresInLabel(isoDate: string, nowMs: number = Date.now()): string {

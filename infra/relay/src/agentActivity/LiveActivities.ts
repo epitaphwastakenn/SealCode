@@ -18,7 +18,7 @@ import { and, eq, sql } from "drizzle-orm";
 import * as RelayDb from "../db.ts";
 import { relayLiveActivities, relayMobileDevices } from "../persistence/schema.ts";
 
-export class LiveActivityRegistrationPersistenceError extends Schema.TaggedErrorClass<LiveActivityRegistrationPersistenceError>()(
+export class LiveActivityRegistrationPersistenceError extends Schema.TaggedError<LiveActivityRegistrationPersistenceError>()(
   "LiveActivityRegistrationPersistenceError",
   {
     userId: Schema.String,
@@ -31,7 +31,7 @@ export class LiveActivityRegistrationPersistenceError extends Schema.TaggedError
   }
 }
 
-export class LiveActivityTargetListPersistenceError extends Schema.TaggedErrorClass<LiveActivityTargetListPersistenceError>()(
+export class LiveActivityTargetListPersistenceError extends Schema.TaggedError<LiveActivityTargetListPersistenceError>()(
   "LiveActivityTargetListPersistenceError",
   {
     userId: Schema.String,
@@ -43,7 +43,7 @@ export class LiveActivityTargetListPersistenceError extends Schema.TaggedErrorCl
   }
 }
 
-export class LiveActivityDeliveryMarkPersistenceError extends Schema.TaggedErrorClass<LiveActivityDeliveryMarkPersistenceError>()(
+export class LiveActivityDeliveryMarkPersistenceError extends Schema.TaggedError<LiveActivityDeliveryMarkPersistenceError>()(
   "LiveActivityDeliveryMarkPersistenceError",
   {
     operation: Schema.Literals([
@@ -66,8 +66,8 @@ export class LiveActivityDeliveryMarkPersistenceError extends Schema.TaggedError
 export interface DeviceRow {
   readonly user_id: string;
   readonly device_id: string;
-  readonly platform: "ios";
-  readonly ios_major_version: number;
+  readonly platform: "ios" | "android";
+  readonly ios_major_version: number | null;
   readonly app_version: string | null;
   readonly bundle_id: string | null;
   readonly aps_environment: "sandbox" | "production" | null;
@@ -283,12 +283,7 @@ export const make = Effect.gen(function* () {
               // A delivered start begins a NEW activity generation: the stored
               // update token belongs to the previous activity (dead once a new
               // one starts, and certainly dead after an end), so keep it only
-              // for plain updates. Deliveries pause until the app registers
-              // the fresh activity's token; registerLiveActivity + replay then
-              // reconcile content (or end the activity if work already
-              // finished). Without this, updates and ends route to the dead
-              // token and the new lock-screen card is stranded at its start
-              // content forever.
+              // for plain updates.
               activityPushToken:
                 input.kind === "live_activity_update"
                   ? sql`${relayLiveActivities.activityPushToken}`

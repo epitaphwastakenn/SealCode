@@ -114,6 +114,14 @@ export const PanelGlassOpacity = Schema.Int.check(
 );
 export type PanelGlassOpacity = typeof PanelGlassOpacity.Type;
 const DEFAULT_PANEL_GLASS_OPACITY: PanelGlassOpacity = 70;
+/** Base corner radius in px; every rounded surface scales from it. */
+export const MIN_CORNER_RADIUS = 0;
+export const MAX_CORNER_RADIUS = 24;
+export const CornerRadius = Schema.Int.check(
+  Schema.isBetween({ minimum: MIN_CORNER_RADIUS, maximum: MAX_CORNER_RADIUS }),
+);
+export type CornerRadius = typeof CornerRadius.Type;
+export const DEFAULT_CORNER_RADIUS: CornerRadius = 10;
 export const MIN_HARNESS_SOUND_VOLUME = 0;
 export const MAX_HARNESS_SOUND_VOLUME = 100;
 export const HarnessSoundVolume = Schema.Int.check(
@@ -434,6 +442,11 @@ export const ClientSettingsSchema = Schema.Struct({
   planModeEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   glassSidebarEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   glassAppEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  cornerRadius: CornerRadius.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_CORNER_RADIUS)),
+  ),
+  smoothCorners: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  floatingPanels: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   panelGlassOpacity: PanelGlassOpacity.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_PANEL_GLASS_OPACITY)),
   ),
@@ -1239,6 +1252,8 @@ export const ServerSettings = Schema.Struct({
   sourceControlWriterModelSelection: Schema.NullOr(ModelSelection).pipe(
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
+  /** Off by default: images go to the main model as they are unless this is on. */
+  imageViewerEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   imageViewerModelSelection: ModelSelection.pipe(
     Schema.withDecodingDefault(
       Effect.succeed({
@@ -1537,6 +1552,7 @@ export const ServerSettingsPatch = Schema.Struct({
     }),
   ),
   sourceControlWriterModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
+  imageViewerEnabled: Schema.optionalKey(Schema.Boolean),
   imageViewerModelSelection: Schema.optionalKey(ModelSelectionPatch),
   diffReviewModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
   contextCompactorModelSelection: Schema.optionalKey(Schema.NullOr(ModelSelection)),
@@ -1677,6 +1693,9 @@ export const ClientSettingsPatch = Schema.Struct({
   planModeEnabled: Schema.optionalKey(Schema.Boolean),
   glassSidebarEnabled: Schema.optionalKey(Schema.Boolean),
   glassAppEnabled: Schema.optionalKey(Schema.Boolean),
+  cornerRadius: Schema.optionalKey(CornerRadius),
+  smoothCorners: Schema.optionalKey(Schema.Boolean),
+  floatingPanels: Schema.optionalKey(Schema.Boolean),
   panelGlassOpacity: Schema.optionalKey(PanelGlassOpacity),
   backdrop: Schema.optionalKey(Schema.NullOr(AppBackdrop)),
   backdropStyles: Schema.optionalKey(

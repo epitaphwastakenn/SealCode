@@ -574,6 +574,26 @@ describe("MuseAdapterV2", () => {
     }).pipe(Effect.scoped, Effect.provide(testLayer)),
   );
 
+  it.effect("does not keep a completed turn's reason as the session error", () =>
+    Effect.gen(function* () {
+      const fake = yield* makeFakeMuse();
+      const harness = yield* makeHarness(fake);
+      const { nativeId } = yield* startConversation(harness, fake);
+      yield* fake.emit("turn/completed", {
+        turnId: nativeId,
+        terminal: "completed",
+        reason: "a tool call failed before the final answer",
+      });
+      const session = yield* harness.takeEvent(
+        "provider_session.updated",
+        (event) => event.providerSession.status === "ready",
+      );
+      assert.isNull(session.providerSession.lastError);
+      const terminal = yield* harness.takeEvent("turn.terminal");
+      assert.strictEqual(terminal.status, "completed");
+    }).pipe(Effect.scoped, Effect.provide(testLayer)),
+  );
+
   it.effect("moves a resumed session on another model back to the catalog default", () =>
     Effect.gen(function* () {
       const fake = yield* makeFakeMuse();

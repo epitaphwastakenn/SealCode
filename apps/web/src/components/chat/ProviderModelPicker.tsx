@@ -281,6 +281,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
         align="start"
         className="before:hidden"
         padding="none"
+        followContentSize
       >
         <ModelPickerContent
           environmentId={props.environmentId}

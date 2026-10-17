@@ -2625,9 +2625,30 @@ function isOverloadedResult(result: SDKResultMessage): boolean {
   return result.subtype === "success" && result.api_error_status === 529;
 }
 
+/**
+ * The CLI reports error_during_execution whenever the turn's last message is not
+ * an answer-shaped frame, even when its loop ended on its own terminal reason,
+ * and fills errors[] with everything it logged during the turn, failed tool
+ * calls included. A turn that did work and stopped for a non-failure reason has
+ * not failed; one that produced nothing keeps the failure so it is not silent.
+ */
+function isClaudeRecoveredExecutionResult(
+  message: SDKResultMessage,
+  turnProducedOutput: boolean,
+): boolean {
+  return (
+    turnProducedOutput &&
+    message.subtype === "error_during_execution" &&
+    message.terminal_reason !== undefined &&
+    message.terminal_reason !== "max_turns" &&
+    terminalResultError(message.terminal_reason) === undefined
+  );
+}
+
 function terminalStatusFromResult(
   message: SDKResultMessage,
   failureHint?: string,
+  turnProducedOutput = false,
 ): Extract<
   OrchestrationV2ProviderTurn["status"],
   "completed" | "interrupted" | "failed" | "cancelled"
@@ -2649,6 +2670,9 @@ function terminalStatusFromResult(
       (message.is_error && failureHint !== undefined)
       ? "failed"
       : "completed";
+  }
+  if (isClaudeRecoveredExecutionResult(message, turnProducedOutput)) {
+    return "completed";
   }
   const errorText = message.errors.join("\n").toLowerCase();
   if (errorText.includes("interrupt")) {
@@ -7474,16 +7498,35 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               resetTimes.length > 0 && resetTimes.every((time) => time !== null)
                 ? resetTimes.reduce((latest, time) => (time! > latest ? time! : latest), "")
                 : null;
-            const resultFailure = interrupted
-              ? null
-              : providerFailureFromResult(message, completedAt, failureHint, usageLimited);
+            const turnProducedOutput = context.itemOrdinals.size > 0;
+            const recoveredExecution =
+              failureHint === undefined &&
+              isClaudeRecoveredExecutionResult(message, turnProducedOutput);
+            if (recoveredExecution && message.subtype !== "success") {
+              yield* Effect.logInfo("orchestration-v2.claude-recovered-execution-result", {
+                providerTurnId: context.providerTurnId,
+                terminal_reason: message.terminal_reason,
+                stop_reason: message.stop_reason,
+                errors: message.errors,
+              });
+            }
+            const resultFailure =
+              interrupted || recoveredExecution
+                ? null
+                : providerFailureFromResult(message, completedAt, failureHint, usageLimited);
             const terminalFailure =
               resultFailure?.class === "usage_limit"
                 ? { ...resultFailure, resetAt: resetAt ?? resultFailure.resetAt ?? null }
                 : resultFailure;
             yield* finalizeActiveTurn({
               context,
-              status: interrupted ? "interrupted" : terminalStatusFromResult(message, failureHint),
+              status: interrupted
+                ? "interrupted"
+                : terminalStatusFromResult(
+                    message,
+                    failureHint,
+                    turnProducedOutput && failureHint === undefined,
+                  ),
               completedAt,
               result: message,
               ...(terminalFailure === null ? {} : { failure: terminalFailure }),

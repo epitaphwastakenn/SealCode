@@ -6962,6 +6962,98 @@ describe("ClaudeAdapterV2 background wake turns", () => {
     ),
   );
 
+  it.effect("completes a turn whose result only flags a failed tool call along the way", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const harness = yield* makeWakeHarness;
+        const now = yield* DateTime.now;
+
+        yield* harness.runtime.startTurn(
+          makeClaudeTestTurnInput({
+            threadId: harness.threadId,
+            providerThread: harness.providerThread,
+            now,
+            attemptId: RunAttemptId.make("attempt-claude-recovered-tool-error"),
+            text: "Run the tests and fix what fails.",
+            attachments: [],
+          }),
+        );
+        yield* Queue.offer(
+          harness.sdkMessages,
+          makeAssistantTextFrame({
+            uuid: "00000000-0000-4000-8000-000000000121",
+            text: "The first run failed, so I fixed the import and the suite passes now.",
+          }),
+        );
+        yield* Queue.offer(
+          harness.sdkMessages,
+          makeResultFrame({
+            uuid: "00000000-0000-4000-8000-000000000122",
+            result: "",
+            numTurns: 4,
+            subtype: "error_during_execution",
+            isError: true,
+            errors: [
+              "[ede_diagnostic] result_type=assistant last_content_type=none stop_reason=end_turn",
+              "Error: Command failed with exit code 1: vp test run",
+            ],
+          }),
+        );
+        yield* awaitUntil(() => harness.terminalEvents().length === 1, "turn terminal");
+        assert.equal(harness.terminalEvents()[0]?.status, "completed");
+        assert.isNull(harness.terminalEvents()[0]?.failure);
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
+    ),
+  );
+
+  it.effect("still fails an execution error result whose loop stopped on a model error", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const harness = yield* makeWakeHarness;
+        const now = yield* DateTime.now;
+
+        yield* harness.runtime.startTurn(
+          makeClaudeTestTurnInput({
+            threadId: harness.threadId,
+            providerThread: harness.providerThread,
+            now,
+            attemptId: RunAttemptId.make("attempt-claude-model-error-after-output"),
+            text: "Run the tests and fix what fails.",
+            attachments: [],
+          }),
+        );
+        yield* Queue.offer(
+          harness.sdkMessages,
+          makeAssistantTextFrame({
+            uuid: "00000000-0000-4000-8000-000000000123",
+            text: "Running the suite now.",
+          }),
+        );
+        yield* Queue.offer(
+          harness.sdkMessages,
+          makeResultFrame({
+            uuid: "00000000-0000-4000-8000-000000000124",
+            result: "",
+            subtype: "error_during_execution",
+            isError: true,
+            errors: ["The model returned an error."],
+            terminalReason: "model_error",
+          }),
+        );
+        yield* awaitUntil(() => harness.terminalEvents().length === 1, "failed terminal");
+        assert.equal(harness.terminalEvents()[0]?.status, "failed");
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+        ),
+      ),
+    ),
+  );
+
   it.effect("settles a continuation turn immediately when no wake output is buffered", () =>
     Effect.scoped(
       Effect.gen(function* () {

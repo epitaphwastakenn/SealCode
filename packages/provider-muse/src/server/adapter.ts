@@ -966,7 +966,12 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
             ? { nativeConversationHeadRef: nativeRef(turn.nativeId) }
             : {}),
         });
-        yield* updateSession(disposition === "broken" ? "error" : "ready", detail ?? null);
+        // Muse may attach a reason to any terminal; only a failure is an error the
+        // thread should keep showing after the turn ends.
+        yield* updateSession(
+          disposition === "broken" ? "error" : "ready",
+          status === "failed" || disposition === "broken" ? (detail ?? null) : null,
+        );
         active = undefined;
         if (status === "failed") {
           const failure = makeProviderFailure({

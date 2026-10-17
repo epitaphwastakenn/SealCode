@@ -1,6 +1,6 @@
 import { Toolbar } from "@base-ui/react/toolbar";
 import { type ProviderInstanceId } from "@t3tools/contracts";
-import { memo, useLayoutEffect, useRef, useState } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { SparklesIcon, StarIcon } from "lucide-react";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -25,8 +25,17 @@ function describeUnavailableInstance(entry: ProviderInstanceEntry): string {
   return msg ? `${label} — ${kind}. ${msg}` : `${label} — ${kind}.`;
 }
 
-const SELECTED_INDICATOR_CLASS =
-  "pointer-events-none absolute -right-1 top-1/2 z-10 h-5 w-0.75 -translate-y-1/2 rounded-l-full bg-primary";
+// The tile and accent bar travel together on the compositor; easing settles
+// without overshoot so the selection never bounces past its target.
+const SELECTION_CLASS =
+  "pointer-events-none absolute inset-x-0 top-0 motion-reduce:transition-none";
+const SELECTION_TRANSITION_CLASS = "transition-[translate,height] duration-300 ease-drawer";
+const SELECTION_TILE_CLASS =
+  "absolute inset-y-0 left-1 right-1 rounded-md bg-background shadow-xs ring-1 ring-border/60";
+const SELECTION_BAR_CLASS =
+  "absolute right-0 top-1/2 h-5 w-0.75 -translate-y-1/2 rounded-l-full bg-primary";
+const RAIL_BUTTON_CLASS =
+  "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded-md transition-[background-color,scale] duration-150 hover:bg-foreground/10 focus-visible:bg-foreground/10 focus-visible:outline-none active:scale-94 motion-reduce:active:scale-100";
 const BADGE_BASE_CLASS =
   "pointer-events-none absolute -right-0.5 top-0.5 z-10 flex size-3.5 items-center justify-center rounded-full bg-transparent shadow-sm ";
 const NEW_BADGE_CLASS = `${BADGE_BASE_CLASS} text-update-foreground `;
@@ -51,7 +60,10 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
   const showFavorites = props.showFavorites ?? true;
   const [hoveredInstanceId, setHoveredInstanceId] = useState<ProviderInstanceId | null>(null);
   const sidebarContentRef = useRef<HTMLDivElement>(null);
-  const [selectedIndicatorTop, setSelectedIndicatorTop] = useState<number | null>(null);
+  const [selection, setSelection] = useState<{ top: number; height: number } | null>(null);
+  // The first placement happens while the popup opens; sliding in from the top
+  // of the rail there reads as a glitch, so motion starts after it lands.
+  const [selectionCanAnimate, setSelectionCanAnimate] = useState(false);
   useLayoutEffect(() => {
     const content = sidebarContentRef.current;
     if (!content) {
@@ -61,11 +73,16 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
       content.querySelectorAll<HTMLElement>("[data-model-picker-provider]"),
     ).find((item) => item.dataset.modelPickerProvider === props.selectedInstanceId);
     if (!selectedItem) {
-      setSelectedIndicatorTop(null);
+      setSelection(null);
       return;
     }
-    setSelectedIndicatorTop(selectedItem.offsetTop + selectedItem.offsetHeight / 2 - 10);
+    setSelection({ top: selectedItem.offsetTop, height: selectedItem.offsetHeight });
   }, [props.instanceEntries, props.selectedInstanceId, showFavorites]);
+  useEffect(() => {
+    if (selection === null || selectionCanAnimate) return;
+    const frame = window.requestAnimationFrame(() => setSelectionCanAnimate(true));
+    return () => window.cancelAnimationFrame(frame);
+  }, [selection, selectionCanAnimate]);
 
   return (
     <Toolbar.Root
@@ -84,15 +101,16 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
     >
       <div className="h-full overflow-y-auto overscroll-contain [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <div ref={sidebarContentRef} className="relative flex min-h-full flex-col gap-1 p-1">
-          {selectedIndicatorTop !== null ? (
+          {selection !== null ? (
             <div
+              aria-hidden
               data-model-picker-selected-indicator="true"
-              className={cn(
-                SELECTED_INDICATOR_CLASS,
-                "right-0 translate-y-0 transition-[top] duration-200 ease-out",
-              )}
-              style={{ top: selectedIndicatorTop }}
-            />
+              className={cn(SELECTION_CLASS, selectionCanAnimate && SELECTION_TRANSITION_CLASS)}
+              style={{ translate: `0 ${selection.top}px`, height: selection.height }}
+            >
+              <div className={SELECTION_TILE_CLASS} />
+              <div className={SELECTION_BAR_CLASS} />
+            </div>
           ) : null}
           {showFavorites ? (
             <>
@@ -101,9 +119,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
                   <TooltipTrigger
                     render={
                       <Toolbar.Button
-                        className={cn(
-                          "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded-md transition-colors hover:bg-foreground/10 focus-visible:bg-foreground/10 focus-visible:outline-none",
-                        )}
+                        className={RAIL_BUTTON_CLASS}
                         onClick={() => handleSelect("favorites")}
                         type="button"
                         aria-label="Favorites"
@@ -149,8 +165,9 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
             const button = (
               <Toolbar.Button
                 className={cn(
-                  "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded-md transition-colors hover:bg-foreground/10 focus-visible:bg-foreground/10 focus-visible:outline-none",
-                  isDisabled && "opacity-50 cursor-not-allowed hover:bg-transparent",
+                  RAIL_BUTTON_CLASS,
+                  isDisabled &&
+                    "opacity-50 cursor-not-allowed hover:bg-transparent active:scale-100",
                 )}
                 data-provider-accent-color={entry.accentColor}
                 onClick={() => !isDisabled && handleSelect(entry.instanceId)}

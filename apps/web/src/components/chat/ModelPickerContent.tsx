@@ -150,6 +150,12 @@ export function adjacentModelPickerProvider(input: {
 }
 
 const EMPTY_MODEL_JUMP_LABELS = new Map<string, string>();
+// Same curve as the `ease-drawer` token the provider rail slides with.
+const MODEL_PICKER_EASING = "cubic-bezier(0.32, 0.72, 0, 1)";
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+}
 const MODEL_LIST_ESTIMATED_ITEM_SIZE = 52;
 
 function ModelListSeparator() {
@@ -187,6 +193,16 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const modelListRef = useRef<LegendListRef | null>(null);
   const pickerContentRef = useRef<HTMLDivElement>(null);
+  const modelListViewportRef = useRef<HTMLDivElement>(null);
+  const pickerHeightAnimationRef = useRef<Animation | null>(null);
+  // Once the user starts moving around (switching providers, searching, opening
+  // legacy models) the picker stops shrinking: a popup that resizes on every
+  // switch moves the search box and rail out from under the pointer.
+  const [heldPickerHeight, setHeldPickerHeight] = useState<number | null>(null);
+  const holdPickerHeight = useCallback(() => {
+    const height = pickerContentRef.current?.offsetHeight;
+    if (height) setHeldPickerHeight((held) => held ?? height);
+  }, []);
   const highlightedModelKeyRef = useRef<string | null>(null);
   const { favorites } = useEnvironmentModelPreferences(props.environmentId);
   const activeEntry = props.instanceEntries.find(
@@ -270,12 +286,13 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
 
   const handleSelectInstance = useCallback(
     (instanceId: ProviderInstanceId | "favorites") => {
+      holdPickerHeight();
       setSelectedInstanceId(instanceId);
       window.requestAnimationFrame(() => {
         focusSearchInput();
       });
     },
-    [focusSearchInput],
+    [focusSearchInput, holdPickerHeight],
   );
 
   useLayoutEffect(() => {
@@ -509,17 +526,21 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     return notice ? [{ instanceId: entry.instanceId, notice }] : [];
   });
 
-  const toggleLegacySection = useCallback((instanceId: ProviderInstanceId) => {
-    setExpandedLegacyInstances((expanded) => {
-      const next = new Set(expanded);
-      if (next.has(instanceId)) {
-        next.delete(instanceId);
-      } else {
-        next.add(instanceId);
-      }
-      return next;
-    });
-  }, []);
+  const toggleLegacySection = useCallback(
+    (instanceId: ProviderInstanceId) => {
+      holdPickerHeight();
+      setExpandedLegacyInstances((expanded) => {
+        const next = new Set(expanded);
+        if (next.has(instanceId)) {
+          next.delete(instanceId);
+        } else {
+          next.add(instanceId);
+        }
+        return next;
+      });
+    },
+    [holdPickerHeight],
+  );
 
   const handleModelSelect = useCallback(
     (modelSlug: string, instanceId: ProviderInstanceId, additive = false) => {
@@ -608,13 +629,66 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   const [modelListContentSize, setModelListContentSize] = useState(
     () => filteredItemKeys.length * MODEL_LIST_ESTIMATED_ITEM_SIZE,
   );
-  const [searchHeight, setSearchHeight] = useState(0);
   useLayoutEffect(
     () => modelListRef.current?.getState().listen("totalSize", setModelListContentSize),
     [],
   );
   const modelListHeight =
     filteredItemKeys.length === 0 ? 0 : `calc(${modelListContentSize}px + var(--spacing) * 5)`;
+
+  // Growth while the height is held eases open instead of jumping. Search keeps
+  // the exact held height so results scroll rather than resize under typing.
+  useLayoutEffect(() => {
+    const container = pickerContentRef.current;
+    if (!container || heldPickerHeight === null || isSearching) return;
+    const running = pickerHeightAnimationRef.current;
+    const fromHeight = running ? container.offsetHeight : heldPickerHeight;
+    running?.cancel();
+    pickerHeightAnimationRef.current = null;
+    const toHeight = container.offsetHeight;
+    if (toHeight > heldPickerHeight) setHeldPickerHeight(toHeight);
+    if (toHeight - fromHeight < 1 || prefersReducedMotion()) return;
+    const animation = container.animate(
+      [
+        { height: `${fromHeight}px`, minHeight: `${fromHeight}px` },
+        { height: `${toHeight}px`, minHeight: `${toHeight}px` },
+      ],
+      { duration: 260, easing: MODEL_PICKER_EASING },
+    );
+    animation.onfinish = () => {
+      if (pickerHeightAnimationRef.current === animation) pickerHeightAnimationRef.current = null;
+    };
+    pickerHeightAnimationRef.current = animation;
+  }, [
+    heldPickerHeight,
+    isSearching,
+    modelListHeight,
+    selectedInstanceId,
+    providerSetupEntries.length,
+    updateRequiredNotices.length,
+  ]);
+
+  const railOrder = useMemo(
+    () => ["favorites", ...sidebarInstanceEntries.map((entry) => entry.instanceId)],
+    [sidebarInstanceEntries],
+  );
+  const previousSelectedInstanceIdRef = useRef(selectedInstanceId);
+  // The list follows the rail: moving down the rail brings the next list up
+  // from below, moving up brings it down from above.
+  useLayoutEffect(() => {
+    const previous = previousSelectedInstanceIdRef.current;
+    previousSelectedInstanceIdRef.current = selectedInstanceId;
+    const viewport = modelListViewportRef.current;
+    if (previous === selectedInstanceId || !viewport || prefersReducedMotion()) return;
+    const direction = railOrder.indexOf(selectedInstanceId) >= railOrder.indexOf(previous) ? 1 : -1;
+    viewport.animate(
+      [
+        { opacity: 0, transform: `translateY(${direction * 6}px)` },
+        { opacity: 1, transform: "none" },
+      ],
+      { duration: 220, easing: MODEL_PICKER_EASING },
+    );
+  }, [railOrder, selectedInstanceId]);
   const updateModelListScrollFades = useCallback(() => {
     const scrollElement = modelListRef.current?.getScrollableNode();
     if (!(scrollElement instanceof HTMLElement)) {
@@ -733,7 +807,13 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       <div
         ref={pickerContentRef}
         className="relative flex max-h-86.5 w-screen max-w-90 flex-row overflow-hidden"
-        style={isSearching ? { height: searchHeight } : undefined}
+        style={
+          heldPickerHeight === null
+            ? undefined
+            : isSearching
+              ? { height: heldPickerHeight }
+              : { minHeight: heldPickerHeight }
+        }
         data-model-picker-content="true"
       >
         {showSidebar && (
@@ -807,7 +887,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
               placeholder="Search models..."
               value={searchQuery}
               onChange={(e) => {
-                if (!isSearching) setSearchHeight(pickerContentRef.current?.offsetHeight ?? 0);
+                holdPickerHeight();
                 setSearchQuery(e.target.value);
               }}
               onKeyDown={(e) => {
@@ -863,6 +943,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
             />
 
             <div
+              ref={modelListViewportRef}
               className="relative min-h-0 overflow-hidden pr-px"
               style={{ height: modelListHeight }}
             >

@@ -1054,13 +1054,13 @@ it.effect("tells a turn cut mid-way about the background work it lost", () =>
   }),
 );
 
-it.effect("shows a continuation as a T3 Code notice whose detail is the prompt", () =>
+it.effect("shows a continuation as a SealCode notice whose detail is the prompt", () =>
   Effect.gen(function* () {
     const [resumed] = yield* continuationDispatches(cutMidTurn());
     assert.deepEqual(resumed?.notification, {
       source: { kind: "system" },
       outcome: "updated",
-      summary: "T3 Code restarted and resumed this turn",
+      summary: "SealCode restarted and resumed this turn",
       detail: "Continue where you left off.",
     });
   }),

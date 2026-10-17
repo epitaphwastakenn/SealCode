@@ -24,7 +24,9 @@ export class DesktopLegacyLocalStorage extends Context.Service<
 >()("@t3tools/desktop/app/DesktopLegacyLocalStorage") {}
 
 const MARKER_FILE_NAME = "v1-local-storage-imported";
-const V1_PROFILE_NAMES = ["T3 Code (Alpha)", "t3code"];
+// SealCode 1.x kept its profile in "sealcode"; the SealCode names cover installs
+// that predate the fork.
+const V1_PROFILE_NAMES = ["sealcode", "T3 Code (Alpha)", "t3code"];
 
 const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
@@ -79,8 +81,15 @@ const make = Effect.gen(function* () {
     yield* Ref.set(markerPath, Option.some(marker));
     const directory = yield* findV1LocalStorage;
     if (directory === null) return yield* writeMarker;
-    const origin = ElectronProtocol.getDesktopUrl(false).replace(/\/$/, "");
-    const read = yield* readChromiumLocalStorage(directory, origin).pipe(
+    // SealCode 1.x wrote under its own origin; its entries win over T3 Code's.
+    const origins = [
+      ElectronProtocol.getDesktopUrl(false).replace(/\/$/, ""),
+      ElectronProtocol.SEALCODE_V1_ORIGIN,
+    ];
+    const read = yield* Effect.forEach(origins, (origin) =>
+      readChromiumLocalStorage(directory, origin),
+    ).pipe(
+      Effect.map((maps) => new Map(maps.flatMap((entries) => [...entries]))),
       Effect.provideService(FileSystem.FileSystem, fs),
       Effect.provideService(Path.Path, path),
       Effect.tapError((error) =>

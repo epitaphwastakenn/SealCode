@@ -20,7 +20,7 @@ export const APPARMOR_PROFILE_PATH = "/etc/apparmor.d/t3-chrome-headless-shell";
  * Modelled on the profile Ubuntu ships for Google Chrome; `unconfined` adds
  * nothing beyond `userns`.
  */
-export const APPARMOR_PROFILE = `# Written by \`t3 browser setup\`: lets T3 Code's headless browser use Chrome's sandbox.
+export const APPARMOR_PROFILE = `# Written by \`t3 browser setup\`: lets SealCode's headless browser use Chrome's sandbox.
 abi <abi/4.0>,
 include <tunables/global>
 

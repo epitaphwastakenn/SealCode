@@ -13,8 +13,12 @@ import * as Scope from "effect/Scope";
 import * as Electron from "electron";
 
 export const DESKTOP_HOST = "app";
+// Sign-in callbacks registered upstream return to t3code://, so the renderer
+// keeps that scheme; sealcode:// is registered alongside it for SealCode links.
 const DESKTOP_PRODUCTION_SCHEME = "t3code";
 const DESKTOP_DEVELOPMENT_SCHEME = "t3code-dev";
+/** SealCode 1.x served its renderer from this origin. */
+export const SEALCODE_V1_ORIGIN = "sealcode://app";
 
 export function getDesktopScheme(isDevelopment: boolean): string {
   return isDevelopment ? DESKTOP_DEVELOPMENT_SCHEME : DESKTOP_PRODUCTION_SCHEME;

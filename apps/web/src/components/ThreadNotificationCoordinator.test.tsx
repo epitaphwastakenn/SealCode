@@ -126,7 +126,7 @@ vi.mock("../hooks/useSettings", () => ({
       settings: Pick<ClientSettings, "notificationMode" | "inAppNotificationsEnabled">,
     ) => unknown,
   ) => select({ notificationMode: state.mode, inAppNotificationsEnabled: state.inApp }),
-  getClientSettings: () => ({ notificationMode: state.mode }),
+  getClientSettings: () => ({ notificationMode: state.mode, harnessSoundVolume: 70 }),
 }));
 vi.mock("../state/environments", () => ({
   useEnvironmentIds: () => ["env-1"],
@@ -258,36 +258,39 @@ describe("thread notifications", () => {
   );
 
   it.each([
-    ["input", "Input needed"],
-    ["approval", "Approval needed"],
-    ["sessionError", "Thread failed"],
-    ["turnError", "Thread failed"],
-    ["limited", "Usage limit reached"],
-  ] as const)("uses the same %s event for in-app and desktop alerts", async (event, title) => {
-    state.mode = "notifications-and-sound";
-    await render();
-    state[event] = true;
-    await render();
-    await render();
-    expect(state.add).toHaveBeenCalledTimes(1);
-    expect(state.add).toHaveBeenLastCalledWith(expect.objectContaining({ title }));
-    expect(state.sound).toHaveBeenCalledWith("input", expect.any(Function));
-    expect(state.notification).not.toHaveBeenCalled();
+    ["input", "Input needed", "question"],
+    ["approval", "Approval needed", "permission"],
+    ["sessionError", "Thread failed", "error"],
+    ["turnError", "Thread failed", "error"],
+    ["limited", "Usage limit reached", "error"],
+  ] as const)(
+    "uses the same %s event for in-app and desktop alerts",
+    async (event, title, sound) => {
+      state.mode = "notifications-and-sound";
+      await render();
+      state[event] = true;
+      await render();
+      await render();
+      expect(state.add).toHaveBeenCalledTimes(1);
+      expect(state.add).toHaveBeenLastCalledWith(expect.objectContaining({ title }));
+      expect(state.sound).toHaveBeenCalledWith(sound, expect.any(Function), expect.any(Number));
+      expect(state.notification).not.toHaveBeenCalled();
 
-    state[event] = false;
-    await render();
-    state.focused = false;
-    state[event] = true;
-    await render();
-    await render();
-    expect(state.add).toHaveBeenCalledTimes(1);
-    expect(state.notification).toHaveBeenCalledTimes(1);
-    expect(state.notification).toHaveBeenCalledWith(title, {
-      body: "Fix the login form",
-      tag: "env-1:thread-1",
-      silent: true,
-    });
-  });
+      state[event] = false;
+      await render();
+      state.focused = false;
+      state[event] = true;
+      await render();
+      await render();
+      expect(state.add).toHaveBeenCalledTimes(1);
+      expect(state.notification).toHaveBeenCalledTimes(1);
+      expect(state.notification).toHaveBeenCalledWith(title, {
+        body: "Fix the login form",
+        tag: "env-1:thread-1",
+        silent: true,
+      });
+    },
+  );
 
   it("alerts when only a dev server is left running, not while a monitor can wake the agent", async () => {
     await render();
@@ -344,7 +347,11 @@ describe("thread notifications", () => {
     state.mode = "notifications-and-sound";
     await render();
     await complete();
-    expect(state.sound).toHaveBeenCalledWith("completion", expect.any(Function));
+    expect(state.sound).toHaveBeenCalledWith(
+      "completion",
+      expect.any(Function),
+      expect.any(Number),
+    );
     expect(state.add).toHaveBeenCalledTimes(1);
     expect(state.notification).not.toHaveBeenCalled();
   });

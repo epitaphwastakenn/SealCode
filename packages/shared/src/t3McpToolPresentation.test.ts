@@ -15,6 +15,7 @@ describe("resolveT3McpToolPresentation", () => {
         "t3code:",
         "mcp_t3-code_",
         "T3 Code ",
+        "SealCode ",
         "t3-code · ",
       ]) {
         expect(resolveT3McpToolPresentation(`${prefix}${tool} completed`), tool).toEqual(
@@ -81,6 +82,7 @@ describe("resolveT3McpToolPresentation", () => {
       "t3code/delegate_task",
       "t3-code delegate_task",
       "T3 Code delegate_task",
+      "SealCode delegate_task",
       "t3-code__delegate_task",
     ]) {
       expect(resolveT3McpToolPresentation(name)?.displayName).toBe("Delegate a child task");

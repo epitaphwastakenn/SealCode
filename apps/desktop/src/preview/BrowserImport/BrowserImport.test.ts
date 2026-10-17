@@ -58,7 +58,7 @@ const withImporter = Effect.fnUntraced(function* () {
         Layer.provide(layerRejectedBeforeSession),
         Layer.provide(layerEnvironment),
         Layer.provide(Layer.succeed(HostProcess.Platform, "darwin")),
-        Layer.provide(Layer.succeed(HostProcess.ExecutablePath, "/Applications/T3 Code.app")),
+        Layer.provide(Layer.succeed(HostProcess.ExecutablePath, "/Applications/SealCode.app")),
         Layer.provide(NodeServices.layer),
       ),
     ),

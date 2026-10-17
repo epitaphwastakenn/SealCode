@@ -65,7 +65,7 @@ const mcpResourceMetadataUrl = (request: HttpServerRequest.HttpServerRequest) =>
   );
 
 /**
- * Agents T3 Code launched carry a registry token and must never be sent into an
+ * Agents SealCode launched carry a registry token and must never be sent into an
  * OAuth flow when it dies: they cannot open a browser, and a sign-in would mint
  * a credential that outlives their session.
  */
@@ -89,7 +89,7 @@ const unauthorized = (input: {
   return HttpServerResponse.jsonUnsafe(
     {
       error: "invalid_mcp_credential",
-      message: "A valid T3 Code MCP credential is required.",
+      message: "A valid SealCode MCP credential is required.",
     },
     {
       status: 401,
@@ -825,7 +825,7 @@ export const layerDeviceToolkit = Layer.mergeAll(
 );
 
 export const layerMcpTransport = McpServer.layerHttp({
-  name: "T3 Code",
+  name: "SealCode",
   version: packageJson.version,
   path: "/mcp",
   protocols: [McpProtocol.v2025_06_18],

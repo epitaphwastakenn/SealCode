@@ -2701,3 +2701,19 @@ html[data-floating-panels="true"][data-glass-app="true"] body,
 html[data-floating-panels="true"][data-glass-sidebar="true"] body {
   background-color: transparent;
 }
+
+/* On Windows the desktop app drops the acrylic for floating panels (see
+   WindowsBackdrop.ts), so nothing paints between the panels and the desktop
+   shows through the gaps. AppBackdrop cuts the image to the panels. */
+html.electron-windows[data-floating-panels="true"],
+html.electron-windows[data-floating-panels="true"] body,
+html.electron-windows[data-floating-panels="true"] #root,
+html.electron-windows[data-floating-panels="true"] [data-slot="sidebar-wrapper"] {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+/* The panel gap already keeps content clear of the window's resize edge. */
+.electron-windows[data-floating-panels="true"] {
+  --desktop-window-right-resize-inset: 0px;
+}

@@ -3,8 +3,11 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
+import * as DesktopEnvironment from "../../app/DesktopEnvironment.ts";
+import * as ElectronWindow from "../../electron/ElectronWindow.ts";
 import * as DesktopClientSettings from "../../settings/DesktopClientSettings.ts";
 import * as DesktopSnapShot from "../../snapShot/DesktopSnapShot.ts";
+import { setWindowsFloatingPanels } from "../../window/WindowsBackdrop.ts";
 import * as IpcChannels from "../channels.ts";
 import * as DesktopIpc from "../DesktopIpc.ts";
 
@@ -27,5 +30,12 @@ export const setClientSettings = DesktopIpc.makeIpcMethod({
     const snapShot = yield* DesktopSnapShot.DesktopSnapShot;
     yield* clientSettings.set(settings);
     yield* snapShot.configure(settings);
+    const environment = yield* DesktopEnvironment.DesktopEnvironment;
+    if (environment.platform === "win32") {
+      const window = yield* (yield* ElectronWindow.ElectronWindow).main;
+      if (Option.isSome(window) && !window.value.isDestroyed()) {
+        setWindowsFloatingPanels(window.value, settings.floatingPanels);
+      }
+    }
   }),
 });

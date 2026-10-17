@@ -7,6 +7,7 @@ import {
 } from "@t3tools/contracts";
 import { type CSSProperties, useEffect, useRef, useState } from "react";
 
+import { isElectron } from "~/env";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
 import { loadBackdropImage } from "~/lib/backdrop/backdropStore";
@@ -16,6 +17,8 @@ import {
   processBackdropImage,
   revokeBackdropUrl,
 } from "~/lib/backdrop/processBackdrop";
+import { observeResize } from "~/lib/observeResize";
+import { isWindowsPlatform } from "~/lib/utils";
 
 // How far the image drifts against the mouse at full parallax, as a share of
 // the window (SealScreen's PARALLAX_MAX).
@@ -88,6 +91,71 @@ function fadeColor(backdrop: AppBackdropSettings, edges: EdgeColors | null): str
   return rgbCss(edges[side]);
 }
 
+const FLOATING_PANEL_SELECTOR =
+  '[data-app-sidebar] [data-slot="sidebar-inner"], [data-slot="sidebar-inset"]';
+
+function roundedRectPath({ left: x, top: y, width: w, height: h }: DOMRect, radius: number) {
+  const r = Math.max(0, Math.min(radius, w / 2, h / 2));
+  return (
+    `M${x + r},${y}H${x + w - r}A${r},${r} 0 0 1 ${x + w},${y + r}V${y + h - r}` +
+    `A${r},${r} 0 0 1 ${x + w - r},${y + h}H${x + r}A${r},${r} 0 0 1 ${x},${y + h - r}` +
+    `V${y + r}A${r},${r} 0 0 1 ${x + r},${y}Z`
+  );
+}
+
+/**
+ * With floating panels the Windows app has no material behind the page, so the
+ * image is cut to the panels and the gaps between them show the desktop.
+ */
+function useClipToFloatingPanels(container: HTMLDivElement | null, enabled: boolean): void {
+  useEffect(() => {
+    if (!enabled || container === null) return;
+    let frame = 0;
+    let watchingDom = false;
+    // Resizes cover window and sidebar changes, and a panel leaving the DOM
+    // reports one too. The DOM is only watched while a panel is still missing.
+    const observed = new Map<Element, () => void>();
+    const mutationObserver = new MutationObserver(() => {
+      if (frame === 0) frame = window.requestAnimationFrame(measure);
+    });
+    function measure() {
+      frame = 0;
+      if (container === null) return;
+      const panels = Array.from(document.querySelectorAll(FLOATING_PANEL_SELECTOR));
+      for (const [panel, unobserve] of observed) {
+        if (panel.isConnected) continue;
+        unobserve();
+        observed.delete(panel);
+      }
+      for (const panel of panels) {
+        if (!observed.has(panel)) observed.set(panel, observeResize(panel, measure));
+      }
+      const complete = panels.length >= 2;
+      if (complete && watchingDom) mutationObserver.disconnect();
+      if (!complete && !watchingDom) {
+        mutationObserver.observe(document.body, { childList: true, subtree: true });
+      }
+      watchingDom = !complete;
+      const path = panels
+        .map((panel) =>
+          roundedRectPath(
+            panel.getBoundingClientRect(),
+            Number.parseFloat(getComputedStyle(panel).borderTopLeftRadius) || 0,
+          ),
+        )
+        .join("");
+      container.style.clipPath = `path("${path || "M0,0Z"}")`;
+    }
+    measure();
+    return () => {
+      if (frame !== 0) window.cancelAnimationFrame(frame);
+      for (const unobserve of observed.values()) unobserve();
+      mutationObserver.disconnect();
+      container.style.removeProperty("clip-path");
+    };
+  }, [container, enabled]);
+}
+
 const GRAIN_TEXTURE = `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")`;
 
 /**
@@ -97,7 +165,9 @@ const GRAIN_TEXTURE = `url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmln
 export function AppBackdrop() {
   const glassAppEnabled = useClientSettings((settings) => settings.glassAppEnabled);
   const backdrop = useClientSettings((settings) => settings.backdrop);
+  const floatingPanels = useClientSettings((settings) => settings.floatingPanels);
   const { resolvedTheme } = useTheme();
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const [source, setSource] = useState<{ imageId: string; blob: Blob } | null>(null);
   const [shown, setShown] = useState<ShownImage | null>(null);
   const imageRef = useRef<HTMLImageElement>(null);
@@ -219,6 +289,11 @@ export function AppBackdrop() {
     document.documentElement.dataset.backdrop = visible ? "true" : "false";
   }, [visible]);
 
+  useClipToFloatingPanels(
+    container,
+    visible && floatingPanels && isElectron && isWindowsPlatform(navigator.platform),
+  );
+
   if (!glassAppEnabled) return null;
 
   const drift = parallax ? (PARALLAX_MAX * Math.min(parallaxAmount, 100)) / 100 : 0;
@@ -244,6 +319,7 @@ export function AppBackdrop() {
 
   return (
     <div
+      ref={setContainer}
       aria-hidden="true"
       data-app-backdrop="true"
       className="pointer-events-none fixed inset-0 -z-10 overflow-hidden"

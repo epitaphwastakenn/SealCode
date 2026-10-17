@@ -34,6 +34,11 @@ import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts";
 import { makeQuitShortcutHandler } from "./QuitHold.ts";
 import { copyContextMenuImage } from "./ContextMenuImage.ts";
+import {
+  applyWindowsBackdrop,
+  roundWindowsCorners,
+  setWindowsFloatingPanels,
+} from "./WindowsBackdrop.ts";
 
 const TITLEBAR_HEIGHT = 40;
 // Matches --workspace-topbar-height in apps/web/src/index.css. Native macOS
@@ -276,7 +281,7 @@ function syncWindowAppearance(
 
     window.setBackgroundColor(getMainWindowBackgroundColor(shouldUseDarkColors, platform));
     if (platform === "win32") {
-      window.setBackgroundMaterial("acrylic");
+      applyWindowsBackdrop(window);
     }
     const { titleBarOverlay } = getWindowTitleBarOptions(shouldUseDarkColors, platform);
     if (typeof titleBarOverlay === "object") {
@@ -411,6 +416,24 @@ export const make = Effect.gen(function* () {
     });
 
     yield* rendererHistory.register(window.webContents, { surface: "main" });
+    if (environment.platform === "win32") {
+      const floatingPanels = yield* clientSettings.get.pipe(
+        Effect.map(
+          Option.match({
+            onNone: () => DEFAULT_CLIENT_SETTINGS.floatingPanels,
+            onSome: (settings) => settings.floatingPanels,
+          }),
+        ),
+        Effect.orElseSucceed(() => DEFAULT_CLIENT_SETTINGS.floatingPanels),
+      );
+      setWindowsFloatingPanels(window, floatingPanels);
+      roundWindowsCorners(window);
+      const refreshBackdrop = () => applyWindowsBackdrop(window);
+      window.on("maximize", refreshBackdrop);
+      window.on("unmaximize", refreshBackdrop);
+      window.on("enter-full-screen", refreshBackdrop);
+      window.on("leave-full-screen", refreshBackdrop);
+    }
     if (environment.platform === "darwin") {
       window.setAutoHideCursor(false);
     }

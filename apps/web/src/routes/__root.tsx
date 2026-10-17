@@ -17,6 +17,7 @@ import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { APP_BASE_NAME, APP_DISPLAY_NAME, APP_STAGE_LABEL, APP_VERSION } from "../branding";
 import { resolveServerBackedAppDisplayName } from "../branding.logic";
 import { AppSidebarLayout } from "../components/AppSidebarLayout";
+import { AppBackdrop } from "../components/AppBackdrop";
 import { CommandPalette } from "../components/CommandPalette";
 import { CustomSnoozeDialogHost } from "../components/CustomSnoozeDialog";
 import { ConfirmDialogHost } from "../components/ConfirmDialogHost";
@@ -189,6 +190,7 @@ function RootRouteView() {
           <ContrastAppearanceSync />
           <EnvironmentThemeSync />
           <GlassAppearanceSync />
+          <AppBackdrop />
           <FontAppearanceSync />
           <ProviderAuthCallbackCoordinator />
           <CustomSnoozeDialogHost />
@@ -226,6 +228,7 @@ function RootRouteView() {
         <ContrastAppearanceSync />
         <EnvironmentThemeSync />
         <GlassAppearanceSync />
+        <AppBackdrop />
         <FontAppearanceSync />
         <ProviderAuthCallbackCoordinator />
         <ChatGptWelcomeCoordinator />
@@ -296,6 +299,13 @@ function ContrastAppearanceSync() {
 
 function GlassAppearanceSync() {
   const glassOpacity = useClientSettings((settings) => settings.glassOpacity);
+  const glassAppEnabled = useClientSettings((settings) => settings.glassAppEnabled);
+  const panelGlassOpacity = useClientSettings((settings) => settings.panelGlassOpacity);
+
+  useEffect(() => {
+    document.documentElement.dataset.glassApp = glassAppEnabled ? "true" : "false";
+    document.documentElement.style.setProperty("--panel-glass-opacity", `${panelGlassOpacity}%`);
+  }, [glassAppEnabled, panelGlassOpacity]);
 
   useEffect(() => {
     const style = document.documentElement.style;

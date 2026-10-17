@@ -32,6 +32,7 @@ import { ProjectScript, type ProjectMutation } from "./project.ts";
 import { DEFAULT_RUNTIME_MODE, ProviderInteractionMode, RuntimeMode } from "./providerPolicy.ts";
 import { SkillScope } from "./harnessEfficiency.ts";
 import { GlobalMcpServerMap } from "./mcp.ts";
+import { AppBackdrop, BackdropStyle, MAX_BACKDROP_STYLES } from "./backdrop.ts";
 import { BrowserProfile, BrowserProfileId, DEFAULT_BROWSER_PROFILE_ID } from "./browserProfile.ts";
 import {
   DEFAULT_PREVIEW_APPEARANCE,
@@ -105,6 +106,14 @@ export const GlassOpacity = Schema.Int.check(
 );
 export type GlassOpacity = typeof GlassOpacity.Type;
 const DEFAULT_GLASS_OPACITY: GlassOpacity = 80;
+/** How much the app panels cover what is behind them when the whole app is glass. */
+export const MIN_PANEL_GLASS_OPACITY = 30;
+export const MAX_PANEL_GLASS_OPACITY = 100;
+export const PanelGlassOpacity = Schema.Int.check(
+  Schema.isBetween({ minimum: MIN_PANEL_GLASS_OPACITY, maximum: MAX_PANEL_GLASS_OPACITY }),
+);
+export type PanelGlassOpacity = typeof PanelGlassOpacity.Type;
+const DEFAULT_PANEL_GLASS_OPACITY: PanelGlassOpacity = 70;
 export const MIN_HARNESS_SOUND_VOLUME = 0;
 export const MAX_HARNESS_SOUND_VOLUME = 100;
 export const HarnessSoundVolume = Schema.Int.check(
@@ -424,6 +433,14 @@ export const ClientSettingsSchema = Schema.Struct({
 
   planModeEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   glassSidebarEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  glassAppEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  panelGlassOpacity: PanelGlassOpacity.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_PANEL_GLASS_OPACITY)),
+  ),
+  backdrop: Schema.NullOr(AppBackdrop).pipe(Schema.withDecodingDefault(Effect.succeed(null))),
+  backdropStyles: Schema.Array(BackdropStyle)
+    .check(Schema.isMaxLength(MAX_BACKDROP_STYLES))
+    .pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   contextWindowMeterEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   composerCollapseOnScroll: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   composerRichTextEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -1659,6 +1676,12 @@ export const ClientSettingsPatch = Schema.Struct({
   pullRequestLinksOpenInApp: Schema.optionalKey(Schema.Boolean),
   planModeEnabled: Schema.optionalKey(Schema.Boolean),
   glassSidebarEnabled: Schema.optionalKey(Schema.Boolean),
+  glassAppEnabled: Schema.optionalKey(Schema.Boolean),
+  panelGlassOpacity: Schema.optionalKey(PanelGlassOpacity),
+  backdrop: Schema.optionalKey(Schema.NullOr(AppBackdrop)),
+  backdropStyles: Schema.optionalKey(
+    Schema.Array(BackdropStyle).check(Schema.isMaxLength(MAX_BACKDROP_STYLES)),
+  ),
   contextWindowMeterEnabled: Schema.optionalKey(Schema.Boolean),
   composerCollapseOnScroll: Schema.optionalKey(Schema.Boolean),
   composerRichTextEnabled: Schema.optionalKey(Schema.Boolean),

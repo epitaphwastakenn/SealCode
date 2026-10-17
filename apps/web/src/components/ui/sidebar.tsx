@@ -227,7 +227,9 @@ function Sidebar({
     [resolvedResizable, side],
   );
 
-  const glassSidebarEnabled = useClientSettings((settings) => settings.glassSidebarEnabled);
+  const glassSidebarEnabled = useClientSettings(
+    (settings) => settings.glassSidebarEnabled || settings.glassAppEnabled,
+  );
 
   if (collapsible === "none") {
     return (

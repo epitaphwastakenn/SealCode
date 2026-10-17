@@ -219,6 +219,26 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["translucent transparent acrylic blur sidebar"],
   },
   {
+    id: "glass-app",
+    title: "Glass app",
+    to: "/settings/appearance",
+    searchTerms: ["translucent transparent acrylic whole window panels see through"],
+  },
+  {
+    id: "panel-glass-opacity",
+    title: "Panel glass",
+    to: "/settings/appearance",
+    searchTerms: ["transparency tint panels solid see through glass amount"],
+  },
+  {
+    id: "backdrop-image",
+    title: "Background image",
+    to: "/settings/appearance",
+    searchTerms: [
+      "wallpaper photo gif picture backdrop blur pixel dither grain vignette duotone halftone glitch parallax fade",
+    ],
+  },
+  {
     // Prefixed because the slider control already owns the `appearance-contrast` id.
     id: "setting-appearance-contrast",
     title: "Contrast",

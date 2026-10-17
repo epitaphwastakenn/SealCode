@@ -18,6 +18,7 @@ export * from "./provider.ts";
 export * from "./providerInstance.ts";
 export * from "./providerSetup.ts";
 export * from "./voice.ts";
+export * from "./backdrop.ts";
 export * from "./harnessEfficiency.ts";
 export * from "./mcp.ts";
 export * from "./providerRuntime.ts";

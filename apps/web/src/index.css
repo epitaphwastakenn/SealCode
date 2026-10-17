@@ -2587,3 +2587,52 @@ html[data-theme-gradient="true"] [data-slot="sidebar-inset"] {
 [data-runtime-mode] [data-composer-control-chevron] {
   opacity: 0.7;
 }
+
+/* SealCode: the whole app as glass (Appearance > Background). The window
+   surfaces go transparent and each panel keeps only a tint, so the backdrop
+   image or the native acrylic shows through. `--panel-glass-opacity` is how
+   much the panels cover what is behind them. No backdrop-filter on the panels:
+   over the live acrylic it flickers, and the image has its own blur. */
+html[data-glass-app="true"],
+html[data-glass-app="true"] body,
+html[data-glass-app="true"] #root,
+html[data-glass-app="true"] [data-slot="sidebar-wrapper"] {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+html[data-glass-app="true"] [data-slot="sidebar-container"].sidebar-glass,
+html[data-glass-app="true"] [data-app-sidebar].sidebar-glass {
+  background: color-mix(
+    in srgb,
+    var(--sidebar) var(--panel-glass-opacity, 70%),
+    transparent
+  ) !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+html[data-glass-app="true"] [data-slot="sidebar-inset"] {
+  background-color: color-mix(
+    in srgb,
+    var(--background) var(--panel-glass-opacity, 70%),
+    transparent
+  ) !important;
+  background-image: none !important;
+}
+
+/* The panel tint is painted once on the inset; the opaque layers stacked
+   inside it (chat view, header, body) would otherwise hide the glass. */
+html[data-glass-app="true"] [data-slot="sidebar-inset"] .bg-background {
+  background-color: transparent;
+}
+
+/* Where there is no native acrylic and no image, the glass sits on the plain
+   theme color instead of the empty page. */
+.app-backdrop-base {
+  background-color: var(--background);
+}
+
+html.electron-windows .app-backdrop-base {
+  background-color: transparent;
+}

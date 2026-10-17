@@ -184,6 +184,7 @@ import {
   useSettingsSearchTargetId,
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
+import { BackgroundSettingsSection } from "./BackgroundSettings";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
 
@@ -1397,6 +1398,8 @@ export function AppearanceSettingsPanel() {
           />
         </div>
       </SettingsSection>
+
+      <BackgroundSettingsSection />
 
       <SettingsSection id="appearance-interface" title="Interface">
         <SettingsRow

@@ -28,6 +28,7 @@ import { cn, isMacPlatform } from "../lib/utils";
 import { primaryServerKeybindingsAtom } from "../state/server";
 import {
   useEnvironmentIdentificationMode,
+  useClientSettings,
   useGlassSidebarEnabled,
   useLegacySidebarEnabled,
 } from "../hooks/useSettings";
@@ -227,6 +228,9 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const legacySidebarEnabled = useLegacySidebarEnabled();
   const glassSidebarEnabled = useGlassSidebarEnabled();
+  // The whole-app glass needs the same transparent window as the glass sidebar.
+  const glassAppEnabled = useClientSettings((settings) => settings.glassAppEnabled);
+  const windowGlassEnabled = glassSidebarEnabled || glassAppEnabled;
   const { active: panelAnimationsActive, durationMs: panelAnimationDurationMs } =
     usePanelAnimationSettings();
   useThreadVisitedMigration();
@@ -306,9 +310,9 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   }, [navigate, pathname]);
 
   useLayoutEffect(() => {
-    document.documentElement.dataset.glassSidebar = glassSidebarEnabled ? "true" : "false";
-    document.body.dataset.glassSidebar = glassSidebarEnabled ? "true" : "false";
-  }, [glassSidebarEnabled]);
+    document.documentElement.dataset.glassSidebar = windowGlassEnabled ? "true" : "false";
+    document.body.dataset.glassSidebar = windowGlassEnabled ? "true" : "false";
+  }, [windowGlassEnabled]);
 
   return (
     <PanelAnimationSuppressionProvider value={panelAnimationsSuppressed}>

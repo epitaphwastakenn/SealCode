@@ -121,6 +121,7 @@ import * as ThreadManagementService from "./orchestration-v2/ThreadManagementSer
 import * as CommandOutputHub from "./orchestration-v2/CommandOutputHub.ts";
 import * as McpAppRequests from "./mcpApps/McpAppRequests.ts";
 import * as GlobalMcpManager from "./mcp/GlobalMcpManager.ts";
+import * as RobloxStudioStatus from "./roblox/RobloxStudioStatus.ts";
 import * as VoiceTranscription from "./voiceTranscription.ts";
 import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
 import * as ThreadLaunchService from "./orchestration-v2/ThreadLaunchService.ts";
@@ -1264,6 +1265,7 @@ const layerWsRpc = (
       const databaseStorage = yield* DatabaseStorage.DatabaseStorage;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
       const globalMcpManager = yield* GlobalMcpManager.GlobalMcpManager;
+      const robloxStudioStatus = yield* RobloxStudioStatus.RobloxStudioStatusService;
       const voiceTranscription = yield* VoiceTranscription.VoiceTranscription;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
@@ -2403,6 +2405,7 @@ const layerWsRpc = (
           }),
         [WS_METHODS.serverGetMcpStatuses]: (_input) => globalMcpManager.getStatuses,
         [WS_METHODS.serverReconnectMcp]: ({ id }) => globalMcpManager.reconnectServer(id),
+        [WS_METHODS.serverGetRobloxStudioStatus]: (_input) => robloxStudioStatus.get,
         [WS_METHODS.serverDiscoverSourceControl]: (_input) => sourceControlDiscovery.discover,
         [WS_METHODS.serverGetTraceDiagnostics]: (_input) =>
           TraceDiagnostics.readTraceDiagnostics({

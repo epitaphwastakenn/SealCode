@@ -518,6 +518,9 @@ export const layer: Layer.Layer<
       const sealInput = yield* Effect.result(
         sealTurnInput.prepare({
           cwd: resolvedRuntimePolicy.cwd ?? project?.workspaceRoot ?? process.cwd(),
+          workspaceRoot: project?.workspaceRoot,
+          providerThreadId: providerThread.id,
+          freshConversation: providerThread.nativeThreadRef === null,
           modelSelection: run.modelSelection,
           text: projectComposerContextForProvider({
             text: message.text,

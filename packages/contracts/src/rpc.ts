@@ -23,6 +23,7 @@ import {
 } from "./providerSetup.ts";
 import * as Schema from "effect/Schema";
 import { GlobalMcpStatus, GlobalMcpStatusUpdatedEvent, McpServerId } from "./mcp.ts";
+import { RobloxStudioStatus } from "./robloxStudio.ts";
 import {
   ServerVoiceTranscriptionInput,
   ServerVoiceTranscriptionResult,
@@ -479,6 +480,7 @@ export const WS_METHODS = {
   serverRefreshProviders: "server.refreshProviders",
   serverGetMcpStatuses: "server.getMcpStatuses",
   serverReconnectMcp: "server.reconnectMcp",
+  serverGetRobloxStudioStatus: "server.getRobloxStudioStatus",
   serverUpdateProvider: "server.updateProvider",
   serverUpdateServer: "server.updateServer",
   serverUpdateServerWithProgress: "server.updateServerWithProgress",
@@ -1304,6 +1306,12 @@ export const WsServerReconnectMcpRpc = Rpc.make(WS_METHODS.serverReconnectMcp, {
   error: EnvironmentAuthorizationError,
 });
 
+export const WsServerGetRobloxStudioStatusRpc = Rpc.make(WS_METHODS.serverGetRobloxStudioStatus, {
+  payload: Schema.Struct({}),
+  success: RobloxStudioStatus,
+  error: EnvironmentAuthorizationError,
+});
+
 export const WsSubscribeMcpStatusRpc = Rpc.make(WS_METHODS.subscribeMcpStatus, {
   payload: Schema.Struct({}),
   success: GlobalMcpStatusUpdatedEvent,
@@ -1902,6 +1910,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsVoiceTranscribeRpc,
   WsServerGetMcpStatusesRpc,
   WsServerReconnectMcpRpc,
+  WsServerGetRobloxStudioStatusRpc,
   WsSubscribeMcpStatusRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,

@@ -6,6 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
+import * as RobloxStudioConfig from "../roblox/RobloxStudioConfig.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 
@@ -31,6 +32,11 @@ export interface SealTurnInput {
 export interface SealTurnInputShape {
   readonly prepare: (input: {
     readonly cwd: string;
+    /** The project's root, which decides whether the thread is a Roblox project. */
+    readonly workspaceRoot?: string | undefined;
+    /** The provider conversation this turn joins, and whether it has no turns yet. */
+    readonly providerThreadId?: string | undefined;
+    readonly freshConversation?: boolean | undefined;
     readonly modelSelection: ModelSelection;
     readonly text: string;
     readonly attachments: ReadonlyArray<ChatAttachment>;
@@ -48,6 +54,9 @@ export const frameWithSealsInstructions = (instructions: string, text: string): 
     : `<sealcode_harness_instructions>\n${rules}\n</sealcode_harness_instructions>\n\n${text}`;
 };
 
+export const withRoqerInstructions = (instructions: string): string =>
+  `<roqer_instructions>\n${instructions.trim()}\n</roqer_instructions>`;
+
 export const withImageDescription = (text: string, description: string): string =>
   `<image-viewer-description>\n${description.trim()}\n</image-viewer-description>\n\n<user-request>\n${text}\n</user-request>`;
 
@@ -61,6 +70,10 @@ export const layer = Layer.effect(
     const settings = yield* ServerSettings.ServerSettingsService;
     const registry = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
     const textGeneration = yield* TextGeneration.TextGeneration;
+    const roblox = yield* RobloxStudioConfig.RobloxStudioConfig;
+    // Roqer's instructions are long, so a provider conversation gets them once rather than on
+    // every turn: when it starts, and once more after a server restart or a settings change.
+    const roqerDelivered = new Map<string, string>();
 
     const lookupModel = (selection: ModelSelection) =>
       Effect.gen(function* () {
@@ -137,10 +150,32 @@ export const layer = Layer.effect(
           text = withImageDescription(input.text, description);
           attachments = attachments.filter((attachment) => attachment.type !== "image");
         }
+        const roqer = yield* roblox.instructions(current, {
+          workspaceRoot: input.workspaceRoot,
+          cwd: input.cwd,
+        });
+        const conversation = input.providerThreadId;
+        const sendRoqer =
+          roqer !== undefined &&
+          (input.freshConversation === true ||
+            conversation === undefined ||
+            roqerDelivered.get(conversation) !== roqer);
+        if (roqer !== undefined && conversation !== undefined) {
+          roqerDelivered.set(conversation, roqer);
+          if (roqerDelivered.size > 512) {
+            roqerDelivered.delete(roqerDelivered.keys().next().value ?? conversation);
+          }
+        }
+        const harness = [
+          current.sealsInstructions.trim(),
+          sendRoqer && roqer !== undefined ? withRoqerInstructions(roqer) : "",
+        ]
+          .filter((part) => part.length > 0)
+          .join("\n\n");
         return {
           text,
           attachments,
-          frame: (framed) => frameWithSealsInstructions(current.sealsInstructions, framed),
+          frame: (framed) => frameWithSealsInstructions(harness, framed),
         };
       },
     );

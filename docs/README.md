@@ -22,6 +22,7 @@
 - [Remote access](./user/remote-access.md)
 - [Outside agents (MCP)](./user/outside-agents.md)
 - [MCP servers](./user/mcp-servers.md)
+- [Roblox Studio](./user/roblox-studio.md)
 - [Running in the background](./user/background-service.md)
 - [Updating SealCode](./user/updating.md)
 - Provider guides: [Codex](./user/providers-codex.md) · [Claude](./user/providers-claude.md) · [OpenCode](./user/providers-opencode.md) · [Antigravity](./user/providers-antigravity.md) · [Pi](./user/providers-pi.md) · [Muse Code](./user/providers-muse.md) · [CommandCode](./user/providers-commandcode.md)

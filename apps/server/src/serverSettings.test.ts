@@ -647,7 +647,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
     }).pipe(Effect.provide(layerServerSettings())),
   );
 
-  it.effect("seeds the Roblox Studio MCP server once when Studio is installed", () =>
+  it.effect("turns Roqer on once for a Studio install and retires the seeded official MCP", () =>
     Effect.gen(function* () {
       const fileSystem = yield* FileSystem.FileSystem;
       const path = yield* Path.Path;
@@ -655,9 +655,27 @@ it.layer(NodeServices.layer)("server settings", (it) => {
       const localAppData = yield* fileSystem.makeTempDirectoryScoped({
         prefix: "t3code-fake-local-app-data-",
       });
-      yield* fileSystem.makeDirectory(path.join(localAppData, "Roblox"), { recursive: true });
+      yield* fileSystem.makeDirectory(path.join(localAppData, "Roblox", "Versions"), {
+        recursive: true,
+      });
       const commandPath = path.join(localAppData, "Roblox", "mcp.bat");
       yield* fileSystem.writeFileString(commandPath, "@echo off");
+      const seeded = {
+        id: "roblox-studio",
+        displayName: "Roblox Studio",
+        enabled: true,
+        transport: "stdio",
+        command: "cmd.exe",
+        args: ["/c", commandPath],
+        env: [],
+        headers: [],
+      };
+      const mine = { ...seeded, id: "my-server", displayName: "Mine" };
+      yield* fileSystem.makeDirectory(path.dirname(serverConfig.settingsPath), { recursive: true });
+      yield* fileSystem.writeFileString(
+        serverConfig.settingsPath,
+        JSON.stringify({ mcpServers: { "roblox-studio": seeded, "my-server": mine } }),
+      );
       const withStudio = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         effect.pipe(
           Effect.provide(ServerSettingsModule.layer.pipe(Layer.fresh)),
@@ -669,23 +687,20 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         Effect.gen(function* () {
           const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
           yield* serverSettings.start;
-          const seeded = yield* serverSettings.getSettings;
-          assert.deepEqual(seeded.mcpServers["roblox-studio"]?.args, ["/c", commandPath]);
-          assert.isTrue(
-            (yield* fileSystem.readFileString(serverConfig.settingsPath)).includes("roblox-studio"),
-          );
-          yield* serverSettings.updateSettings({ mcpServers: {} });
+          const migrated = yield* serverSettings.getSettings;
+          assert.equal(migrated.robloxStudio.mode, "roqer");
+          assert.deepEqual(Object.keys(migrated.mcpServers), ["my-server"]);
+          yield* serverSettings.updateSettings({ robloxStudio: { mode: "off" } });
         }),
       );
 
-      // An empty registry leaves no `mcpServers` key behind; only the marker keeps the
-      // removed server from returning on the next start.
+      // The marker keeps a later "off" from being turned back on at the next start.
       const reloaded = yield* withStudio(
         ServerSettingsModule.ServerSettingsService.pipe(
           Effect.flatMap((serverSettings) => serverSettings.getSettings),
         ),
       );
-      assert.deepEqual(reloaded.mcpServers, {});
+      assert.equal(reloaded.robloxStudio.mode, "off");
     }).pipe(Effect.scoped, Effect.provide(layerServerSettingsWithSecrets())),
   );
 

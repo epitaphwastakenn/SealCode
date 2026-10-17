@@ -63,6 +63,7 @@ const RPC_AGGREGATES = {
   [WS_METHODS.serverUpdateSettings]: "server",
   [WS_METHODS.serverGetMcpStatuses]: "server",
   [WS_METHODS.serverReconnectMcp]: "server",
+  [WS_METHODS.serverGetRobloxStudioStatus]: "server",
   [WS_METHODS.serverSearchAcpRegistry]: "server",
   [WS_METHODS.serverPrepareAcpRegistryAgent]: "server",
   [WS_METHODS.serverUninstallAcpRegistryManagedBinary]: "server",

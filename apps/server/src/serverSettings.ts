@@ -674,39 +674,49 @@ const make = Effect.gen(function* () {
       );
     });
 
-  // Roblox Studio ships its MCP server as a batch file, so a Studio install is enough to offer it.
-  // Seeded once: an emptied registry is not stored, so without the marker the entry the user
-  // removed would come back on every start.
+  // A Studio install turns the Roblox settings on once, with Roqer. SealCode used to seed Roblox's
+  // own MCP as a plain server instead; that entry is retired so Studio tools are not offered twice
+  // (official mode still runs it). The marker keeps a later choice of "off" from being undone.
   const robloxSeedMarkerPath = pathService.join(
     pathService.dirname(settingsPath),
-    ".roblox-mcp-seeded",
+    ".roblox-studio-seeded",
   );
 
   const hostPlatform = yield* HostProcess.Platform;
   const hostEnvironment = yield* HostProcess.Environment;
-  const resolveRobloxMcpServer = Effect.gen(function* () {
-    if (hostPlatform !== "win32") return undefined;
-    const localAppData = hostEnvironment.LOCALAPPDATA?.trim();
-    if (!localAppData) return undefined;
-    const commandPath = pathService.join(localAppData, "Roblox", "mcp.bat");
-    if (!(yield* fs.exists(commandPath).pipe(Effect.orElseSucceed(() => false)))) {
-      return undefined;
-    }
-    return {
-      id: "roblox-studio",
-      displayName: "Roblox Studio",
-      enabled: true,
-      transport: "stdio",
-      command: "cmd.exe",
-      args: ["/c", commandPath],
-      env: [],
-      headers: [],
-    } satisfies GlobalMcpServer;
-  });
+  const robloxLocalAppData =
+    hostPlatform === "win32" ? hostEnvironment.LOCALAPPDATA?.trim() || undefined : undefined;
+  const isSeededOfficialRobloxMcp = (server: GlobalMcpServer | undefined) =>
+    robloxLocalAppData !== undefined &&
+    server !== undefined &&
+    server.command === "cmd.exe" &&
+    server.args.length === 2 &&
+    server.args[0] === "/c" &&
+    server.args[1] === pathService.join(robloxLocalAppData, "Roblox", "mcp.bat") &&
+    server.env.length === 0;
+  const migrateRobloxStudio = (current: ServerSettings) =>
+    Effect.gen(function* () {
+      const studioInstalled =
+        robloxLocalAppData !== undefined &&
+        (yield* fs
+          .exists(pathService.join(robloxLocalAppData, "Roblox", "Versions"))
+          .pipe(Effect.orElseSucceed(() => false)));
+      const seeded = current.mcpServers["roblox-studio"];
+      const retireSeeded = isSeededOfficialRobloxMcp(seeded);
+      const enable = studioInstalled && current.robloxStudio.mode === "off";
+      if (!retireSeeded && !enable) return current;
+      const { "roblox-studio": _retired, ...otherServers } = current.mcpServers;
+      return {
+        ...current,
+        ...(retireSeeded ? { mcpServers: otherServers } : {}),
+        ...(enable ? { robloxStudio: { ...current.robloxStudio, mode: "roqer" as const } } : {}),
+      } satisfies ServerSettings;
+    });
 
   const loadSettingsFromDisk = Effect.gen(function* () {
     let settings = DEFAULT_SERVER_SETTINGS;
     let seededRobloxMcp = false;
+    let robloxSettingsChanged = false;
     let legacyProviders: Readonly<Record<string, unknown>> | undefined;
     let legacySourceControl: Parameters<typeof migrateLegacySourceControlSettings>[1] = {};
     // A file that failed to decode must stay on disk for the user to repair;
@@ -743,13 +753,13 @@ const make = Effect.gen(function* () {
 
     if (
       settingsFileTrusted &&
-      Object.keys(settings.mcpServers).length === 0 &&
       !(yield* fs.exists(robloxSeedMarkerPath).pipe(Effect.orElseSucceed(() => true)))
     ) {
-      const roblox = yield* resolveRobloxMcpServer;
-      if (roblox !== undefined) {
-        settings = { ...settings, mcpServers: { [roblox.id]: roblox } };
-        seededRobloxMcp = true;
+      const migrated = yield* migrateRobloxStudio(settings);
+      seededRobloxMcp = true;
+      if (migrated !== settings) {
+        settings = migrated;
+        robloxSettingsChanged = true;
       }
     }
 
@@ -844,7 +854,7 @@ const make = Effect.gen(function* () {
       migrated !== loaded ||
       (settingsFileTrusted && legacyProviders !== undefined) ||
       hasLegacySourceControl ||
-      seededRobloxMcp
+      robloxSettingsChanged
     ) {
       yield* writeSettingsAtomically(migrated);
       for (const move of sourceControlMigration.secretMoves) {

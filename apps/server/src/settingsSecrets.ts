@@ -3,6 +3,7 @@ import {
   ClaudeSettings,
   CodexSettings,
   type McpSecretField,
+  RobloxStudioSettings,
   type ServerSettings,
   UsageLimitSourceConfig,
   secretSettingsFields,
@@ -41,6 +42,7 @@ const providerSecretFields = new Map([
   ),
 ]);
 const usageLimitSecretFields = secretSettingsFields(UsageLimitSourceConfig);
+const robloxStudioSecretFields = secretSettingsFields(RobloxStudioSettings);
 const encode = (value: string) => Buffer.from(value, "utf8").toString("base64url");
 
 export interface SettingsSecret {
@@ -189,5 +191,18 @@ export function mapSettingsSecrets(
     ]),
   ) as ServerSettings["usageLimitSources"];
 
-  return { ...settings, providerInstances, mcpServers, sourceControlHosts, usageLimitSources };
+  const robloxStudio = mapFields(
+    settings.robloxStudio,
+    robloxStudioSecretFields,
+    (field) => `roblox-studio-${encode(field)}`,
+  ) as ServerSettings["robloxStudio"];
+
+  return {
+    ...settings,
+    providerInstances,
+    mcpServers,
+    sourceControlHosts,
+    usageLimitSources,
+    robloxStudio,
+  };
 }

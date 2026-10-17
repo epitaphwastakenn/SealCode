@@ -20,7 +20,10 @@ Agents see the tools as `mcp__<server id>__<tool name>` under a `sealcode-global
 calls follow the thread's usual approval rules: SealCode does not pre-approve them. Two servers
 whose names normalize to the same tool name both go into an error state until one is renamed.
 
-On Windows, SealCode adds **Roblox Studio** the first time it starts when Roblox Studio's
-`mcp.bat` is installed. Remove or disable it like any other server; it is not added again.
+Roblox Studio and Blender servers are set up under **Roblox Studio** instead; see
+[Roblox Studio](roblox-studio.md). A server you add here with the same id replaces SealCode's.
+
+A server that stops or drops its connection is reconnected automatically a few times before it is
+left in its error.
 
 Pi and the newer OpenCode runtime do not receive these tools.

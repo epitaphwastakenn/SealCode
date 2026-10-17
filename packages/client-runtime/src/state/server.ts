@@ -1283,6 +1283,13 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.subscribeMcpStatus,
       idleTtlMs: 0,
     }),
+    robloxStudioStatus: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:server:roblox-studio-status",
+      tag: WS_METHODS.serverGetRobloxStudioStatus,
+      staleTimeMs: 0,
+      // Studio connects and disconnects on its own, so Settings follows it while open.
+      refreshIntervalMs: 5_000,
+    }),
     reconnectMcp: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:reconnect-mcp",
       tag: WS_METHODS.serverReconnectMcp,

@@ -11,6 +11,7 @@ import {
 } from "@t3tools/contracts";
 
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
+import { RobloxStudioConfig } from "../roblox/RobloxStudioConfig.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 import * as SealTurnInput from "./SealTurnInput.ts";
@@ -236,6 +237,64 @@ describe("SealTurnInput", () => {
       });
       const error = yield* Effect.flip(prepare("look", [image]));
       expect(error.detail).toBe(`Codex CLI request timed out. ${SealTurnInput.IMAGE_VIEWER_HINT}`);
+    }),
+  );
+
+  it.effect("gives a provider conversation Roqer's instructions once, when it starts", () =>
+    Effect.gen(function* () {
+      const layer = SealTurnInput.layer.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            Layer.mock(ServerSettings.ServerSettingsService)({
+              getSettings: Effect.succeed({
+                sealsInstructions: "Seals rule.",
+                imageViewerEnabled: false,
+              } as never),
+            }),
+            Layer.mock(ProviderInstanceRegistry.ProviderInstanceRegistry)({
+              getInstance: () => Effect.succeed(undefined),
+            }),
+            Layer.mock(TextGeneration.TextGeneration)({}),
+            Layer.succeed(RobloxStudioConfig, {
+              ...RobloxStudioConfig.defaultValue(),
+              instructions: (_settings, input) =>
+                Effect.succeed(
+                  input.workspaceRoot === "/game" ? "Use the Studio tools." : undefined,
+                ),
+            }),
+          ),
+        ),
+      );
+      yield* Effect.gen(function* () {
+        const service = yield* SealTurnInput.SealTurnInputV2;
+        const turn = (
+          providerThreadId: string,
+          freshConversation: boolean,
+          workspaceRoot = "/game",
+        ) =>
+          service
+            .prepare({
+              cwd: workspaceRoot,
+              workspaceRoot,
+              providerThreadId,
+              freshConversation,
+              modelSelection: mainSelection,
+              text: "build a tower",
+              attachments: [],
+            })
+            .pipe(Effect.map((prepared) => prepared.frame(prepared.text)));
+
+        expect(yield* turn("conversation-1", true)).toBe(
+          "<sealcode_harness_instructions>\nSeals rule.\n\n<roqer_instructions>\nUse the Studio tools.\n</roqer_instructions>\n</sealcode_harness_instructions>\n\nbuild a tower",
+        );
+        expect(yield* turn("conversation-1", false)).not.toContain("roqer_instructions");
+        // A conversation SealCode has not given them to in this process gets them once.
+        expect(yield* turn("conversation-2", false)).toContain("<roqer_instructions>");
+        expect(yield* turn("conversation-2", false)).not.toContain("roqer_instructions");
+        expect(yield* turn("conversation-3", true, "/elsewhere")).not.toContain(
+          "roqer_instructions",
+        );
+      }).pipe(Effect.provide(layer));
     }),
   );
 });

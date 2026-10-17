@@ -6,6 +6,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 import packageJson from "../../package.json" with { type: "json" };
 import * as GlobalMcpManager from "./GlobalMcpManager.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
+import { McpToolVisibility } from "./McpToolVisibility.ts";
 
 /**
  * Providers connect to the user's configured MCP servers through this one endpoint instead of
@@ -86,25 +87,29 @@ const post = HttpRouter.add(
         return reply({});
       case "tools/list": {
         const catalog = yield* manager.getCatalog;
+        const visibility = yield* McpToolVisibility;
+        const hidden = yield* visibility.hiddenServers(invocation.thread);
         return reply({
-          tools: catalog.tools.map((entry) => ({
-            name: entry.canonicalName,
-            title: entry.tool.title,
-            description: entry.tool.description,
-            inputSchema: entry.tool.inputSchema,
-            outputSchema: entry.tool.outputSchema,
-            annotations: entry.tool.annotations,
-            execution: entry.tool.execution,
-            icons: entry.tool.icons,
-            _meta: {
-              ...entry.tool._meta,
-              sealcode: {
-                serverId: entry.serverId,
-                serverDisplayName: entry.serverDisplayName,
-                upstreamToolName: entry.upstreamToolName,
+          tools: catalog.tools
+            .filter((entry) => !hidden.has(entry.serverId))
+            .map((entry) => ({
+              name: entry.canonicalName,
+              title: entry.tool.title,
+              description: entry.tool.description,
+              inputSchema: entry.tool.inputSchema,
+              outputSchema: entry.tool.outputSchema,
+              annotations: entry.tool.annotations,
+              execution: entry.tool.execution,
+              icons: entry.tool.icons,
+              _meta: {
+                ...entry.tool._meta,
+                sealcode: {
+                  serverId: entry.serverId,
+                  serverDisplayName: entry.serverDisplayName,
+                  upstreamToolName: entry.upstreamToolName,
+                },
               },
-            },
-          })),
+            })),
         });
       }
       case "tools/call": {

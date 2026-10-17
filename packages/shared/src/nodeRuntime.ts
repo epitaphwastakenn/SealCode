@@ -12,6 +12,7 @@ const NodeRuntimeFeature = Schema.Literals([
   "Device automation",
   "Antigravity",
   "Antigravity sign-in",
+  "Roblox Studio",
 ]);
 
 export const nodeRuntimeUnavailableMessage = (feature: typeof NodeRuntimeFeature.Type): string =>

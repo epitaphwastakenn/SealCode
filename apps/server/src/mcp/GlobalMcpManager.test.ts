@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off
-import * as NodeFileSystem from "node:fs";
-import * as NodeOs from "node:os";
+import * as NodeFS from "node:fs";
+import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeCrypto from "node:crypto";
 
@@ -13,7 +13,9 @@ import {
 } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 
+import { RobloxStudioConfig } from "../roblox/RobloxStudioConfig.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import * as GlobalMcpManager from "./GlobalMcpManager.ts";
 import type * as McpInvocationContext from "./McpInvocationContext.ts";
@@ -30,7 +32,8 @@ const fakeMcpServerScript = [
   '  } else if (request.method === "tools/list") {',
   '    send({ jsonrpc: "2.0", id: request.id, result: { tools: [{ name: "get_state", title: "Get state", description: "Read fake state", inputSchema: { type: "object" }, annotations: { readOnlyHint: true }, _meta: { source: "test" } }] } });',
   '  } else if (request.method === "tools/call") {',
-  '    send({ jsonrpc: "2.0", id: request.id, result: { content: [{ type: "text", text: "ok" }], structuredContent: { ok: true } } });',
+  '    send({ jsonrpc: "2.0", id: request.id, result: { content: [{ type: "text", text: "ok" }], structuredContent: { ok: true, meta: request.params._meta ?? null } } });',
+  "    if (process.env.MCP_TEST_EXIT_AFTER_CALL) setTimeout(() => process.exit(0), 10);",
   '  } else if (request.method === "ping") {',
   '    send({ jsonrpc: "2.0", id: request.id, result: {} });',
   "  }",
@@ -53,7 +56,7 @@ const scope: McpInvocationContext.McpInvocationScope = {
 describe("GlobalMcpManager", () => {
   it.effect("reuses one stdio process, discovers tools, calls them, and reconnects", () => {
     const markerPath = NodePath.join(
-      NodeOs.tmpdir(),
+      NodeOS.tmpdir(),
       `sealcode-mcp-manager-${NodeCrypto.randomUUID()}.log`,
     );
     const server: GlobalMcpServer = {
@@ -93,20 +96,19 @@ describe("GlobalMcpManager", () => {
       });
       expect(result).toMatchObject({
         content: [{ type: "text", text: "ok" }],
-        structuredContent: { ok: true },
+        structuredContent: {
+          ok: true,
+          meta: { [GlobalMcpManager.THREAD_SCOPE_META_KEY]: "thread-1" },
+        },
       });
 
       yield* manager.reload;
-      expect(NodeFileSystem.readFileSync(markerPath, "utf8").trim().split(/\r?\n/u)).toHaveLength(
-        1,
-      );
+      expect(NodeFS.readFileSync(markerPath, "utf8").trim().split(/\r?\n/u)).toHaveLength(1);
 
       expect(yield* manager.reconnectServer("roblox-studio")).toMatchObject([
         { id: "roblox-studio", state: "ready", toolCount: 1 },
       ]);
-      expect(NodeFileSystem.readFileSync(markerPath, "utf8").trim().split(/\r?\n/u)).toHaveLength(
-        2,
-      );
+      expect(NodeFS.readFileSync(markerPath, "utf8").trim().split(/\r?\n/u)).toHaveLength(2);
 
       const serverSettings = yield* ServerSettingsService;
       yield* serverSettings.updateSettings({
@@ -144,9 +146,96 @@ describe("GlobalMcpManager", () => {
       Effect.provide(layer),
       Effect.ensuring(
         Effect.sync(() => {
-          NodeFileSystem.rmSync(markerPath, { force: true });
+          NodeFS.rmSync(markerPath, { force: true });
         }),
       ),
+    );
+  });
+
+  const fakeServer = (id: string, markerPath: string, extraEnv: GlobalMcpServer["env"] = []) =>
+    ({
+      id,
+      displayName: id,
+      enabled: true,
+      transport: "stdio",
+      command: process.execPath,
+      args: ["-e", fakeMcpServerScript],
+      env: [{ name: "MCP_TEST_MARKER", value: markerPath, sensitive: false }, ...extraEnv],
+      headers: [],
+    }) satisfies GlobalMcpServer;
+
+  const withManagedServers = (managed: Readonly<Record<string, GlobalMcpServer>>) =>
+    Layer.succeed(RobloxStudioConfig, {
+      ...RobloxStudioConfig.defaultValue(),
+      managedServers: () => managed,
+    });
+
+  it.effect("serves the Roblox settings' servers beside the user's, and a user server wins", () => {
+    const markerPath = NodePath.join(
+      NodeOS.tmpdir(),
+      `sealcode-mcp-managed-${NodeCrypto.randomUUID()}.log`,
+    );
+    const managed = { ...fakeServer("robloxstudio", markerPath), displayName: "Roqer" };
+    const layer = GlobalMcpManager.layer.pipe(
+      Layer.provideMerge(ServerSettingsService.layerTest({ mcpServers: {} })),
+      Layer.provide(withManagedServers({ robloxstudio: managed })),
+    );
+    return Effect.gen(function* () {
+      const manager = yield* GlobalMcpManager.GlobalMcpManager;
+      yield* manager.reload;
+      expect(yield* manager.getStatuses).toMatchObject([
+        { id: "robloxstudio", state: "ready", toolCount: 1 },
+      ]);
+      expect((yield* manager.getCatalog).tools[0]?.serverDisplayName).toBe("Roqer");
+
+      const serverSettings = yield* ServerSettingsService;
+      yield* serverSettings.updateSettings({
+        mcpServers: { robloxstudio: { ...managed, displayName: "Mine" } },
+      });
+      yield* manager.reload;
+      expect((yield* manager.getCatalog).tools[0]?.serverDisplayName).toBe("Mine");
+    }).pipe(
+      Effect.provide(layer),
+      Effect.ensuring(Effect.sync(() => NodeFS.rmSync(markerPath, { force: true }))),
+    );
+  });
+
+  // Live clock: the recovery waits out its real one-second backoff.
+  it.live("brings back a stdio server that exits on its own", () => {
+    const markerPath = NodePath.join(
+      NodeOS.tmpdir(),
+      `sealcode-mcp-recover-${NodeCrypto.randomUUID()}.log`,
+    );
+    const server = fakeServer("robloxstudio", markerPath, [
+      { name: "MCP_TEST_EXIT_AFTER_CALL", value: "1", sensitive: false },
+    ]);
+    const layer = GlobalMcpManager.layer.pipe(
+      Layer.provideMerge(ServerSettingsService.layerTest({ mcpServers: { [server.id]: server } })),
+    );
+    const awaitState = (manager: GlobalMcpManager.GlobalMcpManager["Service"], state: string) =>
+      manager.streamStatusChanges.pipe(
+        Stream.filter((statuses) => statuses.some((status) => status.state === state)),
+        Stream.runHead,
+      );
+    return Effect.gen(function* () {
+      const manager = yield* GlobalMcpManager.GlobalMcpManager;
+      yield* manager.reload;
+      yield* manager.callTool({
+        scope,
+        canonicalToolName: "mcp__robloxstudio__get_state",
+        arguments: {},
+      });
+      yield* awaitState(manager, "error");
+      expect(yield* manager.getCatalog).toMatchObject({ tools: [] });
+
+      yield* awaitState(manager, "ready");
+      expect((yield* manager.getCatalog).tools.map((entry) => entry.canonicalName)).toEqual([
+        "mcp__robloxstudio__get_state",
+      ]);
+      expect(NodeFS.readFileSync(markerPath, "utf8").trim().split(/\r?\n/u)).toHaveLength(2);
+    }).pipe(
+      Effect.provide(layer),
+      Effect.ensuring(Effect.sync(() => NodeFS.rmSync(markerPath, { force: true }))),
     );
   });
 });

@@ -203,6 +203,7 @@ import {
   threadJumpIndexFromCommand,
 } from "../../keybindings";
 import { GlobalMcpSettings } from "./GlobalMcpSettings";
+import { RobloxStudioSettings } from "./RobloxStudioSettings";
 
 const DEFAULT_TAILSCALE_SERVE_PORT = 443;
 const EMPTY_ADVERTISED_ENDPOINTS: ReadonlyArray<AdvertisedEndpoint> = [];
@@ -3831,6 +3832,7 @@ export function ConnectionsSettings() {
 
   return (
     <SettingsPageContainer>
+      {canManageLocalBackend ? <RobloxStudioSettings /> : null}
       {canManageLocalBackend ? <GlobalMcpSettings /> : null}
       {primarySettings}
       <SettingsSection

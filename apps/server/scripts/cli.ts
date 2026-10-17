@@ -12,6 +12,7 @@ import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { DEVELOPMENT_ICON_OVERRIDES } from "../../../scripts/lib/brand-assets.ts";
 import { findEsmImportsOfExternalPackages } from "../../../scripts/lib/cli-executable-imports.ts";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
+import { packFiles } from "../src/roblox/roqerPack.ts";
 import {
   ServerCliBuildAssetMissingError,
   ServerCliCommandExitError,
@@ -94,6 +95,23 @@ const buildCmd = Command.make(
         yield* Effect.log("[cli] Bundled web app into dist/client");
       } else {
         yield* Effect.logWarning("[cli] Web dist not found — skipping client bundle.");
+      }
+
+      const roqerDir = path.join(serverDir, "resources/roqer");
+      if (yield* fs.exists(path.join(roqerDir, "manifest.json"))) {
+        const entries = yield* fs.readDirectory(roqerDir, { recursive: true });
+        const files = [];
+        for (const entry of entries.toSorted()) {
+          const absolute = path.join(roqerDir, entry);
+          if ((yield* fs.stat(absolute)).type !== "File") continue;
+          files.push({ path: entry.split(path.sep).join("/"), data: yield* fs.readFile(absolute) });
+        }
+        yield* fs.writeFile(path.join(serverDir, "dist/roqer.pack.gz"), packFiles(files));
+        yield* Effect.log(
+          `[cli] Packed Roqer (${String(files.length)} files) into dist/roqer.pack.gz`,
+        );
+      } else {
+        yield* Effect.logWarning("[cli] resources/roqer not found — skipping the Roqer bundle.");
       }
     }),
 ).pipe(Command.withDescription("Build the server package (tsdown + bundle web client)."));

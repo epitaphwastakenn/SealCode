@@ -4,13 +4,18 @@ import { Client as McpClient } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
+import {
+  ErrorCode,
+  McpError,
+  ToolListChangedNotificationSchema,
+} from "@modelcontextprotocol/sdk/types.js";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as PubSub from "effect/PubSub";
+import * as Queue from "effect/Queue";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -18,6 +23,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
 import type * as McpInvocationContext from "./McpInvocationContext.ts";
+import { RobloxStudioConfig } from "../roblox/RobloxStudioConfig.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 
 /**
@@ -25,6 +31,25 @@ import { ServerSettingsService } from "../serverSettings.ts";
  * other configured server) hostage.
  */
 const CONNECT_TIMEOUT = Duration.seconds(30);
+
+/**
+ * Studio playtests, uploads and Blender jobs run for minutes, past the SDK's one-minute default;
+ * a server that reports progress keeps its call alive.
+ */
+const TOOL_CALL_TIMEOUT_MS = 15 * 60_000;
+
+/** A server that died on its own is brought back on this schedule, then left in its error. */
+const RECONNECT_BACKOFF = [
+  Duration.seconds(1),
+  Duration.seconds(3),
+  Duration.seconds(10),
+  Duration.seconds(30),
+] as const;
+
+const KEPT_STDERR_LINES = 20;
+
+/** Lets a server tell which SealCode thread a call belongs to, as Roqer scopes its skills and jobs. */
+export const THREAD_SCOPE_META_KEY = "sealcode/threadId";
 
 type UpstreamTool = {
   readonly name: string;
@@ -43,6 +68,7 @@ class GlobalMcpConnectionError extends Schema.TaggedError<GlobalMcpConnectionErr
   {
     serverId: Schema.String,
     cause: Schema.Defect(),
+    output: Schema.optional(Schema.String),
   },
 ) {
   override get message(): string {
@@ -86,6 +112,12 @@ export class GlobalMcpManager extends Context.Service<
     readonly getStatuses: Effect.Effect<ReadonlyArray<GlobalMcpStatus>>;
     readonly getCatalog: Effect.Effect<McpToolCatalog>;
     readonly callTool: (input: McpInvocation) => Effect.Effect<McpCallResult>;
+    /** A call SealCode itself makes, such as reading a managed server's status. */
+    readonly callServerTool: (input: {
+      readonly serverId: string;
+      readonly toolName: string;
+      readonly arguments: Record<string, unknown>;
+    }) => Effect.Effect<McpCallResult>;
     readonly streamChanges: Stream.Stream<McpToolCatalog>;
     /** Starts with the current statuses, then emits whenever any server's status changes. */
     readonly streamStatusChanges: Stream.Stream<ReadonlyArray<GlobalMcpStatus>>;
@@ -105,11 +137,14 @@ const safeNamePart = (value: string): string => {
 const canonicalToolName = (serverId: string, toolName: string): string =>
   `mcp__${safeNamePart(serverId)}__${safeNamePart(toolName)}`;
 
-const errorMessage = (cause: unknown): string => {
-  if (cause instanceof Error && cause.message.trim().length > 0) {
-    return cause.message.slice(0, 500);
-  }
-  return "MCP connection failed.";
+const errorMessage = (cause: unknown, output?: string): string => {
+  const base =
+    cause instanceof Error && cause.message.trim().length > 0
+      ? cause.message.slice(0, 500)
+      : "MCP connection failed.";
+  return output === undefined || output.length === 0
+    ? base
+    : `${base} Last output: ${output.slice(-500)}`;
 };
 
 /**
@@ -177,6 +212,16 @@ const catalogFingerprint = (catalog: McpToolCatalog): string =>
 
 type McpTransport = StdioClientTransport | StreamableHTTPClientTransport | SSEClientTransport;
 
+/** Carries what the process printed out of the promise, beside why it failed. */
+class ConnectAttemptError {
+  readonly cause: unknown;
+  readonly output: string;
+  constructor(cause: unknown, output: string) {
+    this.cause = cause;
+    this.output = output;
+  }
+}
+
 const createTransport = (server: GlobalMcpServer): McpTransport => {
   if (server.transport === "stdio") {
     if (!server.command) {
@@ -205,10 +250,39 @@ type UpstreamConnection = {
   readonly server: GlobalMcpServer;
   readonly client: Client;
   readonly tools: ReadonlyArray<UpstreamTool>;
+  /** The process's recent stderr, which is the only account of why a stdio server died. */
+  readonly output: () => string;
 };
 
+type ConnectionEvents = {
+  /** The transport closed without SealCode closing it. */
+  readonly onClosed: (serverId: string, client: Client) => void;
+  readonly onToolsChanged: (serverId: string, client: Client) => void;
+};
+
+/** Clients SealCode is closing on purpose, whose close is not a crash to recover from. */
+const closingClients = new WeakSet<Client>();
+
 const closeConnection = (connection: UpstreamConnection): Effect.Effect<void> =>
-  Effect.promise(() => connection.client.close().catch(() => undefined));
+  Effect.promise(() => {
+    closingClients.add(connection.client);
+    return connection.client.close().catch(() => undefined);
+  });
+
+const recentOutput = (transport: McpTransport) => {
+  const lines: string[] = [];
+  if (transport instanceof StdioClientTransport) {
+    // Piped stderr must be drained, or a chatty server blocks on a full pipe.
+    transport.stderr?.on("data", (chunk: Buffer | string) => {
+      for (const line of chunk.toString().split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (trimmed.length > 0) lines.push(trimmed.slice(0, 500));
+      }
+      if (lines.length > KEPT_STDERR_LINES) lines.splice(0, lines.length - KEPT_STDERR_LINES);
+    });
+  }
+  return () => lines.slice(-3).join(" | ");
+};
 
 const discoverTools = async (
   client: Client,
@@ -229,10 +303,12 @@ const discoverTools = async (
 
 const connect = (
   server: GlobalMcpServer,
+  events: ConnectionEvents,
 ): Effect.Effect<UpstreamConnection, GlobalMcpConnectionError> =>
   Effect.tryPromise({
     try: async (signal) => {
       const transport = createTransport(server);
+      const output = recentOutput(transport);
       const client = new McpClient(
         { name: "SealCode Global MCP", version: "1.0.0" },
         { capabilities: {} },
@@ -240,18 +316,33 @@ const connect = (
       try {
         await client.connect(transport as Parameters<Client["connect"]>[0], { signal });
         const tools = await discoverTools(client, signal);
+        client.onclose = () => {
+          if (!closingClients.has(client)) events.onClosed(server.id, client);
+        };
+        client.setNotificationHandler(ToolListChangedNotificationSchema, () => {
+          events.onToolsChanged(server.id, client);
+        });
         return {
           fingerprint: serverFingerprint(server),
           server,
           client,
           tools,
+          output,
         } satisfies UpstreamConnection;
       } catch (cause) {
+        closingClients.add(client);
         await client.close().catch(() => undefined);
-        throw cause;
+        throw new ConnectAttemptError(cause, output());
       }
     },
-    catch: (cause) => new GlobalMcpConnectionError({ serverId: server.id, cause }),
+    catch: (cause) =>
+      cause instanceof ConnectAttemptError
+        ? new GlobalMcpConnectionError({
+            serverId: server.id,
+            cause: cause.cause,
+            output: cause.output,
+          })
+        : new GlobalMcpConnectionError({ serverId: server.id, cause }),
   }).pipe(
     Effect.timeoutOrElse({
       duration: CONNECT_TIMEOUT,
@@ -269,12 +360,21 @@ const connect = (
 
 const make = Effect.gen(function* () {
   const settings = yield* ServerSettingsService;
+  const roblox = yield* RobloxStudioConfig;
   const reloadSemaphore = yield* Semaphore.make(1);
   const catalogRef = yield* Ref.make<McpToolCatalog>(emptyCatalog);
   const catalogChanges = yield* PubSub.unbounded<McpToolCatalog>();
   const statusChanges = yield* PubSub.sliding<ReadonlyArray<GlobalMcpStatus>>(1);
   const connections = new Map<string, UpstreamConnection>();
   const statuses = new Map<string, GlobalMcpStatus>();
+  const closedServers = yield* Queue.unbounded<{ readonly id: string; readonly client: Client }>();
+  const changedTools = yield* Queue.unbounded<{ readonly id: string; readonly client: Client }>();
+  const events: ConnectionEvents = {
+    onClosed: (id, client) => void Queue.offerUnsafe(closedServers, { id, client }),
+    onToolsChanged: (id, client) => void Queue.offerUnsafe(changedTools, { id, client }),
+  };
+  /** Consecutive automatic reconnects per server, reset by a connection that stays up. */
+  const reconnectAttempts = new Map<string, number>();
 
   const currentStatuses = (): ReadonlyArray<GlobalMcpStatus> =>
     [...statuses.values()].sort((left, right) => left.id.localeCompare(right.id));
@@ -300,12 +400,13 @@ const make = Effect.gen(function* () {
     state: GlobalMcpStatus["state"],
     toolCount: number,
     failure?: unknown,
+    output?: string,
   ) => {
     statuses.set(server.id, {
       id: server.id,
       state,
       toolCount,
-      ...(failure === undefined ? {} : { errorMessage: errorMessage(failure) }),
+      ...(failure === undefined ? {} : { errorMessage: errorMessage(failure, output) }),
       updatedAt: DateTime.toEpochMillis(DateTime.nowUnsafe()),
     });
   };
@@ -413,9 +514,9 @@ const make = Effect.gen(function* () {
 
         setStatus(server, "connecting", 0);
         yield* publishStatuses();
-        const result = yield* Effect.result(connect(server));
+        const result = yield* Effect.result(connect(server, events));
         if (Result.isFailure(result)) {
-          setStatus(server, "error", 0, result.failure.cause);
+          setStatus(server, "error", 0, result.failure.cause, result.failure.output);
           continue;
         }
         connections.set(server.id, result.success);
@@ -425,8 +526,12 @@ const make = Effect.gen(function* () {
       yield* rebuildCatalog();
     });
 
+  // The Roblox settings' servers join the user's own; a user server with the same id wins.
   const readConfigured = settings.getSettings.pipe(
-    Effect.map((current) => current.mcpServers),
+    Effect.map((current): Readonly<Record<string, GlobalMcpServer>> => ({
+      ...roblox.managedServers(current),
+      ...current.mcpServers,
+    })),
     Effect.catch((cause) =>
       Effect.logWarning("failed to read global MCP settings", { cause }).pipe(
         Effect.as({} as Readonly<Record<string, GlobalMcpServer>>),
@@ -473,12 +578,17 @@ const make = Effect.gen(function* () {
           content: [{ type: "text", text: "MCP server is not connected." }],
         } satisfies McpCallResult;
       }
+      const threadId = input.scope.thread?.threadId;
       const settled = yield* Effect.tryPromise({
         try: (signal) =>
           connection.client.callTool(
-            { name: entry.upstreamToolName, arguments: input.arguments },
+            {
+              name: entry.upstreamToolName,
+              arguments: input.arguments,
+              ...(threadId === undefined ? {} : { _meta: { [THREAD_SCOPE_META_KEY]: threadId } }),
+            },
             undefined,
-            { signal },
+            { signal, timeout: TOOL_CALL_TIMEOUT_MS, resetTimeoutOnProgress: true },
           ),
         catch: (cause) => new GlobalMcpConnectionError({ serverId: entry.serverId, cause }),
       }).pipe(Effect.result);
@@ -486,7 +596,13 @@ const make = Effect.gen(function* () {
         const failure = settled.failure.cause;
         const message = errorMessage(failure);
         if (isConnectionFailure(failure)) {
-          setStatus(connection.server, "error", connection.tools.length, failure);
+          setStatus(
+            connection.server,
+            "error",
+            connection.tools.length,
+            failure,
+            connection.output(),
+          );
           yield* publishStatuses();
         }
         return {
@@ -497,6 +613,103 @@ const make = Effect.gen(function* () {
       }
       return settled.success as McpCallResult;
     });
+
+  const callServerTool: GlobalMcpManager["Service"]["callServerTool"] = (input) =>
+    Effect.gen(function* () {
+      const connection = connections.get(input.serverId);
+      if (!connection) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: "MCP server is not connected." }],
+        } satisfies McpCallResult;
+      }
+      const settled = yield* Effect.tryPromise({
+        try: (signal) =>
+          connection.client.callTool(
+            { name: input.toolName, arguments: input.arguments },
+            undefined,
+            { signal, timeout: 15_000 },
+          ),
+        catch: (cause) => new GlobalMcpConnectionError({ serverId: input.serverId, cause }),
+      }).pipe(Effect.result);
+      if (Result.isFailure(settled)) {
+        return {
+          isError: true,
+          content: [{ type: "text", text: errorMessage(settled.failure.cause) }],
+        } satisfies McpCallResult;
+      }
+      return settled.success as McpCallResult;
+    });
+
+  /**
+   * A server whose process exited, or whose remote connection dropped, leaves the catalog at once
+   * and comes back with backoff, as Roqer restarts its Studio bridge. Reconnect still works at any
+   * point, and a configuration that changed meanwhile wins.
+   */
+  const recoverClosed = (closed: { readonly id: string; readonly client: Client }) =>
+    Effect.gen(function* () {
+      const lost = yield* reloadSemaphore.withPermits(1)(
+        Effect.gen(function* () {
+          const connection = connections.get(closed.id);
+          if (connection === undefined || connection.client !== closed.client) return false;
+          connections.delete(closed.id);
+          setStatus(
+            connection.server,
+            "error",
+            0,
+            new Error("The MCP server stopped."),
+            connection.output(),
+          );
+          yield* rebuildCatalog();
+          return true;
+        }),
+      );
+      if (!lost) return;
+      const attempt = reconnectAttempts.get(closed.id) ?? 0;
+      const delay = RECONNECT_BACKOFF[attempt];
+      if (delay === undefined) return;
+      reconnectAttempts.set(closed.id, attempt + 1);
+      yield* Effect.sleep(delay);
+      yield* reloadSemaphore.withPermits(1)(
+        Effect.gen(function* () {
+          if (connections.has(closed.id)) return;
+          const configured = yield* readConfigured;
+          yield* reloadUnlocked(configured, closed.id);
+        }),
+      );
+      // A connection that lasts a minute earns a fresh backoff budget.
+      const recovered = connections.get(closed.id)?.client;
+      if (recovered === undefined) return;
+      yield* Effect.sleep(Duration.minutes(1));
+      if (connections.get(closed.id)?.client === recovered) reconnectAttempts.delete(closed.id);
+    });
+
+  const refreshTools = (changed: { readonly id: string; readonly client: Client }) =>
+    reloadSemaphore.withPermits(1)(
+      Effect.gen(function* () {
+        const connection = connections.get(changed.id);
+        if (connection === undefined || connection.client !== changed.client) return;
+        const tools = yield* Effect.tryPromise({
+          try: (signal) => discoverTools(connection.client, signal),
+          catch: (cause) => new GlobalMcpConnectionError({ serverId: changed.id, cause }),
+        }).pipe(Effect.option);
+        if (tools._tag === "None") return;
+        connections.set(changed.id, { ...connection, tools: tools.value });
+        setStatus(connection.server, "ready", tools.value.length);
+        yield* rebuildCatalog();
+      }),
+    );
+
+  yield* Queue.take(closedServers).pipe(
+    Effect.flatMap((closed) => Effect.forkScoped(recoverClosed(closed))),
+    Effect.forever,
+    Effect.forkScoped,
+  );
+  yield* Queue.take(changedTools).pipe(
+    Effect.flatMap(refreshTools),
+    Effect.forever,
+    Effect.forkScoped,
+  );
 
   const closeAll = reloadSemaphore.withPermits(1)(
     Effect.gen(function* () {
@@ -524,6 +737,7 @@ const make = Effect.gen(function* () {
     getStatuses,
     getCatalog,
     callTool,
+    callServerTool,
     streamChanges: Stream.fromPubSub(catalogChanges),
     streamStatusChanges: Stream.unwrap(
       PubSub.subscribe(statusChanges).pipe(

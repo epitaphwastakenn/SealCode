@@ -63,6 +63,9 @@ import * as ProviderInstanceRegistryHydration from "./provider/ProviderInstanceR
 import * as ProjectSettingsOverrideSweep from "./provider/ProjectSettingsOverrideSweep.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as GlobalMcpManager from "./mcp/GlobalMcpManager.ts";
+import * as RobloxStudioConfig from "./roblox/RobloxStudioConfig.ts";
+import * as RobloxStudioStatus from "./roblox/RobloxStudioStatus.ts";
+import * as RobloxToolVisibility from "./roblox/RobloxToolVisibility.ts";
 import * as McpHttpServer from "./mcp/McpHttpServer.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
 import * as PreviewAutomationBroker from "./mcp/PreviewAutomationBroker.ts";
@@ -540,7 +543,7 @@ const layerProviderInstallationRefresh = Layer.effectDiscard(
 
 const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   AgentAwarenessRelay.layer,
-  GlobalMcpManager.layer,
+  RobloxStudioStatus.layer.pipe(Layer.provideMerge(GlobalMcpManager.layer)),
   VoiceTranscription.layer,
   HeldHooksWaker.layer,
   layerThreadSettlementWorker,
@@ -584,6 +587,7 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   Layer.effectDiscard(ProjectSettingsOverrideSweep.sweep),
 ).pipe(
   Layer.provideMerge(layerOrchestrationApplication),
+  Layer.provideMerge(RobloxStudioConfig.layer),
   Layer.provideMerge(RuntimeLayer.layerEventInfrastructure),
   Layer.provideMerge(
     Layer.mergeAll(ProjectStore.layer, ThreadSearch.layer, ProjectDiffIndex.layer),
@@ -692,6 +696,7 @@ const layerMakeRoutes = Layer.mergeAll(
     Ws.layer,
   ),
   McpHttpServer.layer.pipe(
+    Layer.provide(RobloxToolVisibility.layer),
     Layer.provide(ProviderAdapterRegistry.layerFromProviderInstanceRegistry),
     Layer.provide(McpOAuth.layerMcpClientAuthenticator),
   ),

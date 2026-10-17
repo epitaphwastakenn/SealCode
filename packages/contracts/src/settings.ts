@@ -836,6 +836,46 @@ export const SourceControlWritingStyleSettings = Schema.Struct({
 });
 export type SourceControlWritingStyleSettings = typeof SourceControlWritingStyleSettings.Type;
 
+/**
+ * How SealCode connects agents to Roblox Studio. `roqer` runs Roqer's harness (its Studio bridge
+ * and auto-installed plugin, its checks, skills and instructions); `official` connects only the
+ * MCP server Roblox Studio ships (`%LOCALAPPDATA%\Roblox\mcp.bat`).
+ */
+export const RobloxStudioMode = Schema.Literals(["off", "roqer", "official"]);
+export type RobloxStudioMode = typeof RobloxStudioMode.Type;
+
+/** Which projects' threads see the Roblox tools and instructions. */
+export const RobloxStudioScope = Schema.Literals(["roblox-projects", "all-projects"]);
+export type RobloxStudioScope = typeof RobloxStudioScope.Type;
+
+export const RobloxStudioSettings = Schema.Struct({
+  mode: RobloxStudioMode.pipe(Schema.withDecodingDefault(Effect.succeed("off" as const))),
+  scope: RobloxStudioScope.pipe(
+    Schema.withDecodingDefault(Effect.succeed("roblox-projects" as const)),
+  ),
+  /** Roqer's agent instructions and skill catalog on every turn of a Roblox thread. */
+  instructions: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  autoPlaytest: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  /** In `roqer` mode, also connect Roblox's own MCP for its mesh, texture and material generation. */
+  officialMcpAlongside: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  openCloudApiKey: TrimmedString.pipe(
+    Schema.withDecodingDefault(Effect.succeed("")),
+    secretSetting,
+  ),
+  creatorUserId: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  creatorGroupId: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /** Roqer's own Blender worker: headless jobs whose exports are re-imported and measured. */
+  blenderWorker: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /** Empty means the Blender found in the usual install folders. */
+  blenderExecutable: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  /** A Blender MCP server that drives the user's live Blender. */
+  blenderMcp: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /** Empty means a detected MCP for Blender install, else `uvx blender-mcp`. */
+  blenderMcpCommand: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
+  blenderMcpArgs: Schema.Array(Schema.String).pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+});
+export type RobloxStudioSettings = typeof RobloxStudioSettings.Type;
+
 export const BranchNamingMode = Schema.Literals(["static", "semantic", "custom"]);
 export type BranchNamingMode = typeof BranchNamingMode.Type;
 
@@ -1303,6 +1343,7 @@ export const ServerSettings = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed({})),
   ),
   mcpServers: GlobalMcpServerMap.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  robloxStudio: RobloxStudioSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   sourceControlHosts: Schema.Record(Schema.String, SourceControlHostSettings).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
@@ -1583,6 +1624,23 @@ export const ServerSettingsPatch = Schema.Struct({
   // patches risk leaving driver-specific config in a half-merged state.
   providerInstances: Schema.optionalKey(Schema.Record(ProviderInstanceId, ProviderInstanceConfig)),
   mcpServers: Schema.optionalKey(GlobalMcpServerMap),
+  robloxStudio: Schema.optionalKey(
+    Schema.Struct({
+      mode: Schema.optionalKey(RobloxStudioMode),
+      scope: Schema.optionalKey(RobloxStudioScope),
+      instructions: Schema.optionalKey(Schema.Boolean),
+      autoPlaytest: Schema.optionalKey(Schema.Boolean),
+      officialMcpAlongside: Schema.optionalKey(Schema.Boolean),
+      openCloudApiKey: Schema.optionalKey(TrimmedString),
+      creatorUserId: Schema.optionalKey(TrimmedString),
+      creatorGroupId: Schema.optionalKey(TrimmedString),
+      blenderWorker: Schema.optionalKey(Schema.Boolean),
+      blenderExecutable: Schema.optionalKey(TrimmedString),
+      blenderMcp: Schema.optionalKey(Schema.Boolean),
+      blenderMcpCommand: Schema.optionalKey(TrimmedString),
+      blenderMcpArgs: Schema.optionalKey(Schema.Array(Schema.String)),
+    }),
+  ),
   // Per-entry, unlike `providerInstances`: a client only ever adds or removes
   // one source, and sending the whole map races another edit that has not
   // echoed back yet. `null` removes; the server merges into its current map.
@@ -1613,7 +1671,9 @@ export function requiredScopesForServerSettingsPatch(
       key === "providers" ||
       key === "providerInstances" ||
       key === "usageLimitSources" ||
-      key === "mcpServers"
+      key === "mcpServers" ||
+      // Starts the Studio bridge and Blender processes on the host.
+      key === "robloxStudio"
     ) {
       changesProviders = true;
     } else {

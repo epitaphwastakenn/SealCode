@@ -1327,6 +1327,8 @@ export function codexThreadRuntimeParams(input: {
                 : {
                     "sealcode-global": {
                       url: mcpSession.globalEndpoint,
+                      // Codex gives MCP tools 60 s by default; Studio playtests and Blender jobs run longer.
+                      tool_timeout_sec: CODEX_T3_MCP_TOOL_TIMEOUT_SEC,
                       http_headers: {
                         Authorization: mcpSession.authorizationHeader,
                       },

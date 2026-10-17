@@ -1245,6 +1245,8 @@ export function claudeMcpQueryOverrides(input: {
               headers: {
                 Authorization: session.authorizationHeader,
               },
+              // Studio playtests and Blender jobs outlast the default tool timeout.
+              timeout: CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
             },
           }),
     },

@@ -93,6 +93,8 @@ export default defineConfig({
       "apps/mobile/ios/**",
       "apps/mobile/uniwind-types.d.ts",
       "*.icon/**",
+      // Built from Roqer by vendor/roqer-host/sync.ts.
+      "apps/server/resources/roqer/**",
     ],
     sortPackageJson: {},
     overrides: [
@@ -119,6 +121,9 @@ export default defineConfig({
       "apps/mobile/android/**",
       "apps/mobile/ios/**",
       "apps/mobile/uniwind-types.d.ts",
+      // Roqer's AGPL host builds against a Roqer checkout, outside the workspace.
+      "vendor/**",
+      "apps/server/resources/roqer/**",
     ],
     plugins: ["eslint", "oxc", "react", "unicorn", "typescript"],
     jsPlugins: ["./oxlint-plugin-t3code/index.ts", "@shadcn/lint"],

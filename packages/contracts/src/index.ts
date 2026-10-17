@@ -21,6 +21,7 @@ export * from "./voice.ts";
 export * from "./backdrop.ts";
 export * from "./harnessEfficiency.ts";
 export * from "./mcp.ts";
+export * from "./robloxStudio.ts";
 export * from "./providerRuntime.ts";
 export * from "./providerUsageLimits.ts";
 export * from "./usageLimitSourceId.ts";

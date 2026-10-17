@@ -1037,6 +1037,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["pull request trusted environments shared credentials permissions read actions"],
   },
   {
+    id: "roblox-studio",
+    title: "Roblox Studio",
+    to: "/settings/connections",
+    searchTerms: [
+      "roqer roblox studio plugin mcp bridge blender skills rojo open cloud playtest luau",
+    ],
+  },
+  {
     id: "global-mcp-servers",
     title: "Global MCP servers",
     to: "/settings/connections",

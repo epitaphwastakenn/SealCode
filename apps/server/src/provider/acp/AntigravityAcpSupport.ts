@@ -3,6 +3,7 @@ import {
   type AntigravityAuthMethod,
   PROVIDER_SEND_TURN_MAX_FILE_BYTES,
   PROVIDER_SEND_TURN_MAX_IMAGE_BYTES,
+  type ProviderOptionSelection,
   type ProviderSendTurnInput,
   type RuntimeMode,
 } from "@t3tools/contracts";
@@ -23,6 +24,12 @@ import {
   makeAntigravityStdoutTransform,
 } from "../antigravityAuthSupport.ts";
 import * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import {
+  antigravityEffortSelection,
+  antigravitySessionModels,
+  groupAntigravityModels,
+  resolveAntigravityModelId,
+} from "../antigravityModelVariants.ts";
 import { normalizeAntigravitySessionUpdate } from "./AntigravityProtocol.ts";
 
 export interface AntigravityAcpRuntimeInput extends Omit<
@@ -92,61 +99,71 @@ export function antigravityPermissionMode(runtimeMode: RuntimeMode): string {
   }
 }
 
-function antigravityModelOptions(
-  configOptions: ReadonlyArray<EffectAcpSchema.SessionConfigOption>,
-) {
-  const model = configOptions.find((option) => option.id === "model");
-  if (model?.type !== "select") return [];
-  return model.options.flatMap((entry) => ("value" in entry ? [entry] : entry.options));
-}
-
-function resolveAntigravityModel(input: {
-  readonly configOptions: ReadonlyArray<EffectAcpSchema.SessionConfigOption>;
-  readonly model: string | null | undefined;
-  readonly defaultModel?: string | undefined;
-}): string | undefined {
-  const modelConfig = input.configOptions.find((option) => option.id === "model");
-  const current = modelConfig?.type === "select" ? modelConfig.currentValue : undefined;
-  if (input.model && input.model !== ANTIGRAVITY_DEFAULT_MODEL) return input.model;
-  const options = antigravityModelOptions(input.configOptions);
-  return input.defaultModel && options.some((option) => option.value === input.defaultModel)
-    ? input.defaultModel
-    : current;
-}
-
-/** Never replace a saved selection with the default returned by a cold resume. */
+/**
+ * Resolves the picker's (model, reasoning level) to a model id the session
+ * accepts and selects it. Never replaces a saved selection with the default
+ * returned by a cold resume.
+ */
 export const applyAntigravityAcpModelSelection = Effect.fn("applyAntigravityAcpModelSelection")(
   function* <E>(input: {
     readonly runtime: Pick<
       AcpSessionRuntime.AcpSessionRuntime["Service"],
       "getConfigOptions" | "setModel"
-    >;
+    > &
+      Partial<Pick<AcpSessionRuntime.AcpSessionRuntime["Service"], "setSessionModel">>;
     readonly model: string | null | undefined;
+    readonly options?: ReadonlyArray<ProviderOptionSelection> | null | undefined;
+    /** The setup response's legacy model list; it can offer models the config select omits. */
+    readonly legacyModels?: EffectAcpSchema.SessionModelState | null | undefined;
     readonly defaultModel?: string | undefined;
     readonly mapError: (cause: EffectAcpErrors.AcpError) => E;
   }): Effect.fn.Return<string | undefined, E> {
     const configOptions = yield* input.runtime.getConfigOptions;
-    const modelConfig = configOptions.find((option) => option.id === "model");
-    const current = modelConfig?.type === "select" ? modelConfig.currentValue : undefined;
-    const resolved = resolveAntigravityModel({
-      configOptions,
-      model: input.model,
-      defaultModel: input.defaultModel,
-    });
-    const explicit = Boolean(input.model) && input.model !== ANTIGRAVITY_DEFAULT_MODEL;
-    if (resolved === undefined || (!explicit && resolved === current)) return current;
-    const options = antigravityModelOptions(configOptions);
-    if (!options.some((option) => option.value === resolved)) {
-      return yield* Effect.fail(
-        input.mapError(
-          EffectAcpErrors.AcpRequestError.invalidParams(
-            `Antigravity model '${resolved}' is unavailable for this Google account. Select an available model.`,
-          ),
+    const session = antigravitySessionModels({ configOptions, models: input.legacyModels });
+    const families = groupAntigravityModels(session.entries);
+    const current = session.currentValue;
+    const effort = antigravityEffortSelection(input.options);
+    const resolve = (model: string) =>
+      resolveAntigravityModelId({
+        families,
+        model,
+        effort,
+        currentValue: current,
+        defaultModel: input.defaultModel,
+      });
+    const unavailable = (model: string) =>
+      input.mapError(
+        EffectAcpErrors.AcpRequestError.invalidParams(
+          `Antigravity model '${model}' is unavailable for this Google account. Select an available model.`,
         ),
       );
+    const select = Effect.fn("applyAntigravityAcpModelSelection.select")(function* (
+      modelId: string,
+    ) {
+      if (session.configIds.has(modelId)) {
+        yield* input.runtime.setModel(modelId).pipe(Effect.mapError(input.mapError));
+      } else if (input.runtime.setSessionModel !== undefined) {
+        yield* input.runtime.setSessionModel(modelId).pipe(Effect.mapError(input.mapError));
+      } else {
+        return yield* Effect.fail(unavailable(modelId));
+      }
+      return modelId;
+    });
+
+    const explicitModel =
+      input.model && input.model !== ANTIGRAVITY_DEFAULT_MODEL ? input.model : undefined;
+    if (explicitModel !== undefined) {
+      const resolved = resolve(explicitModel);
+      return resolved === undefined
+        ? yield* Effect.fail(unavailable(explicitModel))
+        : yield* select(resolved);
     }
-    yield* input.runtime.setModel(resolved).pipe(Effect.mapError(input.mapError));
-    return resolved;
+    const defaultModel =
+      input.defaultModel !== undefined && resolve(input.defaultModel) !== undefined
+        ? input.defaultModel
+        : current;
+    const resolved = defaultModel === undefined ? undefined : resolve(defaultModel);
+    return resolved === undefined || resolved === current ? current : yield* select(resolved);
   },
 );
 

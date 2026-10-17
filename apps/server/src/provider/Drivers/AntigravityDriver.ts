@@ -54,6 +54,7 @@ import { makeAntigravityAdapterV2 } from "../../orchestration-v2/Adapters/Antigr
 import { makeAcpNativeLoggerFactory } from "@t3tools/provider-acp/server/nativeLogging";
 import { ProviderDriverError } from "../Errors.ts";
 import { makeAntigravityProvider } from "../AntigravityProvider.ts";
+import { antigravityBaseSlug } from "../antigravityModelVariants.ts";
 import { makeAntigravityUsageProbe } from "../antigravityUsageLimits.ts";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import * as ModelCatalog from "@t3tools/provider-core/server/ModelCatalog";
@@ -160,8 +161,18 @@ export const AntigravityDriver: ProviderDriver<
       });
       const classifyModels = (draft: ServerProviderDraft) =>
         currentCatalog.pipe(
-          Effect.map((catalog) => stampIdentity(ModelCatalog.applyModelCatalog(draft, catalog))),
+          Effect.map((catalog) =>
+            stampIdentity(
+              ModelCatalog.applyModelCatalog(draft, catalog, {
+                // The manifest lists one entry per level; the picker lists one per model.
+                family: (slug) =>
+                  catalog?.models.find((entry) => antigravityBaseSlug(entry.slug) === slug)?.slug ??
+                  slug,
+              }),
+            ),
+          ),
         );
+      const defaultModel = currentCatalog.pipe(Effect.map((catalog) => catalog?.defaultChatModel));
 
       const makeRuntime = Effect.fn("AntigravityDriver.makeRuntime")(function* (
         input: Omit<AntigravityAcpRuntimeInput, "spawn" | "childProcessSpawner">,
@@ -390,6 +401,7 @@ export const AntigravityDriver: ProviderDriver<
       );
       const provider = yield* makeAntigravityProvider(settings, {
         stampIdentity: classifyModels,
+        defaultModel,
         probe,
         probeUsage: usage.probe,
         clearUsage: usage.clear,
@@ -410,7 +422,6 @@ export const AntigravityDriver: ProviderDriver<
             }),
         ),
       );
-      const defaultModel = currentCatalog.pipe(Effect.map((catalog) => catalog?.defaultChatModel));
       const orchestrationAdapter = yield* makeAntigravityAdapterV2({
         instanceId,
         selfInvocation,

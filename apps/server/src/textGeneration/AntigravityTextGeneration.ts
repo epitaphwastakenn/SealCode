@@ -24,27 +24,30 @@ const Configuration = Schema.Record(Schema.String, Schema.Unknown);
 const decodeConfiguration = Schema.decodeEffect(Schema.fromJsonString(Configuration));
 const decodeConfigurationObject = Schema.decodeUnknownEffect(Configuration);
 
-type AntigravityTextRuntime = Pick<
-  AcpSessionRuntime.AcpSessionRuntime["Service"],
-  | "start"
-  | "setMode"
-  | "getConfigOptions"
-  | "getEvents"
-  | "setModel"
-  | "prompt"
-  | "cancel"
-  | "handleSessionUpdate"
-  | "handleRequestPermission"
-  | "handleElicitation"
-  | "handleReadTextFile"
-  | "handleWriteTextFile"
-  | "handleCreateTerminal"
-  | "handleTerminalOutput"
-  | "handleTerminalWaitForExit"
-  | "handleTerminalKill"
-  | "handleTerminalRelease"
-  | "handleUnknownExtRequest"
->;
+type AntigravityTextRuntime = Partial<
+  Pick<AcpSessionRuntime.AcpSessionRuntime["Service"], "setSessionModel">
+> &
+  Pick<
+    AcpSessionRuntime.AcpSessionRuntime["Service"],
+    | "start"
+    | "setMode"
+    | "getConfigOptions"
+    | "getEvents"
+    | "setModel"
+    | "prompt"
+    | "cancel"
+    | "handleSessionUpdate"
+    | "handleRequestPermission"
+    | "handleElicitation"
+    | "handleReadTextFile"
+    | "handleWriteTextFile"
+    | "handleCreateTerminal"
+    | "handleTerminalOutput"
+    | "handleTerminalWaitForExit"
+    | "handleTerminalKill"
+    | "handleTerminalRelease"
+    | "handleUnknownExtRequest"
+  >;
 
 export interface AntigravityTextGenerationOptions {
   readonly profileDirectory: string;
@@ -212,6 +215,8 @@ export const makeAntigravityTextGeneration = Effect.fn("makeAntigravityTextGener
             yield* applyAntigravityAcpModelSelection({
               runtime,
               model: input.modelSelection.model,
+              options: input.modelSelection.options,
+              legacyModels: started.sessionSetupResult.models,
               defaultModel: yield* options.defaultModel ?? Effect.undefined,
               mapError: (cause) =>
                 new TextGenerationError({

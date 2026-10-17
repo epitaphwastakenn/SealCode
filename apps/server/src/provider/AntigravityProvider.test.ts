@@ -34,6 +34,18 @@ const decodeSettings = Schema.decodeSync(AntigravitySettings);
 const instanceId = ProviderInstanceId.make("antigravity-test");
 const driver = ProviderDriverKind.make("antigravity");
 
+const effortDescriptor = (levels: ReadonlyArray<"low" | "medium" | "high">, current: string) => ({
+  id: "reasoningEffort",
+  label: "Reasoning effort",
+  type: "select",
+  options: levels.map((level) => ({
+    id: level,
+    label: level[0]!.toUpperCase() + level.slice(1),
+    ...(level === current ? { isDefault: true } : {}),
+  })),
+  currentValue: current,
+});
+
 const initializeResult = {
   protocolVersion: 1,
   agentCapabilities: {
@@ -132,6 +144,7 @@ const makeHarness = Effect.fn("makeAntigravityProviderHarness")(function* (
   options: {
     readonly enabled?: boolean;
     readonly safe?: boolean;
+    readonly defaultModel?: string;
     readonly probeUsage?: Effect.Effect<ServerProviderUsageLimits>;
   } = {},
 ) {
@@ -147,6 +160,9 @@ const makeHarness = Effect.fn("makeAntigravityProviderHarness")(function* (
     {
       stampIdentity: (snapshot) => Effect.succeed({ ...snapshot, instanceId, driver }),
       ...(options.probeUsage ? { probeUsage: options.probeUsage } : {}),
+      ...(options.defaultModel === undefined
+        ? {}
+        : { defaultModel: Effect.succeed(options.defaultModel) }),
       probe: Ref.update(probeCalls, (count) => count + 1).pipe(
         Effect.andThen(Ref.get(probe)),
         Effect.flatten,
@@ -179,24 +195,32 @@ const makeHarness = Effect.fn("makeAntigravityProviderHarness")(function* (
 });
 
 describe("Antigravity model catalog", () => {
-  it("keeps the captured personal catalog's IDs, labels, order, and selected default", () => {
+  it("groups the captured personal catalog's per-level IDs into one model per real model", () => {
     const models = buildAntigravityModelsFromSession(sessionSetupResult);
-    expect(models.map((model) => [model.slug, model.name])).toEqual(
-      modelOptions.map((option) => [option.value, option.name]),
-    );
+    expect(models.map((model) => [model.slug, model.name])).toEqual([
+      ["gemini-3.8-flash", "Gemini 3.8 Flash"],
+      ["gemini-3.7-flash", "Gemini 3.7 Flash"],
+      ["gemini-3.6-flash", "Gemini 3.6 Flash"],
+      ["gemini-3.1-pro", "Gemini 3.1 Pro"],
+    ]);
     expect(models.filter((model) => model.isDefault).map((model) => model.slug)).toEqual([
-      "gemini-3.7-flash-high",
+      "gemini-3.7-flash",
     ]);
     expect(
       models
         .filter((model) => model.aliases?.includes(ANTIGRAVITY_DEFAULT_MODEL))
         .map((model) => model.slug),
-    ).toEqual(["gemini-3.7-flash-high"]);
-    expect(models.every((model) => model.capabilities?.optionDescriptors?.length === 0)).toBe(true);
+    ).toEqual(["gemini-3.7-flash"]);
     expect(models.every((model) => !model.isCustom)).toBe(true);
+    expect(models.map((model) => model.capabilities?.optionDescriptors)).toEqual([
+      [effortDescriptor(["low", "medium", "high"], "medium")],
+      [effortDescriptor(["low", "medium", "high"], "high")],
+      [effortDescriptor(["low", "medium", "high"], "medium")],
+      [effortDescriptor(["low", "high"], "low")],
+    ]);
   });
 
-  it("uses legacy session models only when model config is absent", () => {
+  it("merges models that only the legacy list offers into the model config's catalog", () => {
     const fromLegacy = buildAntigravityModelsFromSession({
       models: sessionSetupResult.models,
     });
@@ -206,7 +230,13 @@ describe("Antigravity model catalog", () => {
         ...sessionSetupResult,
         configOptions: [{ ...modelConfig, options: [] }],
       }),
-    ).toEqual([]);
+    ).toEqual(fromLegacy);
+    expect(
+      buildAntigravityModelsFromSession({
+        configOptions: [{ ...modelConfig, options: modelOptions.slice(0, 3) }],
+        models: sessionSetupResult.models,
+      }).map((model) => model.slug),
+    ).toEqual(["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.1-pro"]);
   });
 
   it("flattens native option groups without combining distinct model IDs", () => {
@@ -222,15 +252,23 @@ describe("Antigravity model catalog", () => {
         },
       ],
     });
-    expect(models.map((model) => model.slug)).toEqual([
-      "gemini-3.7-flash-high",
-      "gemini-3.7-flash-medium",
-      "gemini-pro-agent",
-    ]);
+    expect(models.map((model) => model.slug)).toEqual(["gemini-3.7-flash", "gemini-pro-agent"]);
     expect(models.find((model) => model.isDefault)?.slug).toBe("gemini-pro-agent");
     expect(models.find((model) => model.aliases?.includes(ANTIGRAVITY_DEFAULT_MODEL))?.slug).toBe(
       "gemini-pro-agent",
     );
+  });
+
+  it("lets the manifest default outrank the session's current model", () => {
+    const models = buildAntigravityModelsFromSession(sessionSetupResult, {
+      preferredDefault: "gemini-3.8-flash-high",
+    });
+    expect(models.filter((model) => model.isDefault).map((model) => model.slug)).toEqual([
+      "gemini-3.8-flash",
+    ]);
+    expect(models[0]?.capabilities?.optionDescriptors).toEqual([
+      effortDescriptor(["low", "medium", "high"], "high"),
+    ]);
   });
 });
 
@@ -359,7 +397,7 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
         yield* harness.provider.onSessionStarted(started);
         yield* harness.provider.onAvailableCommands(commands);
         const snapshot = yield* harness.provider.snapshot.getSnapshot;
-        expect(snapshot.models).toHaveLength(11);
+        expect(snapshot.models).toHaveLength(4);
         expect(snapshot.slashCommands).toEqual(expectedCommands);
         expect(snapshot.workspaceSnapshots).toEqual([]);
       }),
@@ -414,7 +452,7 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
         ];
         const nextSnapshot = yield* Stream.toPull(
           harness.provider.snapshot.streamChanges.pipe(
-            Stream.filter((snapshot) => snapshot.models.length === 3),
+            Stream.filter((snapshot) => snapshot.models.length === 1),
           ),
         );
         yield* harness.provider.onConfigOptionsUpdated(configOptions);
@@ -426,6 +464,63 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
         });
         yield* harness.provider.onConfigOptionsUpdated([]);
         expect((yield* harness.provider.snapshot.getSnapshot).models).toEqual([]);
+      }),
+    ),
+  );
+
+  it.effect("keeps models that only the legacy list offers when the model config updates", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const harness = yield* makeHarness();
+        yield* harness.initialize;
+        const configOptions = [{ ...modelConfig, options: modelOptions.slice(0, 3) }];
+        yield* harness.provider.onSessionStarted({
+          ...started,
+          sessionSetupResult: { ...sessionSetupResult, configOptions },
+        });
+        const slugs = () =>
+          harness.provider.snapshot.getSnapshot.pipe(
+            Effect.map((snapshot) => snapshot.models.map((model) => model.slug)),
+          );
+        const all = ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash", "gemini-3.1-pro"];
+        expect(yield* slugs()).toEqual(all);
+
+        yield* harness.provider.onConfigOptionsUpdated([
+          {
+            ...modelConfig,
+            currentValue: "gemini-3.8-flash-low",
+            options: modelOptions.slice(0, 3),
+          },
+        ]);
+        expect(yield* slugs()).toEqual(all);
+
+        yield* harness.provider.onSignedOut;
+        yield* harness.provider.onSessionStarted({
+          ...started,
+          sessionSetupResult: { sessionId: "other-account", configOptions },
+        });
+        expect(yield* slugs()).toEqual(["gemini-3.8-flash"]);
+      }),
+    ),
+  );
+
+  it.effect("defaults to the manifest's chat model rather than the session's current one", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const harness = yield* makeHarness({ defaultModel: "gemini-3.8-flash-high" });
+        yield* harness.initialize;
+        yield* harness.provider.onSessionStarted(started);
+        const snapshot = yield* harness.provider.snapshot.getSnapshot;
+        expect(
+          snapshot.models.filter((model) => model.isDefault).map((model) => model.slug),
+        ).toEqual(["gemini-3.8-flash"]);
+        yield* harness.provider.onConfigOptionsUpdated([
+          { ...modelConfig, currentValue: "gemini-3.1-pro-low" },
+        ]);
+        expect(
+          (yield* harness.provider.snapshot.getSnapshot).models.find((model) => model.isDefault)
+            ?.slug,
+        ).toBe("gemini-3.8-flash");
       }),
     ),
   );
@@ -562,7 +657,7 @@ it.layer(layerTest)("Antigravity provider snapshots", (it) => {
             status: "error",
             auth: { status: "authenticated" },
           });
-          expect(snapshot.models).toHaveLength(installed ? 11 : 0);
+          expect(snapshot.models).toHaveLength(installed ? 4 : 0);
           expect(snapshot.slashCommands).toHaveLength(installed ? 2 : 0);
           expect(snapshot.workspaceSnapshots).toHaveLength(installed ? 1 : 0);
           expect(snapshot.supportsTextGeneration).toBe(installed);

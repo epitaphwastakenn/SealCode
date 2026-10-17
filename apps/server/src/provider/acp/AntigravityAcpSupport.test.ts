@@ -170,6 +170,193 @@ describe("applyAntigravityAcpModelSelection", () => {
   );
 });
 
+const levelledConfig = {
+  id: "model",
+  name: "Model",
+  category: "model",
+  type: "select",
+  currentValue: "gemini-3.8-flash-high",
+  options: [
+    { value: "gemini-3.8-flash-high", name: "Gemini 3.8 Flash (High)" },
+    { value: "gemini-3.8-flash-medium", name: "Gemini 3.8 Flash (Medium)" },
+    { value: "gemini-3.8-flash-low", name: "Gemini 3.8 Flash (Low)" },
+    { value: "gemini-pro-agent", name: "Gemini 3.1 Pro (High)" },
+    { value: "gemini-3.1-pro-low", name: "Gemini 3.1 Pro (Low)" },
+  ],
+} satisfies EffectAcpSchema.SessionConfigOption;
+
+function makeLevelRuntime(withLegacySelection = true) {
+  const selections: string[] = [];
+  const legacySelections: string[] = [];
+  return {
+    runtime: {
+      getConfigOptions: Effect.succeed([levelledConfig]),
+      setModel: (model: string) => Effect.sync(() => void selections.push(model)),
+      ...(withLegacySelection
+        ? {
+            setSessionModel: (model: string) =>
+              Effect.sync(() => {
+                legacySelections.push(model);
+                return {};
+              }),
+          }
+        : {}),
+    },
+    selections,
+    legacySelections,
+  };
+}
+
+describe("applyAntigravityAcpModelSelection reasoning levels", () => {
+  it.effect.each([
+    { effort: "low", expected: "gemini-3.8-flash-low" },
+    { effort: "medium", expected: "gemini-3.8-flash-medium" },
+    { effort: "high", expected: "gemini-3.8-flash-high" },
+  ])("sends the $effort level of the grouped model as $expected", ({ effort, expected }) =>
+    Effect.gen(function* () {
+      const { runtime, selections } = makeLevelRuntime();
+      const model = yield* applyAntigravityAcpModelSelection({
+        runtime,
+        model: "gemini-3.8-flash",
+        options: [{ id: "reasoningEffort", value: effort }],
+        mapError: (cause) => cause,
+      });
+
+      expect(model).toBe(expected);
+      expect(selections).toEqual([expected]);
+    }),
+  );
+
+  it.effect("keeps the session's own level when the selection names none", () =>
+    Effect.gen(function* () {
+      const { runtime, selections } = makeLevelRuntime();
+      const model = yield* applyAntigravityAcpModelSelection({
+        runtime,
+        model: "gemini-3.8-flash",
+        mapError: (cause) => cause,
+      });
+
+      expect(model).toBe("gemini-3.8-flash-high");
+      expect(selections).toEqual(["gemini-3.8-flash-high"]);
+    }),
+  );
+
+  it.effect("maps a Pro level whose id does not follow the Flash pattern", () =>
+    Effect.gen(function* () {
+      const { runtime, selections } = makeLevelRuntime();
+      yield* applyAntigravityAcpModelSelection({
+        runtime,
+        model: "gemini-3.1-pro",
+        options: [{ id: "reasoningEffort", value: "high" }],
+        mapError: (cause) => cause,
+      });
+
+      expect(selections).toEqual(["gemini-pro-agent"]);
+    }),
+  );
+
+  it.effect("keeps a thread created with a per-level id on its level", () =>
+    Effect.gen(function* () {
+      const { runtime, selections } = makeLevelRuntime();
+      const model = yield* applyAntigravityAcpModelSelection({
+        runtime,
+        model: "gemini-3.8-flash-low",
+        mapError: (cause) => cause,
+      });
+
+      expect(model).toBe("gemini-3.8-flash-low");
+      expect(selections).toEqual(["gemini-3.8-flash-low"]);
+    }),
+  );
+
+  it.effect("ignores a level stored under an id the picker no longer shows", () =>
+    Effect.gen(function* () {
+      const { runtime, selections } = makeLevelRuntime();
+      yield* applyAntigravityAcpModelSelection({
+        runtime,
+        model: "gemini-3.8-flash",
+        options: [{ id: "effort", value: "medium" }],
+        mapError: (cause) => cause,
+      });
+
+      expect(selections).toEqual(["gemini-3.8-flash-high"]);
+    }),
+  );
+
+  it.effect("applies the level to the manifest default when the default alias is selected", () =>
+    Effect.gen(function* () {
+      const { runtime, selections } = makeLevelRuntime();
+      const model = yield* applyAntigravityAcpModelSelection({
+        runtime,
+        model: ANTIGRAVITY_DEFAULT_MODEL,
+        options: [{ id: "reasoningEffort", value: "low" }],
+        defaultModel: "gemini-3.8-flash-high",
+        mapError: (cause) => cause,
+      });
+
+      expect(model).toBe("gemini-3.8-flash-low");
+      expect(selections).toEqual(["gemini-3.8-flash-low"]);
+    }),
+  );
+
+  it.effect("does not reselect the current level for the default alias", () =>
+    Effect.gen(function* () {
+      const { runtime, selections } = makeLevelRuntime();
+      const model = yield* applyAntigravityAcpModelSelection({
+        runtime,
+        model: ANTIGRAVITY_DEFAULT_MODEL,
+        options: [{ id: "reasoningEffort", value: "high" }],
+        defaultModel: "gemini-3.8-flash-high",
+        mapError: (cause) => cause,
+      });
+
+      expect(model).toBe("gemini-3.8-flash-high");
+      expect(selections).toEqual([]);
+    }),
+  );
+
+  it.effect("selects a model that only the legacy list offers through session/set_model", () =>
+    Effect.gen(function* () {
+      const { runtime, selections, legacySelections } = makeLevelRuntime();
+      const legacyModels = {
+        currentModelId: "gemini-3.8-flash-high",
+        availableModels: [{ modelId: "claude-opus-4-6", name: "Claude Opus 4.6 (Thinking)" }],
+      };
+      const model = yield* applyAntigravityAcpModelSelection({
+        runtime,
+        model: "claude-opus-4-6",
+        legacyModels,
+        mapError: (cause) => cause,
+      });
+
+      expect(model).toBe("claude-opus-4-6");
+      expect(selections).toEqual([]);
+      expect(legacySelections).toEqual(["claude-opus-4-6"]);
+    }),
+  );
+
+  it.effect("reports a legacy-only model as unavailable when the runtime cannot select it", () =>
+    Effect.gen(function* () {
+      const { runtime, selections } = makeLevelRuntime(false);
+      const error = yield* applyAntigravityAcpModelSelection({
+        runtime,
+        model: "claude-opus-4-6",
+        legacyModels: {
+          currentModelId: "gemini-3.8-flash-high",
+          availableModels: [{ modelId: "claude-opus-4-6", name: "Claude Opus 4.6" }],
+        },
+        mapError: (cause) => cause,
+      }).pipe(Effect.flip);
+
+      expect(error).toMatchObject({
+        _tag: "AcpRequestError",
+        errorMessage: expect.stringContaining("'claude-opus-4-6' is unavailable"),
+      });
+      expect(selections).toEqual([]);
+    }),
+  );
+});
+
 describe("antigravityPermissionMode", () => {
   it.each([
     { runtimeMode: "approval-required", nativeMode: "default" },

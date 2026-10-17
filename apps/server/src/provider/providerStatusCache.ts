@@ -11,9 +11,17 @@ import * as Schema from "effect/Schema";
 
 import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
 
+import { regroupCachedAntigravityModels } from "./antigravityModelVariants.ts";
+
 const decodeProviderStatusCache = Schema.decodeUnknownEffect(
   Schema.fromJsonString(ServerProviderSchema),
 );
+
+const cachedModelsForProvider = (
+  driver: ServerProvider["driver"],
+  models: ReadonlyArray<ServerProvider["models"][number]>,
+): ReadonlyArray<ServerProvider["models"][number]> =>
+  driver === "antigravity" ? regroupCachedAntigravityModels(models) : models;
 
 const mergeProviderModels = (
   fallbackModels: ReadonlyArray<ServerProvider["models"][number]>,
@@ -79,7 +87,10 @@ export const hydrateCachedProvider = (input: {
   const { message: _fallbackMessage, ...fallbackWithoutMessage } = input.fallbackProvider;
   const hydratedProvider: ServerProvider = {
     ...fallbackWithoutMessage,
-    models: mergeProviderModels(input.fallbackProvider.models, input.cachedProvider.models),
+    models: mergeProviderModels(
+      input.fallbackProvider.models,
+      cachedModelsForProvider(input.fallbackProvider.driver, input.cachedProvider.models),
+    ),
     installed: input.cachedProvider.installed,
     version: input.cachedProvider.version,
     status: input.cachedProvider.status,

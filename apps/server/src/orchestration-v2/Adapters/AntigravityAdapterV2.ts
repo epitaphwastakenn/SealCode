@@ -17,6 +17,7 @@ import * as EffectAcpErrors from "effect-acp/errors";
 import * as ProviderHost from "@t3tools/provider-core/server/ProviderHost";
 import type { AntigravityAuth } from "../../provider/AntigravityAuth.ts";
 import type * as AcpSessionRuntime from "@t3tools/provider-acp/server/AcpSessionRuntime";
+import { ANTIGRAVITY_MODEL_OPTION_IDS } from "../../provider/antigravityModelVariants.ts";
 import {
   antigravityPermissionMode,
   applyAntigravityAcpModelSelection,
@@ -163,13 +164,16 @@ export function makeAntigravityAcpAdapterFlavor(
     preferResumeSession: true,
     subagentsIdleOnTurnCompletion: true,
     ...(options.onSessionEvent === undefined ? {} : { onSessionEvent: options.onSessionEvent }),
-    applyModelSelection: ({ runtime, modelSelection }) =>
+    consumedOptionIds: ANTIGRAVITY_MODEL_OPTION_IDS,
+    applyModelSelection: ({ runtime, startResult, modelSelection }) =>
       Effect.gen(function* () {
         const defaultModel = yield* options.defaultModel;
         return yield* applyAntigravityAcpModelSelection({
           runtime,
           model:
             modelSelection.model === ANTIGRAVITY_DEFAULT_MODEL ? undefined : modelSelection.model,
+          options: modelSelection.options,
+          legacyModels: startResult.sessionSetupResult.models,
           defaultModel,
           mapError: (cause) => cause,
         });

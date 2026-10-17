@@ -86,6 +86,39 @@ describe("AntigravityAdapterV2 flavor", () => {
     assert.equal(mode("full-access"), "yolo");
   });
 
+  it.effect("turns the picker's model and reasoning level into the session's model id", () =>
+    Effect.gen(function* () {
+      const selected: string[] = [];
+      const config = {
+        id: "model",
+        name: "Model",
+        category: "model",
+        type: "select",
+        currentValue: "gemini-3.8-flash-high",
+        options: ["high", "medium", "low"].map((level) => ({
+          value: `gemini-3.8-flash-${level}`,
+          name: `Gemini 3.8 Flash (${level})`,
+        })),
+      } satisfies EffectAcpSchema.SessionConfigOption;
+      const applied = yield* flavor.applyModelSelection!({
+        runtime: {
+          getConfigOptions: Effect.succeed([config]),
+          setModel: (model: string) => Effect.sync(() => void selected.push(model)),
+        } as never,
+        startResult: { sessionSetupResult: { sessionId: "session-1" } } as never,
+        modelSelection: {
+          instanceId: ProviderInstanceId.make("antigravity-test"),
+          model: "gemini-3.8-flash",
+          options: [{ id: "reasoningEffort", value: "low" }],
+        },
+      });
+
+      assert.equal(applied, "gemini-3.8-flash-low");
+      assert.deepEqual(selected, ["gemini-3.8-flash-low"]);
+      assert.include(flavor.consumedOptionIds ?? [], "reasoningEffort");
+    }),
+  );
+
   it("exposes Antigravity's /compact command through the v2 compaction path", () => {
     assert.isTrue(flavor.supportsCompaction);
   });

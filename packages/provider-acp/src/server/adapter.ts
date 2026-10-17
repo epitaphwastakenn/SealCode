@@ -222,6 +222,12 @@ export interface AcpAdapterV2Flavor {
     ChildProcessSpawner.ChildProcessSpawner | Crypto.Crypto | Scope.Scope
   >;
   readonly resolveModelId?: (selection: ModelSelection) => string | undefined;
+  /**
+   * Selection option ids that `applyModelSelection` consumes itself because
+   * the session has no config option for them. Without this they are reported
+   * as options the session does not expose.
+   */
+  readonly consumedOptionIds?: ReadonlyArray<string>;
   readonly applyModelSelection?: (input: {
     readonly runtime: AcpSessionRuntime.AcpSessionRuntime["Service"];
     readonly startResult: AcpSessionRuntime.AcpSessionRuntimeStartResult;
@@ -5883,9 +5889,11 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               };
             });
           }
-          const optionSelections = (modelSelection.options ?? []).map((selection) =>
-            selection.value === ACP_EMPTY_OPTION_VALUE ? { ...selection, value: "" } : selection,
-          );
+          const optionSelections = (modelSelection.options ?? [])
+            .filter((selection) => flavor.consumedOptionIds?.includes(selection.id) !== true)
+            .map((selection) =>
+              selection.value === ACP_EMPTY_OPTION_VALUE ? { ...selection, value: "" } : selection,
+            );
           const configOptions = yield* runtime.getConfigOptions;
           const availableConfigIds = new Set(configOptions.map((option) => option.id));
           const hasNativeConfigWithSyntheticModeId = availableConfigIds.has(

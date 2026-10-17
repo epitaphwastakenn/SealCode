@@ -23,6 +23,7 @@ const emptyCapabilities = createModelCapabilities({ optionDescriptors: [] });
 const CODEX_DRIVER = ProviderDriverKind.make("codex");
 const CLAUDE_AGENT_DRIVER = ProviderDriverKind.make("claudeAgent");
 const OPENCODE_DRIVER = ProviderDriverKind.make("opencode");
+const ANTIGRAVITY_DRIVER = ProviderDriverKind.make("antigravity");
 
 const makeProvider = (
   provider: ProviderDriverKind,
@@ -208,6 +209,60 @@ it.layer(NodeServices.layer)("providerStatusCache", (it) => {
         fallbackProvider: fallbackCodex,
       }).models,
       [builtIn],
+    );
+  });
+
+  it("regroups cached Antigravity per-level models instead of restoring them", () => {
+    const perLevel = (
+      slug: string,
+      name: string,
+      extra: Partial<ServerProvider["models"][number]> = {},
+    ) => ({
+      slug,
+      name,
+      isCustom: false,
+      capabilities: emptyCapabilities,
+      ...extra,
+    });
+    const hydrated = hydrateCachedProvider({
+      cachedProvider: makeProvider(ANTIGRAVITY_DRIVER, {
+        models: [
+          perLevel("gemini-3.8-flash-high", "Gemini 3.8 Flash (High)", {
+            isDefault: true,
+            aliases: ["antigravity-default"],
+          }),
+          perLevel("gemini-3.8-flash-medium", "Gemini 3.8 Flash (Medium)"),
+          perLevel("gemini-3.8-flash-low", "Gemini 3.8 Flash (Low)"),
+          perLevel("gpt-oss-120b", "GPT-OSS 120B (Medium)"),
+        ],
+      }),
+      fallbackProvider: makeProvider(ANTIGRAVITY_DRIVER),
+    });
+
+    assert.deepStrictEqual(
+      hydrated.models.map((model) => model.slug),
+      ["gemini-3.8-flash", "gpt-oss-120b"],
+    );
+    assert.strictEqual(hydrated.models[0]?.isDefault, true);
+    assert.deepStrictEqual(
+      hydrated.models[0]?.capabilities?.optionDescriptors?.map((descriptor) => descriptor.id),
+      ["reasoningEffort"],
+    );
+  });
+
+  it("does not regroup other drivers' cached models", () => {
+    const cachedModels = ["a-high", "a-low"].map((slug) => ({
+      slug,
+      name: slug,
+      isCustom: false,
+      capabilities: emptyCapabilities,
+    }));
+    assert.deepStrictEqual(
+      hydrateCachedProvider({
+        cachedProvider: makeProvider(CODEX_DRIVER, { models: cachedModels }),
+        fallbackProvider: makeProvider(CODEX_DRIVER),
+      }).models.map((model) => model.slug),
+      ["a-high", "a-low"],
     );
   });
 

@@ -1,5 +1,4 @@
 import {
-  ANTIGRAVITY_DEFAULT_MODEL,
   ProviderDriverKind,
   type AntigravitySettings,
   type ProviderSetupError,
@@ -8,7 +7,6 @@ import {
   type ServerProviderSlashCommand,
   type ServerProviderUsageLimits,
 } from "@t3tools/contracts";
-import { createModelCapabilities } from "@t3tools/shared/model";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -32,7 +30,12 @@ import {
 } from "@t3tools/provider-core/server/snapshotProbe";
 import { resolveUsageLimitsAfterProbe } from "@t3tools/provider-core/server/usageLimits";
 
-const EMPTY_MODEL_CAPABILITIES = createModelCapabilities({ optionDescriptors: [] });
+import {
+  antigravitySessionModels,
+  buildAntigravityServerModels,
+  type AntigravityModelEntry,
+} from "./antigravityModelVariants.ts";
+
 const MAX_WORKSPACE_SNAPSHOTS = 32;
 const HEALTH_CHECK_TIMEOUT = "90 seconds";
 const SIGN_IN_MESSAGE = "Sign in with Google to use Antigravity.";
@@ -44,40 +47,29 @@ type SessionSetupResult = Pick<
   "configOptions" | "models"
 >;
 
+/**
+ * `carriedEntries` are models an earlier session setup offered only through the
+ * legacy `models` list. A later `config_option_update` carries just the config
+ * select, and replacing the catalog with it would drop them.
+ */
 export function buildAntigravityModelsFromSession(
   setup: SessionSetupResult,
+  options: {
+    readonly preferredDefault?: string | undefined;
+    readonly carriedEntries?: ReadonlyArray<AntigravityModelEntry>;
+  } = {},
 ): ReadonlyArray<ServerProviderModel> {
-  const config = setup.configOptions?.find(
-    (option) => option.id === "model" || option.category === "model",
-  );
-  const currentValue =
-    config?.type === "select" ? config.currentValue : setup.models?.currentModelId;
-  const entries =
-    config?.type === "select"
-      ? config.options.flatMap((entry) => ("value" in entry ? [entry] : entry.options))
-      : config === undefined
-        ? (setup.models?.availableModels.map((model) => ({
-            value: model.modelId,
-            name: model.name,
-          })) ?? [])
-        : [];
-  const seen = new Set<string>();
-  return entries.flatMap((entry): ServerProviderModel[] => {
-    if (!entry.value.trim() || seen.has(entry.value)) return [];
-    seen.add(entry.value);
-    return [
-      {
-        slug: entry.value,
-        name: entry.name.trim() ? entry.name : entry.value,
-        isCustom: false,
-        ...(entry.value === currentValue
-          ? { isDefault: true, aliases: [ANTIGRAVITY_DEFAULT_MODEL] }
-          : {}),
-        capabilities: EMPTY_MODEL_CAPABILITIES,
-      },
-    ];
+  const session = antigravitySessionModels(setup);
+  return buildAntigravityServerModels([...session.entries, ...(options.carriedEntries ?? [])], {
+    currentValue: session.currentValue,
+    preferredDefault: options.preferredDefault,
   });
 }
+
+const legacyOnlyEntries = (setup: SessionSetupResult): ReadonlyArray<AntigravityModelEntry> => {
+  const session = antigravitySessionModels(setup);
+  return session.entries.filter((entry) => !session.configIds.has(entry.value));
+};
 
 function nativeCommands(
   commands: ReadonlyArray<EffectAcpSchema.AvailableCommand>,
@@ -115,6 +107,7 @@ function isMissingInstallation(error: EffectAcpErrors.AcpError | ProviderSetupEr
 interface AntigravityProviderState {
   readonly draft: ServerProviderDraft;
   readonly authRevision: number;
+  readonly carriedModels: ReadonlyArray<AntigravityModelEntry>;
 }
 
 interface AntigravityProviderOptions {
@@ -124,6 +117,8 @@ interface AntigravityProviderOptions {
     EffectAcpErrors.AcpError | ProviderSetupError
   >;
   readonly supportsTextGeneration: Effect.Effect<boolean>;
+  /** The manifest's default chat model; it outranks the session's current model as the picker default. */
+  readonly defaultModel?: Effect.Effect<string | undefined>;
   readonly probeUsage?: Effect.Effect<ServerProviderUsageLimits>;
   readonly clearUsage?: Effect.Effect<void>;
   readonly maintenanceCapabilities?: ProviderMaintenanceCapabilities;
@@ -159,6 +154,7 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
   const metadata = yield* SubscriptionRef.make<AntigravityProviderState>({
     draft: initialDraft,
     authRevision: 0,
+    carriedModels: [],
   });
   // Skills the driver discovered on disk per workspace. Session callbacks
   // rewrite the workspace entry with native commands and must keep these, or
@@ -273,6 +269,7 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
       options.probeUsage && (!before.draft.usageLimits || before.draft.usageLimits.unavailable)
         ? yield* options.probeUsage
         : before.draft.usageLimits;
+    const preferredDefault = options.defaultModel ? yield* options.defaultModel : undefined;
     const updatedAt = DateTime.formatIso(yield* DateTime.now);
     yield* SubscriptionRef.update(metadata, (state) => {
       if (
@@ -286,6 +283,7 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
       const workspace = cwd ? workspaces.find((entry) => entry.cwd === cwd) : undefined;
       return {
         authRevision: state.authRevision + 1,
+        carriedModels: legacyOnlyEntries(started.sessionSetupResult),
         draft: {
           ...draft,
           installed: true,
@@ -301,7 +299,9 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
             published: draft.usageLimits,
             probed: usageLimits ?? draft.usageLimits,
           }),
-          models: buildAntigravityModelsFromSession(started.sessionSetupResult),
+          models: buildAntigravityModelsFromSession(started.sessionSetupResult, {
+            preferredDefault,
+          }),
           supportsTextGeneration,
           ...(cwd
             ? {
@@ -324,9 +324,13 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
   const onConfigOptionsUpdated = Effect.fn("AntigravityProvider.onConfigOptionsUpdated")(function* (
     configOptions: ReadonlyArray<EffectAcpSchema.SessionConfigOption>,
   ) {
-    const models = buildAntigravityModelsFromSession({ configOptions });
+    const preferredDefault = options.defaultModel ? yield* options.defaultModel : undefined;
     yield* SubscriptionRef.update(metadata, (state) => {
       if (state.draft.auth.status !== "authenticated") return state;
+      const models = buildAntigravityModelsFromSession(
+        { configOptions },
+        { preferredDefault, carriedEntries: state.carriedModels },
+      );
       return { ...state, draft: { ...state.draft, models } };
     });
   });
@@ -375,6 +379,7 @@ export const makeAntigravityProvider = Effect.fn("makeAntigravityProvider")(func
       (state) =>
         ({
           authRevision: state.authRevision + 1,
+          carriedModels: [],
           draft: {
             ...state.draft,
             auth: { status: "unauthenticated" },

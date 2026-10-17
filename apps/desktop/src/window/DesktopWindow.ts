@@ -141,6 +141,15 @@ function getInitialWindowBackgroundColor(shouldUseDarkColors: boolean): string {
   return shouldUseDarkColors ? "#0a0a0a" : "#ffffff";
 }
 
+// Acrylic only shows through a fully transparent window. The renderer keeps its
+// own surfaces opaque until the glass sidebar is enabled (see index.css).
+function getMainWindowBackgroundColor(
+  shouldUseDarkColors: boolean,
+  platform: NodeJS.Platform,
+): string {
+  return platform === "win32" ? "#00000000" : getInitialWindowBackgroundColor(shouldUseDarkColors);
+}
+
 type DisplayBounds = Pick<Electron.Rectangle, "x" | "y" | "width" | "height">;
 
 function windowFitsWithinDisplay(
@@ -265,7 +274,7 @@ function syncWindowAppearance(
       return;
     }
 
-    window.setBackgroundColor(getInitialWindowBackgroundColor(shouldUseDarkColors));
+    window.setBackgroundColor(getMainWindowBackgroundColor(shouldUseDarkColors, platform));
     if (platform === "win32") {
       window.setBackgroundMaterial("acrylic");
     }
@@ -377,7 +386,8 @@ export const make = Effect.gen(function* () {
       show: false,
       autoHideMenuBar: true,
       ...(environment.platform === "darwin" ? { disableAutoHideCursor: true } : {}),
-      backgroundColor: getInitialWindowBackgroundColor(shouldUseDarkColors),
+      ...(environment.platform === "win32" ? { transparent: true } : {}),
+      backgroundColor: getMainWindowBackgroundColor(shouldUseDarkColors, environment.platform),
       ...getWindowBackdropOptions(environment.platform),
       ...iconOption,
       title: environment.displayName,

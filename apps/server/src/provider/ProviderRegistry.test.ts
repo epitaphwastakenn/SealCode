@@ -1645,6 +1645,104 @@ it.layer(
       }),
     );
 
+    it.effect("publishes subscription usage derived from a provider's usage limits", () =>
+      Effect.gen(function* () {
+        const driver = ProviderDriverKind.make("opencode");
+        const instanceId = ProviderInstanceId.make("opencode");
+        const provider = {
+          instanceId,
+          driver,
+          status: "ready",
+          enabled: true,
+          installed: true,
+          auth: { status: "authenticated" },
+          checkedAt: "2026-10-17T00:00:00.000Z",
+          version: "1.0.0",
+          usageLimits: {
+            checkedAt: "2026-10-17T00:00:00.000Z",
+            windows: [
+              {
+                id: "go_weekly",
+                kind: "weekly",
+                label: "Go · Weekly",
+                usedPercent: 42,
+                windowDurationMins: 10_080,
+                resetsAt: "2026-10-20T00:00:00.000Z",
+              },
+            ],
+          },
+          models: [],
+          slashCommands: [],
+          skills: [],
+        } as const satisfies ServerProvider;
+        const instance = {
+          instanceId,
+          driverKind: driver,
+          continuationIdentity: {
+            driverKind: driver,
+            continuationKey: "opencode:instance:opencode",
+          },
+          displayName: undefined,
+          enabled: true,
+          snapshot: {
+            resolveMaintenance: () =>
+              Effect.succeed(
+                makeManualOnlyProviderMaintenanceCapabilities({
+                  provider: driver,
+                  packageName: null,
+                }),
+              ),
+            getSnapshot: Effect.succeed(provider),
+            refresh: Effect.never,
+            streamChanges: Stream.empty,
+            applyUsageLimits: () => Effect.void,
+          },
+          orchestrationAdapter: {} as ProviderInstance["orchestrationAdapter"],
+          textGeneration: {} as ProviderInstance["textGeneration"],
+        } satisfies ProviderInstance;
+        const layerInstanceRegistry = Layer.succeed(
+          ProviderInstanceRegistry.ProviderInstanceRegistry,
+          {
+            getInstance: (id) => Effect.succeed(id === instanceId ? instance : undefined),
+            listInstances: Effect.succeed([instance]),
+            listUnavailable: Effect.succeed([]),
+            streamChanges: Stream.empty,
+            subscribeChanges: Effect.flatMap(PubSub.unbounded<void>(), PubSub.subscribe),
+          },
+        );
+        const scope = yield* Scope.make();
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void));
+        const runtimeServices = yield* Layer.build(
+          ProviderRegistry.layer.pipe(
+            Layer.provideMerge(layerInstanceRegistry),
+            Layer.provideMerge(
+              ServerConfig.layerTest(process.cwd(), {
+                prefix: "t3-provider-registry-subscription-usage-",
+              }),
+            ),
+            Layer.provideMerge(NodeServices.layer),
+          ),
+        ).pipe(Scope.provide(scope));
+        yield* Effect.gen(function* () {
+          const registry = yield* ProviderRegistry.ProviderRegistry;
+          assert.deepStrictEqual((yield* registry.getProviders)[0]?.subscriptionUsage, {
+            plan: "OpenCode Go",
+            windows: [
+              {
+                id: "go_weekly",
+                label: "Go · Weekly",
+                usedPercent: 42,
+                windowDurationMins: 10_080,
+                resetsAt: "2026-10-20T00:00:00.000Z",
+              },
+            ],
+            metrics: [],
+            checkedAt: "2026-10-17T00:00:00.000Z",
+          });
+        }).pipe(Effect.provide(runtimeServices));
+      }),
+    );
+
     it.effect("deduplicates cwd probes and clears snapshots when an instance rebuilds", () =>
       Effect.gen(function* () {
         const driver = ProviderDriverKind.make("codex");

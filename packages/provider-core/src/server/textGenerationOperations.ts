@@ -9,6 +9,7 @@ import type { ProviderTextGeneration } from "./textGeneration.ts";
 import {
   buildBranchNamePrompt,
   buildCommitMessagePrompt,
+  buildImageDescriptionPrompt,
   buildPrContentPrompt,
   buildReviewGuidePrompt,
   buildThreadTitlePrompt,
@@ -168,11 +169,31 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     });
   });
 
+  const describeImages: NonNullable<ProviderTextGeneration["describeImages"]> = Effect.fn(
+    `${name}.describeImages`,
+  )(function* (input) {
+    if (!input.attachments.some((attachment) => attachment.type === "image")) {
+      return yield* new TextGenerationError({
+        operation: "describeImages",
+        detail: "No image attachments were supplied.",
+      });
+    }
+    const generated = yield* run({
+      operation: "describeImages",
+      cwd: input.cwd,
+      modelSelection: input.modelSelection,
+      attachments: input.attachments,
+      ...buildImageDescriptionPrompt({ message: input.message }),
+    });
+    return { description: generated.description.trim() };
+  });
+
   return {
     generateCommitMessage,
     generatePrContent,
     generateBranchName,
     generateThreadTitle,
     generateReviewGuide,
+    describeImages,
   } satisfies ProviderTextGeneration;
 }

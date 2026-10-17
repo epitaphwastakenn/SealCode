@@ -3422,6 +3422,17 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
           });
         } else assert.isUndefined(candidate);
         assert.isUndefined(candidates.find((row) => row.id === otherThreadId));
+        const limitedRuns = yield* store.getUsageLimitedRuns({
+          since: DateTime.subtract(now, { minutes: 1 }),
+        });
+        assert.deepEqual(
+          limitedRuns.map((row) => [row.threadId, row.run.id]),
+          lastErrorClass === "usage_limit" ? [[threadId, sqlShell.latestRunId]] : [],
+        );
+        assert.deepEqual(
+          yield* store.getUsageLimitedRuns({ since: DateTime.add(now, { minutes: 1 }) }),
+          [],
+        );
       });
       yield* store.apply({
         id: EventId.make("event:limit-shell:error"),

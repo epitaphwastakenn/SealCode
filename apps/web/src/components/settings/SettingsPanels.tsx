@@ -293,9 +293,9 @@ function backgroundActivityProfileSettings(profile: BackgroundActivityProfile) {
   };
 }
 
-// SealCode 1.x ran these helper models and the Seals.md rules on its old
-// orchestrator. The V2 server does not read them yet, so the rows stay hidden
-// instead of offering settings that change nothing.
+// SealCode 1.x ran these helper models on its old orchestrator. V2 has no
+// compaction, curation or delegation hook that reads them, so the rows stay
+// hidden instead of offering settings that change nothing.
 const HARNESS_HELPER_SETTINGS_AVAILABLE = false;
 
 function HarnessHelperModelRow(props: {
@@ -3648,66 +3648,64 @@ export function GeneralSettingsPanel() {
           }
         />
 
-        {HARNESS_HELPER_SETTINGS_AVAILABLE ? (
-          <SettingsRow
-            serverScoped
-            settingKeys={["imageViewerModelSelection"]}
-            {...searchableSetting("image-viewer-model")}
-            description="Codex model used to interpret images for main models without vision support."
-            resetAction={
-              isImageViewerModelDirty ? (
-                <SettingResetButton
-                  label="image viewer model"
-                  onClick={() =>
-                    updateSettings({
-                      imageViewerModelSelection: DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection,
-                    })
-                  }
-                />
-              ) : null
-            }
-            control={
-              <div className="flex flex-wrap items-center justify-end gap-1.5">
-                <ProviderModelPicker
-                  environmentId={environmentId}
-                  activeInstanceId={imageViewerInstanceId}
-                  model={imageViewerModel}
-                  lockedProvider={CODEX_DRIVER_KIND}
-                  instanceEntries={imageViewerInstanceEntries}
-                  modelOptionsByInstance={imageViewerModelOptionsByInstance}
-                  triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
-                  onInstanceModelChange={(instanceId, model) => {
-                    updateSettings({
-                      imageViewerModelSelection: createModelSelection(instanceId, model),
-                    });
-                  }}
-                />
-                <TraitsPicker
-                  provider={CODEX_DRIVER_KIND}
-                  models={imageViewerInstanceEntry?.models ?? []}
-                  model={imageViewerModel}
-                  prompt=""
-                  onPromptChange={() => {}}
-                  modelOptions={imageViewerModelOptions}
-                  allowPromptInjectedEffort={false}
-                  planModeEnabled={
-                    settings.planModeEnabled || selectsPlanAgent(imageViewerModelOptions)
-                  }
-                  triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
-                  onModelOptionsChange={(nextOptions) => {
-                    updateSettings({
-                      imageViewerModelSelection: createModelSelection(
-                        imageViewerInstanceId,
-                        imageViewerModel,
-                        nextOptions,
-                      ),
-                    });
-                  }}
-                />
-              </div>
-            }
-          />
-        ) : null}
+        <SettingsRow
+          serverScoped
+          settingKeys={["imageViewerModelSelection"]}
+          {...searchableSetting("image-viewer-model")}
+          description="Codex model used to interpret images for main models without vision support."
+          resetAction={
+            isImageViewerModelDirty ? (
+              <SettingResetButton
+                label="image viewer model"
+                onClick={() =>
+                  updateSettings({
+                    imageViewerModelSelection: DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <ProviderModelPicker
+                environmentId={environmentId}
+                activeInstanceId={imageViewerInstanceId}
+                model={imageViewerModel}
+                lockedProvider={CODEX_DRIVER_KIND}
+                instanceEntries={imageViewerInstanceEntries}
+                modelOptionsByInstance={imageViewerModelOptionsByInstance}
+                triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
+                onInstanceModelChange={(instanceId, model) => {
+                  updateSettings({
+                    imageViewerModelSelection: createModelSelection(instanceId, model),
+                  });
+                }}
+              />
+              <TraitsPicker
+                provider={CODEX_DRIVER_KIND}
+                models={imageViewerInstanceEntry?.models ?? []}
+                model={imageViewerModel}
+                prompt=""
+                onPromptChange={() => {}}
+                modelOptions={imageViewerModelOptions}
+                allowPromptInjectedEffort={false}
+                planModeEnabled={
+                  settings.planModeEnabled || selectsPlanAgent(imageViewerModelOptions)
+                }
+                triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
+                onModelOptionsChange={(nextOptions) => {
+                  updateSettings({
+                    imageViewerModelSelection: createModelSelection(
+                      imageViewerInstanceId,
+                      imageViewerModel,
+                      nextOptions,
+                    ),
+                  });
+                }}
+              />
+            </div>
+          }
+        />
 
         <SettingsRow
           title="Show provider thinking"
@@ -3866,31 +3864,31 @@ export function GeneralSettingsPanel() {
                 updateSettings({ delegationDefaultModelSelection: selection })
               }
             />
-
-            <SettingsRow
-              serverScoped
-              settingKeys={["sealsInstructions"]}
-              title="Seals.md harness rules"
-              description="Persistent instructions included at the start of every provider turn, similar to global user rules."
-            >
-              <div className="mt-3 w-full pb-3.5">
-                <Textarea
-                  key={settings.sealsInstructions}
-                  defaultValue={settings.sealsInstructions}
-                  onBlur={(event) => {
-                    const sealsInstructions = event.target.value.trim();
-                    if (sealsInstructions !== settings.sealsInstructions) {
-                      updateSettings({ sealsInstructions });
-                    }
-                  }}
-                  rows={7}
-                  placeholder="Use concise answers. Run focused tests after edits."
-                  aria-label="Seals.md harness rules"
-                />
-              </div>
-            </SettingsRow>
           </>
         ) : null}
+
+        <SettingsRow
+          serverScoped
+          settingKeys={["sealsInstructions"]}
+          title="Seals.md harness rules"
+          description="Persistent instructions included at the start of every provider turn, similar to global user rules."
+        >
+          <div className="mt-3 w-full pb-3.5">
+            <Textarea
+              key={settings.sealsInstructions}
+              defaultValue={settings.sealsInstructions}
+              onBlur={(event) => {
+                const sealsInstructions = event.target.value.trim();
+                if (sealsInstructions !== settings.sealsInstructions) {
+                  updateSettings({ sealsInstructions });
+                }
+              }}
+              rows={7}
+              placeholder="Use concise answers. Run focused tests after edits."
+              aria-label="Seals.md harness rules"
+            />
+          </div>
+        </SettingsRow>
       </SettingsSection>
 
       <SettingsSection id="about" title="About">

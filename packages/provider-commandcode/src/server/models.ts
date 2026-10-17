@@ -11,8 +11,10 @@ import { createModelCapabilities } from "@t3tools/shared/model";
 
 import { buildSelectOptionDescriptor } from "@t3tools/provider-core/server/snapshotProbe";
 
+// The headless CLI takes no image input, so the image viewer model describes attachments instead.
 export const COMMAND_CODE_NO_EFFORT_CAPABILITIES: ModelCapabilities = createModelCapabilities({
   optionDescriptors: [],
+  vision: false,
 });
 
 /** Shown until the CLI answers, and whenever it cannot list models. */
@@ -90,6 +92,7 @@ export function commandCodeModelCapabilities(efforts: ReadonlyArray<string>): Mo
         })),
       }),
     ],
+    vision: false,
   });
 }
 

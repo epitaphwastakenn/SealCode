@@ -169,6 +169,11 @@ export type ProjectionLimitRecoveryCandidate = Pick<
   | "snoozedUntil"
 >;
 
+export interface ProjectionUsageLimitedRun {
+  readonly threadId: ThreadId;
+  readonly run: OrchestrationV2Run;
+}
+
 export type ProjectionThreadPullRequests = Pick<
   OrchestrationV2AppThread,
   "id" | "projectId" | "lineage" | "settledOverride" | "settledAt" | "pullRequests"
@@ -416,6 +421,10 @@ export interface ProjectionStoreV2Shape {
     readonly autoResume: boolean;
     readonly snooze: boolean;
   }) => Effect.Effect<ReadonlyArray<ProjectionLimitRecoveryCandidate>, ProjectionStoreV2Error>;
+  /** Threads whose latest run failed on a usage limit at or after `since`, with or without a reset time. */
+  readonly getUsageLimitedRuns: (options: {
+    readonly since: DateTime.Utc;
+  }) => Effect.Effect<ReadonlyArray<ProjectionUsageLimitedRun>, ProjectionStoreV2Error>;
   readonly getSettlementCandidates: (
     threadId?: ThreadId,
   ) => Effect.Effect<ReadonlyArray<ProjectionSettlementCandidate>, ProjectionStoreV2Error>;
@@ -3643,6 +3652,78 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       Effect.mapError((cause) => new ProjectionStoreSetupError({ cause })),
     );
 
+    const getUsageLimitedRuns = Effect.fn("ProjectionStore.getUsageLimitedRuns")(
+      function* (options: Parameters<ProjectionStoreV2Shape["getUsageLimitedRuns"]>[0]) {
+        const rows = yield* sql<{
+          readonly thread_id: string;
+          readonly run_payload_json: string;
+          readonly failure_payload_json: string;
+          readonly last_error: string | null;
+        }>`
+          SELECT t.thread_id, r.payload_json AS run_payload_json,
+            item.payload_json AS failure_payload_json,
+            (
+              SELECT json_extract(session.payload_json, '$.lastError')
+              -- Keep bindings outermost: one provider instance can hold every session.
+              FROM orchestration_v2_projection_provider_session_bindings binding
+              CROSS JOIN orchestration_v2_projection_provider_sessions session
+                ON session.provider_session_id = binding.provider_session_id
+              WHERE binding.thread_id = t.thread_id
+                AND session.provider_instance_id = t.provider_instance_id
+              ORDER BY session.updated_at DESC, session.provider_session_id DESC
+              LIMIT 1
+            ) AS last_error
+          FROM orchestration_v2_projection_threads t
+          INNER JOIN orchestration_v2_projection_runs r ON r.run_id = (
+            SELECT latest.run_id FROM orchestration_v2_projection_runs latest
+            WHERE latest.thread_id = t.thread_id
+              AND latest.status <> 'queued'
+              AND NOT (
+                latest.status = 'cancelled'
+                AND json_extract(latest.payload_json, '$.startedAt') IS NULL
+              )
+            ORDER BY latest.completed_at IS NULL DESC, latest.completed_at DESC,
+              latest.ordinal DESC, latest.run_id DESC
+            LIMIT 1
+          ) AND r.status = 'failed'
+          INNER JOIN orchestration_v2_projection_turn_items item ON item.turn_item_id = (
+            SELECT error.turn_item_id FROM orchestration_v2_projection_turn_items error
+            WHERE error.thread_id = t.thread_id AND error.run_id = r.run_id
+              AND error.type = 'error' AND error.status = 'failed'
+              AND error.node_id IS json_extract(r.payload_json, '$.rootNodeId')
+            ORDER BY error.updated_at DESC, error.ordinal DESC, error.turn_item_id DESC
+            LIMIT 1
+          )
+          WHERE t.deleted_at IS NULL
+            AND json_extract(t.payload_json, '$.archivedAt') IS NULL
+            AND json_extract(t.payload_json, '$.settledOverride') IS NOT 'settled'
+            AND json_extract(item.payload_json, '$.failure.class') = 'usage_limit'
+            AND r.completed_at IS NOT NULL
+            AND julianday(r.completed_at) >= julianday(${DateTime.formatIso(options.since)})
+            AND NOT EXISTS (
+              SELECT 1 FROM orchestration_v2_projection_runtime_requests request
+              WHERE request.thread_id = t.thread_id AND request.status = 'pending'
+            )
+          ORDER BY t.thread_id
+        `;
+        const limited: Array<ProjectionUsageLimitedRun> = [];
+        for (const row of rows) {
+          const item = yield* decodeTurnItemPayload(row.failure_payload_json);
+          const summary = threadErrorSummary(
+            item.type === "error" ? item.failure : null,
+            row.last_error,
+          );
+          if (summary.lastErrorClass !== "usage_limit") continue;
+          limited.push({
+            threadId: ThreadId.make(row.thread_id),
+            run: yield* decodeRunPayload(row.run_payload_json),
+          });
+        }
+        return limited;
+      },
+      Effect.mapError((cause) => new ProjectionStoreSetupError({ cause })),
+    );
+
     const getRecoveryThreadIds = Effect.fn("ProjectionStore.getRecoveryThreadIds")(
       function* (kind: ProjectionRecoveryKind) {
         const candidates = (() => {
@@ -6092,6 +6173,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
       getPlan,
       getProviderControlContext,
       getLimitRecoveryCandidates,
+      getUsageLimitedRuns,
       getRecoveryThreadIds,
       getUnreadableThreadIds,
       getThreadSnapshot,
@@ -6299,6 +6381,28 @@ export const layerMemory: Layer.Layer<ProjectionStoreV2> = Layer.effect(
                 );
               })
               .toSorted((left, right) => left.id.localeCompare(right.id)),
+          ),
+        ),
+      getUsageLimitedRuns: (options) =>
+        Ref.get(replayState).pipe(
+          Effect.map((state) =>
+            [...state.projections.values()]
+              .flatMap((projection) => {
+                const { thread } = projection;
+                const shell = threadShellFromProjection(projection);
+                const run = projection.runs.find((candidate) => candidate.id === shell.latestRunId);
+                return thread.deletedAt === null &&
+                  thread.archivedAt === null &&
+                  thread.settledOverride !== "settled" &&
+                  shell.pendingRuntimeRequest === null &&
+                  shell.lastErrorClass === "usage_limit" &&
+                  run?.status === "failed" &&
+                  run.completedAt !== null &&
+                  DateTime.toEpochMillis(run.completedAt) >= DateTime.toEpochMillis(options.since)
+                  ? [{ threadId: thread.id, run }]
+                  : [];
+              })
+              .toSorted((left, right) => left.threadId.localeCompare(right.threadId)),
           ),
         ),
       getRecoveryThreadIds: (kind) =>

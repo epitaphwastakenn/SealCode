@@ -449,3 +449,22 @@ export function buildThreadTitlePrompt(input: ThreadTitlePromptInput) {
 
   return { prompt, outputSchema };
 }
+
+export interface ImageDescriptionPromptInput {
+  readonly message: string;
+}
+
+export function buildImageDescriptionPrompt(input: ImageDescriptionPromptInput) {
+  const prompt = [
+    "Interpret the attached image or images for another coding agent that cannot see them.",
+    "Return JSON with exactly one key: description.",
+    "Describe visible UI structure, text, colors, spacing, states, annotations, errors, and implementation-relevant details.",
+    "Be precise and compact. Do not edit files or run tools.",
+    "",
+    "User request:",
+    input.message,
+  ].join("\n");
+  const outputSchema = Schema.Struct({ description: Schema.String });
+
+  return { prompt, outputSchema };
+}

@@ -68,6 +68,17 @@ export interface ThreadTitleGenerationResult {
   needsRefinement?: boolean | undefined;
 }
 
+export interface ImageDescriptionInput {
+  cwd: string;
+  message: string;
+  attachments: ReadonlyArray<ChatAttachment>;
+  modelSelection: ModelSelection;
+}
+
+export interface ImageDescriptionResult {
+  description: string;
+}
+
 export interface ReviewGuideStackLayer {
   readonly number: number;
   readonly title: string | null;
@@ -113,4 +124,9 @@ export interface ProviderTextGeneration {
   readonly generateReviewGuide: (
     input: ReviewGuideGenerationInput,
   ) => Effect.Effect<ReviewGuideGenerationResult, TextGenerationError>;
+
+  /** Absent on providers that cannot read image attachments. */
+  readonly describeImages?: (
+    input: ImageDescriptionInput,
+  ) => Effect.Effect<ImageDescriptionResult, TextGenerationError>;
 }

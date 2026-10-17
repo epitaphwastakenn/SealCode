@@ -162,10 +162,6 @@ function nextConfigBlobWithValue(
   return base;
 }
 
-// SealCode 1.x switched accounts on the old orchestrator; the V2 server does
-// not read fallbackInstanceId yet, so the row stays hidden until it does.
-const FALLBACK_INSTANCE_SETTING_AVAILABLE = false;
-
 export function deriveProviderModelsForDisplay(input: {
   readonly liveModels: ReadonlyArray<ServerProviderModel> | undefined;
   readonly customModels: ReadonlyArray<CustomModelDefinition>;
@@ -1200,7 +1196,7 @@ export function ProviderInstanceCard({
             </div>
           }
         />
-        {FALLBACK_INSTANCE_SETTING_AVAILABLE && fallbackInstances ? (
+        {fallbackInstances ? (
           <SettingsRow
             title="Fallback instance"
             description="Continues this thread on another account when the current account reaches its five-hour limit."

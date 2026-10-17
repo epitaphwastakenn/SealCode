@@ -2,6 +2,7 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it, vi } from "vite-plus/test";
 import { it as effectIt } from "@effect/vitest";
 import {
+  type ChatAttachment,
   CheckpointScopeId,
   MessageId,
   NodeId,
@@ -42,6 +43,7 @@ import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import * as ProviderTurnStart from "./ProviderTurnStartService.ts";
 import * as RunExecutionService from "./RunExecutionService.ts";
 import * as RuntimePolicy from "./RuntimePolicy.ts";
+import * as SealTurnInput from "./SealTurnInput.ts";
 
 const isDomainEvent = Schema.is(OrchestrationV2DomainEvent);
 
@@ -97,6 +99,7 @@ it("does not commit running state when inherited background routing cannot be re
   const layer = ProviderTurnStart.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
+        SealTurnInput.layerPassthrough,
         Layer.mock(ContextHandoffService.ContextHandoffServiceV2)({}),
         Layer.mock(EventSink.EventSinkV2)({ writeIfRunCurrent }),
         IdAllocator.layer,
@@ -177,6 +180,8 @@ function makeLocalCommandHarness(input: {
   readonly interruptRunBeforeOpenFailure?: boolean;
   readonly writeFailure?: unknown;
   readonly failReadsAfterRunning?: boolean;
+  readonly sealInput?: Layer.Layer<SealTurnInput.SealTurnInputV2>;
+  readonly attachments?: ReadonlyArray<ChatAttachment>;
 }) {
   const now = DateTime.makeUnsafe("2026-09-04T12:00:00Z");
   const threadId = ThreadId.make("thread-native-account-command");
@@ -231,7 +236,7 @@ function makeLocalCommandHarness(input: {
     nodeId: rootNodeId,
     role: "user",
     text: input.text,
-    attachments: [],
+    attachments: input.attachments ?? [],
     streaming: false,
     createdBy: "user",
     creationSource: "web",
@@ -511,6 +516,7 @@ function makeLocalCommandHarness(input: {
   const layer = ProviderTurnStart.layer.pipe(
     Layer.provide(
       Layer.mergeAll(
+        input.sealInput ?? SealTurnInput.layerPassthrough,
         Layer.mock(ContextHandoffService.ContextHandoffServiceV2)({
           prepareProviderHandoff: () => Effect.die("history read must fail first"),
         }),
@@ -1042,3 +1048,65 @@ for (const previousMessages of [[], ["/compact", " /COMPACT "]]) {
       }),
   );
 }
+
+effectIt.effect("hands the provider the Seals-prepared text and attachments", () =>
+  Effect.gen(function* () {
+    const harness = makeLocalCommandHarness({
+      text: "what is wrong here?",
+      failReadsAfterRunning: true,
+      attachments: [
+        {
+          type: "image",
+          id: "image-1",
+          name: "a.png",
+          mimeType: "image/png",
+          sizeBytes: 1,
+        } as never,
+      ],
+      sealInput: Layer.succeed(
+        SealTurnInput.SealTurnInputV2,
+        SealTurnInput.SealTurnInputV2.of({
+          prepare: () =>
+            Effect.succeed({
+              text: "<described>",
+              attachments: [],
+              frame: (text) => `<rules>
+${text}`,
+            }),
+        }),
+      ),
+    });
+    yield* harness.start;
+    const message = harness.startRootRun.mock.calls[0]![0].message;
+    expect(message.text).toBe("<rules>\n<described>");
+    expect(message.attachments).toEqual([]);
+  }),
+);
+
+effectIt.effect(
+  "fails the run before opening a session when the turn input cannot be prepared",
+  () =>
+    Effect.gen(function* () {
+      const harness = makeLocalCommandHarness({
+        text: "look at this",
+        sealInput: Layer.succeed(
+          SealTurnInput.SealTurnInputV2,
+          SealTurnInput.SealTurnInputV2.of({
+            prepare: () =>
+              Effect.fail(new SealTurnInput.SealTurnInputError({ detail: "no viewer" })),
+          }),
+        ),
+      });
+      yield* harness.start;
+      expect(harness.open).not.toHaveBeenCalled();
+      expect(harness.startRootRun).not.toHaveBeenCalled();
+      const run = harness.projection().runs.at(-1);
+      expect(run?.status).toBe("failed");
+      expect(harness.projection().turnItems).toEqual([
+        expect.objectContaining({
+          type: "error",
+          failure: expect.objectContaining({ class: "validation_error", message: "no viewer" }),
+        }),
+      ]);
+    }),
+);

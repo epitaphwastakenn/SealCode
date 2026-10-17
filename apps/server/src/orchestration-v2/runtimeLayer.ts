@@ -1,3 +1,4 @@
+import * as ProviderFallbackWorker from "./ProviderFallbackWorker.ts";
 import * as UsageLimitRecoveryWorker from "./UsageLimitRecoveryWorker.ts";
 import * as Scheduler from "../scheduling/Scheduler.ts";
 import * as Layer from "effect/Layer";
@@ -42,6 +43,7 @@ import * as ProviderRuntimeRecoveryService from "./ProviderRuntimeRecoveryServic
 import * as ProviderSwitchService from "./ProviderSwitchService.ts";
 import * as ProviderTurnControlService from "./ProviderTurnControlService.ts";
 import * as ProviderTurnStartService from "./ProviderTurnStartService.ts";
+import * as SealTurnInput from "./SealTurnInput.ts";
 import * as RunExecutionService from "./RunExecutionService.ts";
 import * as RunFinalizationService from "./RunFinalizationService.ts";
 import * as RuntimePolicy from "./RuntimePolicy.ts";
@@ -159,6 +161,8 @@ const layerRunExecutionServiceProvided = RunExecutionService.layer.pipe(
   ),
 );
 
+const layerSealTurnInputProvided = SealTurnInput.layer.pipe(Layer.provide(TextGeneration.layer));
+
 const layerProviderTurnStartServiceProvided = ProviderTurnStartService.layer.pipe(
   Layer.provide(
     Layer.mergeAll(
@@ -170,6 +174,7 @@ const layerProviderTurnStartServiceProvided = ProviderTurnStartService.layer.pip
       layerProviderAuthServiceProvided,
       layerRunExecutionServiceProvided,
       layerRuntimePolicyProvided,
+      layerSealTurnInputProvided,
     ),
   ),
 );
@@ -365,6 +370,9 @@ export const layerProduction = Layer.mergeAll(
   layerScheduledTaskProvided,
   layerSecretRequestsProvided,
   UsageLimitRecoveryWorker.layer.pipe(
+    Layer.provide(Layer.mergeAll(ProjectionStore.layer, layerThreadManagementProvided)),
+  ),
+  ProviderFallbackWorker.layer.pipe(
     Layer.provide(Layer.mergeAll(ProjectionStore.layer, layerThreadManagementProvided)),
   ),
   layerProviderContinuationWorkerProvided,

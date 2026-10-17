@@ -175,4 +175,50 @@ describe("TextGeneration.make", () => {
       }
     }),
   );
+
+  it.effect(
+    "routes describeImages to the viewer instance and reports drivers that cannot read images",
+    () =>
+      Effect.gen(function* () {
+        const attachments = [
+          { type: "image", id: "image-1", name: "a.png", mimeType: "image/png", sizeBytes: 1 },
+        ] as never;
+        const viewerId = ProviderInstanceId.make("codex");
+        const plainId = ProviderInstanceId.make("plain");
+        const viewer = makeStubInstance(
+          viewerId,
+          makeStubTextGeneration({
+            describeImages: (input) =>
+              Effect.succeed({ description: `saw ${input.attachments.length} image` }),
+          }),
+        );
+        const plain = makeStubInstance(plainId, makeStubTextGeneration({}));
+        const tg = yield* TextGeneration.make.pipe(
+          Effect.provideService(
+            ProviderInstanceRegistry.ProviderInstanceRegistry,
+            makeStubRegistry([viewer, plain]),
+          ),
+          Effect.provide(
+            Layer.mock(SourceControlProviderRegistry.SourceControlProviderRegistry)({
+              resolveLink: () => Effect.die("No link lookup expected"),
+            }),
+          ),
+        );
+        const described = yield* tg.describeImages!({
+          cwd: process.cwd(),
+          message: "what is this",
+          attachments,
+          modelSelection: createModelSelection(viewerId, "gpt-5"),
+        });
+        expect(described.description).toBe("saw 1 image");
+        const unsupported = yield* tg.describeImages!({
+          cwd: process.cwd(),
+          message: "what is this",
+          attachments,
+          modelSelection: createModelSelection(plainId, "gpt-5"),
+        }).pipe(Effect.flip);
+        expect(unsupported.operation).toBe("describeImages");
+        expect(unsupported.detail).toContain("plain");
+      }),
+  );
 });

@@ -45,6 +45,7 @@ import * as ProjectionStore from "./ProjectionStore.ts";
 import * as ProviderSessionManager from "./ProviderSessionManager.ts";
 import { makeProviderFailure } from "@t3tools/provider-core/server/failure";
 import * as RunExecutionService from "./RunExecutionService.ts";
+import * as SealTurnInput from "./SealTurnInput.ts";
 import * as RuntimePolicy from "./RuntimePolicy.ts";
 import {
   isRestartNoteContinuation,
@@ -95,6 +96,7 @@ export const layer: Layer.Layer<
   | ProviderSessionManager.ProviderSessionManagerV2
   | RunExecutionService.RunExecutionServiceV2
   | RuntimePolicy.RuntimePolicyV2
+  | SealTurnInput.SealTurnInputV2
 > = Layer.effect(
   ProviderTurnStartServiceV2,
   Effect.gen(function* () {
@@ -110,6 +112,7 @@ export const layer: Layer.Layer<
     const providerSessions = yield* ProviderSessionManager.ProviderSessionManagerV2;
     const runExecution = yield* RunExecutionService.RunExecutionServiceV2;
     const runtimePolicy = yield* RuntimePolicy.RuntimePolicyV2;
+    const sealTurnInput = yield* SealTurnInput.SealTurnInputV2;
 
     // These callbacks outlive startup while a run drains background work. Build
     // them outside start's scope so they cannot retain its full thread history.
@@ -508,29 +511,41 @@ export const layer: Layer.Layer<
         thread: projection.thread,
         modelSelection: run.modelSelection,
       });
-      const existingSessionProjection = projection.providerSessions.find(
-        (candidate) => candidate.id === providerSessionId,
+      const project = yield* projects.getById(projection.thread.projectId).pipe(
+        Effect.map(Option.getOrUndefined),
+        Effect.orElseSucceed(() => undefined),
       );
-      const sessionResult = yield* Effect.result(
-        providerSessions.open({
-          threadId: projection.thread.id,
-          providerSessionId,
+      const sealInput = yield* Effect.result(
+        sealTurnInput.prepare({
+          cwd: resolvedRuntimePolicy.cwd ?? project?.workspaceRoot ?? process.cwd(),
           modelSelection: run.modelSelection,
-          runtimePolicy: resolvedRuntimePolicy,
-          ...(existingSessionProjection === undefined
-            ? {}
-            : { resumeFromSession: existingSessionProjection }),
-          ...(providerThread.nativeThreadRef?.nativeId == null
-            ? {}
-            : { initialNativeThreadId: providerThread.nativeThreadRef.nativeId }),
-          ...(providerThread.nativeMetadata?.itemIdentityVersion === undefined
-            ? {}
-            : {
-                initialProviderItemIdentityVersion:
-                  providerThread.nativeMetadata.itemIdentityVersion,
-              }),
+          text: projectComposerContextForProvider({
+            text: message.text,
+            records: message.context?.records ?? [],
+          }),
+          attachments: message.attachments,
         }),
       );
+      if (sealInput._tag === "Failure") {
+        yield* settleRunBeforeStart({
+          signal: "seal-turn-input-failure",
+          status: "failed",
+          now: yield* DateTime.now,
+          providerInstanceId: run.providerInstanceId,
+          itemProviderThreadId: providerThread.id,
+          item: {
+            type: "error",
+            title: "Turn input could not be prepared",
+            failure: makeProviderFailure({
+              cause: sealInput.failure,
+              message: sealInput.failure.detail,
+              class: "validation_error",
+            }),
+          },
+        });
+        return;
+      }
+      const { frame: frameTurnText, attachments: turnAttachments } = sealInput.success;
       const settleStartFailure = (failed: {
         readonly signal: string;
         readonly title: string;
@@ -560,6 +575,29 @@ export const layer: Layer.Layer<
             },
           });
         });
+      const existingSessionProjection = projection.providerSessions.find(
+        (candidate) => candidate.id === providerSessionId,
+      );
+      const sessionResult = yield* Effect.result(
+        providerSessions.open({
+          threadId: projection.thread.id,
+          providerSessionId,
+          modelSelection: run.modelSelection,
+          runtimePolicy: resolvedRuntimePolicy,
+          ...(existingSessionProjection === undefined
+            ? {}
+            : { resumeFromSession: existingSessionProjection }),
+          ...(providerThread.nativeThreadRef?.nativeId == null
+            ? {}
+            : { initialNativeThreadId: providerThread.nativeThreadRef.nativeId }),
+          ...(providerThread.nativeMetadata?.itemIdentityVersion === undefined
+            ? {}
+            : {
+                initialProviderItemIdentityVersion:
+                  providerThread.nativeMetadata.itemIdentityVersion,
+              }),
+        }),
+      );
       if (sessionResult._tag === "Failure") {
         if (input.willRetry === true) return yield* sessionResult.failure;
         yield* settleStartFailure({
@@ -922,10 +960,7 @@ export const layer: Layer.Layer<
       const routableSubagents = projection.subagents.filter((subagent) =>
         RunExecutionService.canRouteRelatedSubagent(subagent.status),
       );
-      const userText = projectComposerContextForProvider({
-        text: message.text,
-        records: message.context?.records ?? [],
-      });
+      const userText = sealInput.success.text;
       // Delivered once: this run's provider turn marks the work as told. A
       // restart continuation is prompted by its own text or resumes natively.
       const noteContinuation = isRestartNoteContinuation(
@@ -1097,8 +1132,10 @@ export const layer: Layer.Layer<
               return handoffBudget({
                 tokenCap,
                 modelContextWindow,
-                userText: restartNote === "" ? userText : `${restartNote}\n\n${userText}`,
-                attachments: message.attachments,
+                userText: frameTurnText(
+                  restartNote === "" ? userText : `${restartNote}\n\n${userText}`,
+                ),
+                attachments: turnAttachments,
                 providerThread: budgetProviderThread,
                 nativeContextEstimate:
                   budgetProviderThread.contextUsage?.usedTokens === undefined
@@ -1146,7 +1183,9 @@ export const layer: Layer.Layer<
             ...(noteContinuation ? promptedInput : turnInput),
             message: {
               ...turnInput.message,
-              text: context === "" ? userText : `${context}\n\nUser message:\n${userText}`,
+              text: frameTurnText(
+                context === "" ? userText : `${context}\n\nUser message:\n${userText}`,
+              ),
             },
           }).pipe(
             // A pending marker would make the next turn abandon this native
@@ -1228,8 +1267,8 @@ export const layer: Layer.Layer<
         hasUnpairedRunInterruptRequest: runControls.hasUnpairedRunInterruptRequest,
         message: {
           messageId: message.id,
-          text: userText,
-          attachments: message.attachments,
+          text: frameTurnText(userText),
+          attachments: turnAttachments,
           createdBy: message.createdBy,
           creationSource: message.creationSource,
           ...(message.scheduledTaskId === undefined

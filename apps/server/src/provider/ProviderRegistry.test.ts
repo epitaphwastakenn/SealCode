@@ -2704,7 +2704,14 @@ it.layer(
           decodeServerSettings(
             deepMerge(encodedDefaultServerSettings, {
               providerInstances: {
-                ...disabledDefaultSlots("codex", "claudeAgent", "cursor", "grok", "opencode"),
+                ...disabledDefaultSlots(
+                  "codex",
+                  "claudeAgent",
+                  "commandcode",
+                  "cursor",
+                  "grok",
+                  "opencode",
+                ),
                 codex_personal: {
                   driver: "codex",
                   displayName: "Codex Personal",
@@ -2799,7 +2806,7 @@ it.layer(
           decodeServerSettings(
             deepMerge(encodedDefaultServerSettings, {
               providerInstances: {
-                ...disabledDefaultSlots("claudeAgent", "cursor", "grok", "opencode"),
+                ...disabledDefaultSlots("claudeAgent", "commandcode", "cursor", "grok", "opencode"),
                 [ProviderInstanceId.make("codex")]: {
                   driver: ProviderDriverKind.make("codex"),
                   enabled: true,
@@ -2892,7 +2899,7 @@ it.layer(
           );
           yield* serverSettings.updateSettings({
             providerInstances: {
-              ...disabledDefaultSlots("claudeAgent", "cursor", "grok", "opencode"),
+              ...disabledDefaultSlots("claudeAgent", "commandcode", "cursor", "grok", "opencode"),
               [ProviderInstanceId.make("codex")]: {
                 driver: ProviderDriverKind.make("codex"),
                 enabled: true,
@@ -2922,7 +2929,14 @@ it.layer(
           decodeServerSettings(
             deepMerge(encodedDefaultServerSettings, {
               providerInstances: {
-                ...disabledDefaultSlots("codex", "claudeAgent", "cursor", "grok", "opencode"),
+                ...disabledDefaultSlots(
+                  "codex",
+                  "claudeAgent",
+                  "commandcode",
+                  "cursor",
+                  "grok",
+                  "opencode",
+                ),
                 ghost_main: {
                   driver: "ghostDriver",
                   displayName: "A fork-only driver we don't ship",
@@ -3064,6 +3078,7 @@ it.layer(
               "antigravity",
               "claudeAgent",
               "codex",
+              "commandcode",
               "cursor",
               "grok",
               "muse",

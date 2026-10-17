@@ -15,7 +15,10 @@ export interface ProviderEnvironmentField {
 
 export interface ProviderIcon {
   readonly viewBox: string;
+  /** Also the provider's accent text color, so a raster `image` still needs one. */
   readonly fill: { readonly light: string; readonly dark: string };
+  /** A self-contained `data:image/*` URL for a mark with no vector source; clients draw it instead of `paths`. */
+  readonly image?: string;
   readonly paths: ReadonlyArray<{
     readonly d: string;
     readonly fillRule?: "evenodd" | "nonzero";

@@ -36,6 +36,13 @@ Forks use Pi's CLI in the destination directory because RPC session switching re
 session's cwd. Provider switches still use portable handoff summaries.
 See the [adapter](../../packages/provider-pi/src/server/adapter.ts).
 
+CommandCode has no resident protocol, so each turn is one `commandcode --print` process and the
+CLI session id in its final `result` frame is the resume cursor. A killed first turn never
+reports one. The prompt goes in on stdin, because a Windows `.cmd` shim runs through cmd.exe,
+which cannot carry a newline in an argument. Print mode refuses file writes and shell commands
+unless `--yolo` is set, even with `--auto-accept`, so the driver offers only Supervised (read-only)
+and Full access. See the [adapter](../../packages/provider-commandcode/src/server/adapter.ts).
+
 Antigravity separates account profiles per instance while sharing installed executables across the
 environment. It forces file-based credential storage because the native macOS keychain entry would
 otherwise be shared across instances. The launch environment removes ambient Google credentials,

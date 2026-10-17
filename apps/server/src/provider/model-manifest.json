@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updatedAt": "2026-10-09T23:31:10Z",
+  "updatedAt": "2026-10-17T04:40:00Z",
   "compatibility": [
     {
       "driver": "codex",
@@ -94,6 +94,15 @@
       "ranges": [
         { "range": ">=1.4.2", "status": "supported" },
         { "range": "<1.4.2", "status": "unknown" }
+      ]
+    },
+    {
+      "driver": "commandcode",
+      "t3CodeRange": ">=0.0.46",
+      "recommendedRange": ">=1.17.0",
+      "ranges": [
+        { "range": ">=1.17.0", "status": "supported" },
+        { "range": "<1.17.0", "status": "unknown" }
       ]
     }
   ],

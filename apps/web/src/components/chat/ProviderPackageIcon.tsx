@@ -45,6 +45,7 @@ export function ProviderPackageIcon({
           )}
         </defs>
       ) : null}
+      {icon.image === undefined ? null : <image href={icon.image} width="100%" height="100%" />}
       {icon.paths.map((path, index) => (
         <path
           key={path.d}

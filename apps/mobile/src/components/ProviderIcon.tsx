@@ -95,6 +95,15 @@ export function ProviderIcon(props: ProviderIconProps) {
   }
 
   const packageIcon = getProviderClient(props.provider)?.icon;
+  if (packageIcon?.image !== undefined) {
+    return (
+      <Image
+        source={{ uri: packageIcon.image }}
+        style={{ width: size, height: size }}
+        contentFit="contain"
+      />
+    );
+  }
   if (packageIcon) {
     const themeFill = (fill: { readonly light: string; readonly dark: string }) =>
       isDarkMode ? fill.dark : fill.light;

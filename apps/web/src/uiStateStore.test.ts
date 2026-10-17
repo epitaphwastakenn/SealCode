@@ -13,6 +13,7 @@ import {
   resolveProjectExpanded,
   setDefaultAdvertisedEndpointKey,
   setProjectExpanded,
+  setProjectPinned,
   setSidebarProjectScopeKey,
   setThreadChangedFilesExpanded,
   type UiState,
@@ -22,6 +23,7 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
   return {
     projectExpandedById: {},
     projectOrder: [],
+    pinnedProjectKeys: [],
     sidebarProjectScopeKey: null,
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
@@ -197,6 +199,7 @@ describe("parsePersistedState", () => {
         logical: false,
       },
       projectOrder: ["physical-b", "physical-a"],
+      pinnedProjectKeys: [],
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
@@ -319,6 +322,7 @@ describe("uiStateStore persistence", () => {
         logical: false,
       },
       projectOrder: ["physical-b", "physical-a"],
+      pinnedProjectKeys: [],
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
@@ -362,5 +366,18 @@ describe("uiStateStore persistence", () => {
     ) as PersistedUiState;
     expect(resolveProjectExpanded(persisted.projectExpandedById ?? {}, ["unknown"])).toBe(true);
     expect(persisted).not.toHaveProperty("threadPanelOpen");
+  });
+});
+
+describe("setProjectPinned", () => {
+  it("pins projects in the order they were pinned and unpins without reordering", () => {
+    const pinned = setProjectPinned(
+      setProjectPinned(makeUiState(), "project-b", true),
+      "project-a",
+      true,
+    );
+    expect(pinned.pinnedProjectKeys).toEqual(["project-b", "project-a"]);
+    expect(setProjectPinned(pinned, "project-b", true)).toBe(pinned);
+    expect(setProjectPinned(pinned, "project-b", false).pinnedProjectKeys).toEqual(["project-a"]);
   });
 });

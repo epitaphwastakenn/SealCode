@@ -1351,3 +1351,77 @@ export function sortScopedProjectsForSidebar<
       left.id.localeCompare(right.id),
   );
 }
+
+export interface SidebarFolderLayout {
+  /** Folder key per `${environmentId}:${projectId}`. */
+  readonly folderKeyByProject: ReadonlyMap<string, string>;
+  /** Folder keys in display order: pinned projects first, then the rest. */
+  readonly order: readonly string[];
+  readonly collapsed: ReadonlySet<string>;
+}
+
+export function sidebarThreadFolderKey(
+  layout: SidebarFolderLayout,
+  thread: { readonly environmentId: string; readonly projectId: string | null },
+): string | null {
+  return thread.projectId === null
+    ? null
+    : (layout.folderKeyByProject.get(`${thread.environmentId}:${thread.projectId}`) ?? null);
+}
+
+/**
+ * Stable grouping: threads keep their relative order inside a folder, folders
+ * follow the layout order, and threads outside every folder come last.
+ */
+export function groupSidebarThreadsByFolder<
+  T extends { readonly environmentId: string; readonly projectId: string | null },
+>(threads: readonly T[], layout: SidebarFolderLayout): T[] {
+  const rank = new Map(layout.order.map((key, index) => [key, index] as const));
+  const rankOf = (thread: T) => {
+    const folder = sidebarThreadFolderKey(layout, thread);
+    return folder === null ? Number.POSITIVE_INFINITY : (rank.get(folder) ?? layout.order.length);
+  };
+  return threads
+    .map((thread, index) => ({ thread, index, rank: rankOf(thread) }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map((entry) => entry.thread);
+}
+
+export interface SidebarFolderHeaderPlan {
+  /** Folder headers to render right before the row with this thread key. */
+  readonly before: ReadonlyMap<string, readonly string[]>;
+  /** Headers of collapsed folders with no visible row after them. */
+  readonly trailing: readonly string[];
+  readonly threadCount: ReadonlyMap<string, number>;
+}
+
+/**
+ * A collapsed folder hides its rows but keeps its header, so headers anchor to
+ * the next visible row instead of to their own first row.
+ */
+export function planSidebarFolderHeaders<
+  T extends { readonly environmentId: string; readonly projectId: string | null },
+>(input: {
+  readonly groupedThreads: readonly T[];
+  readonly layout: SidebarFolderLayout;
+  readonly keyOf: (thread: T) => string;
+  readonly isVisible: (thread: T) => boolean;
+}): SidebarFolderHeaderPlan {
+  const before = new Map<string, string[]>();
+  const threadCount = new Map<string, number>();
+  let pending: string[] = [];
+  let lastFolder: string | null = null;
+  for (const thread of input.groupedThreads) {
+    const folder = sidebarThreadFolderKey(input.layout, thread);
+    if (folder !== null) {
+      threadCount.set(folder, (threadCount.get(folder) ?? 0) + 1);
+      if (folder !== lastFolder) pending.push(folder);
+    }
+    lastFolder = folder;
+    if (input.isVisible(thread) && pending.length > 0) {
+      before.set(input.keyOf(thread), pending);
+      pending = [];
+    }
+  }
+  return { before, trailing: pending, threadCount };
+}

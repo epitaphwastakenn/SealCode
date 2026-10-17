@@ -179,6 +179,10 @@
       "types": "./src/server/usage.ts",
       "import": "./src/server/usage.ts"
     },
+    "./server/subscriptionUsage": {
+      "types": "./src/server/subscriptionUsage.ts",
+      "import": "./src/server/subscriptionUsage.ts"
+    },
     "./server/usageLimits": {
       "types": "./src/server/usageLimits.ts",
       "import": "./src/server/usageLimits.ts"

@@ -24,6 +24,7 @@ import * as Semaphore from "effect/Semaphore";
 import * as ModelManifest from "./ModelManifest.ts";
 import { applyProviderCompatibility } from "./providerCompatibility.ts";
 import * as ServerConfig from "../config.ts";
+import { withSubscriptionUsageFromLimits } from "@t3tools/provider-core/server/subscriptionUsage";
 import * as ProviderInstanceRegistry from "./ProviderInstanceRegistry.ts";
 import {
   hydrateCachedProvider,
@@ -321,7 +322,7 @@ const correlateSnapshotWithSource = (
       ),
     );
   }
-  return Effect.succeed(snapshot);
+  return Effect.succeed(withSubscriptionUsageFromLimits(snapshot));
 };
 
 const snapshotInstanceKey = (provider: ServerProvider): ProviderInstanceId => {

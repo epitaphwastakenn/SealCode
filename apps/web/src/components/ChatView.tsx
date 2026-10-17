@@ -1024,9 +1024,8 @@ function makeModelDisabledReason(
   };
 }
 
-// SealCode's Project diffs tab needs a project-wide checkpoint index that the V2
-// server does not serve yet; the surface stays wired but the tab is hidden.
-const PROJECT_DIFF_CENTER_AVAILABLE = false;
+// SealCode's Project diffs tab reads `orchestration.getProjectDiffIndex`.
+const PROJECT_DIFF_CENTER_AVAILABLE = true;
 
 export default function ChatView(props: ChatViewProps) {
   const {

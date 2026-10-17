@@ -51,6 +51,7 @@ import {
   type AcpRegistryListSessionsInput,
   type AcpRegistrySetProviderInput,
   OrchestrationGetFullThreadDiffError,
+  OrchestrationGetProjectDiffIndexError,
   OrchestrationSearchThreadsError,
   OrchestrationV2SearchThreadError,
   OrchestrationGetTurnDiffError,
@@ -163,6 +164,7 @@ import {
   projectThreadProjectionForWire,
 } from "./orchestration-v2/WireProjection.ts";
 import * as ProjectStore from "./orchestration-v2/ProjectStore.ts";
+import * as ProjectDiffIndex from "./orchestration-v2/ProjectDiffIndex.ts";
 import * as ThreadSearch from "./orchestration-v2/ThreadSearch.ts";
 import * as OrchestrationEventStore from "./persistence/OrchestrationEventStore.ts";
 import { userFacingDispatchErrorMessage } from "./orchestration-v2/UserFacingErrors.ts";
@@ -1182,6 +1184,7 @@ const layerWsRpc = (
       const projectService = yield* ProjectService.ProjectService;
       const managedFolders = yield* ManagedProjectFolders.ManagedProjectFolders;
       const threadSearch = yield* ThreadSearch.ThreadSearch;
+      const projectDiffIndex = yield* ProjectDiffIndex.ProjectDiffIndex;
 
       const providerSessionsV2 = yield* ProviderSessionManager.ProviderSessionManagerV2;
       const mcpAppRequests = yield* McpAppRequests.McpAppRequests;
@@ -1881,6 +1884,16 @@ const layerWsRpc = (
           threadManagement
             .searchThreadStream(input)
             .pipe(Stream.mapError((cause) => new OrchestrationV2SearchThreadError({ cause }))),
+        [ORCHESTRATION_V2_WS_METHODS.getProjectDiffIndex]: (input) =>
+          projectDiffIndex.getProjectDiffIndex(input).pipe(
+            Effect.mapError(
+              (cause) =>
+                new OrchestrationGetProjectDiffIndexError({
+                  message: "Failed to load project diff index",
+                  cause,
+                }),
+            ),
+          ),
         [ORCHESTRATION_V2_WS_METHODS.searchThreads]: (input) =>
           threadSearch.search(input).pipe(
             Effect.mapError(

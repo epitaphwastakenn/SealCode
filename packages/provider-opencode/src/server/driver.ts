@@ -21,6 +21,7 @@ import type * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAda
 import type { ProviderTextGeneration } from "@t3tools/provider-core/server/textGeneration";
 import { ProviderDriverError } from "@t3tools/provider-core/server/errors";
 import { openCodeUsageReader, type OpenCodeUsageReaderEnv } from "./usage.ts";
+import { readOpenCodeActivityUsage } from "./activityUsage.ts";
 import { readOpenCodeGoUsageLimits } from "./usageLimits.ts";
 import { loadOpenCode2Catalog } from "./openCode2Catalog.ts";
 import {
@@ -356,10 +357,22 @@ export const OpenCodeDriver: ProviderDriver<
             serverUrl: effectiveConfig.serverUrl,
             environment: processEnv,
           }),
+          // `opencode stats` reads the local database; an external server has its own.
+          activity:
+            effectiveConfig.enabled && !effectiveConfig.serverUrl.trim()
+              ? readOpenCodeActivityUsage({
+                  binaryPath: effectiveConfig.binaryPath,
+                  environment: processEnv,
+                })
+              : Effect.succeed(undefined),
         },
         { concurrency: "unbounded" },
       ).pipe(
-        Effect.map(({ provider, usageLimits }) => ({ ...provider, usageLimits })),
+        Effect.map(({ provider, usageLimits, activity }) => ({
+          ...provider,
+          usageLimits,
+          ...(activity === undefined ? {} : { subscriptionUsage: activity }),
+        })),
         Effect.map(stampIdentity),
         Effect.provideService(FileSystem.FileSystem, fileSystem),
         Effect.provideService(Path.Path, pathService),

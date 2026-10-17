@@ -6,6 +6,8 @@ import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
 import { useTheme } from "../hooks/useTheme";
 import { useClientSettings } from "../hooks/useSettings";
 import { useCheckpointDiff } from "../lib/checkpointDiffState";
+import { orchestrationEnvironment } from "../state/orchestration";
+import { useEnvironmentQuery } from "../state/query";
 import {
   getRenderablePatch,
   resolveDiffThemeName,
@@ -47,29 +49,42 @@ interface ProjectDiffIndexState {
 }
 
 const NO_ENTRIES: readonly ProjectDiffEntry[] = [];
-const UNAVAILABLE_INDEX: ProjectDiffIndexState = {
-  entries: NO_ENTRIES,
-  isPending: false,
-  error: null,
-  available: false,
-  refresh: () => {},
-};
+const INDEX_LIMIT = 100;
 
-/**
- * The only place the center asks for its list. The V1 `getProjectDiffIndex`
- * RPC is gone, and V2 keeps checkpoints inside each thread's projection:
- * shells carry no turn ordinal or file list, so the client cannot assemble the
- * project-wide list without hydrating every thread. It needs a server query
- * (`orchestration.getProjectDiffIndex`: `{ projectId, limit }` in, the ready
- * checkpoints newest-first out, each with threadId, threadTitle, archivedAt,
- * runId, appRunOrdinal as checkpointTurnCount, status, files and capturedAt).
- * Swap this body for that query and nothing else changes.
- */
+/** The only place the center asks for its list: the server's newest-first checkpoint index. */
 function useProjectDiffIndex(
-  _environmentId: EnvironmentId,
-  _projectId: ProjectId,
+  environmentId: EnvironmentId,
+  projectId: ProjectId,
 ): ProjectDiffIndexState {
-  return UNAVAILABLE_INDEX;
+  const query = useEnvironmentQuery(
+    orchestrationEnvironment.projectDiffIndex({
+      environmentId,
+      input: { projectId, limit: INDEX_LIMIT },
+    }),
+  );
+  const entries = useMemo(
+    () =>
+      query.data === null
+        ? NO_ENTRIES
+        : query.data.entries.map((entry): ProjectDiffEntry => ({
+            threadId: entry.threadId,
+            threadTitle: entry.threadTitle,
+            archivedAt: entry.archivedAt,
+            runId: entry.runId,
+            checkpointTurnCount: entry.appRunOrdinal,
+            status: entry.status,
+            files: entry.files,
+            completedAt: entry.capturedAt,
+          })),
+    [query.data],
+  );
+  return {
+    entries,
+    isPending: query.isPending,
+    error: query.error,
+    available: true,
+    refresh: query.refresh,
+  };
 }
 
 function entryKey(entry: ProjectDiffEntry): string {

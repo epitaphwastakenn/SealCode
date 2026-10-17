@@ -157,6 +157,11 @@ import {
 } from "./review.ts";
 import { KeybindingsConfigError } from "./keybindings.ts";
 import {
+  OrchestrationGetProjectDiffIndexError,
+  OrchestrationGetProjectDiffIndexInput,
+  OrchestrationGetProjectDiffIndexResult,
+} from "./projectDiffIndex.ts";
+import {
   OrchestrationSearchThreadsError,
   OrchestrationSearchThreadsInput,
   OrchestrationSearchThreadsResult,
@@ -1646,6 +1651,15 @@ const WsOrchestrationV2GetFullThreadDiffRpc = Rpc.make(
   },
 );
 
+const WsOrchestrationV2GetProjectDiffIndexRpc = Rpc.make(
+  ORCHESTRATION_V2_WS_METHODS.getProjectDiffIndex,
+  {
+    payload: OrchestrationGetProjectDiffIndexInput,
+    success: OrchestrationGetProjectDiffIndexResult,
+    error: Schema.Union([OrchestrationGetProjectDiffIndexError, EnvironmentAuthorizationError]),
+  },
+);
+
 const WsOrchestrationV2SearchThreadRpc = Rpc.make(ORCHESTRATION_V2_WS_METHODS.searchThread, {
   payload: OrchestrationV2SearchThreadInput,
   success: OrchestrationV2SearchThreadResult,
@@ -2074,6 +2088,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsOrchestrationV2GetTurnItemRpc,
   WsOrchestrationV2GetTurnDiffRpc,
   WsOrchestrationV2GetFullThreadDiffRpc,
+  WsOrchestrationV2GetProjectDiffIndexRpc,
   WsOrchestrationV2SearchThreadsRpc,
   WsOrchestrationV2SearchThreadRpc,
   WsOrchestrationV2SearchThreadStreamRpc,

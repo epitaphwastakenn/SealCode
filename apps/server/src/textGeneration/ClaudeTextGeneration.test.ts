@@ -545,4 +545,130 @@ it.layer(layerClaudeTextGenerationTest)("ClaudeTextGeneration", (it) => {
         }),
     ),
   );
+
+  const viewerSelection = createModelSelection(
+    ProviderInstanceId.make("claudeAgent"),
+    SYNTHETIC_CLAUDE_STANDARD_MODEL,
+  );
+  const imageAttachment = (id: string, mimeType: "image/png" | "image/svg+xml") =>
+    ({ type: "image", id, name: "screen", mimeType, sizeBytes: 5 }) as const;
+
+  it.effect(
+    "describeImages sends the images as a stream-json user message and reads the streamed result",
+    () =>
+      withFakeClaudeEnv(
+        {
+          output: [
+            { type: "system", subtype: "init" },
+            {
+              type: "result",
+              subtype: "success",
+              is_error: false,
+              structured_output: { description: "  a red button  " },
+            },
+          ]
+            .map((message) => JSON.stringify(message))
+            .join("\n"),
+          argsMustContain: "-p --input-format stream-json --output-format stream-json --verbose",
+          // "hello" in base64, so the bytes on disk are what Claude receives.
+          stdinMustContain: '"source":{"type":"base64","media_type":"image/png","data":"aGVsbG8="}',
+        },
+        (textGeneration) =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            const path = yield* Path.Path;
+            const { attachmentsDir } = yield* ServerConfig.ServerConfig;
+            yield* fs.makeDirectory(attachmentsDir, { recursive: true });
+            yield* fs.writeFile(
+              path.join(attachmentsDir, "claude-viewer-image.png"),
+              Buffer.from("hello"),
+            );
+
+            const described = yield* textGeneration.describeImages!({
+              cwd: process.cwd(),
+              message: "What is wrong here?",
+              attachments: [imageAttachment("claude-viewer-image", "image/png")],
+              modelSelection: viewerSelection,
+            });
+
+            expect(described.description).toBe("a red button");
+          }),
+      ),
+  );
+
+  it.effect("describeImages reports the error a streamed run ends with", () =>
+    withFakeClaudeEnv(
+      {
+        output: [
+          { type: "system", subtype: "init" },
+          { type: "result", is_error: true, result: "Image exceeds 5 MB maximum" },
+        ]
+          .map((message) => JSON.stringify(message))
+          .join("\n"),
+        exitCode: 1,
+      },
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const { attachmentsDir } = yield* ServerConfig.ServerConfig;
+          yield* fs.makeDirectory(attachmentsDir, { recursive: true });
+          yield* fs.writeFile(
+            path.join(attachmentsDir, "claude-viewer-big.png"),
+            Buffer.from("hello"),
+          );
+
+          const error = yield* Effect.flip(
+            textGeneration.describeImages!({
+              cwd: process.cwd(),
+              message: "Look",
+              attachments: [imageAttachment("claude-viewer-big", "image/png")],
+              modelSelection: viewerSelection,
+            }),
+          );
+
+          expect(error.detail).toBe("Claude CLI command failed: Image exceeds 5 MB maximum");
+        }),
+    ),
+  );
+
+  it.effect(
+    "describeImages refuses image types Claude cannot read instead of describing nothing",
+    () =>
+      withFakeClaudeEnv({ output: "" }, (textGeneration) =>
+        Effect.gen(function* () {
+          const error = yield* Effect.flip(
+            textGeneration.describeImages!({
+              cwd: process.cwd(),
+              message: "Look",
+              attachments: [imageAttachment("claude-viewer-svg", "image/svg+xml")],
+              modelSelection: viewerSelection,
+            }),
+          );
+
+          expect(error.operation).toBe("describeImages");
+          expect(error.detail).toContain("image/svg+xml");
+        }),
+      ),
+  );
+
+  it.effect("keeps titles and branch names on plain text input", () =>
+    withFakeClaudeEnv(
+      {
+        output: JSON.stringify({ structured_output: { branch: "fix-layout" } }),
+        argsMustNotContain: "stream-json",
+      },
+      (textGeneration) =>
+        Effect.gen(function* () {
+          const generated = yield* textGeneration.generateBranchName({
+            cwd: process.cwd(),
+            message: "Fix the layout from the screenshot",
+            attachments: [imageAttachment("claude-branch-image", "image/svg+xml")],
+            modelSelection: viewerSelection,
+          });
+
+          expect(generated.branch).toBe("fix-layout");
+        }),
+    ),
+  );
 });

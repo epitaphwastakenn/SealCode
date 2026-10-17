@@ -607,10 +607,10 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["OTel OTLP telemetry export endpoints logs traces metrics Grafana"],
   },
   {
-    id: "image-viewer-model",
-    title: "Image viewer model",
+    id: "image-viewer",
+    title: "Image viewer",
     to: "/settings/general",
-    searchTerms: ["vision images screenshots codex"],
+    searchTerms: ["vision images screenshots describe viewer model codex claude"],
   },
   {
     id: "diagnostics",

@@ -19,6 +19,7 @@ import {
   getProviderOptionStringSelectionValue,
   normalizeCustomModelSlug,
   normalizeModelSlug,
+  modelHasVision,
   modelSelectionsEqual,
 } from "./model.ts";
 
@@ -359,5 +360,21 @@ describe("provider-reported option display", () => {
     { ...selection, options: [{ id: "variant", value: "none" }] },
   ])("ignores reports after changing the model, instance, or option: %j", (selected) => {
     expect(getProviderOptionCurrentLabel(descriptor, selected, reported)).toBe("Unknown");
+  });
+});
+
+describe("modelHasVision", () => {
+  it("believes a catalog that reports vision, whatever the driver", () => {
+    expect(modelHasVision({ driverKind: "opencode", capabilities: { vision: true } })).toBe(true);
+    expect(modelHasVision({ driverKind: "codex", capabilities: { vision: false } })).toBe(false);
+  });
+
+  it("falls back to Codex and Claude when vision is not reported", () => {
+    expect(modelHasVision({ driverKind: "codex" })).toBe(true);
+    expect(
+      modelHasVision({ driverKind: "claudeAgent", capabilities: { optionDescriptors: [] } }),
+    ).toBe(true);
+    expect(modelHasVision({ driverKind: "opencode" })).toBe(false);
+    expect(modelHasVision({ driverKind: "grok", capabilities: null })).toBe(false);
   });
 });

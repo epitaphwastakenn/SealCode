@@ -155,6 +155,7 @@ import {
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { ScopedSwitch } from "./ScopedSwitch";
+import { filterImageViewerModelOptions, providerCanViewImages } from "./ImageViewerSettings.logic";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ThemeLibrary } from "./ThemeSettings";
@@ -263,7 +264,6 @@ const BACKGROUND_ACTIVITY_PROFILE_DESCRIPTIONS: Record<BackgroundActivityProfile
 const ADVANCED_BACKGROUND_ACTIVITY_DESCRIPTION = "Uses custom intervals.";
 
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
-const CODEX_DRIVER_KIND = ProviderDriverKind.make("codex");
 const BACKGROUND_ACTIVITY_BOOLEAN_OVERRIDES: ReadonlyArray<{
   readonly key:
     | "pauseWhenHostLocked"
@@ -769,10 +769,12 @@ export function useSettingsRestore(onRestored?: () => void) {
     settings.textGenerationModelSelection ?? null,
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
   );
-  const isImageViewerModelDirty = !Equal.equals(
-    settings.imageViewerModelSelection ?? null,
-    DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection ?? null,
-  );
+  const isImageViewerDirty =
+    settings.imageViewerEnabled !== DEFAULT_UNIFIED_SETTINGS.imageViewerEnabled ||
+    !Equal.equals(
+      settings.imageViewerModelSelection ?? null,
+      DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection ?? null,
+    );
   const isHarnessHelperModelsDirty = [
     settings.contextCompactorModelSelection,
     settings.skillCuratorModelSelection,
@@ -910,7 +912,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       : []),
     ...(settings.confirmQuit !== DEFAULT_UNIFIED_SETTINGS.confirmQuit ? ["Quit shortcut"] : []),
     ...(isTextGenerationModelDirty ? ["Text generation model"] : []),
-    ...(isImageViewerModelDirty ? ["Image viewer model"] : []),
+    ...(isImageViewerDirty ? ["Image viewer"] : []),
     ...(isHarnessHelperModelsDirty ? ["Harness helper models"] : []),
     ...getChangedBrowserSettingLabels(settings),
     ...(settings.enableAgentBrowserAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess
@@ -1023,6 +1025,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       confirmThreadUnpin: DEFAULT_UNIFIED_SETTINGS.confirmThreadUnpin,
       confirmQuit: DEFAULT_UNIFIED_SETTINGS.confirmQuit,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
+      imageViewerEnabled: DEFAULT_UNIFIED_SETTINGS.imageViewerEnabled,
       imageViewerModelSelection: DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection,
       contextCompactorModelSelection: DEFAULT_UNIFIED_SETTINGS.contextCompactorModelSelection,
       skillCuratorModelSelection: DEFAULT_UNIFIED_SETTINGS.skillCuratorModelSelection,
@@ -2465,9 +2468,7 @@ export function GeneralSettingsPanel() {
     settings,
     textGenerationModelInstanceEntries,
   );
-  const imageViewerProviders = serverProviders.filter(
-    (provider) => provider.driver === CODEX_DRIVER_KIND,
-  );
+  const imageViewerProviders = textGenerationProviders.filter(providerCanViewImages);
   const imageViewerModelSelection = resolveAppModelSelectionState(
     {
       ...settings,
@@ -2478,17 +2479,20 @@ export function GeneralSettingsPanel() {
   const imageViewerInstanceId = imageViewerModelSelection.instanceId;
   const imageViewerModel = imageViewerModelSelection.model;
   const imageViewerModelOptions = imageViewerModelSelection.options;
-  const imageViewerInstanceEntries = textGenerationModelInstanceEntries.filter(
-    (entry) => entry.driverKind === CODEX_DRIVER_KIND,
+  const imageViewerInstanceEntries = textGenerationModelInstanceEntries.filter((entry) =>
+    providerCanViewImages(entry.snapshot),
   );
   const imageViewerInstanceEntry = imageViewerInstanceEntries.find(
     (entry) => entry.instanceId === imageViewerInstanceId,
   );
-  const imageViewerModelOptionsByInstance = getCustomModelOptionsByInstance(
-    settings,
-    imageViewerProviders,
-    imageViewerInstanceId,
-    imageViewerModel,
+  const imageViewerModelOptionsByInstance = filterImageViewerModelOptions(
+    imageViewerInstanceEntries,
+    getCustomModelOptionsByInstance(
+      settings,
+      imageViewerProviders,
+      imageViewerInstanceId,
+      imageViewerModel,
+    ),
   );
   const isImageViewerModelDirty = !Equal.equals(
     settings.imageViewerModelSelection ?? null,
@@ -3653,62 +3657,101 @@ export function GeneralSettingsPanel() {
 
         <SettingsRow
           serverScoped
-          settingKeys={["imageViewerModelSelection"]}
-          {...searchableSetting("image-viewer-model")}
-          description="Codex model used to interpret images for main models without vision support."
+          settingKeys={["imageViewerEnabled"]}
+          {...searchableSetting("image-viewer")}
+          description="Let a vision model describe attached images for main models that cannot see them. When off, images go to the main model as they are."
           resetAction={
-            isImageViewerModelDirty ? (
+            settings.imageViewerEnabled !== DEFAULT_UNIFIED_SETTINGS.imageViewerEnabled ? (
               <SettingResetButton
-                label="image viewer model"
+                label="image viewer"
                 onClick={() =>
                   updateSettings({
-                    imageViewerModelSelection: DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection,
+                    imageViewerEnabled: DEFAULT_UNIFIED_SETTINGS.imageViewerEnabled,
                   })
                 }
               />
             ) : null
           }
           control={
-            <div className="flex flex-wrap items-center justify-end gap-1.5">
-              <ProviderModelPicker
-                environmentId={environmentId}
-                activeInstanceId={imageViewerInstanceId}
-                model={imageViewerModel}
-                lockedProvider={CODEX_DRIVER_KIND}
-                instanceEntries={imageViewerInstanceEntries}
-                modelOptionsByInstance={imageViewerModelOptionsByInstance}
-                triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
-                onInstanceModelChange={(instanceId, model) => {
-                  updateSettings({
-                    imageViewerModelSelection: createModelSelection(instanceId, model),
-                  });
-                }}
-              />
-              <TraitsPicker
-                provider={CODEX_DRIVER_KIND}
-                models={imageViewerInstanceEntry?.models ?? []}
-                model={imageViewerModel}
-                prompt=""
-                onPromptChange={() => {}}
-                modelOptions={imageViewerModelOptions}
-                allowPromptInjectedEffort={false}
-                planModeEnabled={
-                  settings.planModeEnabled || selectsPlanAgent(imageViewerModelOptions)
-                }
-                triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
-                onModelOptionsChange={(nextOptions) => {
-                  updateSettings({
-                    imageViewerModelSelection: createModelSelection(
-                      imageViewerInstanceId,
-                      imageViewerModel,
-                      nextOptions,
-                    ),
-                  });
-                }}
-              />
-            </div>
+            <ScopedSwitch
+              settingKeys={["imageViewerEnabled"]}
+              checked={settings.imageViewerEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ imageViewerEnabled: Boolean(checked) })
+              }
+              aria-label="Image viewer"
+            />
           }
         />
+
+        {settings.imageViewerEnabled ? (
+          <SettingsRow
+            serverScoped
+            settingKeys={["imageViewerModelSelection"]}
+            title="Image viewer model"
+            description="Reads attached images and describes them to the main model. Only models with vision are listed."
+            resetAction={
+              isImageViewerModelDirty ? (
+                <SettingResetButton
+                  label="image viewer model"
+                  onClick={() =>
+                    updateSettings({
+                      imageViewerModelSelection: DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection,
+                    })
+                  }
+                />
+              ) : null
+            }
+            control={
+              imageViewerInstanceEntries.length === 0 ? (
+                <span className="text-sm text-muted-foreground">
+                  No providers with vision available.
+                </span>
+              ) : (
+                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                  <ProviderModelPicker
+                    environmentId={environmentId}
+                    activeInstanceId={imageViewerInstanceId}
+                    model={imageViewerModel}
+                    lockedProvider={null}
+                    instanceEntries={imageViewerInstanceEntries}
+                    modelOptionsByInstance={imageViewerModelOptionsByInstance}
+                    triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
+                    onInstanceModelChange={(instanceId, model) => {
+                      updateSettings({
+                        imageViewerModelSelection: createModelSelection(instanceId, model),
+                      });
+                    }}
+                  />
+                  {imageViewerInstanceEntry ? (
+                    <TraitsPicker
+                      provider={imageViewerInstanceEntry.driverKind}
+                      models={imageViewerInstanceEntry.models}
+                      model={imageViewerModel}
+                      prompt=""
+                      onPromptChange={() => {}}
+                      modelOptions={imageViewerModelOptions}
+                      allowPromptInjectedEffort={false}
+                      planModeEnabled={
+                        settings.planModeEnabled || selectsPlanAgent(imageViewerModelOptions)
+                      }
+                      triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
+                      onModelOptionsChange={(nextOptions) => {
+                        updateSettings({
+                          imageViewerModelSelection: createModelSelection(
+                            imageViewerInstanceId,
+                            imageViewerModel,
+                            nextOptions,
+                          ),
+                        });
+                      }}
+                    />
+                  ) : null}
+                </div>
+              )
+            }
+          />
+        ) : null}
 
         <SettingsRow
           title="Show provider thinking"

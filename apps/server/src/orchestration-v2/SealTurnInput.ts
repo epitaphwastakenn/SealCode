@@ -1,4 +1,5 @@
-import { type ChatAttachment, ProviderDriverKind, type ModelSelection } from "@t3tools/contracts";
+import { type ChatAttachment, type ModelSelection } from "@t3tools/contracts";
+import { modelHasVision } from "@t3tools/shared/model";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -54,8 +55,6 @@ export const withImageDescription = (text: string, description: string): string 
 const isSlashCommand = (text: string, attachments: ReadonlyArray<ChatAttachment>) =>
   attachments.length === 0 && text.trimStart().startsWith("/");
 
-const CODEX_DRIVER = ProviderDriverKind.make("codex");
-
 export const layer = Layer.effect(
   SealTurnInputV2,
   Effect.gen(function* () {
@@ -63,18 +62,23 @@ export const layer = Layer.effect(
     const registry = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
     const textGeneration = yield* TextGeneration.TextGeneration;
 
-    // Unknown capability is not "no vision": drivers that never report it must keep sending images natively.
-    const lacksVision = (selection: ModelSelection) =>
+    const lookupModel = (selection: ModelSelection) =>
       Effect.gen(function* () {
         const instance = yield* registry.getInstance(selection.instanceId);
-        if (instance === undefined) return false;
+        if (instance === undefined) return undefined;
         const snapshot = yield* instance.snapshot.getSnapshot.pipe(Effect.option);
-        if (snapshot._tag === "None") return false;
-        return (
-          snapshot.value.models.find((model) => model.slug === selection.model)?.capabilities
-            ?.vision === false
-        );
+        return {
+          driverKind: instance.driverKind,
+          capabilities:
+            snapshot._tag === "None"
+              ? undefined
+              : snapshot.value.models.find((model) => model.slug === selection.model)?.capabilities,
+        };
       });
+
+    // Unknown capability is not "no vision": drivers that never report it must keep sending images natively.
+    const lacksVision = (selection: ModelSelection) =>
+      lookupModel(selection).pipe(Effect.map((model) => model?.capabilities?.vision === false));
 
     const describe = Effect.fn("SealTurnInput.describe")(function* (input: {
       readonly viewer: ModelSelection;
@@ -82,8 +86,8 @@ export const layer = Layer.effect(
       readonly text: string;
       readonly attachments: ReadonlyArray<ChatAttachment>;
     }) {
-      const viewerInstance = yield* registry.getInstance(input.viewer.instanceId);
-      if (viewerInstance?.driverKind !== CODEX_DRIVER) {
+      const viewer = yield* lookupModel(input.viewer);
+      if (viewer === undefined || !modelHasVision(viewer)) {
         return yield* new SealTurnInputError({
           detail: `The selected model cannot interpret images. ${IMAGE_VIEWER_HINT}`,
         });
@@ -118,7 +122,9 @@ export const layer = Layer.effect(
         );
         let text = input.text;
         let attachments = input.attachments;
+        // Off by default: images then reach the main model untouched, with no error of ours.
         if (
+          current.imageViewerEnabled &&
           attachments.some((attachment) => attachment.type === "image") &&
           (yield* lacksVision(input.modelSelection))
         ) {

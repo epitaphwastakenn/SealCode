@@ -39,6 +39,24 @@ export function createModelCapabilities(input: {
   };
 }
 
+/** Drivers whose models read images although their catalogs never set `capabilities.vision`. */
+const IMAGE_READING_DRIVER_KINDS: ReadonlySet<string> = new Set([
+  ProviderDriverKind.make("codex"),
+  ProviderDriverKind.make("claudeAgent"),
+]);
+
+/**
+ * Whether a model can read images, which decides who may act as the image viewer. A catalog that
+ * reports `vision` is believed either way; otherwise only Codex and Claude models count, so a
+ * driver that says nothing is never trusted to describe an image.
+ */
+export function modelHasVision(input: {
+  readonly driverKind: string;
+  readonly capabilities?: ModelCapabilities | null | undefined;
+}): boolean {
+  return input.capabilities?.vision ?? IMAGE_READING_DRIVER_KINDS.has(input.driverKind);
+}
+
 function getRawSelectionValueById(
   selections: ReadonlyArray<ProviderOptionSelection> | null | undefined,
   id: string,

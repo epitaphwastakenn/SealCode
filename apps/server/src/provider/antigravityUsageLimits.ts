@@ -15,9 +15,11 @@ import {
   makeUsageLimits,
 } from "@t3tools/provider-core/server/usageLimits";
 
+// The two endpoints report different quota groups for the same account (the
+// daily one can omit Gemini entirely), so every probe asks both and merges.
 const ENDPOINTS = [
-  "https://daily-cloudcode-pa.googleapis.com",
   "https://cloudcode-pa.googleapis.com",
+  "https://daily-cloudcode-pa.googleapis.com",
 ];
 const MANUAL_REDIRECT: RequestInit = { redirect: "manual" };
 const TokenFile = Schema.Struct({
@@ -250,8 +252,9 @@ export const makeAntigravityUsageProbe = Effect.fn("makeAntigravityUsageProbe")(
       operation: string,
       parse: (response: unknown) => Effect.Effect<ServerProviderUsageWindow[], E>,
     ) {
+      const windows = new Map<string, ServerProviderUsageWindow>();
       for (const endpoint of ENDPOINTS) {
-        const windows = yield* request(
+        const reported = yield* request(
           HttpClientRequest.post(`${endpoint}/v1internal:${operation}`).pipe(
             HttpClientRequest.setHeaders({
               Authorization: `Bearer ${accessToken}`,
@@ -263,9 +266,13 @@ export const makeAntigravityUsageProbe = Effect.fn("makeAntigravityUsageProbe")(
           Effect.flatMap(parse),
           Effect.orElseSucceed(() => []),
         );
-        if (windows.length > 0) return windows;
+        for (const window of reported) {
+          const previous = windows.get(window.id);
+          if (!previous || window.usedPercent > previous.usedPercent)
+            windows.set(window.id, window);
+        }
       }
-      return [];
+      return [...windows.values()];
     });
     const summary = yield* fetchWindows("retrieveUserQuotaSummary", (response) =>
       decodeSummary(response).pipe(Effect.map(summaryWindows)),

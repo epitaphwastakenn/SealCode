@@ -42,6 +42,7 @@ const authorizationUrl =
   "https://accounts.google.com/o/oauth2/v2/auth?response_type=code" +
   "&client_id=test-client&redirect_uri=http%3A%2F%2F127.0.0.1%3A46353%2F" +
   "&state=test-opaque-state&code_challenge=test-challenge&code_challenge_method=S256";
+const shownAuthorizationUrl = `${authorizationUrl}&prompt=select_account`;
 const authLine = `${ANTIGRAVITY_AUTH_STDOUT_PREFIX}${authorizationUrl}\n`;
 const encode = (text: string) => new TextEncoder().encode(text);
 const encodeUnknownJson = Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown));
@@ -287,10 +288,21 @@ describe("Antigravity authorization URL", () => {
   it.effect("returns the official Google URL and its owned loopback target", () =>
     Effect.gen(function* () {
       expect(yield* parseAntigravityAuthorizationUrl(authorizationUrl)).toEqual({
-        authorizationUrl,
+        authorizationUrl: shownAuthorizationUrl,
         redirectUri: "http://127.0.0.1:46353/",
         state: "test-opaque-state",
       });
+    }),
+  );
+
+  it.effect("asks Google for the account chooser alongside any prompt Antigravity sent", () =>
+    Effect.gen(function* () {
+      const consent = yield* parseAntigravityAuthorizationUrl(`${authorizationUrl}&prompt=consent`);
+      expect(new URL(consent.authorizationUrl).searchParams.get("prompt")).toBe(
+        "consent select_account",
+      );
+      const chooser = `${authorizationUrl}&prompt=select_account`;
+      expect((yield* parseAntigravityAuthorizationUrl(chooser)).authorizationUrl).toBe(chooser);
     }),
   );
 
@@ -373,7 +385,7 @@ describe("Antigravity stdout compatibility", () => {
           onAuthorizationUrl: (url) => Effect.sync(() => void urls.push(url)),
         })(Stream.fromIterable(chunks)).pipe(Stream.decodeText(), Stream.mkString);
         expect(result).toBe(`${jsonBefore}${jsonAfter}`);
-        expect(urls).toEqual([authorizationUrl]);
+        expect(urls).toEqual([shownAuthorizationUrl]);
       }),
   );
 
@@ -384,7 +396,7 @@ describe("Antigravity stdout compatibility", () => {
         onAuthorizationUrl: (url) => Effect.sync(() => void urls.push(url)),
       })(Stream.make(encode(authLine.slice(0, -1)))).pipe(Stream.runCollect);
       expect(result).toEqual([]);
-      expect(urls).toEqual([authorizationUrl]);
+      expect(urls).toEqual([shownAuthorizationUrl]);
     }),
   );
 
@@ -470,7 +482,7 @@ describe("Antigravity stderr compatibility", () => {
       yield* handleStderr(`native log\n${line.slice(0, 40)}`);
       yield* handleStderr(line.slice(40, 90));
       yield* handleStderr(`${line.slice(90)}another native log\n`);
-      expect(urls).toEqual([authorizationUrl]);
+      expect(urls).toEqual([shownAuthorizationUrl]);
     }),
   );
 
@@ -513,7 +525,7 @@ describe("Antigravity stderr compatibility", () => {
         `${ANTIGRAVITY_AUTH_BROWSER_MARKER}${encodeUnknownJson(longAuthorizationUrl)}\n`,
       );
 
-      expect(urls).toEqual([longAuthorizationUrl]);
+      expect(urls).toEqual([`${longAuthorizationUrl}&prompt=select_account`]);
     }),
   );
 
@@ -529,7 +541,7 @@ describe("Antigravity stderr compatibility", () => {
       yield* handleStderr(markerLine.slice(12, 70));
       yield* handleStderr(`${markerLine.slice(70)}another native log\n`);
 
-      expect(urls).toEqual([authorizationUrl]);
+      expect(urls).toEqual([shownAuthorizationUrl]);
     }),
   );
 

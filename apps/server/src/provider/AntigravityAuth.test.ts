@@ -24,6 +24,7 @@ const owner = "t3-auth-session-owner";
 const otherOwner = "t3-auth-session-other";
 const authorizationUrl =
   "https://accounts.google.com/o/oauth2/v2/auth?response_type=code&redirect_uri=http%3A%2F%2F127.0.0.1%3A51234%2F&state=test-state";
+const shownAuthorizationUrl = `${authorizationUrl}&prompt=select_account`;
 const callbackUrl = "http://127.0.0.1:51234/?state=test-state&code=test-code";
 
 const initialized = {
@@ -150,7 +151,7 @@ it.layer(NodeServices.layer)("AntigravityAuth", (it) => {
       });
       yield* harness.auth.controller.start(owner);
       const waiting = yield* phase(harness.auth, "waiting");
-      assert.equal(waiting.authorizationUrl, authorizationUrl);
+      assert.equal(waiting.authorizationUrl, shownAuthorizationUrl);
 
       yield* Deferred.succeed(harness.authenticated, undefined);
       yield* Deferred.succeed(harness.discovered, undefined);
@@ -195,7 +196,7 @@ it.layer(NodeServices.layer)("AntigravityAuth", (it) => {
       const state = yield* harness.auth.controller.start(owner);
       assert.isNotNull(state.flowId);
       const waiting = yield* phase(harness.auth, "waiting");
-      assert.equal(waiting.authorizationUrl, authorizationUrl);
+      assert.equal(waiting.authorizationUrl, shownAuthorizationUrl);
 
       const other = yield* phase(harness.auth, "waiting", otherOwner);
       assert.isNull(other.authorizationUrl);
@@ -299,7 +300,7 @@ it.layer(NodeServices.layer)("AntigravityAuth", (it) => {
         assert.isTrue(Exit.isFailure(result));
       }
       assert.equal(harness.forwarded(), 0);
-      assert.equal((yield* phase(harness.auth, "waiting")).authorizationUrl, authorizationUrl);
+      assert.equal((yield* phase(harness.auth, "waiting")).authorizationUrl, shownAuthorizationUrl);
       yield* harness.auth.controller.cancel(owner, state.flowId!);
     }),
   );

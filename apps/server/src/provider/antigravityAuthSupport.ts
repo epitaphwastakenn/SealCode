@@ -465,9 +465,20 @@ export const parseAntigravityAuthorizationUrl = Effect.fn("parseAntigravityAutho
     }
     const redirect = yield* decodeUrl(redirectUri).pipe(Effect.mapError(invalidUrl));
     if (Number(redirect.port) < 1_024) return yield* invalidUrl();
-    return { authorizationUrl, redirectUri, state };
+    return { authorizationUrl: withAccountChooser(url, authorizationUrl), redirectUri, state };
   },
 );
+
+// Google otherwise signs in with whichever account the browser already has,
+// leaving no way to pick another one; the chooser also offers adding one.
+function withAccountChooser(url: URL, authorizationUrl: string): string {
+  const prompt = url.searchParams.get("prompt");
+  if (prompt === null) return `${authorizationUrl}&prompt=select_account`;
+  const prompts = prompt.split(" ").filter(Boolean);
+  if (prompts.includes("select_account") || prompts.includes("none")) return authorizationUrl;
+  url.searchParams.set("prompt", [...prompts, "select_account"].join(" "));
+  return url.href;
+}
 
 export function makeAntigravityStdoutTransform(
   input: {

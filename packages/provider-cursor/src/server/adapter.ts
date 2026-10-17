@@ -215,6 +215,17 @@ export function cursorMcpServers(
         Authorization: session.authorizationHeader,
       },
     },
+    ...(session.globalEndpoint === undefined
+      ? {}
+      : {
+          "sealcode-global": {
+            type: "http" as const,
+            url: session.globalEndpoint,
+            headers: {
+              Authorization: session.authorizationHeader,
+            },
+          },
+        }),
   };
 }
 

@@ -418,6 +418,19 @@ describe("theme files", () => {
     expect(JSON.parse(serializeThemeFile(theme))).not.toHaveProperty("sidebarArtwork");
   });
 
+  it("round-trips the optional canvas gradient", () => {
+    const theme = parseThemeFile({
+      version: THEME_FILE_VERSION,
+      name: "Gradient dusk",
+      appearance: "dark",
+      colors: { canvas: "#120a1f", accent: "#a855f7" },
+      gradient: true,
+    });
+
+    expect(theme.gradient).toBe(true);
+    expect(JSON.parse(serializeThemeFile(theme)).gradient).toBe(true);
+  });
+
   it("suppresses sidebar artwork during a live custom-theme preview", () => {
     const listener = vi.fn();
     const unsubscribe = subscribeToThemePreview(listener);
@@ -429,8 +442,9 @@ describe("theme files", () => {
       },
     });
 
-    applyThemeColorPreview(T3_CHAT_THEME.colors, "light");
+    applyThemeColorPreview(T3_CHAT_THEME.colors, "light", true);
     expect(getThemePreviewSidebarArtwork()).toBe(false);
+    expect(document.documentElement.dataset.themeGradient).toBe("true");
     expect(listener).toHaveBeenCalledTimes(1);
 
     applyThemePalette("system");
@@ -470,6 +484,7 @@ describe("theme files", () => {
   });
 
   it("keeps the T3 Chat palette faithful and readable", () => {
+    expect(T3_CHAT_THEME.label).toBe("Rose");
     expectThemeColors(T3_CHAT_THEME.colors, {
       canvas: "#fdf7fd",
       chrome: "#fdf7fd",

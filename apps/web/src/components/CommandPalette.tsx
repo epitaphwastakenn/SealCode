@@ -69,6 +69,7 @@ import {
   MessageSquareDashedIcon,
   LinkIcon,
   MessageSquareIcon,
+  MicIcon,
   MonitorIcon,
   MoonIcon,
   PaletteIcon,
@@ -145,6 +146,7 @@ import {
   resolveProjectPathForDispatch,
 } from "../lib/projectPaths";
 import { onOpenCommandPalette } from "../commandPaletteBus";
+import { toggleComposerVoice } from "../composerVoiceBus";
 import { isPreviewFocused } from "../lib/previewFocus";
 import { isTerminalFocused } from "../lib/terminalFocus";
 import {
@@ -2012,6 +2014,18 @@ function OpenCommandPaletteDialog(props: {
     // oxlint-disable-next-line react/set-state-in-effect -- applying the intent dispatches to the parent reducer and can navigate, neither of which may run during render.
     applyOpenIntent(openIntent);
   }, [openIntent, projectThreadItemCount]);
+
+  actionItems.push({
+    kind: "action",
+    value: "action:record-voice-note",
+    searchTerms: ["voice", "speech", "microphone", "dictate", "transcribe", "record", "voice note"],
+    title: "Record voice note",
+    icon: <MicIcon className={ITEM_ICON_CLASS} />,
+    shortcutCommand: "composer.voice",
+    run: async () => {
+      toggleComposerVoice();
+    },
+  });
 
   actionItems.push({
     kind: "action",

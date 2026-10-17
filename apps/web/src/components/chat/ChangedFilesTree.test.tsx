@@ -19,6 +19,7 @@ describe("ChangedFilesCard", () => {
 
     expect(markup).toContain('data-changed-files-state="tree"');
     expect(markup).toContain('aria-label="Open diff"');
+    expect(markup).toContain('aria-label="Review changes"');
     expect(markup).toContain('role="group" aria-label="2 additions, 1 deletions"');
     expect(markup).toContain("1 changed file");
     expect(markup).not.toContain("1 changed files");

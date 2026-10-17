@@ -3,7 +3,9 @@ import {
   type ProviderInstanceId,
   type EnvironmentId,
   type ProviderDriverKind,
+  type ProviderOptionSelection,
   type ResolvedKeybindingsConfig,
+  type ServerProviderModel,
 } from "@t3tools/contracts";
 import { memo, useEffect, useMemo, useState } from "react";
 import { Badge } from "../ui/badge";
@@ -53,6 +55,15 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   onOpenProviderSetup?: (instanceId: ProviderInstanceId) => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
+  /** SealCode: the reasoning level shown beside the model name in the trigger. */
+  effortLabel?: string | null;
+  isMaximumEffort?: boolean;
+  /** SealCode: when set, the popup hosts the reasoning slider and model options. */
+  models?: ReadonlyArray<ServerProviderModel>;
+  modelOptions?: ReadonlyArray<ProviderOptionSelection> | null | undefined;
+  onModelOptionsChange?: (nextOptions: ReadonlyArray<ProviderOptionSelection> | undefined) => void;
+  prompt?: string;
+  onPromptChange?: (prompt: string) => void;
 }) {
   const composerFloatingLayerProps = useComposerMenuProps();
   const [uncontrolledIsMenuOpen, setUncontrolledIsMenuOpen] = useState(false);
@@ -145,8 +156,11 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   const handleInstanceModelChange = (instanceId: ProviderInstanceId, model: string) => {
     if (props.disabled) return;
     props.onInstanceModelChange(instanceId, model);
-    setIsMenuOpen(false);
+    // With the traits section in the popup, picking a model keeps it open so the
+    // reasoning level can be adjusted next; double-click or Enter closes it.
+    if (!props.onModelOptionsChange) setIsMenuOpen(false);
   };
+  const isMaxEffort = props.isMaximumEffort ?? false;
 
   const shortcutLabel = props.keybindings
     ? shortcutLabelForCommand(props.keybindings, "modelPicker.toggle")
@@ -264,8 +278,32 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             >
               {props.triggerLabel ?? multipleLabel ?? triggerTitle}
             </TooltipTrigger>
-            <TooltipPopup side="top">{triggerTooltipContent}</TooltipPopup>
+            <TooltipPopup side="top">
+              {triggerTooltipContent}
+              {props.effortLabel ? ` · ${props.effortLabel}` : ""}
+            </TooltipPopup>
           </Tooltip>
+          {props.effortLabel && !selectedEntries && props.triggerLabel === undefined ? (
+            <span
+              data-chat-provider-model-picker-effort="true"
+              className={cn(
+                "inline-flex shrink-0 items-center gap-1 text-xs font-normal transition-colors duration-200",
+                isMaxEffort ? "font-semibold text-primary" : "text-muted-foreground/80",
+              )}
+            >
+              {isMaxEffort ? (
+                <svg
+                  viewBox="0 0 16 16"
+                  fill="currentColor"
+                  className="size-2.5 shrink-0"
+                  aria-hidden="true"
+                >
+                  <path d="M8 0L9.79 6.21L16 8L9.79 9.79L8 16L6.21 9.79L0 8L6.21 6.21L8 0Z" />
+                </svg>
+              ) : null}
+              {props.effortLabel}
+            </span>
+          ) : null}
           {selectedModel?.isUnavailable && !selectedEntries && props.triggerLabel === undefined ? (
             <Badge variant="outline" size="sm">
               Unavailable
@@ -278,7 +316,8 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
       </PopoverTrigger>
       <PopoverPopup
         {...(props.isComposerOwned ? composerFloatingLayerProps : {})}
-        align="start"
+        align={props.isComposerOwned ? "end" : "start"}
+        sideOffset={8}
         className="before:hidden"
         padding="none"
         followContentSize
@@ -307,6 +346,15 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             ? { getModelDisabledReason: props.getModelDisabledReason }
             : {})}
           onInstanceModelChange={handleInstanceModelChange}
+          {...(props.onModelOptionsChange
+            ? {
+                models: props.models,
+                modelOptions: props.modelOptions,
+                onModelOptionsChange: props.onModelOptionsChange,
+                prompt: props.prompt,
+                onPromptChange: props.onPromptChange,
+              }
+            : {})}
         />
         {props.selectedModels === undefined ? (
           <ChatGptSharingControl provider={activeEntry?.snapshot ?? null} />

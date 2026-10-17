@@ -585,6 +585,29 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
     });
   });
 
+  it("attaches the global MCP gateway without pre-approving its tools", () => {
+    const threadId = ThreadId.make("thread-claude-mcp-global");
+    const overrides = ClaudeAdapterV2.claudeMcpQueryOverrides({
+      mcpSession: {
+        ...mcpSessionFor(threadId),
+        globalEndpoint: "http://127.0.0.1:43123/mcp/global",
+      },
+      readOnlySandbox: false,
+    });
+
+    assert.deepEqual(overrides, {
+      allowedTools: [ClaudeAdapterV2.CLAUDE_T3_MCP_TOOL_WILDCARD],
+      mcpServers: {
+        ...T3_MCP_SERVERS,
+        "sealcode-global": {
+          type: "http",
+          url: "http://127.0.0.1:43123/mcp/global",
+          headers: { Authorization: "Bearer secret-claude-token" },
+        },
+      },
+    });
+  });
+
   it("extends an explicit allowlist with the t3-code wildcard", () => {
     const threadId = ThreadId.make("thread-claude-mcp-with-allowlist");
     const mcpSession = mcpSessionFor(threadId);

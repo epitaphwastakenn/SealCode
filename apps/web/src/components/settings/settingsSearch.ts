@@ -213,6 +213,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     targetId: "appearance",
   },
   {
+    id: "glass-sidebar",
+    title: "Glass sidebar",
+    to: "/settings/appearance",
+    searchTerms: ["translucent transparent acrylic blur sidebar"],
+  },
+  {
     // Prefixed because the slider control already owns the `appearance-contrast` id.
     id: "setting-appearance-contrast",
     title: "Contrast",
@@ -246,7 +252,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "harness-sound-volume",
     title: "Sound volume",
-    to: "/settings/general",
+    to: "/settings/appearance",
     searchTerms: ["harness notification sound volume audio"],
   },
   {
@@ -433,6 +439,11 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["queue steer running turn send default behavior composer"],
   },
   {
+    id: "diff-presentation",
+    title: "Diff presentation",
+    to: "/settings/general",
+  },
+  {
     id: "provider-update-checks",
     title: "Provider update checks",
     to: "/settings/general",
@@ -561,6 +572,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "image-viewer-model",
     title: "Image viewer model",
     to: "/settings/general",
+    searchTerms: ["vision images screenshots codex"],
   },
   {
     id: "diagnostics",
@@ -985,6 +997,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "GitHub sharing",
     to: "/settings/connections",
     searchTerms: ["pull request trusted environments shared credentials permissions read actions"],
+  },
+  {
+    id: "global-mcp-servers",
+    title: "Global MCP servers",
+    to: "/settings/connections",
+    searchTerms: ["model context protocol tools stdio http sse providers"],
   },
   {
     id: "archive",

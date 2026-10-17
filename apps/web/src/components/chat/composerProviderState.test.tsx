@@ -68,6 +68,11 @@ const ULTRATHINK_FRAME_CLASSES = {
   modelPickerIconClassName: "ultrathink-chroma",
 } as const;
 
+const MAX_EFFORT_FRAME_CLASSES = {
+  composerFrameClassName: "max-effort-frame",
+  composerSurfaceClassName: "shadow-[0_0_0_1px_rgba(255,255,255,0.07)_inset]",
+} as const;
+
 describe("getComposerProviderState", () => {
   it("derives a stable prompt injection state for ordinary prompt edits", () => {
     expect(getComposerPromptInjectionState("Investigate this failure")).toBe("none");
@@ -94,6 +99,7 @@ describe("getComposerProviderState", () => {
       provider: PROVIDER,
       promptEffort: "high",
       modelOptionsForDispatch: undefined,
+      ...MAX_EFFORT_FRAME_CLASSES,
     });
   });
 
@@ -464,6 +470,53 @@ describe("trait controls fastMode display", () => {
     if (fastMode?.type === "boolean") {
       expect(fastMode.currentValue).toBe(false);
     }
+  });
+});
+
+describe("composer max effort frame", () => {
+  it("adds the composer gradient frame when the selected effort is the model's maximum", () => {
+    const state = getComposerProviderState({
+      provider: PROVIDER,
+      model: MODEL,
+      models: modelWith([
+        selectDescriptor("effort", [
+          { id: "low", label: "Low" },
+          { id: "medium", label: "Medium", isDefault: true },
+          { id: "high", label: "High" },
+        ]),
+      ]),
+      modelOptions: selections(["effort", "high"]),
+      planModeEnabled: true,
+    });
+
+    expect(state).toEqual({
+      provider: PROVIDER,
+      promptEffort: "high",
+      modelOptionsForDispatch: selections(["effort", "high"]),
+      ...MAX_EFFORT_FRAME_CLASSES,
+    });
+  });
+
+  it("does not add the composer gradient frame for a non-maximum effort", () => {
+    const state = getComposerProviderState({
+      provider: PROVIDER,
+      model: MODEL,
+      models: modelWith([
+        selectDescriptor("effort", [
+          { id: "low", label: "Low" },
+          { id: "medium", label: "Medium", isDefault: true },
+          { id: "high", label: "High" },
+        ]),
+      ]),
+      modelOptions: selections(["effort", "medium"]),
+      planModeEnabled: true,
+    });
+
+    expect(state).toEqual({
+      provider: PROVIDER,
+      promptEffort: "medium",
+      modelOptionsForDispatch: selections(["effort", "medium"]),
+    });
   });
 });
 

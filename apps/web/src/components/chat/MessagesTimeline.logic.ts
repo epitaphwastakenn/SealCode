@@ -65,6 +65,7 @@ import { htmlRenderReferencesEqual, type HtmlRenderReference } from "@t3tools/sh
 import { mcpAppReferencesEqual, type McpAppReference } from "@t3tools/shared/mcpApp";
 import { dynamicToolTitle } from "@t3tools/shared/toolActivity";
 import { formatWorkspaceRelativePath } from "../../filePathDisplay";
+import { resolveCheckpointChangedFileCount } from "../../lib/checkpointAttribution";
 import {
   collectToolFilePaths,
   formatReadToolLabel,
@@ -472,6 +473,17 @@ export type TimelineLatestRun = Pick<
   "runId" | "status" | "startedAt" | "completedAt"
 >;
 
+/** What a folded turn did, so the fold header can say more than "Worked for 3m". */
+export interface TurnActivitySummary {
+  readonly state: "completed" | "interrupted" | "failed";
+  readonly duration: string | null;
+  readonly activityCount: number;
+  readonly toolCallCount: number;
+  readonly assistantResponseCount: number;
+  readonly agentCount: number;
+  readonly changedFileCount: number | null;
+}
+
 const LIVE_ACTIVITY_ROW_ID = "live-activity-row";
 
 export type MessagesTimelineRow = MessagesTimelineRowContent & {
@@ -539,6 +551,7 @@ type MessagesTimelineRowContent =
       runId: RunId;
       label: string;
       expanded: boolean;
+      summary: TurnActivitySummary;
     }
   | {
       kind: "attempt-fold";
@@ -702,6 +715,7 @@ interface TurnFold {
   createdAt: string;
   hiddenEntryIds: ReadonlySet<string>;
   label: string;
+  summary: TurnActivitySummary;
 }
 
 interface SupersededAttemptFold {
@@ -959,6 +973,9 @@ function deriveTurnFolds(input: {
   runlessWorkActive: boolean;
   liveSubagentEntryIds: ReadonlySet<string>;
   completeSupersededReplyEntryIds: ReadonlySet<string>;
+  /** Keeps intermediate assistant messages visible instead of folding them with the tool work. */
+  preserveAssistantCommentary: boolean;
+  changedFileCountByRunId: ReadonlyMap<RunId, number | null>;
 }): ReadonlyMap<string, TurnFold> {
   const interruptedRunIds = new Set<RunId>();
   const promptIndexByRunId = new Map<RunId, number>();
@@ -1084,6 +1101,13 @@ function deriveTurnFolds(input: {
         continue;
       }
       if (entry.kind === "work" && entry.entry.itemType === "notification") continue;
+      if (
+        input.preserveAssistantCommentary &&
+        entry.kind === "message" &&
+        entry.message.role === "assistant"
+      ) {
+        continue;
+      }
       hiddenEntryIds.add(entry.id);
     }
     if (hiddenEntryIds.size === 0) {
@@ -1100,7 +1124,8 @@ function deriveTurnFolds(input: {
 
     const firstEntry = group.entries[0];
     const lastEntry = group.entries.at(-1);
-    if (!firstEntry || !lastEntry) {
+    const firstHiddenEntry = group.entries.find((entry) => hiddenEntryIds.has(entry.id));
+    if (!firstEntry || !firstHiddenEntry || !lastEntry) {
       continue;
     }
 
@@ -1119,6 +1144,33 @@ function deriveTurnFolds(input: {
               lastEntryEnd,
           );
     const duration = elapsedMs !== null ? formatDuration(elapsedMs) : null;
+    const workEntries = group.entries.flatMap((entry) =>
+      entry.kind === "work" ? [entry.entry] : [],
+    );
+    const agentIds = new Set<string>();
+    for (const entry of group.entries) {
+      if (entry.kind === "event" && entry.projectedItem.item.type === "subagent") {
+        agentIds.add(entry.projectedItem.item.subagentId);
+      } else if (entry.kind === "work" && entry.entry.taskId !== undefined) {
+        agentIds.add(entry.entry.taskId);
+      }
+    }
+    const summary: TurnActivitySummary = {
+      state: isLatestInterruptedTurn
+        ? "interrupted"
+        : (input.latestRun?.runId === runId && input.latestRun.status === "failed") ||
+            workEntries.some((entry) => workEntryDisplayIndicatesToolFailure(entry))
+          ? "failed"
+          : "completed",
+      duration,
+      activityCount: workEntries.length,
+      toolCallCount: workEntries.filter((entry) => workLogEntryIsToolLike(entry)).length,
+      assistantResponseCount: group.entries.filter(
+        (entry) => entry.kind === "message" && entry.message.role === "assistant",
+      ).length,
+      agentCount: agentIds.size,
+      changedFileCount: input.changedFileCountByRunId.get(runId) ?? null,
+    };
     const label = isLatestInterruptedTurn
       ? duration
         ? `You stopped after ${duration}`
@@ -1127,12 +1179,16 @@ function deriveTurnFolds(input: {
         ? `Worked for ${duration}`
         : "Worked";
 
-    foldsByAnchorEntryId.set(group.anchorEntryId, {
+    // Preserved commentary can precede the first hidden entry, and the fold
+    // header belongs where the hidden work starts.
+    const anchorEntry = input.preserveAssistantCommentary ? firstHiddenEntry : null;
+    foldsByAnchorEntryId.set(anchorEntry?.id ?? group.anchorEntryId, {
       runId,
-      anchorEntryId: group.anchorEntryId,
-      createdAt: group.startBoundary ?? firstEntry.createdAt,
+      anchorEntryId: anchorEntry?.id ?? group.anchorEntryId,
+      createdAt: anchorEntry?.createdAt ?? group.startBoundary ?? firstEntry.createdAt,
       hiddenEntryIds,
       label,
+      summary,
     });
   }
   return foldsByAnchorEntryId;
@@ -1291,7 +1347,12 @@ function timelineRowEntries(entries: ReadonlyArray<TimelineEntry>) {
 function deriveTimelineTurnFolds(
   input: Pick<
     MessagesTimelineRowsInput,
-    "timelineEntries" | "latestRun" | "isWorking" | "runlessWorkActive" | "runningRunId"
+    | "timelineEntries"
+    | "latestRun"
+    | "isWorking"
+    | "runlessWorkActive"
+    | "runningRunId"
+    | "preserveAssistantCommentary"
   >,
 ) {
   const timelineEntries = timelineRowEntries(input.timelineEntries);
@@ -1310,6 +1371,8 @@ function deriveTimelineTurnFolds(
     runlessWorkActive: input.isWorking && input.runlessWorkActive === true,
     liveSubagentEntryIds: liveSubagentCardEntryIds(timelineEntries),
     completeSupersededReplyEntryIds: completeSupersededReplyEntryIds(timelineEntries),
+    preserveAssistantCommentary: input.preserveAssistantCommentary ?? false,
+    changedFileCountByRunId: new Map(),
   });
 }
 
@@ -1329,15 +1392,19 @@ export function deriveMessagesTimelineRows(input: {
   activeTurnStartedAt?: string | null;
   turnDiffSummaries: ReadonlyArray<TurnDiffSummary>;
   supportsConversationRollback: boolean;
+  /** Keeps intermediate assistant messages visible when a turn folds. */
+  preserveAssistantCommentary?: boolean;
   liveAgentTaskIds?: ReadonlySet<string> | undefined;
   worktreeSetup?: WorktreeSetupSnapshot | null;
 }): MessagesTimelineRow[] {
   const timelineEntries = timelineRowEntries(input.timelineEntries);
   const turnDiffSummaryByAssistantMessageId = new Map<MessageId, TurnDiffSummary>();
+  const changedFileCountByRunId = new Map<RunId, number | null>();
   for (const summary of input.turnDiffSummaries) {
     if (summary.assistantMessageId) {
       turnDiffSummaryByAssistantMessageId.set(summary.assistantMessageId, summary);
     }
+    changedFileCountByRunId.set(summary.runId, resolveCheckpointChangedFileCount(summary));
   }
   const revertTurnCountByUserMessageId = input.supportsConversationRollback
     ? deriveRevertTurnCountByUserMessageId({
@@ -1374,6 +1441,8 @@ export function deriveMessagesTimelineRows(input: {
     runlessWorkActive,
     liveSubagentEntryIds,
     completeSupersededReplyEntryIds: completeSupersededReplyIds,
+    preserveAssistantCommentary: input.preserveAssistantCommentary ?? false,
+    changedFileCountByRunId,
   });
   const collapsedEntryIds = new Set<string>();
   for (const fold of foldsByAnchorEntryId.values()) {
@@ -1528,6 +1597,7 @@ export function deriveMessagesTimelineRows(input: {
         runId: turnFold.runId,
         label: turnFold.label,
         expanded: input.expandedRunIds?.has(turnFold.runId) ?? false,
+        summary: turnFold.summary,
       });
     }
 
@@ -1981,7 +2051,12 @@ export interface MessagesTimelineRowsProjection {
 export function timelineEntryTurnFoldRunId(
   input: Pick<
     MessagesTimelineRowsInput,
-    "timelineEntries" | "latestRun" | "isWorking" | "runlessWorkActive" | "runningRunId"
+    | "timelineEntries"
+    | "latestRun"
+    | "isWorking"
+    | "runlessWorkActive"
+    | "runningRunId"
+    | "preserveAssistantCommentary"
   >,
   entryId: string,
 ): RunId | null {
@@ -1991,7 +2066,12 @@ export function timelineEntryTurnFoldRunId(
 export function timelineTurnFoldRunIdsByEntryId(
   input: Pick<
     MessagesTimelineRowsInput,
-    "timelineEntries" | "latestRun" | "isWorking" | "runlessWorkActive" | "runningRunId"
+    | "timelineEntries"
+    | "latestRun"
+    | "isWorking"
+    | "runlessWorkActive"
+    | "runningRunId"
+    | "preserveAssistantCommentary"
   >,
 ): ReadonlyMap<string, RunId> {
   const byEntryId = new Map<string, RunId>();
@@ -2149,7 +2229,12 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
 
     case "turn-fold": {
       const bf = b as typeof a;
-      return a.createdAt === bf.createdAt && a.label === bf.label && a.expanded === bf.expanded;
+      return (
+        a.createdAt === bf.createdAt &&
+        a.label === bf.label &&
+        a.expanded === bf.expanded &&
+        shallow(a.summary, bf.summary)
+      );
     }
 
     case "attempt-fold": {

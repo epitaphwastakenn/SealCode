@@ -183,21 +183,30 @@ function ComboboxPopup({
   );
 }
 
+// SealCode model rows: a bordered card that tints violet when selected.
+const COMBOBOX_ITEM_CARD_CLASS =
+  "flex min-h-8 cursor-pointer items-center gap-2.5 overflow-hidden rounded-lg border border-transparent px-2.5 py-2 text-base text-foreground/90 outline-none transition-[background-color,border-color,color] duration-150 not-data-disabled:hover:border-border/60 not-data-disabled:hover:bg-muted/60 not-data-disabled:hover:text-foreground data-highlighted:border-border/60 data-highlighted:bg-muted/60 data-selected:border-primary/50 data-selected:bg-linear-to-r data-selected:from-primary/15 data-selected:via-primary/10 data-selected:to-transparent data-selected:text-foreground data-selected:ring-1 data-selected:ring-inset data-selected:ring-primary/20 data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50 sm:text-sm [&_svg]:pointer-events-none [&_svg]:shrink-0";
+
 function ComboboxItem({
   className,
   children,
   hideIndicator: _hideIndicator = false,
+  variant = "default",
   ...props
 }: ComboboxPrimitive.Item.Props & {
   hideIndicator?: boolean;
+  variant?: "default" | "card";
 }) {
   return (
     <ComboboxPrimitive.Item
       className={cn(
-        "flex min-h-8 in-data-[side=none]:min-w-[calc(var(--anchor-width)+1.25rem)] cursor-pointer items-center rounded-sm px-2 py-1 text-base outline-none not-data-disabled:hover:bg-accent data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-selected:bg-foreground/[0.08] data-selected:text-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground [&[data-highlighted][data-selected]]:bg-accent [&[data-highlighted][data-selected]]:text-accent-foreground data-disabled:opacity-64 sm:min-h-7 sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+        variant === "card"
+          ? COMBOBOX_ITEM_CARD_CLASS
+          : "flex min-h-8 in-data-[side=none]:min-w-[calc(var(--anchor-width)+1.25rem)] cursor-pointer items-center rounded-sm px-2 py-1 text-base outline-none not-data-disabled:hover:bg-accent data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-selected:bg-foreground/[0.08] data-selected:text-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground [&[data-highlighted][data-selected]]:bg-accent [&[data-highlighted][data-selected]]:text-accent-foreground data-disabled:opacity-64 sm:min-h-7 sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className,
       )}
       data-slot="combobox-item"
+      data-variant={variant}
       {...props}
     >
       <div

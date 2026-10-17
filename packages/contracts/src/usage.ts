@@ -1,3 +1,4 @@
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { ForwardCompatibleArray, NonNegativeInt, TrimmedNonEmptyString } from "./baseSchemas.ts";
@@ -21,6 +22,43 @@ export const UsageProviderKind = Schema.Literals([
   "pi",
 ]);
 export type UsageProviderKind = typeof UsageProviderKind.Type;
+
+/**
+ * A provider-reported subscription quota window.
+ *
+ * Providers own the limits and reset schedule. SealCode only normalizes the
+ * values they report, so the client never has to guess a plan's quota.
+ */
+export const SubscriptionUsageWindow = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  label: TrimmedNonEmptyString,
+  usedPercent: Schema.Number,
+  windowDurationMins: Schema.NullOr(NonNegativeInt),
+  resetsAt: Schema.NullOr(Schema.String),
+});
+export type SubscriptionUsageWindow = typeof SubscriptionUsageWindow.Type;
+
+/**
+ * A provider-reported usage value whose service does not expose a quota
+ * denominator. These values are shown as activity, never converted into a
+ * fabricated percentage bar.
+ */
+export const SubscriptionUsageMetric = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  label: TrimmedNonEmptyString,
+  value: TrimmedNonEmptyString,
+});
+export type SubscriptionUsageMetric = typeof SubscriptionUsageMetric.Type;
+
+export const SubscriptionUsage = Schema.Struct({
+  plan: Schema.NullOr(TrimmedNonEmptyString),
+  windows: Schema.Array(SubscriptionUsageWindow),
+  metrics: Schema.Array(SubscriptionUsageMetric).pipe(
+    Schema.withDecodingDefault(Effect.succeed([])),
+  ),
+  checkedAt: Schema.String,
+});
+export type SubscriptionUsage = typeof SubscriptionUsage.Type;
 
 const USAGE_DAY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 

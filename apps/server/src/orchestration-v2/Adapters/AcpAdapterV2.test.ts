@@ -722,6 +722,7 @@ describe("AcpAdapterV2", () => {
         providerSessionId: "mcp-session-acp-self-contained-mcp-bridge",
         providerInstanceId: instanceId,
         endpoint: "http://127.0.0.1:43123/mcp",
+        globalEndpoint: "http://127.0.0.1:43123/mcp/global",
         authorizationHeader: "Bearer self-contained-mcp-bridge-token",
         browserToolsAvailable: false,
       });
@@ -759,6 +760,16 @@ describe("AcpAdapterV2", () => {
       }
       assert.equal(mcpServer.command, process.execPath);
       assert.deepEqual(mcpServer.args, ["acp-mcp-bridge"]);
+      const globalServer = runtimeInput?.mcpServers[1];
+      if (globalServer === undefined || !("command" in globalServer)) {
+        return yield* Effect.die("ACP runtime must receive the sealcode-global stdio MCP server");
+      }
+      assert.equal(globalServer.name, "sealcode-global");
+      assert.deepEqual(globalServer.args, ["acp-mcp-bridge"]);
+      assert.deepInclude(globalServer.env, {
+        name: "T3_ACP_MCP_ENDPOINT",
+        value: "http://127.0.0.1:43123/mcp/global",
+      });
       assert.equal(runtimeInput?.processEnvironment?.T3_ACP_MCP_NODE, process.execPath);
       assert.equal(runtimeInput?.processEnvironment?.T3_ACP_MCP_ENTRYPOINT, undefined);
     }).pipe(Effect.provide(layerTest), Effect.scoped),

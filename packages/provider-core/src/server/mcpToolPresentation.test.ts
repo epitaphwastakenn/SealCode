@@ -51,6 +51,27 @@ describe("mcpToolPresentation", () => {
     expect(presentation.toolSource?.icon).toEqual(presentation.toolIcon);
   });
 
+  it("presents global gateway tools under the upstream server", () => {
+    const expected = {
+      title: "get state",
+      toolSource: { key: "mcp:roblox_studio", name: "roblox studio", kind: "integration" },
+    };
+    // Claude qualifies the gateway's tool with the gateway's own name.
+    expect(
+      mcpToolPresentation({
+        toolName: "mcp__sealcode-global__mcp__roblox_studio__get_state",
+        serverDisplayName: "sealcode-global",
+      }),
+    ).toEqual(expected);
+    // Codex and ACP report the gateway as the server and leave the upstream name in the tool.
+    expect(
+      mcpToolPresentation({
+        serverName: "sealcode-global",
+        toolName: "mcp__roblox_studio__get_state",
+      }),
+    ).toEqual(expected);
+  });
+
   it("uses readable fallback names without a guessed logo", () => {
     expect(mcpToolPresentation({ toolName: "mcp__my_server__get_weather" })).toEqual({
       title: "get weather",

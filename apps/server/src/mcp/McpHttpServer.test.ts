@@ -29,6 +29,7 @@ import {
 import * as ProjectService from "../project/ProjectService.ts";
 import * as PullRequestReviewGuideService from "../pullRequest/PullRequestReviewGuideService.ts";
 import * as ServerConfig from "../config.ts";
+import * as GlobalMcpManager from "./GlobalMcpManager.ts";
 import * as McpHttpServer from "./McpHttpServer.ts";
 import * as McpToolAccess from "./McpToolAccess.ts";
 import * as McpToolAccessTestkit from "./McpToolAccess.testkit.ts";
@@ -1082,6 +1083,152 @@ it.effect("admits provider and OAuth client credentials and points only clients 
       const deadProvider = yield* call("deadProviderToken");
       expect(deadProvider.status).toBe(401);
       expect(deadProvider.headers["www-authenticate"]).toBe('Bearer error="invalid_token"');
+    }),
+  ).pipe(Effect.provide(NodeHttpServer.layerTest)),
+);
+
+it.effect("serves the global MCP gateway to thread credentials only", () =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const threadToken = "threadTokenWithoutDots";
+      const clientToken = "client-payload.client-signature";
+      const threadScope: McpInvocationContext.McpInvocationScope = {
+        ...invocation,
+        capabilities: new Set(["orchestration"]),
+      };
+      const clientScope: McpInvocationContext.McpInvocationScope = {
+        environmentId,
+        requestNamespace: "client:session-1",
+        thread: undefined,
+        client: { sessionId: "session-1", label: "Claude Code", access: "auto" },
+        capabilities: new Set(["orchestration"]),
+        issuedAt: 1,
+      };
+      const catalog: GlobalMcpManager.McpToolCatalog = {
+        tools: [
+          {
+            canonicalName: "mcp__roblox_studio__get_state",
+            serverId: "roblox-studio",
+            serverDisplayName: "Roblox Studio",
+            upstreamToolName: "get_state",
+            tool: {
+              name: "get_state",
+              description: "Read Studio state.",
+              inputSchema: { type: "object" },
+              annotations: { readOnlyHint: true },
+            },
+          },
+        ],
+        byCanonicalName: new Map(),
+      };
+      const received: Array<GlobalMcpManager.McpInvocation> = [];
+      const layerGateway = McpHttpServer.layerGlobalMcpGateway.pipe(
+        Layer.provide(
+          Layer.mock(McpSessionRegistry.McpSessionRegistry)({
+            resolve: (token) =>
+              Effect.succeed(
+                token === threadToken
+                  ? (threadScope as McpInvocationContext.McpThreadInvocationScope)
+                  : undefined,
+              ),
+          }),
+        ),
+        Layer.provide(
+          Layer.succeed(McpHttpServer.McpClientAuthenticator, {
+            authenticate: (request) =>
+              Effect.succeed(
+                request.headers.authorization === `Bearer ${clientToken}` ? clientScope : undefined,
+              ),
+          }),
+        ),
+      );
+      // Handler requirements resolve from outside `serve`, not from the app layer.
+      yield* HttpRouter.serve(layerGateway, { disableListenLog: true, disableLogger: true }).pipe(
+        Layer.provide(
+          Layer.mock(GlobalMcpManager.GlobalMcpManager)({
+            getCatalog: Effect.succeed(catalog),
+            callTool: (input) =>
+              Effect.sync(() => {
+                received.push(input);
+                return {
+                  isError: false,
+                  content: [{ type: "text", text: "Studio is ready." }],
+                  structuredContent: { connected: true },
+                };
+              }),
+            streamChanges: Stream.empty,
+          }),
+        ),
+        Layer.build,
+      );
+      const httpClient = yield* HttpClient.HttpClient;
+      const rpc = (token: string | undefined, body: unknown) =>
+        httpClient.post("/mcp/global", {
+          headers: {
+            accept: "application/json, text/event-stream",
+            ...(token === undefined ? {} : { authorization: `Bearer ${token}` }),
+          },
+          body: HttpBody.text(JSON.stringify(body), "application/json"),
+        });
+      const ping = { jsonrpc: "2.0", id: 1, method: "ping" };
+
+      expect((yield* rpc(undefined, ping)).status).toBe(401);
+      expect((yield* rpc("unknownToken", ping)).status).toBe(401);
+      expect((yield* rpc(clientToken, ping)).status).toBe(403);
+
+      const initialized = yield* rpc(threadToken, {
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { protocolVersion: "2025-03-26" },
+      });
+      expect(initialized.status).toBe(200);
+      expect(yield* initialized.json).toMatchObject({
+        result: {
+          protocolVersion: "2025-03-26",
+          capabilities: { tools: { listChanged: true } },
+        },
+      });
+
+      expect(
+        (yield* rpc(threadToken, { jsonrpc: "2.0", method: "notifications/initialized" })).status,
+      ).toBe(202);
+
+      const listed = yield* rpc(threadToken, { jsonrpc: "2.0", id: 2, method: "tools/list" });
+      expect(yield* listed.json).toMatchObject({
+        result: {
+          tools: [
+            {
+              name: "mcp__roblox_studio__get_state",
+              annotations: { readOnlyHint: true },
+              _meta: { sealcode: { serverId: "roblox-studio", upstreamToolName: "get_state" } },
+            },
+          ],
+        },
+      });
+
+      const called = yield* rpc(threadToken, {
+        jsonrpc: "2.0",
+        id: 3,
+        method: "tools/call",
+        params: { name: "mcp__roblox_studio__get_state", arguments: { place: "Test" } },
+      });
+      expect(yield* called.json).toMatchObject({
+        result: { structuredContent: { connected: true } },
+      });
+      expect(received[0]?.scope.thread?.threadId).toBe(threadId);
+      expect(received[0]?.canonicalToolName).toBe("mcp__roblox_studio__get_state");
+      expect(received[0]?.arguments).toEqual({ place: "Test" });
+
+      const unknown = yield* rpc(threadToken, { jsonrpc: "2.0", id: 4, method: "resources/list" });
+      expect(yield* unknown.json).toMatchObject({ error: { code: -32601 } });
+
+      const stream = yield* httpClient.get("/mcp/global", {
+        headers: { accept: "text/event-stream", authorization: `Bearer ${threadToken}` },
+      });
+      expect(stream.status).toBe(200);
+      expect(stream.headers["content-type"]).toContain("text/event-stream");
+      expect(yield* stream.text).toContain(": connected");
     }),
   ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );

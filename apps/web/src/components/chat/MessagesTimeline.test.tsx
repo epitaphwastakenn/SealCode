@@ -1125,6 +1125,98 @@ describe("MessagesTimeline", () => {
     expect(markup).toContain("1 changed file");
   });
 
+  it("still renders captured changed files when the checkpoint is stale", () => {
+    const assistantMessageId = MessageId.make("message-assistant-stale-checkpoint");
+    const runId = RunId.make("run-stale-checkpoint");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        {...buildProps()}
+        latestRun={{
+          runId,
+          status: "completed",
+          startedAt: MESSAGE_CREATED_AT,
+          completedAt: MESSAGE_CREATED_AT,
+        }}
+        timelineEntries={[
+          {
+            id: "entry-assistant-stale-checkpoint",
+            kind: "message",
+            createdAt: MESSAGE_CREATED_AT,
+            message: {
+              id: assistantMessageId,
+              role: "assistant",
+              text: "Updated the fixture.",
+              runId,
+              createdAt: MESSAGE_CREATED_AT,
+              updatedAt: MESSAGE_CREATED_AT,
+              streaming: false,
+            },
+          },
+        ]}
+        turnDiffSummaries={[
+          {
+            runId,
+            checkpointTurnCount: 1,
+            checkpointRef: CheckpointRef.make("checkpoint-stale"),
+            status: "stale",
+            files: [{ path: "README.md", kind: "modified", additions: 2, deletions: 1 }],
+            assistantMessageId,
+            completedAt: MESSAGE_CREATED_AT,
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("1 changed file");
+    expect(markup).not.toContain("Changed files could not be attributed safely to this turn.");
+  });
+
+  it("offers the raw diff when an empty checkpoint could not be captured", () => {
+    const assistantMessageId = MessageId.make("message-assistant-failed-checkpoint");
+    const runId = RunId.make("run-failed-checkpoint");
+    const markup = renderToStaticMarkup(
+      <MessagesTimeline
+        {...buildProps()}
+        latestRun={{
+          runId,
+          status: "completed",
+          startedAt: MESSAGE_CREATED_AT,
+          completedAt: MESSAGE_CREATED_AT,
+        }}
+        timelineEntries={[
+          {
+            id: "entry-assistant-failed-checkpoint",
+            kind: "message",
+            createdAt: MESSAGE_CREATED_AT,
+            message: {
+              id: assistantMessageId,
+              role: "assistant",
+              text: "Updated the fixture.",
+              runId,
+              createdAt: MESSAGE_CREATED_AT,
+              updatedAt: MESSAGE_CREATED_AT,
+              streaming: false,
+            },
+          },
+        ]}
+        turnDiffSummaries={[
+          {
+            runId,
+            checkpointTurnCount: 1,
+            checkpointRef: CheckpointRef.make("checkpoint-failed"),
+            status: "error",
+            files: [],
+            assistantMessageId,
+            completedAt: MESSAGE_CREATED_AT,
+          },
+        ]}
+      />,
+    );
+
+    expect(markup).toContain("Changed files could not be attributed safely to this turn.");
+    expect(markup).toContain("Open raw diff");
+  });
+
   it("treats the follow re-arm band above the content bottom as the live edge", async () => {
     const {
       resolveTimelineIsAtEnd,

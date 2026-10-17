@@ -1,5 +1,6 @@
 import {
   DEFAULT_SERVER_SETTINGS,
+  type GlobalMcpServer,
   ModelSelection,
   ProjectId,
   ProjectScript,
@@ -15,6 +16,7 @@ import {
   ServerSettings,
   ServerSettingsError,
   type ServerSettingsPatch,
+  validateGlobalMcpServerMap,
 } from "@t3tools/contracts";
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
@@ -37,6 +39,7 @@ import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as SqlClient from "effect/sql/SqlClient";
 import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveSymlinkTarget } from "@t3tools/shared/symlink";
 import * as ServerConfig from "./config.ts";
 import { type DeepPartial, deepMerge } from "@t3tools/shared/Struct";
@@ -113,8 +116,18 @@ const foldProviderInstanceEnabledFlags = (settings: ServerSettings): ServerSetti
 
 const normalizeServerSettings = (
   settings: ServerSettings,
-): Effect.Effect<ServerSettings, ServerSettingsError> =>
-  encodeServerSettings(settings).pipe(
+): Effect.Effect<ServerSettings, ServerSettingsError> => {
+  const mcpValidationError = validateGlobalMcpServerMap(settings.mcpServers);
+  if (mcpValidationError !== undefined) {
+    return Effect.fail(
+      new ServerSettingsError({
+        settingsPath: "<memory>",
+        operation: "normalize",
+        cause: new Error(mcpValidationError),
+      }),
+    );
+  }
+  return encodeServerSettings(settings).pipe(
     Effect.flatMap(decodeServerSettings),
     Effect.map(foldProviderInstanceEnabledFlags),
     Effect.map((next) => ({ ...next, ...deriveLegacyProjectOverrides(next) })),
@@ -127,6 +140,7 @@ const normalizeServerSettings = (
         }),
     ),
   );
+};
 
 export function redactServerSettingsForClient(settings: ServerSettings): ServerSettings {
   return mapSettingsSecrets(settings, (secret) =>
@@ -442,7 +456,13 @@ const ATOMIC_SETTINGS_KEYS: ReadonlySet<string> = new Set([
   "providerHealthRefreshInterval",
   "sourceControlWriterModelSelection",
   "reviewGuideModelSelection",
+  "diffReviewModelSelection",
+  "contextCompactorModelSelection",
+  "skillCuratorModelSelection",
+  "memoryCuratorModelSelection",
+  "delegationDefaultModelSelection",
   "textGenerationModelSelection",
+  "imageViewerModelSelection",
   "pullRequestMergeMethod",
 ]);
 
@@ -654,8 +674,39 @@ const make = Effect.gen(function* () {
       );
     });
 
+  // Roblox Studio ships its MCP server as a batch file, so a Studio install is enough to offer it.
+  // Seeded once: an emptied registry is not stored, so without the marker the entry the user
+  // removed would come back on every start.
+  const robloxSeedMarkerPath = pathService.join(
+    pathService.dirname(settingsPath),
+    ".roblox-mcp-seeded",
+  );
+
+  const hostPlatform = yield* HostProcess.Platform;
+  const hostEnvironment = yield* HostProcess.Environment;
+  const resolveRobloxMcpServer = Effect.gen(function* () {
+    if (hostPlatform !== "win32") return undefined;
+    const localAppData = hostEnvironment.LOCALAPPDATA?.trim();
+    if (!localAppData) return undefined;
+    const commandPath = pathService.join(localAppData, "Roblox", "mcp.bat");
+    if (!(yield* fs.exists(commandPath).pipe(Effect.orElseSucceed(() => false)))) {
+      return undefined;
+    }
+    return {
+      id: "roblox-studio",
+      displayName: "Roblox Studio",
+      enabled: true,
+      transport: "stdio",
+      command: "cmd.exe",
+      args: ["/c", commandPath],
+      env: [],
+      headers: [],
+    } satisfies GlobalMcpServer;
+  });
+
   const loadSettingsFromDisk = Effect.gen(function* () {
     let settings = DEFAULT_SERVER_SETTINGS;
+    let seededRobloxMcp = false;
     let legacyProviders: Readonly<Record<string, unknown>> | undefined;
     let legacySourceControl: Parameters<typeof migrateLegacySourceControlSettings>[1] = {};
     // A file that failed to decode must stay on disk for the user to repair;
@@ -687,6 +738,18 @@ const make = Effect.gen(function* () {
         }
       } else {
         settings = decoded.value;
+      }
+    }
+
+    if (
+      settingsFileTrusted &&
+      Object.keys(settings.mcpServers).length === 0 &&
+      !(yield* fs.exists(robloxSeedMarkerPath).pipe(Effect.orElseSucceed(() => true)))
+    ) {
+      const roblox = yield* resolveRobloxMcpServer;
+      if (roblox !== undefined) {
+        settings = { ...settings, mcpServers: { [roblox.id]: roblox } };
+        seededRobloxMcp = true;
       }
     }
 
@@ -780,12 +843,16 @@ const make = Effect.gen(function* () {
     if (
       migrated !== loaded ||
       (settingsFileTrusted && legacyProviders !== undefined) ||
-      hasLegacySourceControl
+      hasLegacySourceControl ||
+      seededRobloxMcp
     ) {
       yield* writeSettingsAtomically(migrated);
       for (const move of sourceControlMigration.secretMoves) {
         yield* secretStore.remove(move.from).pipe(Effect.ignore);
       }
+    }
+    if (seededRobloxMcp) {
+      yield* fs.writeFileString(robloxSeedMarkerPath, "").pipe(Effect.ignore);
     }
     return migrated;
   });
@@ -819,6 +886,8 @@ const make = Effect.gen(function* () {
                 operation: "read-secret",
                 providerInstanceId: secret.providerInstanceId,
                 environmentVariable: secret.environmentVariable,
+                mcpServerId: secret.mcpServerId,
+                mcpFieldName: secret.mcpFieldName,
                 cause,
               }),
           ),
@@ -846,6 +915,8 @@ const make = Effect.gen(function* () {
               operation: error.operation,
               providerInstanceId: error.providerInstanceId,
               environmentVariable: error.environmentVariable,
+              mcpServerId: error.mcpServerId,
+              mcpFieldName: error.mcpFieldName,
               cause: error.cause,
             }).pipe(Effect.as(settings)),
           ),
@@ -858,6 +929,8 @@ const make = Effect.gen(function* () {
     readonly secretName: string;
     readonly providerInstanceId?: string;
     readonly environmentVariable?: string;
+    readonly mcpServerId?: string;
+    readonly mcpFieldName?: string;
   } & (
     | { readonly kind: "write"; readonly value: Uint8Array }
     | { readonly kind: "remove"; readonly operation: "remove-secret" | "remove-stale-secret" }
@@ -881,6 +954,8 @@ const make = Effect.gen(function* () {
           ...(secret.environmentVariable !== undefined
             ? { environmentVariable: secret.environmentVariable }
             : {}),
+          ...(secret.mcpServerId !== undefined ? { mcpServerId: secret.mcpServerId } : {}),
+          ...(secret.mcpFieldName !== undefined ? { mcpFieldName: secret.mcpFieldName } : {}),
         };
         if (!secret.sensitive) {
           changes.push({ ...metadata, kind: "remove", operation: "remove-secret" });
@@ -915,6 +990,8 @@ const make = Effect.gen(function* () {
           ...(secret.environmentVariable !== undefined
             ? { environmentVariable: secret.environmentVariable }
             : {}),
+          ...(secret.mcpServerId !== undefined ? { mcpServerId: secret.mcpServerId } : {}),
+          ...(secret.mcpFieldName !== undefined ? { mcpFieldName: secret.mcpFieldName } : {}),
         });
       }
       return { settings, changes };
@@ -926,6 +1003,8 @@ const make = Effect.gen(function* () {
       readonly previousValue: Option.Option<Uint8Array>;
       readonly providerInstanceId?: string;
       readonly environmentVariable?: string;
+      readonly mcpServerId?: string;
+      readonly mcpFieldName?: string;
     }>,
   ) =>
     Effect.forEach(
@@ -939,6 +1018,8 @@ const make = Effect.gen(function* () {
             Effect.logWarning("failed to roll back settings secret", {
               providerInstanceId: write.providerInstanceId,
               environmentVariable: write.environmentVariable,
+              mcpServerId: write.mcpServerId,
+              mcpFieldName: write.mcpFieldName,
               cause,
             }),
           ),
@@ -952,6 +1033,8 @@ const make = Effect.gen(function* () {
       readonly previousValue: Option.Option<Uint8Array>;
       readonly providerInstanceId?: string;
       readonly environmentVariable?: string;
+      readonly mcpServerId?: string;
+      readonly mcpFieldName?: string;
     }> = [];
     const rollback = Effect.suspend(() => rollbackSettingsSecretWrites(applied));
     return Effect.forEach(
@@ -966,6 +1049,8 @@ const make = Effect.gen(function* () {
                   operation: "read-secret",
                   providerInstanceId: change.providerInstanceId,
                   environmentVariable: change.environmentVariable,
+                  mcpServerId: change.mcpServerId,
+                  mcpFieldName: change.mcpFieldName,
                   cause,
                 }),
             ),
@@ -984,6 +1069,8 @@ const make = Effect.gen(function* () {
                   operation: change.kind === "write" ? "write-secret" : change.operation,
                   providerInstanceId: change.providerInstanceId,
                   environmentVariable: change.environmentVariable,
+                  mcpServerId: change.mcpServerId,
+                  mcpFieldName: change.mcpFieldName,
                   cause,
                 }),
             ),

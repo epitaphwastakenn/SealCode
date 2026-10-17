@@ -59,6 +59,7 @@ export const ProviderInstanceConfig = Schema.Struct({
   environment: Schema.optionalKey(ProviderInstanceEnvironment),
   enabled: Schema.optionalKey(Schema.Boolean),
   config: Schema.optionalKey(Schema.Unknown),
+  fallbackInstanceId: Schema.optionalKey(ProviderInstanceId),
 });
 export type ProviderInstanceConfig = typeof ProviderInstanceConfig.Type;
 

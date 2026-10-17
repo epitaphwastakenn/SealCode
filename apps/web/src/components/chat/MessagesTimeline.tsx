@@ -62,6 +62,7 @@ import { observeResize } from "~/lib/observeResize";
 
 const NOOP_USE_ARTIFACT_TEMPLATE = () => {};
 const NOOP_OPEN_ATTACHMENT = (_attachment: ChatFileAttachment) => {};
+const NOOP_REVIEW_TURN_DIFF = (_runId: RunId) => {};
 
 import { resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
 import { toolActivityFaviconUrl } from "@t3tools/shared/favicon";
@@ -108,6 +109,8 @@ import {
   isVideoAttachment,
   type TurnDiffSummary,
 } from "../../types";
+import { shouldRenderUnattributedDiffFallback } from "../../lib/checkpointAttribution";
+import { useCheckpointDiff } from "../../lib/checkpointDiffState";
 import {
   getRenderablePatch,
   resolveDiffThemeName,
@@ -275,7 +278,7 @@ import type { ChatMarkdownContextReference } from "../ChatMarkdown";
 import { useMediaQuery } from "~/hooks/useMediaQuery";
 import { cn } from "~/lib/utils";
 import { useUiStateStore } from "~/uiStateStore";
-import { type TimestampFormat } from "@t3tools/contracts/settings";
+import { type DiffPresentation, type TimestampFormat } from "@t3tools/contracts/settings";
 import {
   formatChatTimestampTooltip,
   formatDayAwareTimestamp,
@@ -327,6 +330,9 @@ interface TimelineRowSharedState {
   onImageExpand: (preview: ExpandedImagePreview) => void;
   displayThreadKey?: string;
   onOpenTurnDiff: (runId: RunId, filePath?: string) => void;
+  onReviewTurnDiff: (runId: RunId) => void;
+  diffPresentation: DiffPresentation;
+  diffIgnoreWhitespace: boolean;
   onOpenThread: (threadId: OrchestrationV2TurnItem["threadId"]) => void;
   onForkFromRun: (input: {
     readonly sourceThreadId: ThreadId;
@@ -388,6 +394,12 @@ function timelineListStateFor(identity: string): {
       expandedEntries: new Set(),
     },
   };
+}
+
+/** Folds the user opened survive a reload; the in-memory position memory does not. */
+function persistedExpandedRunIds(identity: string): ReadonlySet<RunId> {
+  const persisted = useUiStateStore.getState().timelineExpandedTurnIdsByThread[identity] ?? [];
+  return new Set(persisted.map((id) => id as RunId));
 }
 
 const TIMELINE_LIST_HEADER = <div className="h-3 sm:h-4" />;
@@ -461,10 +473,15 @@ interface MessagesTimelineProps {
   latestRun: TimelineLatestRun | null;
   runningRunId?: RunId | null;
   turnDiffSummaries: ReadonlyArray<TurnDiffSummary>;
+  /** Keeps intermediate assistant messages visible when a turn folds its tool work. */
+  preserveAssistantCommentary?: boolean;
+  diffPresentation?: DiffPresentation;
+  diffIgnoreWhitespace?: boolean;
   routeThreadKey: string;
   displayThreadKey?: string;
   paintOnly?: boolean;
   onOpenTurnDiff: (runId: RunId, filePath?: string) => void;
+  onReviewTurnDiff?: (runId: RunId) => void;
   onOpenThread: (threadId: OrchestrationV2TurnItem["threadId"]) => void;
   parentThreadLink?: {
     readonly threadId: ThreadId;
@@ -566,10 +583,14 @@ const ConversationTimeline = memo(function ConversationTimeline({
   latestRun,
   runningRunId = null,
   turnDiffSummaries,
+  preserveAssistantCommentary = false,
+  diffPresentation = "summary",
+  diffIgnoreWhitespace = true,
   routeThreadKey,
   displayThreadKey,
   paintOnly = false,
   onOpenTurnDiff,
+  onReviewTurnDiff = NOOP_REVIEW_TURN_DIFF,
   onOpenThread,
   parentThreadLink = null,
   onForkFromRun,
@@ -611,7 +632,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
   // scrolling keeps rewriting the stored entry, which must not move the restore.
   const [listState, setListState] = useState(() => timelineListStateFor(listIdentityKey));
   const [expandedRunIds, setExpandedRunIds] = useState<ReadonlySet<RunId>>(
-    () => listState.rememberedPosition?.disclosures?.runs ?? new Set(),
+    () =>
+      listState.rememberedPosition?.disclosures?.runs ?? persistedExpandedRunIds(listIdentityKey),
   );
   const [expandedWorkGroupIds, setExpandedWorkGroupIds] = useState<ReadonlySet<string>>(
     () => listState.rememberedPosition?.disclosures?.workGroups ?? new Set(),
@@ -636,7 +658,8 @@ const ConversationTimeline = memo(function ConversationTimeline({
     setListState({ identity: listIdentityKey, rememberedPosition, workGroupViewState });
     setPositionedThreadKey(null);
     setSettlingListIdentity(listIdentityKey);
-    paintedExpandedRunIds = rememberedPosition?.disclosures?.runs ?? new Set();
+    paintedExpandedRunIds =
+      rememberedPosition?.disclosures?.runs ?? persistedExpandedRunIds(listIdentityKey);
     paintedExpandedWorkGroupIds = rememberedPosition?.disclosures?.workGroups ?? new Set();
     paintedExpandedAttemptIds = rememberedPosition?.disclosures?.attempts ?? new Set();
     setExpandedRunIds(paintedExpandedRunIds);
@@ -731,6 +754,9 @@ const ConversationTimeline = memo(function ConversationTimeline({
 
   const onToggleTurnFold = (runId: RunId) => {
     suspendEndScrollMaintenanceForDisclosure(`turn-fold:${runId}`);
+    useUiStateStore
+      .getState()
+      .setTimelineTurnExpanded(listIdentityKey, runId, !expandedRunIds.has(runId));
     setExpandedRunIds((existing) => {
       const next = new Set(existing);
       if (next.has(runId)) {
@@ -775,6 +801,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
     }
     if (latestRun.runId === previous.runId) {
       if (previous.status === "running" && latestRun.status === "interrupted") {
+        useUiStateStore.getState().setTimelineTurnExpanded(listIdentityKey, latestRun.runId, true);
         setExpandedRunIds((existing) => {
           const next = new Set(existing);
           next.add(latestRun.runId);
@@ -783,6 +810,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
       }
       return;
     }
+    useUiStateStore.getState().setTimelineTurnExpanded(listIdentityKey, previous.runId, false);
     setExpandedRunIds((existing) => {
       if (!existing.has(previous.runId)) {
         return existing;
@@ -802,6 +830,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
         runningRunId,
         isWorking,
         runlessWorkActive,
+        preserveAssistantCommentary,
       })
     : null;
   const activeFindRunId = activeFindMatch
@@ -850,6 +879,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
     activeTurnStartedAt,
     turnDiffSummaries,
     supportsConversationRollback,
+    preserveAssistantCommentary,
     worktreeSetup,
   });
   const rows = useStableRows(rawRows, listIdentityKey);
@@ -1233,6 +1263,9 @@ const ConversationTimeline = memo(function ConversationTimeline({
     onFileDownload,
     openPullRequest,
     onOpenTurnDiff,
+    onReviewTurnDiff,
+    diffPresentation,
+    diffIgnoreWhitespace,
     onOpenThread,
     onForkFromRun,
     onRollbackCheckpoint,
@@ -1312,6 +1345,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
           runningRunId,
           isWorking,
           runlessWorkActive,
+          preserveAssistantCommentary,
         });
       const entryById = new Map(timelineEntries.map((entry) => [entry.id, entry]));
       return readThreadFindPosition(
@@ -1359,6 +1393,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
     findPositionReaderRef,
     isWorking,
     latestRun,
+    preserveAssistantCommentary,
     rows,
     runlessWorkActive,
     runningRunId,
@@ -2534,23 +2569,71 @@ function TimelineRowTimestamp({
 
 function TurnFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "turn-fold" }> }) {
   const ctx = use(TimelineRowCtx);
+  const { summary } = row;
+  // An interrupted turn's label already says it was stopped.
+  const stateLabel =
+    summary.state === "failed" ? "Failed" : summary.state === "interrupted" ? null : "Completed";
+  const summaryItems = [
+    summary.toolCallCount > 0
+      ? `${summary.toolCallCount} tool call${summary.toolCallCount === 1 ? "" : "s"}`
+      : null,
+    summary.assistantResponseCount > 0
+      ? `${summary.assistantResponseCount} response${summary.assistantResponseCount === 1 ? "" : "s"}`
+      : null,
+    summary.agentCount > 0
+      ? `${summary.agentCount} agent${summary.agentCount === 1 ? "" : "s"}`
+      : null,
+    summary.changedFileCount !== null
+      ? `${summary.changedFileCount} file${summary.changedFileCount === 1 ? "" : "s"}`
+      : null,
+  ].filter((item): item is string => item !== null);
+  const accessibleLabel = [stateLabel, row.label, ...summaryItems]
+    .filter((part): part is string => part !== null)
+    .join(", ");
 
   return (
-    <div className="group/timeline-row relative flex items-center gap-1 border-b border-border/60 pb-2 pe-0.5 pt-1">
+    <div className="group/timeline-row relative flex items-start gap-1 border-b border-border/60 pb-2 pe-0.5 pt-1">
       <button
         type="button"
         aria-expanded={row.expanded}
+        aria-label={accessibleLabel}
         data-scroll-anchor-ignore
         onClick={() => ctx.onToggleTurnFold(row.runId)}
-        className="flex cursor-pointer select-none items-center gap-1 rounded-md px-1 text-sm leading-relaxed text-muted-foreground tabular-nums transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+        className="flex min-w-0 flex-1 cursor-pointer select-none items-start gap-2 rounded-md px-1 py-1 text-left text-sm leading-relaxed text-muted-foreground tabular-nums transition-colors hover:bg-accent/20 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
       >
-        <span>{row.label}</span>
-        <MorphIcon className="size-3.5" icon={row.expanded ? ChevronDown : ChevronRight} />
+        <span
+          aria-hidden
+          className={cn(
+            "mt-2 size-1.5 shrink-0 rounded-full",
+            summary.state === "failed"
+              ? "bg-destructive"
+              : summary.state === "interrupted"
+                ? "bg-muted-foreground/60"
+                : "bg-success",
+          )}
+        />
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
+            {stateLabel ? (
+              <span className="font-medium text-foreground/85">{stateLabel}</span>
+            ) : null}
+            <span>{row.label}</span>
+          </span>
+          {summaryItems.length > 0 ? (
+            <span className="mt-0.5 block text-xs text-muted-foreground/75">
+              {summaryItems.join(" · ")}
+            </span>
+          ) : null}
+        </span>
+        <MorphIcon
+          className="mt-1 size-3.5 shrink-0"
+          icon={row.expanded ? ChevronDown : ChevronRight}
+        />
       </button>
       <TimelineRowTimestamp
         createdAt={row.createdAt}
         timestampFormat={ctx.timestampFormat}
-        className="ms-auto"
+        className="ms-auto mt-1.5"
       />
     </div>
   );
@@ -2586,6 +2669,14 @@ function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "mess
     <>
       <div className="relative min-w-0 px-1 py-0.5">
         <MessageAuthorHeading>SealCode</MessageAuthorHeading>
+        {!row.showAssistantMeta && messageText.trim().length > 0 ? (
+          <div
+            aria-hidden
+            className="mb-0.5 text-2xs font-medium uppercase tracking-wider text-muted-foreground/70"
+          >
+            Agent response
+          </div>
+        ) : null}
         <div data-thread-find-text="true">
           <AssistantCitationSource
             messageId={row.message.id}
@@ -3955,6 +4046,21 @@ const AssistantChangedFilesSection = memo(function AssistantChangedFilesSection(
 }) {
   if (!turnSummary) return null;
   const checkpointFiles = turnSummary.files;
+  if (shouldRenderUnattributedDiffFallback(turnSummary)) {
+    return (
+      <div className="mt-2 flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2 py-1.5 text-xs text-muted-foreground">
+        <span>Changed files could not be attributed safely to this turn.</span>
+        <Button
+          type="button"
+          size="xs"
+          variant="ghost"
+          onClick={() => onOpenTurnDiff(turnSummary.runId)}
+        >
+          Open raw diff
+        </Button>
+      </div>
+    );
+  }
   if (checkpointFiles.length === 0) return null;
 
   return (
@@ -3983,6 +4089,7 @@ function AssistantChangedFilesSectionInner({
   onOpenTurnDiff: (runId: RunId, filePath?: string) => void;
 }) {
   const ctx = use(TimelineRowCtx);
+  const activity = use(TimelineRowActivityCtx);
   const persistedExpanded = useUiStateStore(
     (store) => store.threadChangedFilesExpandedById[routeThreadKey]?.[turnSummary.runId],
   );
@@ -3997,6 +4104,53 @@ function AssistantChangedFilesSectionInner({
   );
   const onFileContextMenu = useFileContextMenuHandler(ctx.activeThreadEnvironmentId);
 
+  const showInlineDiff = ctx.diffPresentation === "inline";
+  const checkpointDiff = useCheckpointDiff(
+    {
+      environmentId: ctx.threadRef?.environmentId ?? null,
+      threadId: ctx.threadRef?.threadId ?? null,
+      fromTurnCount: Math.max(0, turnSummary.checkpointTurnCount - 1),
+      toTurnCount: turnSummary.checkpointTurnCount,
+      ignoreWhitespace: ctx.diffIgnoreWhitespace,
+      cacheScope: `chat-turn:${turnSummary.runId}`,
+    },
+    { enabled: showInlineDiff },
+  );
+  const inlinePatch = getRenderablePatch(
+    checkpointDiff.data?.diff,
+    `chat-turn:${turnSummary.runId}`,
+  );
+
+  if (showInlineDiff) {
+    return (
+      <>
+        {checkpointDiff.isPending ? (
+          <p className="px-3 py-2 text-xs text-muted-foreground">Loading inline diff…</p>
+        ) : null}
+        {inlinePatch?.kind === "files" ? (
+          <div className="mt-2 max-h-[32rem] space-y-2 overflow-auto rounded-xl border border-border/60 bg-code p-1">
+            {inlinePatch.files.map((fileDiff) => (
+              <FileDiff
+                key={resolveFileDiffPath(fileDiff)}
+                fileDiff={fileDiff}
+                options={{
+                  collapsed: false,
+                  diffStyle: "unified",
+                  theme: resolveDiffThemeName(resolvedTheme),
+                }}
+              />
+            ))}
+          </div>
+        ) : null}
+        {inlinePatch?.kind === "raw" ? (
+          <pre className="mt-2 max-h-80 overflow-auto rounded-xl bg-code p-3 text-xs text-code-foreground">
+            {inlinePatch.text}
+          </pre>
+        ) : null}
+      </>
+    );
+  }
+
   return (
     <ChangedFilesCard
       runId={turnSummary.runId}
@@ -4007,6 +4161,8 @@ function AssistantChangedFilesSectionInner({
         setExpanded(routeThreadKey, turnSummary.runId, !allDirectoriesExpanded)
       }
       onOpenTurnDiff={onOpenTurnDiff}
+      onReviewTurnDiff={ctx.onReviewTurnDiff}
+      reviewDisabled={activity.isWorking}
       onFileContextMenu={(filePath, event) =>
         onFileContextMenu(
           {

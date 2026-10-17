@@ -1322,6 +1322,16 @@ export function codexThreadRuntimeParams(input: {
                   Authorization: mcpSession.authorizationHeader,
                 },
               },
+              ...(mcpSession.globalEndpoint === undefined
+                ? {}
+                : {
+                    "sealcode-global": {
+                      url: mcpSession.globalEndpoint,
+                      http_headers: {
+                        Authorization: mcpSession.authorizationHeader,
+                      },
+                    },
+                  }),
             },
           }),
     },

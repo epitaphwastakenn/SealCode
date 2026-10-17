@@ -80,6 +80,7 @@ async function renderPanel(overrides: Partial<ComponentProps<typeof RightPanelTa
         onAddBrowserInProfile={noop}
         onAddTerminal={noop}
         onAddDiff={noop}
+        onAddDiffCenter={noop}
         onAddFiles={addFiles}
         onAddPullRequest={noop}
         onAddPullRequests={noop}
@@ -87,6 +88,7 @@ async function renderPanel(overrides: Partial<ComponentProps<typeof RightPanelTa
         browserAvailable={false}
         terminalAvailable={false}
         diffAvailable={false}
+        diffCenterAvailable={false}
         filesAvailable
         pullRequestAvailable={false}
         pullRequestsAvailable={false}

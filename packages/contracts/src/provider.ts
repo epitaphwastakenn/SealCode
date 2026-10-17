@@ -25,6 +25,7 @@ import {
   RuntimeMode,
 } from "./providerPolicy.ts";
 import { ProviderInstanceId, ProviderDriverKind } from "./providerInstance.ts";
+import { PromptAssemblyMetadata } from "./harnessEfficiency.ts";
 
 const ProviderSessionStatus = Schema.Literals([
   "connecting",
@@ -79,6 +80,7 @@ export const ProviderSendTurnInput = Schema.Struct({
   ),
   modelSelection: Schema.optional(ModelSelection),
   interactionMode: Schema.optional(ProviderInteractionMode),
+  promptMetadata: Schema.optional(PromptAssemblyMetadata),
 });
 export type ProviderSendTurnInput = typeof ProviderSendTurnInput.Type;
 

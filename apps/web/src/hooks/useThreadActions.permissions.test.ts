@@ -129,10 +129,13 @@ vi.mock("../terminalUiStateStore", () => ({
     }),
 }));
 vi.mock("../uiStateStore", () => ({
-  useUiStateStore: (select: (store: unknown) => unknown) =>
-    select({
-      markThreadVisited: () => state.localEffects.push("mark-visited"),
-    }),
+  useUiStateStore: Object.assign(
+    (select: (store: unknown) => unknown) =>
+      select({
+        markThreadVisited: () => state.localEffects.push("mark-visited"),
+      }),
+    { getState: () => ({ lastOpenThreadRoute: null, setLastOpenThreadRoute: () => {} }) },
+  ),
 }));
 vi.mock("../lib/archivedThreadsState", () => ({
   refreshArchivedThreadsForEnvironment: () => state.localEffects.push("refresh-archive"),
@@ -331,6 +334,26 @@ describe("thread action permissions", () => {
     expect(state.requests.map((request) => request.action)).toEqual(["stopSession", "delete"]);
     expect(state.localEffects).toContain("clear-terminal-ui");
   });
+
+  it.each([
+    { answer: true, removes: true },
+    { answer: false, removes: false },
+  ])(
+    "asks the supplied worktree confirmation instead of the native dialog ($answer)",
+    async ({ answer, removes }) => {
+      state.scopes
+        .get(secondary)!
+        .add(AuthOrchestrationOperateScope)
+        .add(AuthSourceControlWriteScope);
+      state.threads[0]!.worktreePath = "/worktrees/thread";
+      const confirmWorktreeDeletion = vi.fn(async () => answer);
+      const result = await useThreadActions().deleteThread(target, { confirmWorktreeDeletion });
+      expect(result._tag).toBe("Success");
+      expect(confirmWorktreeDeletion).toHaveBeenCalledWith({ path: "thread" });
+      expect(state.confirm).not.toHaveBeenCalled();
+      expect(state.requests.some((request) => request.action === "removeWorktree")).toBe(removes);
+    },
+  );
 
   it("does not request worktree removal after its grant is revoked during delete", async () => {
     state.scopes

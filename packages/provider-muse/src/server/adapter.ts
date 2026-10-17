@@ -1747,6 +1747,16 @@ export const makeMuseAdapterV2 = Effect.fn("makeMuseAdapterV2")(function* (
                     url: mcpSession.endpoint,
                     headers: { Authorization: mcpSession.authorizationHeader },
                   },
+                  ...(mcpSession.globalEndpoint === undefined
+                    ? {}
+                    : {
+                        "sealcode-global": {
+                          transport: "streamableHttp",
+                          mode: "optional",
+                          url: mcpSession.globalEndpoint,
+                          headers: { Authorization: mcpSession.authorizationHeader },
+                        },
+                      }),
                 },
               }
             : undefined;

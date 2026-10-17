@@ -27,6 +27,7 @@ const PreviewPanel = lazy(() =>
   import("../preview/PreviewPanel").then((module) => ({ default: module.PreviewPanel })),
 );
 const DiffPanel = lazy(() => import("../DiffPanel"));
+const ProjectDiffCenter = lazy(() => import("../ProjectDiffCenter"));
 const DevicePanel = lazy(() =>
   import("../device/DevicePanel").then((module) => ({ default: module.DevicePanel })),
 );
@@ -63,6 +64,7 @@ export function RightPanelSurfaceContent(props: {
   readonly activeSurfaceId: string | null;
   readonly threadRef: ScopedThreadRef;
   readonly environmentId: EnvironmentId;
+  readonly projectId: ProjectId | null;
   readonly visible: boolean;
   readonly composerDraftTarget: ScopedThreadRef | DraftId;
   readonly keybindings: ResolvedKeybindingsConfig;
@@ -112,6 +114,12 @@ export function RightPanelSurfaceContent(props: {
             composerDraftTarget={props.composerDraftTarget}
             workspaceMutationId={props.workspaceMutationId}
           />
+        </Suspense>
+      );
+    case "diff-center":
+      return props.projectId === null ? null : (
+        <Suspense fallback={null}>
+          <ProjectDiffCenter environmentId={props.environmentId} projectId={props.projectId} />
         </Suspense>
       );
     case "pull-request": {

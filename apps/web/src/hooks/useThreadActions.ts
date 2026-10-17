@@ -33,6 +33,7 @@ import { vcsEnvironment } from "../state/vcs";
 import { useNewThreadHandler } from "./useHandleNewThread";
 import { refreshArchivedThreadsForEnvironment } from "../lib/archivedThreadsState";
 import { releaseComposerDraftUploads } from "../lib/composerDraftUploads";
+import { lastOpenThreadRouteMatchesServerThread } from "../lib/chatIndexLanding";
 import { readLocalApi } from "../localApi";
 import {
   readEnvironmentSupportsAutoSettleOptOut,
@@ -397,7 +398,10 @@ export function useThreadActions() {
 
   const deleteThread = async (
     target: ScopedThreadRef,
-    opts: { deletedThreadKeys?: ReadonlySet<string> } = {},
+    opts: {
+      deletedThreadKeys?: ReadonlySet<string>;
+      confirmWorktreeDeletion?: (input: { path: string }) => Promise<boolean>;
+    } = {},
   ) => {
     const permissionFailure = threadOperationFailure(target);
     if (permissionFailure) return permissionFailure;
@@ -465,22 +469,27 @@ export function useThreadActions() {
     const automaticWorktreeCleanup = environmentSettings
       ? resolveWorktreeCleanup(environmentSettings, thread.projectId).worktreeOnDelete
       : false;
-    if (canDeleteWorktree && localApi && !automaticWorktreeCleanup) {
-      const confirmationResult = await settlePromise(() =>
-        localApi.dialogs.confirm(
-          [
-            "This thread is the only one linked to this worktree:",
-            displayWorktreePath ?? orphanedWorktreePath,
-            "",
-            "Delete the worktree too?",
-          ].join("\n"),
-          { variant: "destructive" },
-        ),
-      );
-      if (confirmationResult._tag === "Failure") {
-        return confirmationResult;
+    if (canDeleteWorktree && orphanedWorktreePath !== null && !automaticWorktreeCleanup) {
+      const worktreePath = displayWorktreePath ?? orphanedWorktreePath;
+      if (opts.confirmWorktreeDeletion) {
+        shouldDeleteWorktree = await opts.confirmWorktreeDeletion({ path: worktreePath });
+      } else if (localApi) {
+        const confirmationResult = await settlePromise(() =>
+          localApi.dialogs.confirm(
+            [
+              "This thread is the only one linked to this worktree:",
+              worktreePath,
+              "",
+              "Delete the worktree too?",
+            ].join("\n"),
+            { variant: "destructive" },
+          ),
+        );
+        if (confirmationResult._tag === "Failure") {
+          return confirmationResult;
+        }
+        shouldDeleteWorktree = confirmationResult.value;
       }
-      shouldDeleteWorktree = confirmationResult.value;
     }
 
     if (thread.runtime !== null) {
@@ -511,6 +520,16 @@ export function useThreadActions() {
     refreshArchivedThreadsForEnvironment(threadRef.environmentId);
     releaseComposerDraftUploads(threadRef);
     clearComposerDraftForThread(threadRef);
+    const lastOpenThreadRoute = useUiStateStore.getState().lastOpenThreadRoute;
+    if (
+      lastOpenThreadRouteMatchesServerThread(
+        lastOpenThreadRoute,
+        threadRef.environmentId,
+        threadRef.threadId,
+      )
+    ) {
+      useUiStateStore.getState().setLastOpenThreadRoute(null);
+    }
     clearProjectDraftThreadById(
       scopeProjectRef(threadRef.environmentId, thread.projectId),
       threadRef,

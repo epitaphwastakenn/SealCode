@@ -398,6 +398,11 @@ export function useLegacySidebarEnabled(): boolean {
   return settingsHydrated && legacySidebarEnabled;
 }
 
+export function useGlassSidebarEnabled(): boolean {
+  const glassSidebarEnabled = useClientSettingsValue().glassSidebarEnabled;
+  return glassSidebarEnabled;
+}
+
 export async function prepareModelPreferencesPatch(
   settings: ServerSettings,
   patch: ServerSettingsPatch,

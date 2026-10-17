@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vite-plus/test";
 
+import { legacyProjectCwdPreferenceKey } from "../uiStateStore";
 import {
+  buildSidebarFolderLayout,
   groupSidebarThreadsByFolder,
   planSidebarFolderHeaders,
   type SidebarFolderLayout,
@@ -59,5 +61,58 @@ describe("sidebar project folders", () => {
     });
     expect(plan.before.get("w1")).toEqual(["folder-web"]);
     expect(plan.trailing).toEqual(["folder-api"]);
+  });
+});
+
+describe("buildSidebarFolderLayout", () => {
+  const group = (projectKey: string, physicalProjectKey: string, workspaceRoot: string) => ({
+    projectKey,
+    memberProjects: [{ physicalProjectKey, workspaceRoot }],
+    memberProjectRefs: [{ environmentId: "env", projectId: `${projectKey}-id` }],
+  });
+  const groups = [
+    group("alpha", "alpha-physical", "/repo/alpha"),
+    group("beta", "beta-physical", "/repo/beta"),
+    group("gamma", "gamma-physical", "/repo/gamma"),
+  ] as unknown as Parameters<typeof buildSidebarFolderLayout>[0]["projectGroups"];
+  const build = (overrides: Partial<Parameters<typeof buildSidebarFolderLayout>[0]> = {}) =>
+    buildSidebarFolderLayout({
+      projectGroups: groups,
+      pinnedProjectKeys: [],
+      projectExpandedById: {},
+      projectOrder: [],
+      ...overrides,
+    });
+
+  it("leads with pinned projects and ignores pins for projects that are gone", () => {
+    expect(build({ pinnedProjectKeys: ["gamma", "missing", "beta"] }).order).toEqual([
+      "gamma",
+      "beta",
+      "alpha",
+    ]);
+  });
+
+  it("lets a manual drag order win, whichever key it was recorded under", () => {
+    expect(build({ projectOrder: ["gamma-physical", "alpha"] }).order).toEqual([
+      "gamma",
+      "alpha",
+      "beta",
+    ]);
+  });
+
+  it("honors collapse state saved under the project, physical or legacy path key", () => {
+    const layout = build({
+      projectExpandedById: {
+        alpha: false,
+        "beta-physical": false,
+        [legacyProjectCwdPreferenceKey("/repo/gamma")]: false,
+      },
+    });
+    expect([...layout.collapsed].toSorted()).toEqual(["alpha", "beta", "gamma"]);
+    expect(build({ projectExpandedById: { alpha: true } }).collapsed.size).toBe(0);
+  });
+
+  it("maps every member project to its folder", () => {
+    expect(build().folderKeyByProject.get("env:beta-id")).toBe("beta");
   });
 });

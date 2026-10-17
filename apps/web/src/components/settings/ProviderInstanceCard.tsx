@@ -21,9 +21,9 @@ import { useEffect, useRef, useState, type ReactElement, type ReactNode } from "
 import {
   isProviderDriverKind,
   resolveProviderInstanceEnabled,
+  ProviderInstanceId,
   type ProviderInstanceConfig,
   type ProviderInstanceEnvironmentVariable,
-  type ProviderInstanceId,
   type AcpRegistryUrlAuthAction,
   type EnvironmentId,
   type ProjectId,
@@ -46,6 +46,7 @@ import { MorphIcon } from "~/components/MorphIcon";
 import { DraftInput } from "../ui/draft-input";
 import { SecretInput } from "./SecretInput";
 import { Popover, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -71,6 +72,8 @@ import {
 } from "./providerStatus";
 
 const ENVIRONMENT_VARIABLE_NAME_PATTERN = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+// Base UI selects need a concrete value to represent "no fallback".
+const NO_FALLBACK_INSTANCE = "__none__";
 
 function ProviderStatusDiagnostic({
   detail,
@@ -158,6 +161,10 @@ function nextConfigBlobWithValue(
   base[key] = value;
   return base;
 }
+
+// SealCode 1.x switched accounts on the old orchestrator; the V2 server does
+// not read fallbackInstanceId yet, so the row stays hidden until it does.
+const FALLBACK_INSTANCE_SETTING_AVAILABLE = false;
 
 export function deriveProviderModelsForDisplay(input: {
   readonly liveModels: ReadonlyArray<ServerProviderModel> | undefined;
@@ -578,6 +585,12 @@ interface ProviderInstanceCardProps {
   readonly readOnly?: boolean | undefined;
   readonly canWriteSettings?: boolean;
   readonly onUpdate: (nextInstance: ProviderInstanceConfig) => void;
+  readonly fallbackInstances?:
+    | ReadonlyArray<{
+        readonly instanceId: ProviderInstanceId;
+        readonly displayName: string;
+      }>
+    | undefined;
   readonly onDelete?: (() => void) | undefined;
   readonly headerAction?: ReactNode | undefined;
   readonly setup?: ReactNode;
@@ -628,6 +641,7 @@ export function ProviderInstanceCard({
   readOnly = false,
   canWriteSettings = true,
   onUpdate,
+  fallbackInstances,
   onDelete,
   headerAction,
   setup,
@@ -796,6 +810,18 @@ export function ProviderInstanceCard({
   };
   const removeEnvironmentField = (field: ProviderEnvironmentField) => {
     updateEnvironment(providerEnvironmentWithoutNames(instance.environment, new Set([field.name])));
+  };
+
+  const updateFallbackInstance = (value: string) => {
+    const { fallbackInstanceId: _omit, ...rest } = instance;
+    onUpdate(
+      value
+        ? ({
+            ...rest,
+            fallbackInstanceId: ProviderInstanceId.make(value),
+          } as ProviderInstanceConfig)
+        : (rest as ProviderInstanceConfig),
+    );
   };
 
   const titleIconNode = (
@@ -1174,6 +1200,53 @@ export function ProviderInstanceCard({
             </div>
           }
         />
+        {FALLBACK_INSTANCE_SETTING_AVAILABLE && fallbackInstances ? (
+          <SettingsRow
+            title="Fallback instance"
+            description="Continues this thread on another account when the current account reaches its five-hour limit."
+            control={
+              <div
+                inert={readOnly}
+                aria-disabled={readOnly || undefined}
+                className={readOnly ? "opacity-50 select-none" : undefined}
+              >
+                <Select
+                  value={instance.fallbackInstanceId ?? NO_FALLBACK_INSTANCE}
+                  onValueChange={(value) =>
+                    updateFallbackInstance(value === NO_FALLBACK_INSTANCE ? "" : (value ?? ""))
+                  }
+                >
+                  <SelectTrigger
+                    size="sm"
+                    className="w-full sm:w-56"
+                    aria-label={`Fallback instance for ${displayName}`}
+                  >
+                    <SelectValue>
+                      {(value: string | null) =>
+                        fallbackInstances.find((fallback) => fallback.instanceId === value)
+                          ?.displayName ?? "None"
+                      }
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectPopup align="end" alignItemWithTrigger={false}>
+                    <SelectItem hideIndicator value={NO_FALLBACK_INSTANCE}>
+                      None
+                    </SelectItem>
+                    {fallbackInstances.map((fallback) => (
+                      <SelectItem
+                        key={fallback.instanceId}
+                        hideIndicator
+                        value={fallback.instanceId}
+                      >
+                        {fallback.displayName}
+                      </SelectItem>
+                    ))}
+                  </SelectPopup>
+                </Select>
+              </div>
+            }
+          />
+        ) : null}
       </SettingsSection>
 
       {setup || environmentFields.length > 0 ? (

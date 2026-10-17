@@ -26,6 +26,9 @@ import type { SidebarThreadSummary, Thread } from "../types";
 import { cn, normalizeSearchText } from "../lib/utils";
 import { isLatestRunSettled } from "../session-logic";
 import { resolveServerBackedAppStageLabel } from "../branding.logic";
+import type { SidebarProjectSnapshot } from "../sidebarProjectGrouping";
+import { legacyProjectCwdPreferenceKey, resolveProjectExpanded } from "../uiStateStore";
+import { presentThreadState, type ThreadStateKey } from "@t3tools/shared/statusPresentation";
 
 export function shouldNavigateAfterThreadPark(input: {
   readonly threadKey: string;
@@ -567,27 +570,28 @@ export function buildBulkUnpinContextMenuItem(input: {
 }
 
 export interface ThreadStatusPill {
-  label:
-    | "Working"
-    | "Connecting"
-    | "Completed"
-    | "Pending Approval"
-    | "Awaiting Input"
-    | "Waiting"
-    | "Plan Ready";
+  state: ThreadStateKey | "waiting";
+  label: string;
   colorClass: string;
   dotClass: string;
   pulse: boolean;
 }
 
-const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["label"], number> = {
-  "Pending Approval": 5,
-  "Awaiting Input": 4,
-  Working: 3,
-  Connecting: 3,
-  Waiting: 2.5,
-  "Plan Ready": 2,
-  Completed: 1,
+// Rollup order mirrors the per-thread resolver exactly: attention states,
+// then active work, then background waiting, then the actionable plan prompt.
+// A Plan Ready sibling must never hide active work or a Waiting thread.
+const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["state"], number> = {
+  "needs-approval": 6,
+  "needs-input": 5,
+  working: 4,
+  connecting: 4,
+  waiting: 3.5,
+  "plan-ready": 3,
+  monitoring: 2,
+  completed: 1,
+  failed: 6,
+  stopped: 1,
+  ready: 0,
 };
 
 type ThreadStatusInput = Pick<
@@ -1083,8 +1087,10 @@ export function resolveThreadStatusPill(input: {
   const { thread } = input;
 
   if (thread.hasPendingApprovals || thread.pendingSubagentRequest === "approval") {
+    const state = "needs-approval" as const;
     return {
-      label: "Pending Approval",
+      state,
+      label: presentThreadState(state).label,
       colorClass: "text-amber-600 dark:text-amber-300/90",
       dotClass: "bg-amber-500 dark:bg-amber-300/90",
       pulse: false,
@@ -1092,8 +1098,10 @@ export function resolveThreadStatusPill(input: {
   }
 
   if (thread.hasPendingUserInput || thread.pendingSubagentRequest === "user_input") {
+    const state = "needs-input" as const;
     return {
-      label: "Awaiting Input",
+      state,
+      label: presentThreadState(state).label,
       colorClass: "text-indigo-600 dark:text-indigo-300/90",
       dotClass: "bg-indigo-500 dark:bg-indigo-300/90",
       pulse: false,
@@ -1101,8 +1109,10 @@ export function resolveThreadStatusPill(input: {
   }
 
   if (thread.runtime?.status === "running" || thread.runtime?.status === "waiting") {
+    const state = "working" as const;
     return {
-      label: "Working",
+      state,
+      label: presentThreadState(state).label,
       colorClass: "text-sky-600 dark:text-sky-300/80",
       dotClass: "bg-sky-500 dark:bg-sky-300/80",
       pulse: true,
@@ -1114,8 +1124,10 @@ export function resolveThreadStatusPill(input: {
     thread.runtime?.status === "starting" ||
     thread.runtime?.status === "queued"
   ) {
+    const state = "connecting" as const;
     return {
-      label: "Connecting",
+      state,
+      label: presentThreadState(state).label,
       colorClass: "text-sky-600 dark:text-sky-300/80",
       dotClass: "bg-sky-500 dark:bg-sky-300/80",
       pulse: true,
@@ -1124,6 +1136,7 @@ export function resolveThreadStatusPill(input: {
 
   if (backgroundWorkHoldsCompletion(thread.pendingBackgroundTasks ?? [])) {
     return {
+      state: "waiting",
       label: "Waiting",
       colorClass: "text-sidebar-muted-foreground",
       dotClass: "bg-sidebar-muted-foreground",
@@ -1137,8 +1150,10 @@ export function resolveThreadStatusPill(input: {
     isLatestRunSettled(thread.latestRun, thread.runtime) &&
     thread.hasActionableProposedPlan;
   if (hasPlanReadyPrompt) {
+    const state = "plan-ready" as const;
     return {
-      label: "Plan Ready",
+      state,
+      label: presentThreadState(state).label,
       colorClass: "text-violet-600 dark:text-violet-300/90",
       dotClass: "bg-violet-500 dark:bg-violet-300/90",
       pulse: false,
@@ -1146,8 +1161,10 @@ export function resolveThreadStatusPill(input: {
   }
 
   if (hasUnseenCompletion(thread)) {
+    const state = "completed" as const;
     return {
-      label: "Completed",
+      state,
+      label: presentThreadState(state).label,
       colorClass: "text-emerald-600 dark:text-emerald-300/90",
       dotClass: "bg-emerald-500 dark:bg-emerald-300/90",
       pulse: false,
@@ -1166,7 +1183,7 @@ export function resolveProjectStatusIndicator(
     if (status === null) continue;
     if (
       highestPriorityStatus === null ||
-      THREAD_STATUS_PRIORITY[status.label] > THREAD_STATUS_PRIORITY[highestPriorityStatus.label]
+      THREAD_STATUS_PRIORITY[status.state] > THREAD_STATUS_PRIORITY[highestPriorityStatus.state]
     ) {
       highestPriorityStatus = status;
     }
@@ -1358,6 +1375,59 @@ export interface SidebarFolderLayout {
   /** Folder keys in display order: pinned projects first, then the rest. */
   readonly order: readonly string[];
   readonly collapsed: ReadonlySet<string>;
+}
+
+/**
+ * Every key a folder's expand/collapse and manual-order preferences may be
+ * stored under: its own key, its projects' physical keys, and the per-path keys
+ * saved before projects were grouped.
+ */
+export function projectExpansionPreferenceKeys(
+  group: Pick<SidebarProjectSnapshot, "projectKey" | "memberProjects">,
+): string[] {
+  return [
+    group.projectKey,
+    ...group.memberProjects.map((member) => member.physicalProjectKey),
+    ...group.memberProjects.map((member) => legacyProjectCwdPreferenceKey(member.workspaceRoot)),
+  ];
+}
+
+export function buildSidebarFolderLayout(input: {
+  readonly projectGroups: readonly Pick<
+    SidebarProjectSnapshot,
+    "projectKey" | "memberProjects" | "memberProjectRefs"
+  >[];
+  readonly pinnedProjectKeys: readonly string[];
+  readonly projectExpandedById: Readonly<Record<string, boolean>>;
+  /** Manual folder order recorded by dragging; it wins over the sort setting. */
+  readonly projectOrder: readonly string[];
+}): SidebarFolderLayout {
+  const orderedGroups = orderItemsByPreferredIds({
+    items: input.projectGroups,
+    preferredIds: input.projectOrder,
+    getId: (group) => group.projectKey,
+    getPreferenceIds: projectExpansionPreferenceKeys,
+  });
+  const groupKeys = orderedGroups.map((group) => group.projectKey);
+  const pinned = input.pinnedProjectKeys.filter((key) => groupKeys.includes(key));
+  return {
+    folderKeyByProject: new Map(
+      input.projectGroups.flatMap((group) =>
+        group.memberProjectRefs.map(
+          (projectRef) =>
+            [`${projectRef.environmentId}:${projectRef.projectId}`, group.projectKey] as const,
+        ),
+      ),
+    ),
+    order: [...pinned, ...groupKeys.filter((key) => !pinned.includes(key))],
+    collapsed: new Set(
+      orderedGroups.flatMap((group) =>
+        resolveProjectExpanded(input.projectExpandedById, projectExpansionPreferenceKeys(group))
+          ? []
+          : [group.projectKey],
+      ),
+    ),
+  };
 }
 
 export function sidebarThreadFolderKey(

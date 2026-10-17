@@ -16,6 +16,47 @@ import { cn } from "~/lib/utils";
 import { modelPickerModelKey } from "./modelPickerKeys";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 
+// Small at-a-glance hints in each row. They come from the model name because
+// providers do not report these traits consistently.
+function getModelCapabilityTags(model: ModelEsque): string[] {
+  const tags: string[] = [];
+  const text = `${model.slug} ${model.name}`.toLowerCase();
+  if (
+    text.includes("o3") ||
+    text.includes("o1") ||
+    text.includes("reason") ||
+    text.includes("r1") ||
+    text.includes("think")
+  ) {
+    tags.push("Thinking");
+  } else if (
+    text.includes("flash") ||
+    text.includes("mini") ||
+    text.includes("haiku") ||
+    text.includes("fast")
+  ) {
+    tags.push("Fast");
+  }
+  if (
+    text.includes("1m") ||
+    text.includes("gemini-1.5") ||
+    text.includes("gemini-2.0") ||
+    text.includes("gemini-2.5")
+  ) {
+    tags.push("1M");
+  } else if (
+    text.includes("claude") ||
+    text.includes("sonnet") ||
+    text.includes("opus") ||
+    text.includes("gpt-4o") ||
+    text.includes("o3") ||
+    text.includes("o1")
+  ) {
+    tags.push("200k");
+  }
+  return tags;
+}
+
 export const ModelListRow = memo(function ModelListRow(props: {
   index: number;
   model: ModelEsque;
@@ -36,8 +77,10 @@ export const ModelListRow = memo(function ModelListRow(props: {
   jumpLabel?: string | null;
   disabledReason?: string | null;
   onToggleFavorite: () => void;
+  onDoubleClick?: () => void;
 }) {
   const providerLabel = getProviderRowLabel(props.providerDisplayName, props.model.subProvider);
+  const capabilityTags = getModelCapabilityTags(props.model);
 
   const row = (
     <ComboboxItem
@@ -45,15 +88,47 @@ export const ModelListRow = memo(function ModelListRow(props: {
       index={props.index}
       value={modelPickerModelKey(props.instanceId, props.model.slug)}
       disabled={Boolean(props.disabledReason)}
+      onDoubleClick={(event) => {
+        if (props.disabledReason) return;
+        event.preventDefault();
+        event.stopPropagation();
+        props.onDoubleClick?.();
+      }}
+      variant="card"
       className={cn(
         "group relative w-full !min-w-0 max-w-full cursor-pointer",
         props.disabledReason &&
           "data-disabled:pointer-events-auto data-disabled:cursor-not-allowed",
       )}
     >
-      <div className="min-w-0 flex-1 text-left">
-        <div className="flex min-w-0 items-center gap-2">
-          <div className="min-w-0 truncate text-xs font-medium leading-snug">
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 rounded-lg opacity-0 transition-opacity duration-200 group-hover:opacity-100"
+        style={{
+          background:
+            "radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--primary) 10%, transparent) 0%, transparent 75%)",
+        }}
+      />
+      <div
+        className={cn(
+          "relative z-10 flex size-7 shrink-0 items-center justify-center rounded-md border transition-colors",
+          props.isSelected
+            ? "border-primary/40 bg-primary/15 text-primary"
+            : "border-border/50 bg-muted/60 text-foreground/80 group-hover:border-border/80 group-hover:bg-muted",
+        )}
+      >
+        <ProviderInstanceIcon
+          driverKind={props.driverKind}
+          displayName={props.providerDisplayName}
+          acpRegistryAgentId={props.acpRegistryAgentId}
+          acpRegistryIconUrl={props.acpRegistryIconUrl}
+          className="size-4"
+          iconClassName="size-4"
+        />
+      </div>
+      <div className="relative z-10 min-w-0 flex-1 text-left">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <div className="min-w-0 truncate text-xs font-semibold leading-snug">
             {props.useTriggerLabel
               ? getTriggerDisplayModelLabel(props.model)
               : getDisplayModelName(
@@ -75,27 +150,26 @@ export const ModelListRow = memo(function ModelListRow(props: {
             </Badge>
           ) : null}
         </div>
-        {props.showProvider && (
-          <div className="mt-1 flex items-center gap-1.5">
-            <ProviderInstanceIcon
-              driverKind={props.driverKind}
-              displayName={props.providerDisplayName}
-              acpRegistryAgentId={props.acpRegistryAgentId}
-              acpRegistryIconUrl={props.acpRegistryIconUrl}
-              className="size-3"
-              iconClassName="size-3"
-            />
-            <span className="truncate text-xs font-normal leading-snug text-muted-foreground/70">
-              {providerLabel}
-            </span>
+        {props.showProvider || capabilityTags.length > 0 ? (
+          <div className="mt-0.5 flex items-center gap-1.5 text-2xs leading-tight text-muted-foreground">
+            {props.showProvider ? <span className="truncate">{providerLabel}</span> : null}
+            {capabilityTags.length > 0 ? (
+              <span className="flex shrink-0 items-center gap-1">
+                {capabilityTags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="rounded border border-border/50 bg-background/50 px-1 py-px text-3xs font-medium leading-none text-muted-foreground/90"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </span>
+            ) : null}
           </div>
-        )}
+        ) : null}
       </div>
 
-      <div className="flex shrink-0 items-center gap-1.5">
-        {props.showSelection && props.isSelected ? (
-          <CheckIcon className="size-3.5" aria-hidden="true" />
-        ) : null}
+      <div className="relative z-10 flex shrink-0 items-center gap-1.5">
         {props.jumpLabel ? <Kbd>{props.jumpLabel}</Kbd> : null}
         <Tooltip>
           <TooltipTrigger
@@ -127,6 +201,11 @@ export const ModelListRow = memo(function ModelListRow(props: {
             {props.isFavorite ? "Remove from favorites" : "Add to favorites"}
           </TooltipPopup>
         </Tooltip>
+        {props.isSelected ? (
+          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
+            <CheckIcon className="size-3.5" aria-hidden="true" />
+          </span>
+        ) : null}
       </div>
     </ComboboxItem>
   );

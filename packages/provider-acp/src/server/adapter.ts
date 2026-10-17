@@ -560,6 +560,20 @@ function acpMcpContext(
           { name: "T3_ACP_MCP_AUTHORIZATION", value: session.authorizationHeader },
         ],
       },
+      ...(session.globalEndpoint === undefined
+        ? []
+        : [
+            {
+              name: "sealcode-global",
+              command: self.command,
+              args: [...selfInvocationArgs(self, ["acp-mcp-bridge"])],
+              env: [
+                { name: "ELECTRON_RUN_AS_NODE", value: "1" },
+                { name: "T3_ACP_MCP_ENDPOINT", value: session.globalEndpoint },
+                { name: "T3_ACP_MCP_AUTHORIZATION", value: session.authorizationHeader },
+              ],
+            },
+          ]),
     ],
     acpServers: [{ type: "acp", name: "t3-code", serverId: "t3-code" }],
     endpoint: session.endpoint,

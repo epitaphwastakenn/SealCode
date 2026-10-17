@@ -6,7 +6,7 @@ import {
   summarizeTurnDiffStats,
   type TurnDiffTreeNode,
 } from "../../lib/turnDiffTree";
-import { ChevronRightIcon, FileDiffIcon } from "lucide-react";
+import { ChevronRightIcon, FileDiffIcon, ShieldCheckIcon } from "lucide-react";
 import { ChevronsDownUp, ChevronsUpDown, Folder, FolderClosed } from "lucide";
 import { cn } from "~/lib/utils";
 import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
@@ -17,6 +17,7 @@ import { MiddleTruncate } from "../ui/middle-truncate";
 import { MorphIcon } from "~/components/MorphIcon";
 
 const EMPTY_DIRECTORY_OVERRIDES: Record<string, boolean> = {};
+const NOOP_REVIEW_TURN_DIFF = (_runId: RunId) => {};
 
 export type ChangedFileContextMenuHandler = (filePath: string, event: MouseEvent) => void;
 
@@ -27,6 +28,8 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
   resolvedTheme: "light" | "dark";
   onToggleAllDirectories: () => void;
   onOpenTurnDiff: (runId: RunId, filePath?: string) => void;
+  onReviewTurnDiff?: (runId: RunId) => void;
+  reviewDisabled?: boolean;
   onFileContextMenu?: ChangedFileContextMenuHandler | undefined;
 }) {
   const {
@@ -36,6 +39,8 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
     resolvedTheme,
     onToggleAllDirectories,
     onOpenTurnDiff,
+    onReviewTurnDiff = NOOP_REVIEW_TURN_DIFF,
+    reviewDisabled = false,
     onFileContextMenu,
   } = props;
   const summaryStat = useMemo(() => summarizeTurnDiffStats(files), [files]);
@@ -64,6 +69,26 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
+          <Tooltip>
+            <TooltipTrigger
+              render={
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  aria-label="Review changes"
+                  disabled={reviewDisabled}
+                  onClick={() => onReviewTurnDiff(runId)}
+                />
+              }
+            >
+              <ShieldCheckIcon className="size-3" />
+              <span className="hidden @[24rem]/changed-files:inline">Review</span>
+            </TooltipTrigger>
+            <TooltipPopup side="top">
+              Run the configured agent in read-only mode and score this diff
+            </TooltipPopup>
+          </Tooltip>
           {hasDirectories && (
             <Tooltip>
               <TooltipTrigger

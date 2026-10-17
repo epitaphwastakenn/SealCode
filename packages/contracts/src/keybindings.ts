@@ -94,6 +94,7 @@ export const STATIC_KEYBINDING_COMMANDS = [
   "composer.cycleHost",
   "composer.effort",
   "composer.mode",
+  "composer.voice",
   "composer.workspace",
   "composer.previousWorktree",
   "composer.branch",

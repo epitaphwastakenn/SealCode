@@ -1024,6 +1024,10 @@ function makeModelDisabledReason(
   };
 }
 
+// SealCode's Project diffs tab needs a project-wide checkpoint index that the V2
+// server does not serve yet; the surface stays wired but the tab is hidden.
+const PROJECT_DIFF_CENTER_AVAILABLE = false;
+
 export default function ChatView(props: ChatViewProps) {
   const {
     environmentId,
@@ -1174,6 +1178,14 @@ export default function ChatView(props: ChatViewProps) {
     return ids;
   })();
   const markThreadVisited = useUiStateStore((store) => store.markThreadVisited);
+  const setLastOpenThreadRoute = useUiStateStore((store) => store.setLastOpenThreadRoute);
+  useEffect(() => {
+    if (routeKind === "draft" && draftId) {
+      setLastOpenThreadRoute({ kind: "draft", draftId });
+      return;
+    }
+    setLastOpenThreadRoute({ kind: "server", environmentId, threadId });
+  }, [draftId, environmentId, routeKind, setLastOpenThreadRoute, threadId]);
   const activeThreadLocalLastVisitedAt = useUiStateStore(
     (store) => store.threadLastVisitedAtById[routeThreadKey],
   );
@@ -2905,10 +2917,59 @@ export default function ChatView(props: ChatViewProps) {
         message,
       }) as const,
   );
-  const timelineEntries = isServerThread ? serverTimelineEntries : draftTimelineEntries;
+  const visibleServerTimelineEntries = settings.showThinkingTraces
+    ? serverTimelineEntries
+    : serverTimelineEntries.filter(
+        (entry) => entry.kind !== "work" || entry.entry.tone !== "thinking",
+      );
+  const timelineEntries = isServerThread ? visibleServerTimelineEntries : draftTimelineEntries;
   const timelineMessages = timelineEntries.flatMap((entry) =>
     entry.kind === "message" ? [entry.message] : [],
   );
+  // A run that failed before producing any reply gives the prompt back, so the
+  // user can change the model and retry without retyping it.
+  const restoredFailedRunRef = useRef<string | null>(null);
+  const failedRunId = activeActivityRun?.status === "failed" ? activeActivityRun.runId : null;
+  useEffect(() => {
+    if (failedRunId === null || activeThreadKey === null || failedRunId === resumableRunId) {
+      return;
+    }
+    const restoredKey = `${activeThreadKey}:${failedRunId}`;
+    if (restoredFailedRunRef.current === restoredKey) return;
+    restoredFailedRunRef.current = restoredKey;
+    if (
+      promptRef.current.length > 0 ||
+      timelineMessages.some(
+        (message) => message.role === "assistant" && message.runId === failedRunId,
+      )
+    ) {
+      return;
+    }
+    const failedPrompt = timelineMessages.findLast((message) => message.role === "user")?.text;
+    if (!failedPrompt) return;
+    promptRef.current = failedPrompt;
+    setComposerDraftPrompt(composerDraftTarget, failedPrompt);
+    composerRef.current?.resetCursorState({
+      cursor: collapseExpandedComposerCursor(failedPrompt, failedPrompt.length),
+      prompt: failedPrompt,
+      detectTrigger: true,
+    });
+    toastManager.add(
+      stackedThreadToast({
+        type: "error",
+        title: "Agent stopped before responding",
+        description: "Your message is back in the prompt. Change the model and try again.",
+      }),
+    );
+  }, [
+    activeThreadKey,
+    composerDraftTarget,
+    composerRef,
+    failedRunId,
+    resumableRunId,
+    setComposerDraftPrompt,
+    timelineMessages,
+  ]);
   const displayedTimeline = resolveThreadSwitchTimeline({
     loading: timelineEntries.length === 0 && threadSyncPhase !== null,
     activeThreadKey,
@@ -3385,6 +3446,8 @@ export default function ChatView(props: ChatViewProps) {
   const canInterruptRunningThread =
     canOperateThread && deriveCanInterruptRunningThread(activeThread !== undefined, activeRuntime);
   const onInterrupt = async () => {
+    sendInFlightRef.current = false;
+    resetLocalDispatch();
     if (
       !activeThread ||
       !readEnvironmentScope(activeThread.environmentId, AuthOrchestrationOperateScope)
@@ -3714,6 +3777,11 @@ export default function ChatView(props: ChatViewProps) {
     useRightPanelStore.getState().open(activeThreadRef, "files");
   };
   const addFilesSurfaceStable = useStableCallback(addFilesSurface);
+  const addProjectDiffSurface = () => {
+    if (!activeThreadRef || !activeProject) return;
+    useRightPanelStore.getState().open(activeThreadRef, "diff-center");
+  };
+  const addProjectDiffSurfaceStable = useStableCallback(addProjectDiffSurface);
   const supportsThreadPullRequests =
     serverConfig?.environment.capabilities.threadPullRequests === true;
   const visiblePullRequests = visibleThreadPullRequests(
@@ -7716,6 +7784,37 @@ export default function ChatView(props: ChatViewProps) {
     onDiffPanelOpen?.();
   };
   const onOpenTurnDiffStable = useStableCallback(onOpenTurnDiff);
+  const onReviewTurnDiff = async (runId: RunId) => {
+    if (!isServerThread || !activeThread || !canOperateThread || isWorking) return;
+    const summary = turnDiffSummaries.find((candidate) => candidate.runId === runId);
+    const changedFiles = (summary?.files ?? []).slice(0, 20).map((file) => file.path);
+    const turnLabel = summary ? `turn ${summary.checkpointTurnCount}` : "that turn";
+    const result = await startThreadTurn({
+      environmentId,
+      input: {
+        threadId: activeThread.id,
+        message: {
+          messageId: newMessageId(),
+          role: "user",
+          text: `Review only the code changes produced by ${turnLabel}${
+            changedFiles.length > 0 ? ` (${changedFiles.join(", ")})` : ""
+          }. Do not edit files or run mutating commands. Report correctness, regressions, security, performance, and maintainability findings by severity, then finish with a strict score from 0/10 to 10/10 and one sentence explaining the score.`,
+          attachments: [],
+        },
+        modelSelection: settings.diffReviewModelSelection ?? settings.textGenerationModelSelection,
+        runtimeMode,
+        interactionMode: "plan",
+      },
+    });
+    if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+      const error = squashAtomCommandFailure(result);
+      setThreadError(
+        activeThread.id,
+        error instanceof Error ? error.message : "Failed to start the read-only review.",
+      );
+    }
+  };
+  const onReviewTurnDiffStable = useStableCallback(onReviewTurnDiff);
   const onTimelineRollbackCheckpoint = (input: {
     readonly checkpointId: string;
     readonly scopeId: string;
@@ -7780,6 +7879,7 @@ export default function ChatView(props: ChatViewProps) {
       activeSurfaceId={activeRightPanelSurface?.id ?? null}
       threadRef={activeThreadRef}
       environmentId={activeThread.environmentId}
+      projectId={activeProject?.id ?? null}
       visible={rightPanelOpen}
       composerDraftTarget={composerDraftTarget}
       keybindings={keybindings}
@@ -8135,6 +8235,9 @@ export default function ChatView(props: ChatViewProps) {
                 turnDiffSummaries={
                   paintOnlyDisplayedTimeline ? EMPTY_HELD_TURN_DIFF_SUMMARIES : turnDiffSummaries
                 }
+                preserveAssistantCommentary={settings.showThinkingTraces}
+                diffPresentation={settings.diffPresentation}
+                diffIgnoreWhitespace={settings.diffIgnoreWhitespace}
                 activeThreadEnvironmentId={
                   displayedThreadRef?.environmentId ?? activeThread.environmentId
                 }
@@ -8144,6 +8247,9 @@ export default function ChatView(props: ChatViewProps) {
                 onOpenTurnDiff={
                   paintOnlyDisplayedTimeline ? noopHeldTurnDiff : onOpenTurnDiffStable
                 }
+                {...(paintOnlyDisplayedTimeline
+                  ? {}
+                  : { onReviewTurnDiff: onReviewTurnDiffStable })}
                 onOpenThread={onOpenRelatedThreadStable}
                 parentThreadLink={paintOnlyDisplayedTimeline ? null : parentThreadLink}
                 onForkFromRun={paintOnlyDisplayedTimeline ? async () => {} : onForkFromRunStable}
@@ -8658,6 +8764,7 @@ export default function ChatView(props: ChatViewProps) {
           onAddBrowserInProfile={createBrowserSurfaceStable}
           onAddTerminal={addTerminalSurfaceStable}
           onAddDiff={addDiffSurfaceStable}
+          onAddDiffCenter={addProjectDiffSurfaceStable}
           onAddFiles={addFilesSurfaceStable}
           onAddPullRequest={addPullRequestSurfaceStable}
           onAddPullRequests={addPullRequestsSurfaceStable}
@@ -8665,6 +8772,7 @@ export default function ChatView(props: ChatViewProps) {
           browserAvailable={canOperatePreview && browserAvailable}
           terminalAvailable={activeProject !== null && canOperateTerminal}
           diffAvailable={isServerThread && isGitRepo}
+          diffCenterAvailable={PROJECT_DIFF_CENTER_AVAILABLE}
           filesAvailable={activeProject !== null}
           pullRequestAvailable={pullRequestSurfaceAvailable}
           pullRequestsAvailable={pullRequestsSurfaceAvailable}
@@ -8713,6 +8821,7 @@ export default function ChatView(props: ChatViewProps) {
             onAddBrowserInProfile={createBrowserSurfaceStable}
             onAddTerminal={addTerminalSurfaceStable}
             onAddDiff={addDiffSurfaceStable}
+            onAddDiffCenter={addProjectDiffSurfaceStable}
             onAddFiles={addFilesSurfaceStable}
             onAddPullRequest={addPullRequestSurfaceStable}
             onAddPullRequests={addPullRequestsSurfaceStable}
@@ -8720,6 +8829,7 @@ export default function ChatView(props: ChatViewProps) {
             browserAvailable={canOperatePreview && browserAvailable}
             terminalAvailable={activeProject !== null && canOperateTerminal}
             diffAvailable={isServerThread && isGitRepo}
+            diffCenterAvailable={PROJECT_DIFF_CENTER_AVAILABLE}
             filesAvailable={activeProject !== null}
             pullRequestAvailable={pullRequestSurfaceAvailable}
             pullRequestsAvailable={pullRequestsSurfaceAvailable}

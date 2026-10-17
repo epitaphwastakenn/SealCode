@@ -1236,6 +1236,17 @@ export function claudeMcpQueryOverrides(input: {
         },
         timeout: CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
       },
+      ...(session.globalEndpoint === undefined
+        ? {}
+        : {
+            "sealcode-global": {
+              type: "http" as const,
+              url: session.globalEndpoint,
+              headers: {
+                Authorization: session.authorizationHeader,
+              },
+            },
+          }),
     },
   };
 }

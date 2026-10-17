@@ -12,10 +12,13 @@ import {
   UsageLimitSourceId,
 } from "@t3tools/contracts";
 import { createModelSelection } from "@t3tools/shared/model";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { assert, it } from "@effect/vitest";
+import { afterAll, beforeAll } from "vite-plus/test";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Duration from "effect/Duration";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
@@ -33,6 +36,17 @@ import * as SqlitePersistence from "./persistence/Sqlite.ts";
 import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
 import * as ServerSettingsModule from "./serverSettings.ts";
 import { resolveProviderInstanceTerminalEnvironment } from "./terminal/Manager.ts";
+
+// A Windows machine with Roblox Studio would otherwise get its MCP server seeded into every
+// settings file these tests write.
+const originalLocalAppData = process.env.LOCALAPPDATA;
+beforeAll(() => {
+  process.env.LOCALAPPDATA = "Z:\\t3code-settings-test-no-roblox";
+});
+afterAll(() => {
+  if (originalLocalAppData === undefined) delete process.env.LOCALAPPDATA;
+  else process.env.LOCALAPPDATA = originalLocalAppData;
+});
 
 const decodeSettingsPatch = Schema.decodeUnknownEffect(ServerSettingsPatch);
 const decodeServerSettings = Schema.decodeUnknownEffect(ServerSettings);
@@ -561,6 +575,118 @@ it.layer(NodeServices.layer)("server settings", (it) => {
         "Kilo",
       );
     }).pipe(Effect.provide(layerServerSettings())),
+  );
+
+  it.effect("preserves redacted MCP secrets and removes stale fields", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
+      const secrets = yield* ServerSecretStore.ServerSecretStore;
+      const serverId = "secret-server";
+      // The name 1.x used, so MCP secrets saved before the V2 upgrade keep resolving.
+      const secretName = `mcp-server-${Buffer.from(serverId).toString("base64url")}-env-${Buffer.from("TOKEN").toString("base64url")}`;
+      const server = {
+        id: serverId,
+        displayName: "Secret server",
+        enabled: true,
+        transport: "stdio" as const,
+        command: "mcp-server",
+        args: [],
+        env: [{ name: "TOKEN", value: "secret-value", sensitive: true }],
+        headers: [],
+      };
+
+      const materialized = yield* serverSettings.updateSettings({
+        mcpServers: { [serverId]: server },
+      });
+      const clientSettings = ServerSettingsModule.redactServerSettingsForClient(materialized);
+      assert.deepEqual(clientSettings.mcpServers[serverId]?.env[0], {
+        name: "TOKEN",
+        value: "",
+        sensitive: true,
+        valueRedacted: true,
+      });
+      assert.isTrue(Option.isSome(yield* secrets.get(secretName)));
+
+      const preserved = yield* serverSettings.updateSettings({
+        mcpServers: clientSettings.mcpServers,
+      });
+      assert.equal(preserved.mcpServers[serverId]?.env[0]?.value, "secret-value");
+
+      yield* serverSettings.updateSettings({
+        mcpServers: { [serverId]: { ...server, env: [] } },
+      });
+      assert.isTrue(Option.isNone(yield* secrets.get(secretName)));
+
+      yield* serverSettings.updateSettings({ mcpServers: { [serverId]: server } });
+      yield* serverSettings.updateSettings({ mcpServers: {} });
+      assert.isTrue(Option.isNone(yield* secrets.get(secretName)));
+    }).pipe(Effect.provide(layerServerSettingsWithSecrets())),
+  );
+
+  it.effect("rejects MCP servers that mix stdio and remote fields", () =>
+    Effect.gen(function* () {
+      const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
+      const exit = yield* Effect.exit(
+        serverSettings.updateSettings({
+          mcpServers: {
+            remote: {
+              id: "remote",
+              displayName: "Remote",
+              enabled: true,
+              transport: "streamable-http",
+              command: "should-not-be-here",
+              args: [],
+              env: [],
+              headers: [],
+            },
+          },
+        }),
+      );
+      assert.isTrue(Exit.isFailure(exit));
+      assert.deepEqual((yield* serverSettings.getSettings).mcpServers, {});
+    }).pipe(Effect.provide(layerServerSettings())),
+  );
+
+  it.effect("seeds the Roblox Studio MCP server once when Studio is installed", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const serverConfig = yield* ServerConfig.ServerConfig;
+      const localAppData = yield* fileSystem.makeTempDirectoryScoped({
+        prefix: "t3code-fake-local-app-data-",
+      });
+      yield* fileSystem.makeDirectory(path.join(localAppData, "Roblox"), { recursive: true });
+      const commandPath = path.join(localAppData, "Roblox", "mcp.bat");
+      yield* fileSystem.writeFileString(commandPath, "@echo off");
+      const withStudio = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        effect.pipe(
+          Effect.provide(ServerSettingsModule.layer.pipe(Layer.fresh)),
+          Effect.provideService(HostProcess.Platform, "win32"),
+          Effect.provideService(HostProcess.Environment, { LOCALAPPDATA: localAppData }),
+        );
+
+      yield* withStudio(
+        Effect.gen(function* () {
+          const serverSettings = yield* ServerSettingsModule.ServerSettingsService;
+          yield* serverSettings.start;
+          const seeded = yield* serverSettings.getSettings;
+          assert.deepEqual(seeded.mcpServers["roblox-studio"]?.args, ["/c", commandPath]);
+          assert.isTrue(
+            (yield* fileSystem.readFileString(serverConfig.settingsPath)).includes("roblox-studio"),
+          );
+          yield* serverSettings.updateSettings({ mcpServers: {} });
+        }),
+      );
+
+      // An empty registry leaves no `mcpServers` key behind; only the marker keeps the
+      // removed server from returning on the next start.
+      const reloaded = yield* withStudio(
+        ServerSettingsModule.ServerSettingsService.pipe(
+          Effect.flatMap((serverSettings) => serverSettings.getSettings),
+        ),
+      );
+      assert.deepEqual(reloaded.mcpServers, {});
+    }).pipe(Effect.scoped, Effect.provide(layerServerSettingsWithSecrets())),
   );
 
   it.effect("buffers changes after a subscription is acquired but before it is consumed", () =>

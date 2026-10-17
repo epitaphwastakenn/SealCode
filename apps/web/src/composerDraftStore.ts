@@ -1304,10 +1304,7 @@ type ComposerThreadLookupState = Pick<
   "draftsByThreadKey" | "draftThreadsByThreadKey"
 >;
 
-function normalizeComposerTarget(
-  state: ComposerThreadLookupState,
-  target: ComposerThreadTarget,
-): ComposerThreadTarget | null {
+function normalizeComposerTarget(target: ComposerThreadTarget): ComposerThreadTarget | null {
   if (typeof target === "string") {
     const draftId = target.trim();
     return draftId.length > 0 ? DraftId.make(draftId) : null;
@@ -1319,7 +1316,7 @@ export function resolveComposerDraftKey(
   state: ComposerThreadLookupState,
   target: ComposerThreadTarget,
 ): string | null {
-  const normalizedTarget = normalizeComposerTarget(state, target);
+  const normalizedTarget = normalizeComposerTarget(target);
   if (!normalizedTarget) {
     return null;
   }
@@ -1346,7 +1343,7 @@ function resolveComposerThreadId(
   state: ComposerThreadLookupState,
   target: ComposerThreadTarget,
 ): ThreadId | null {
-  const normalizedTarget = normalizeComposerTarget(state, target);
+  const normalizedTarget = normalizeComposerTarget(target);
   if (!normalizedTarget) {
     return null;
   }

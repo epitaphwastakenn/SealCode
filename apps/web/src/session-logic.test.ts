@@ -1129,6 +1129,24 @@ describe("native provider presentation in the v2 timeline", () => {
     expect(entry).toMatchObject({ kind: "work", entry: { label: "Read README" } });
   });
 
+  it("labels an MCP tool call with its server and tool", () => {
+    const item = {
+      ...base,
+      type: "dynamic_tool" as const,
+      toolName: "mcp__github__search_issues",
+      input: { query: "is:open" },
+      output: {},
+    } satisfies OrchestrationV2TurnItem;
+    const [entry] = deriveTimelineEntriesFromVisibleTurnItems({
+      visibleTurnItems: [visible(item)],
+      optimisticMessages: [],
+    });
+    expect(entry).toMatchObject({
+      kind: "work",
+      entry: { label: "github → search_issues", toolTitle: "github → search_issues" },
+    });
+  });
+
   it("keeps browser identity and its source on a completed tool row", () => {
     const item = {
       ...base,

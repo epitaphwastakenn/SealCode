@@ -6,6 +6,11 @@ export interface McpProviderSessionConfig {
   readonly providerSessionId: string;
   readonly providerInstanceId: ProviderInstanceId;
   readonly endpoint: string;
+  /**
+   * The user's configured MCP servers, proxied under the same credential. Adapters attach it as
+   * a second server named `sealcode-global` beside `t3-code`.
+   */
+  readonly globalEndpoint?: string;
   readonly authorizationHeader: string;
   /**
    * Adapters read it to keep developer instructions truthful: when the user

@@ -16,6 +16,7 @@ import {
 import { ProviderInstanceId, ProviderDriverKind } from "./providerInstance.ts";
 import { ProviderUsageLimitsUpdate } from "./providerUsageLimits.ts";
 import { ProviderApprovalOption } from "./providerPolicy.ts";
+import { EfficiencySnapshot } from "./harnessEfficiency.ts";
 
 const TrimmedNonEmptyStringSchema = TrimmedNonEmptyString;
 const UnknownRecordSchema = Schema.Record(Schema.String, Schema.Unknown);
@@ -115,6 +116,16 @@ const TOOL_LIFECYCLE_ITEM_TYPES = [
 
 export const ToolLifecycleItemType = Schema.Literals(TOOL_LIFECYCLE_ITEM_TYPES);
 export type ToolLifecycleItemType = typeof ToolLifecycleItemType.Type;
+
+export const McpToolActivityMetadata = Schema.Struct({
+  serverId: Schema.String,
+  serverDisplayName: Schema.optional(Schema.String),
+  upstreamToolName: Schema.String,
+  canonicalToolName: Schema.String,
+  providerToolName: Schema.optional(Schema.String),
+  callId: Schema.optional(Schema.String),
+});
+export type McpToolActivityMetadata = typeof McpToolActivityMetadata.Type;
 
 export function isToolLifecycleItemType(value: string): value is ToolLifecycleItemType {
   return TOOL_LIFECYCLE_ITEM_TYPES.includes(value as ToolLifecycleItemType);
@@ -280,6 +291,8 @@ export const ThreadTokenUsageSnapshot = Schema.Struct({
       currency: TrimmedNonEmptyStringSchema.check(Schema.isMaxLength(32)),
     }),
   ),
+  /** Harness measurements are optional and never replace provider usage. */
+  efficiency: Schema.optional(EfficiencySnapshot),
 });
 export type ThreadTokenUsageSnapshot = typeof ThreadTokenUsageSnapshot.Type;
 
@@ -441,6 +454,7 @@ export const ItemLifecyclePayload = Schema.Struct({
   data: Schema.optional(Schema.Unknown),
   agentId: Schema.optional(TrimmedNonEmptyStringSchema),
   parentToolUseId: Schema.optional(TrimmedNonEmptyStringSchema),
+  mcp: Schema.optional(McpToolActivityMetadata),
 });
 export type ItemLifecyclePayload = typeof ItemLifecyclePayload.Type;
 

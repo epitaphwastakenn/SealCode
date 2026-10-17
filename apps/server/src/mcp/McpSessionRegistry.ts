@@ -89,6 +89,7 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
   const endpoint = NetAddress.isInetAddress(httpServer.address)
     ? `http://${getHttpMcpEndpointHost(httpServer.address.address)}:${httpServer.address.port}/mcp`
     : "http://127.0.0.1/mcp";
+  const globalEndpoint = `${endpoint}/global`;
 
   const hashToken = (token: string) =>
     crypto
@@ -140,6 +141,7 @@ const makeWithOptions = Effect.fn("McpSessionRegistry.make")(function* (
           providerSessionId,
           providerInstanceId: scope.thread.providerInstanceId,
           endpoint,
+          globalEndpoint,
           authorizationHeader: `Bearer ${rawToken}`,
           browserToolsAvailable: scope.capabilities.has("preview"),
           capabilities: scope.capabilities,

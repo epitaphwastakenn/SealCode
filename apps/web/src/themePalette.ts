@@ -16,12 +16,12 @@ import {
   type ThemeAppearance,
   type ThemeColorRole,
   type ThemeColors,
-  type ThemeDefinition,
+  type ThemeDefinition as SharedThemeDefinition,
   type ThemeVariants,
 } from "@t3tools/shared/themePalettes";
 
 export { EMBER_THEME, GROVE_THEME, IRIS_THEME, OCEAN_THEME, T3_CHAT_THEME, THEME_COLOR_ROLES };
-export type { ThemeAppearance, ThemeColorRole, ThemeColors, ThemeDefinition, ThemeVariants };
+export type { ThemeAppearance, ThemeColorRole, ThemeColors, ThemeVariants };
 
 export const T3_CHAT_THEME_ID = "t3-chat" as const;
 const GROVE_THEME_ID = "grove" as const;
@@ -44,6 +44,12 @@ export type ThemeColorOverrides = Readonly<Partial<Record<ThemeColorRole, string
 export type ThemeVariantOverrides = Readonly<Partial<Record<ThemeAppearance, ThemeColorOverrides>>>;
 export type ThemePreferenceMode = ThemeAppearance | "system";
 export type ThemeCollection = Readonly<{ id: string; label: string }>;
+/** SealCode adds `gradient` on top of the shared palette shape. */
+export type ThemeDefinition = SharedThemeDefinition &
+  Readonly<{
+    /** Blends the theme canvas toward its accent across the workspace. */
+    gradient?: boolean;
+  }>;
 export type ThemeFile = Readonly<{
   version: typeof THEME_FILE_VERSION;
   id: string;
@@ -53,6 +59,7 @@ export type ThemeFile = Readonly<{
   variants?: ThemeVariantOverrides;
   collection?: ThemeCollection;
   managed?: boolean;
+  gradient?: boolean;
 }>;
 
 /**
@@ -175,6 +182,7 @@ function parseStoredTheme(value: unknown): ThemeDefinition | null {
     ...(variants ? { variants } : {}),
     ...(collection ? { collection } : {}),
     ...(value.managed === true ? { managed: true } : {}),
+    ...(value.gradient === true ? { gradient: true } : {}),
   };
 }
 
@@ -1338,6 +1346,7 @@ export function parseThemeFile(value: unknown): ThemeDefinition {
     ...(Object.keys(variants).length > 0 ? { variants } : {}),
     ...(collection ? { collection } : {}),
     ...(value.managed === true ? { managed: true } : {}),
+    ...(value.gradient === true ? { gradient: true } : {}),
   };
 }
 
@@ -1352,6 +1361,7 @@ export function serializeThemeFile(theme: ThemeDefinition): string {
     ...(canonicalTheme.variants ? { variants: canonicalTheme.variants } : {}),
     ...(canonicalTheme.collection ? { collection: canonicalTheme.collection } : {}),
     ...(canonicalTheme.managed ? { managed: true } : {}),
+    ...(canonicalTheme.gradient ? { gradient: true } : {}),
   };
   return `${JSON.stringify(file, null, 2)}\n`;
 }
@@ -1429,7 +1439,11 @@ export const THEME_PREVIEW_ID = "__preview";
 /**
  * Callers restore the stored theme (refreshTheme) when the draft goes away.
  */
-export function applyThemeColorPreview(colors: ThemeColors, appearance: ThemeAppearance): void {
+export function applyThemeColorPreview(
+  colors: ThemeColors,
+  appearance: ThemeAppearance,
+  gradient = false,
+): void {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
   if (!root?.style) return;
@@ -1437,6 +1451,7 @@ export function applyThemeColorPreview(colors: ThemeColors, appearance: ThemeApp
   setThemePreviewSidebarArtwork(false);
   root.dataset.themeId = THEME_PREVIEW_ID;
   root.classList.toggle("dark", appearance === "dark");
+  root.dataset.themeGradient = gradient ? "true" : "false";
   for (const [role, value] of Object.entries(colors) as Array<[ThemeColorRole, string]>) {
     if (isThemeColor(value)) root.style.setProperty(APP_THEME_VARIABLES[role], value);
   }
@@ -1455,6 +1470,7 @@ export function applyThemePalette(theme: ThemePreference, appearance?: ThemeAppe
     root.dataset.themeId = palette.id;
     const mode = appearance ?? legacyThemeMode(theme) ?? palette.appearance;
     const colors = getThemeColorsForMode(palette, mode) ?? palette.colors;
+    root.dataset.themeGradient = palette.gradient ? "true" : "false";
     for (const [role, value] of Object.entries(colors) as Array<[ThemeColorRole, string]>) {
       root.style.setProperty(APP_THEME_VARIABLES[role], value);
     }
@@ -1462,6 +1478,7 @@ export function applyThemePalette(theme: ThemePreference, appearance?: ThemeAppe
   }
 
   delete root.dataset.themeId;
+  delete root.dataset.themeGradient;
   for (const variable of Object.values(APP_THEME_VARIABLES)) {
     root.style.removeProperty(variable);
   }

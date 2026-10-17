@@ -14,7 +14,12 @@ import {
   useComposerDraftStore,
 } from "../composerDraftStore";
 import { useSidebarPendingFileDropStore } from "../sidebarPendingFileDropStore";
-import { useEnvironmentThreadRefs, useThreadRefs, useThreadShell } from "../state/entities";
+import {
+  lastOpenThreadRouteMatchesDraft,
+  lastOpenThreadRouteMatchesServerThread,
+} from "../lib/chatIndexLanding";
+import { useUiStateStore } from "../uiStateStore";
+import { useThreadRefs, useThreadShell } from "../state/entities";
 import { useEnvironmentQuery } from "../state/query";
 import { environmentShell } from "../state/shell";
 import {
@@ -62,7 +67,6 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
     serverThreadRef === null ? null : environmentShell.stateAtom(serverThreadRef.environmentId),
   );
   const serverThreadShell = serverThread;
-  const environmentThreadRefs = useEnvironmentThreadRefs(serverThreadRef?.environmentId ?? null);
   const bootstrapComplete = isThreadRouteSnapshotAuthoritative(shell.data?.status);
   const draftThread = useComposerDraftStore((store) =>
     serverThreadRef ? store.getDraftThreadByRef(serverThreadRef) : null,
@@ -86,9 +90,6 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
   if (nextChatViewKey !== chatViewKey) {
     setChatViewKey(nextChatViewKey);
   }
-  const environmentHasDraftThreads = useComposerDraftStore((store) =>
-    serverThreadRef ? store.hasDraftThreadsInEnvironment(serverThreadRef.environmentId) : false,
-  );
   const renderState = resolveThreadRouteRenderState({
     bootstrapComplete,
     serverThreadExists: serverThreadShell !== null,
@@ -96,7 +97,6 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
     draftThreadExists: draftThread !== null,
   });
   const serverThreadStarted = threadHasStarted(serverThreadShell);
-  const environmentHasAnyThreads = environmentThreadRefs.length > 0 || environmentHasDraftThreads;
 
   useEffect(() => {
     if (!inferredThreadRef || draftSession?.promotedTo) {
@@ -129,8 +129,13 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
     if (target.kind !== "draft" || draftSession || canonicalThreadRef) {
       return;
     }
+    // "/" reopens the last thread, so forget a draft that no longer exists first.
+    const uiState = useUiStateStore.getState();
+    if (lastOpenThreadRouteMatchesDraft(uiState.lastOpenThreadRoute, target.draftId)) {
+      uiState.setLastOpenThreadRoute(null);
+    }
     void navigate({ to: "/", replace: true });
-  }, [canonicalThreadRef, draftSession, navigate, target.kind]);
+  }, [canonicalThreadRef, draftSession, navigate, target]);
 
   useEffect(() => {
     if (target.kind !== "server" || !bootstrapComplete) {
@@ -139,11 +144,20 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
     if (renderState === "missing") {
       const { clearPendingFileDropsForThread } = useSidebarPendingFileDropStore.getState();
       clearPendingFileDropsForThread(target.threadRef);
-      if (environmentHasAnyThreads) {
-        void navigate({ to: "/", replace: true });
+      const uiState = useUiStateStore.getState();
+      if (
+        lastOpenThreadRouteMatchesServerThread(
+          uiState.lastOpenThreadRoute,
+          target.threadRef.environmentId,
+          target.threadRef.threadId,
+        )
+      ) {
+        uiState.setLastOpenThreadRoute(null);
       }
+      // "/" always lands somewhere (last thread, a draft, or a scratch thread).
+      void navigate({ to: "/", replace: true });
     }
-  }, [bootstrapComplete, environmentHasAnyThreads, navigate, renderState, target]);
+  }, [bootstrapComplete, navigate, renderState, target]);
 
   useEffect(() => {
     if (target.kind !== "server" || !serverThreadStarted || !draftThread) {

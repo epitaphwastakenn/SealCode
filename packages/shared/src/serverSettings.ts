@@ -552,6 +552,10 @@ export function applyServerSettingsPatch(
           ),
         }
       : {}),
+    ...(patch.mcpServers !== undefined ? { mcpServers: patch.mcpServers } : {}),
+    ...(patch.diffReviewModelSelection !== undefined
+      ? { diffReviewModelSelection: patch.diffReviewModelSelection }
+      : {}),
     ...(patch.defaultModelSelection !== undefined
       ? { defaultModelSelection: patch.defaultModelSelection }
       : {}),

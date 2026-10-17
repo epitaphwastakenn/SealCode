@@ -330,6 +330,7 @@ export function ThemeEditorPanel({
   const isEditing = editingTheme !== null;
   const [name, setName] = useState("");
   const [activeAppearance, setActiveAppearance] = useState<ThemeAppearance>(initialAppearance);
+  const [gradient, setGradient] = useState(false);
   const [isAdvanced, setIsAdvanced] = useState(false);
   const [colorsByAppearance, setColorsByAppearance] = useState<ThemeEditorColorsByAppearance>(() =>
     getThemeEditorColorsByAppearance(),
@@ -406,6 +407,9 @@ export function ThemeEditorPanel({
 
       setName(editingTheme?.label ?? seedName ?? "");
       setActiveAppearance(nextAppearance);
+      // Gradient is opt-in for new themes, including duplicates. Editing keeps the
+      // theme's existing choice.
+      setGradient(editingTheme?.gradient === true);
       // Themes saved by the guided editor carry the managed flag; anything else
       // (imports, hand-edited files, older saves) opens in advanced mode so
       // guided regeneration cannot silently discard hand-tuned colors.
@@ -458,10 +462,20 @@ export function ThemeEditorPanel({
     }
   }
 
+  // A matching name makes that existing theme the surviving merge target. Seed the
+  // gradient from it so adding a palette or renaming onto it does not silently reset
+  // it; leaving the merge restores the edited theme's choice (off for a new theme).
+  const mergeTargetId = mergeTarget?.id ?? null;
+  const [appliedMergeTargetId, setAppliedMergeTargetId] = useState<string | null>(null);
+  if (appliedMergeTargetId !== mergeTargetId) {
+    setAppliedMergeTargetId(mergeTargetId);
+    setGradient(mergeTarget ? mergeTarget.gradient === true : editingTheme?.gradient === true);
+  }
+
   useEffect(() => {
     if (!open) return;
-    applyThemeColorPreview(colorsByAppearance[activeAppearance], activeAppearance);
-  }, [activeAppearance, colorsByAppearance, open]);
+    applyThemeColorPreview(colorsByAppearance[activeAppearance], activeAppearance, gradient);
+  }, [activeAppearance, colorsByAppearance, gradient, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -784,6 +798,7 @@ export function ThemeEditorPanel({
               ...mergeTarget.variants,
               ...Object.fromEntries(editedModes.map((mode) => [mode, colorsForSave[mode]])),
             },
+            ...(gradient ? { gradient: true } : {}),
             ...(mergeTarget.managed === true && !isAdvanced ? { managed: true } : {}),
           }),
           ...(mergeTarget.collection ? { collection: mergeTarget.collection } : {}),
@@ -803,6 +818,7 @@ export function ThemeEditorPanel({
             ...(getThemeModes(editingTheme).length > 1
               ? { variants: { [variantAppearance]: colorsForSave[variantAppearance] } }
               : {}),
+            ...(gradient ? { gradient: true } : {}),
             ...(isAdvanced ? {} : { managed: true }),
           }),
           ...(editingTheme.collection ? { collection: editingTheme.collection } : {}),
@@ -826,6 +842,7 @@ export function ThemeEditorPanel({
               ...mergeTarget.variants,
               [activeAppearance]: colorsForSave[activeAppearance],
             },
+            ...(gradient ? { gradient: true } : {}),
             ...(mergeTarget.managed === true && !isAdvanced ? { managed: true } : {}),
           }),
           ...(mergeTarget.collection ? { collection: mergeTarget.collection } : {}),
@@ -837,6 +854,7 @@ export function ThemeEditorPanel({
             name,
             appearance: activeAppearance,
             colors: colorsForSave[activeAppearance],
+            ...(gradient ? { gradient: true } : {}),
             ...(isAdvanced ? {} : { managed: true }),
           }),
         );
@@ -927,6 +945,20 @@ export function ThemeEditorPanel({
         {renderAppearanceButton("dark")}
       </ToggleGroup>
     </div>
+  );
+
+  const renderGradientToggle = () => (
+    <label className="grid cursor-pointer grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-center gap-3">
+      <span className="text-sm font-medium">Canvas gradient</span>
+      <span className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+        <span>Blend background into the accent color</span>
+        <Switch
+          aria-label="Use a canvas gradient"
+          checked={gradient}
+          onCheckedChange={(checked) => setGradient(Boolean(checked))}
+        />
+      </span>
+    </label>
   );
 
   const renderColorsHeader = () => (
@@ -1172,6 +1204,7 @@ export function ThemeEditorPanel({
               </p>
             ) : null}
             {renderAppearanceButtons()}
+            {renderGradientToggle()}
             <div className="space-y-3">
               {renderColorsHeader()}
               {renderColorFields()}

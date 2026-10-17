@@ -9,8 +9,14 @@ import { Link, useNavigate } from "@tanstack/react-router";
 import type { CSSProperties, ReactNode } from "react";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 import {
+  AgentPreset as AgentPresetSchema,
+  type AgentPreset,
+  type ModelSelection,
   type BackgroundActivityProfile,
   type DesktopUpdateChannel,
+  type EnvironmentId,
+  type ServerProvider,
+  type ServerSettings,
   ProviderDriverKind,
   type ProviderInstanceId,
   type ScopedThreadRef,
@@ -30,8 +36,10 @@ import {
   type DiffLayout,
   type EnvironmentIdentificationMode,
   MAX_APPEARANCE_CONTRAST,
+  type DiffPresentation,
   MAX_CODE_FONT_SIZE,
   MAX_GLASS_OPACITY,
+  MAX_HARNESS_SOUND_VOLUME,
   MAX_INTERFACE_FONT_SIZE,
   MAX_PANEL_ANIMATION_DURATION_MS,
   MAX_PROMPT_FONT_SIZE,
@@ -40,6 +48,7 @@ import {
   MIN_CODE_FONT_SIZE,
   MIN_APPEARANCE_CONTRAST,
   MIN_GLASS_OPACITY,
+  MIN_HARNESS_SOUND_VOLUME,
   MIN_INTERFACE_FONT_SIZE,
   MIN_PANEL_ANIMATION_DURATION_MS,
   MIN_PROMPT_FONT_SIZE,
@@ -48,12 +57,14 @@ import {
   MIN_TERMINAL_FONT_SIZE,
   type QuitConfirmationMode,
   SidebarProjectSortOrder,
+  type UnifiedSettings,
 } from "@t3tools/contracts/settings";
 import { resolveServerBackgroundActivitySettings } from "@t3tools/shared/backgroundActivitySettings";
 import { createModelSelection } from "@t3tools/shared/model";
 import * as Duration from "effect/Duration";
 import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
+import { randomUUID } from "../../lib/utils";
 import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
 import { CliCommandSettingsRow } from "./CliCommandSettingsRow";
 import { MobileAppSettingsRow } from "./MobileAppSettingsRow";
@@ -88,6 +99,7 @@ import {
 import { useScopedModelDisabledReason } from "./useScopedModelAvailability";
 import { useSettingsScope } from "./SettingsScopeContext";
 import { ProjectDefaultsSettings } from "./ProjectDefaultsSettings";
+import { useClientSettings } from "../../hooks/useSettings";
 import { useThreadActions } from "../../hooks/useThreadActions";
 import { useDesktopUpdateState } from "../../state/desktopUpdate";
 import {
@@ -99,6 +111,7 @@ import {
   applyProviderInstanceSettings,
   deriveProviderInstanceEntries,
   sortProviderInstanceEntries,
+  type ProviderInstanceEntry,
 } from "../../providerInstances";
 import { ensureLocalApi, readLocalApi } from "../../localApi";
 import { isMacPlatform } from "../../lib/utils";
@@ -106,6 +119,7 @@ import { EMPTY_SERVER_PROVIDERS } from "../../state/server";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
 import { formatRelativeTimeLabel } from "../../timestampFormat";
 import { Button } from "../ui/button";
+import { useThreadDeleteConfirmation } from "../threadActionMenu";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import {
   Dialog,
@@ -118,6 +132,7 @@ import {
 } from "../ui/dialog";
 import { DraftInput } from "../ui/draft-input";
 import { Input } from "../ui/input";
+import { Textarea } from "../ui/textarea";
 import {
   DEFAULT_CODE_FONT_STACK,
   DEFAULT_SANS_FONT_STACK,
@@ -218,6 +233,12 @@ const QUIT_CONFIRMATION_MODE_LABELS: Record<QuitConfirmationMode, string> = {
   "double-click": "Double press",
 };
 
+const DIFF_PRESENTATION_LABELS: Record<DiffPresentation, string> = {
+  summary: "Changed files summary",
+  inline: "Inline code diff",
+  panel: "Open in diff panel",
+};
+
 const BACKGROUND_ACTIVITY_PROFILE_LABELS: Record<BackgroundActivityProfile, string> = {
   balanced: "Balanced",
   performance: "Performance",
@@ -240,6 +261,7 @@ const BACKGROUND_ACTIVITY_PROFILE_DESCRIPTIONS: Record<BackgroundActivityProfile
 const ADVANCED_BACKGROUND_ACTIVITY_DESCRIPTION = "Uses custom intervals.";
 
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
+const CODEX_DRIVER_KIND = ProviderDriverKind.make("codex");
 const BACKGROUND_ACTIVITY_BOOLEAN_OVERRIDES: ReadonlyArray<{
   readonly key:
     | "pauseWhenHostLocked"
@@ -268,6 +290,224 @@ function backgroundActivityProfileSettings(profile: BackgroundActivityProfile) {
       overrides: {},
     },
   };
+}
+
+// SealCode 1.x ran these helper models and the Seals.md rules on its old
+// orchestrator. The V2 server does not read them yet, so the rows stay hidden
+// instead of offering settings that change nothing.
+const HARNESS_HELPER_SETTINGS_AVAILABLE = false;
+
+function HarnessHelperModelRow(props: {
+  readonly settingKey: keyof ServerSettings;
+  readonly title: string;
+  readonly description: string;
+  readonly environmentId: EnvironmentId | null;
+  readonly selection: ModelSelection | null;
+  readonly settings: UnifiedSettings;
+  readonly providers: ReadonlyArray<ServerProvider>;
+  readonly instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
+  readonly fallbackSelection: ModelSelection;
+  readonly onSelectionChange: (selection: ModelSelection | null) => void;
+}) {
+  const activeSelection = props.selection ?? props.fallbackSelection;
+  const instanceEntry = props.instanceEntries.find(
+    (entry) => entry.instanceId === activeSelection.instanceId,
+  );
+  const modelOptionsByInstance = getCustomModelOptionsByInstance(
+    props.settings,
+    props.providers,
+    activeSelection.instanceId,
+    activeSelection.model,
+  );
+  const enabled = props.selection !== null;
+
+  return (
+    <SettingsRow
+      serverScoped
+      settingKeys={[props.settingKey]}
+      title={props.title}
+      description={props.description}
+      control={
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          {enabled ? (
+            <>
+              <ProviderModelPicker
+                environmentId={props.environmentId}
+                activeInstanceId={activeSelection.instanceId}
+                model={activeSelection.model}
+                lockedProvider={null}
+                instanceEntries={props.instanceEntries}
+                modelOptionsByInstance={modelOptionsByInstance}
+                triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
+                triggerAriaLabel={`${props.title} model`}
+                onInstanceModelChange={(instanceId, model) =>
+                  props.onSelectionChange(
+                    createModelSelection(
+                      instanceId,
+                      model,
+                      activeSelection.instanceId === instanceId
+                        ? activeSelection.options
+                        : undefined,
+                    ),
+                  )
+                }
+              />
+              <TraitsPicker
+                provider={instanceEntry?.driverKind ?? DEFAULT_DRIVER_KIND}
+                models={instanceEntry?.models ?? []}
+                model={activeSelection.model}
+                prompt=""
+                onPromptChange={() => {}}
+                modelOptions={activeSelection.options}
+                allowPromptInjectedEffort={false}
+                planModeEnabled={
+                  props.settings.planModeEnabled || selectsPlanAgent(activeSelection.options)
+                }
+                triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
+                onModelOptionsChange={(options) =>
+                  props.onSelectionChange(
+                    createModelSelection(
+                      activeSelection.instanceId,
+                      activeSelection.model,
+                      options,
+                    ),
+                  )
+                }
+              />
+            </>
+          ) : null}
+          <Switch
+            checked={enabled}
+            onCheckedChange={(checked) =>
+              props.onSelectionChange(
+                checked
+                  ? createModelSelection(
+                      props.fallbackSelection.instanceId,
+                      props.fallbackSelection.model,
+                      props.fallbackSelection.options,
+                    )
+                  : null,
+              )
+            }
+            aria-label={`Use a dedicated ${props.title.toLowerCase()}`}
+          />
+        </div>
+      }
+    />
+  );
+}
+
+const decodeAgentPreset = Schema.decodeSync(AgentPresetSchema);
+
+function AgentPresetsSettings(props: {
+  readonly settings: UnifiedSettings;
+  readonly currentSelection: ModelSelection;
+  readonly updateSettings: (patch: { agentPresets: ReadonlyArray<AgentPreset> }) => void;
+}) {
+  const [name, setName] = useState("");
+  const [kind, setKind] = useState<AgentPreset["kind"]>("custom");
+  const [interactionMode, setInteractionMode] = useState<AgentPreset["interactionMode"]>("default");
+  const savePreset = () => {
+    const trimmedName = name.trim();
+    if (trimmedName.length === 0) return;
+    const preset = decodeAgentPreset({
+      id: randomUUID(),
+      name: trimmedName,
+      kind,
+      modelSelection: props.currentSelection,
+      interactionMode,
+      skills: [],
+    });
+    props.updateSettings({ agentPresets: [...props.settings.agentPresets, preset] });
+    setName("");
+  };
+
+  return (
+    <SettingsRow
+      serverScoped
+      settingKeys={["agentPresets"]}
+      title="Workflow presets"
+      description="Save a named model and effort workflow, then apply it from the composer before the next turn."
+    >
+      <div className="mt-3 space-y-2 pb-3.5">
+        <div className="flex flex-wrap gap-1.5">
+          <Input
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                savePreset();
+              }
+            }}
+            placeholder="Preset name"
+            aria-label="Workflow preset name"
+            className="min-w-40 flex-1"
+          />
+          <Select value={kind} onValueChange={(value) => setKind(value as AgentPreset["kind"])}>
+            <SelectTrigger className="w-28" aria-label="Workflow preset type">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectPopup>
+              <SelectItem value="coding">Coding</SelectItem>
+              <SelectItem value="review">Review</SelectItem>
+              <SelectItem value="research">Research</SelectItem>
+              <SelectItem value="custom">Custom</SelectItem>
+            </SelectPopup>
+          </Select>
+          <Select
+            value={interactionMode}
+            onValueChange={(value) => setInteractionMode(value as AgentPreset["interactionMode"])}
+          >
+            <SelectTrigger className="w-28" aria-label="Workflow preset mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectPopup>
+              <SelectItem value="default">Default</SelectItem>
+              <SelectItem value="plan">Plan</SelectItem>
+            </SelectPopup>
+          </Select>
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={savePreset}
+            disabled={!name.trim()}
+          >
+            Save current
+          </Button>
+        </div>
+        {props.settings.agentPresets.length > 0 ? (
+          <div className="divide-y divide-border/60 rounded-md border border-border/60">
+            {props.settings.agentPresets.map((preset) => (
+              <div key={preset.id} className="flex items-center gap-2 px-2.5 py-2">
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-medium">{preset.name}</div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {preset.kind} · {preset.modelSelection.model}
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="ghost"
+                  onClick={() =>
+                    props.updateSettings({
+                      agentPresets: props.settings.agentPresets.filter(
+                        (candidate) => candidate.id !== preset.id,
+                      ),
+                    })
+                  }
+                >
+                  Remove
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    </SettingsRow>
+  );
 }
 
 function AboutVersionTitle() {
@@ -527,12 +767,25 @@ export function useSettingsRestore(onRestored?: () => void) {
     settings.textGenerationModelSelection ?? null,
     DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection ?? null,
   );
+  const isImageViewerModelDirty = !Equal.equals(
+    settings.imageViewerModelSelection ?? null,
+    DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection ?? null,
+  );
+  const isHarnessHelperModelsDirty = [
+    settings.contextCompactorModelSelection,
+    settings.skillCuratorModelSelection,
+    settings.memoryCuratorModelSelection,
+    settings.delegationDefaultModelSelection,
+  ].some((selection) => selection !== null);
   const isBackgroundActivityDirty = hasChangedBackgroundActivitySettings(settings);
 
   const changedSettingLabels = [
     ...(theme !== "system" ? ["Theme"] : []),
     ...(!followSystem ? ["Follow system"] : []),
     ...(themeHalves !== null ? ["Theme mix"] : []),
+    ...(settings.glassSidebarEnabled !== DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled
+      ? ["Glass sidebar"]
+      : []),
     ...(settings.appearanceContrast !== DEFAULT_UNIFIED_SETTINGS.appearanceContrast
       ? ["Contrast"]
       : []),
@@ -601,6 +854,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ? ["Diff whitespace changes"]
       : []),
     ...(settings.diffLayout !== DEFAULT_UNIFIED_SETTINGS.diffLayout ? ["Diff layout"] : []),
+    ...(settings.diffPresentation !== DEFAULT_UNIFIED_SETTINGS.diffPresentation
+      ? ["Diff presentation"]
+      : []),
     ...(settings.proactivePanelsEnabled !== DEFAULT_UNIFIED_SETTINGS.proactivePanelsEnabled
       ? ["Proactive panels"]
       : []),
@@ -652,6 +908,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       : []),
     ...(settings.confirmQuit !== DEFAULT_UNIFIED_SETTINGS.confirmQuit ? ["Quit shortcut"] : []),
     ...(isTextGenerationModelDirty ? ["Text generation model"] : []),
+    ...(isImageViewerModelDirty ? ["Image viewer model"] : []),
+    ...(isHarnessHelperModelsDirty ? ["Harness helper models"] : []),
     ...getChangedBrowserSettingLabels(settings),
     ...(settings.enableAgentBrowserAccess !== DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess
       ? ["Agent browser access"]
@@ -727,6 +985,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       diffFilesCollapsed: DEFAULT_UNIFIED_SETTINGS.diffFilesCollapsed,
       diffIgnoreWhitespace: DEFAULT_UNIFIED_SETTINGS.diffIgnoreWhitespace,
       diffLayout: DEFAULT_UNIFIED_SETTINGS.diffLayout,
+      diffPresentation: DEFAULT_UNIFIED_SETTINGS.diffPresentation,
       proactivePanelsEnabled: DEFAULT_UNIFIED_SETTINGS.proactivePanelsEnabled,
       showSkillsInSlashMenu: DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu,
       composerCollapseOnScroll: DEFAULT_UNIFIED_SETTINGS.composerCollapseOnScroll,
@@ -735,6 +994,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       followUpBehavior: DEFAULT_UNIFIED_SETTINGS.followUpBehavior,
       contextWindowMeterEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
+      glassSidebarEnabled: DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled,
       glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity,
       panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
@@ -761,6 +1021,11 @@ export function useSettingsRestore(onRestored?: () => void) {
       confirmThreadUnpin: DEFAULT_UNIFIED_SETTINGS.confirmThreadUnpin,
       confirmQuit: DEFAULT_UNIFIED_SETTINGS.confirmQuit,
       textGenerationModelSelection: DEFAULT_UNIFIED_SETTINGS.textGenerationModelSelection,
+      imageViewerModelSelection: DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection,
+      contextCompactorModelSelection: DEFAULT_UNIFIED_SETTINGS.contextCompactorModelSelection,
+      skillCuratorModelSelection: DEFAULT_UNIFIED_SETTINGS.skillCuratorModelSelection,
+      memoryCuratorModelSelection: DEFAULT_UNIFIED_SETTINGS.memoryCuratorModelSelection,
+      delegationDefaultModelSelection: DEFAULT_UNIFIED_SETTINGS.delegationDefaultModelSelection,
       fontFamilySans: DEFAULT_UNIFIED_SETTINGS.fontFamilySans,
       fontFamilyComposer: DEFAULT_UNIFIED_SETTINGS.fontFamilyComposer,
       fontFamilyCode: DEFAULT_UNIFIED_SETTINGS.fontFamilyCode,
@@ -1105,6 +1370,13 @@ export function AppearanceSettingsPanel() {
     "--settings-slider-progress": `${panelAnimationDurationRatio * 100}%`,
     "--settings-slider-fill-offset": `${0.5 - panelAnimationDurationRatio}rem`,
   } as CSSProperties;
+  const harnessSoundVolumeRatio =
+    (settings.harnessSoundVolume - MIN_HARNESS_SOUND_VOLUME) /
+    (MAX_HARNESS_SOUND_VOLUME - MIN_HARNESS_SOUND_VOLUME);
+  const harnessSoundVolumeSliderStyle = {
+    "--settings-slider-progress": `${harnessSoundVolumeRatio * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - harnessSoundVolumeRatio}rem`,
+  } as CSSProperties;
 
   return (
     <SettingsPageContainer>
@@ -1176,6 +1448,32 @@ export function AppearanceSettingsPanel() {
         />
 
         <SettingsRow
+          {...searchableSetting("glass-sidebar")}
+          description="Render the sidebar as a translucent glass panel over the window background. On Windows this reveals the desktop Acrylic material behind the app."
+          resetAction={
+            settings.glassSidebarEnabled !== DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled ? (
+              <SettingResetButton
+                label="glass sidebar"
+                onClick={() =>
+                  updateSettings({
+                    glassSidebarEnabled: DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.glassSidebarEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ glassSidebarEnabled: Boolean(checked) })
+              }
+              aria-label="Glass sidebar"
+            />
+          }
+        />
+
+        <SettingsRow
           {...searchableSetting("setting-glass-opacity")}
           description="Higher values make menus, dialogs, and the composer more solid."
           resetAction={
@@ -1216,6 +1514,54 @@ export function AppearanceSettingsPanel() {
                 style={glassOpacitySliderStyle}
                 type="range"
                 value={settings.glassOpacity}
+              />
+            </div>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("harness-sound-volume")}
+          description="Set the volume for harness errors, permission requests, questions, and completed turns."
+          resetAction={
+            settings.harnessSoundVolume !== DEFAULT_UNIFIED_SETTINGS.harnessSoundVolume ? (
+              <SettingResetButton
+                label="harness sound volume"
+                onClick={() =>
+                  updateSettings({
+                    harnessSoundVolume: DEFAULT_UNIFIED_SETTINGS.harnessSoundVolume,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="flex w-full items-center gap-3 sm:w-52">
+              <output
+                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                htmlFor="harness-sound-volume-control"
+              >
+                {settings.harnessSoundVolume}%
+              </output>
+              <input
+                aria-label="Harness sound volume"
+                className="settings-slider min-w-0 flex-1"
+                id="harness-sound-volume-control"
+                max={MAX_HARNESS_SOUND_VOLUME}
+                min={MIN_HARNESS_SOUND_VOLUME}
+                onChange={(event) => {
+                  const harnessSoundVolume = Number(event.currentTarget.value);
+                  if (
+                    Number.isInteger(harnessSoundVolume) &&
+                    harnessSoundVolume >= MIN_HARNESS_SOUND_VOLUME &&
+                    harnessSoundVolume <= MAX_HARNESS_SOUND_VOLUME
+                  ) {
+                    updateSettings({ harnessSoundVolume });
+                  }
+                }}
+                step={1}
+                style={harnessSoundVolumeSliderStyle}
+                type="range"
+                value={settings.harnessSoundVolume}
               />
             </div>
           }
@@ -2113,6 +2459,43 @@ export function GeneralSettingsPanel() {
     settings,
     textGenerationModelInstanceEntries,
   );
+  const imageViewerProviders = serverProviders.filter(
+    (provider) => provider.driver === CODEX_DRIVER_KIND,
+  );
+  const imageViewerModelSelection = resolveAppModelSelectionState(
+    {
+      ...settings,
+      textGenerationModelSelection: settings.imageViewerModelSelection,
+    },
+    imageViewerProviders,
+  );
+  const imageViewerInstanceId = imageViewerModelSelection.instanceId;
+  const imageViewerModel = imageViewerModelSelection.model;
+  const imageViewerModelOptions = imageViewerModelSelection.options;
+  const imageViewerInstanceEntries = textGenerationModelInstanceEntries.filter(
+    (entry) => entry.driverKind === CODEX_DRIVER_KIND,
+  );
+  const imageViewerInstanceEntry = imageViewerInstanceEntries.find(
+    (entry) => entry.instanceId === imageViewerInstanceId,
+  );
+  const imageViewerModelOptionsByInstance = getCustomModelOptionsByInstance(
+    settings,
+    imageViewerProviders,
+    imageViewerInstanceId,
+    imageViewerModel,
+  );
+  const isImageViewerModelDirty = !Equal.equals(
+    settings.imageViewerModelSelection ?? null,
+    DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection ?? null,
+  );
+  const usesDedicatedDiffReviewer = settings.diffReviewModelSelection !== null;
+  const diffReviewSelection = settings.diffReviewModelSelection ?? textGenerationModelSelection;
+  const diffReviewModelOptionsByInstance = getCustomModelOptionsByInstance(
+    settings,
+    serverProviders,
+    diffReviewSelection.instanceId,
+    diffReviewSelection.model,
+  );
   const resolvedBackgroundActivity = resolveServerBackgroundActivitySettings(settings);
   const activeBackgroundActivityProfile = resolvedBackgroundActivity.profile;
   const backgroundActivityProfileOption = resolveBackgroundActivityProfileOption(settings);
@@ -2568,6 +2951,46 @@ export function GeneralSettingsPanel() {
                 </SelectItem>
                 <SelectItem hideIndicator value="split">
                   {DIFF_LAYOUT_LABELS.split}
+                </SelectItem>
+              </SelectPopup>
+            </Select>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("diff-presentation")}
+          description="Choose whether chat shows the changed-files summary, the full inline patch, or the dedicated diff panel."
+          resetAction={
+            settings.diffPresentation !== DEFAULT_UNIFIED_SETTINGS.diffPresentation ? (
+              <SettingResetButton
+                label="diff presentation"
+                onClick={() =>
+                  updateSettings({ diffPresentation: DEFAULT_UNIFIED_SETTINGS.diffPresentation })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={settings.diffPresentation}
+              onValueChange={(value) => {
+                if (value === "summary" || value === "inline" || value === "panel") {
+                  updateSettings({ diffPresentation: value });
+                }
+              }}
+            >
+              <SelectTrigger size="sm" className="w-full sm:w-44" aria-label="Diff presentation">
+                <SelectValue>{DIFF_PRESENTATION_LABELS[settings.diffPresentation]}</SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectItem hideIndicator value="summary">
+                  {DIFF_PRESENTATION_LABELS.summary}
+                </SelectItem>
+                <SelectItem hideIndicator value="inline">
+                  {DIFF_PRESENTATION_LABELS.inline}
+                </SelectItem>
+                <SelectItem hideIndicator value="panel">
+                  {DIFF_PRESENTATION_LABELS.panel}
                 </SelectItem>
               </SelectPopup>
             </Select>
@@ -3221,6 +3644,250 @@ export function GeneralSettingsPanel() {
             )
           }
         />
+
+        {HARNESS_HELPER_SETTINGS_AVAILABLE ? (
+          <SettingsRow
+            serverScoped
+            settingKeys={["imageViewerModelSelection"]}
+            {...searchableSetting("image-viewer-model")}
+            description="Codex model used to interpret images for main models without vision support."
+            resetAction={
+              isImageViewerModelDirty ? (
+                <SettingResetButton
+                  label="image viewer model"
+                  onClick={() =>
+                    updateSettings({
+                      imageViewerModelSelection: DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection,
+                    })
+                  }
+                />
+              ) : null
+            }
+            control={
+              <div className="flex flex-wrap items-center justify-end gap-1.5">
+                <ProviderModelPicker
+                  environmentId={environmentId}
+                  activeInstanceId={imageViewerInstanceId}
+                  model={imageViewerModel}
+                  lockedProvider={CODEX_DRIVER_KIND}
+                  instanceEntries={imageViewerInstanceEntries}
+                  modelOptionsByInstance={imageViewerModelOptionsByInstance}
+                  triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
+                  onInstanceModelChange={(instanceId, model) => {
+                    updateSettings({
+                      imageViewerModelSelection: createModelSelection(instanceId, model),
+                    });
+                  }}
+                />
+                <TraitsPicker
+                  provider={CODEX_DRIVER_KIND}
+                  models={imageViewerInstanceEntry?.models ?? []}
+                  model={imageViewerModel}
+                  prompt=""
+                  onPromptChange={() => {}}
+                  modelOptions={imageViewerModelOptions}
+                  allowPromptInjectedEffort={false}
+                  planModeEnabled={
+                    settings.planModeEnabled || selectsPlanAgent(imageViewerModelOptions)
+                  }
+                  triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
+                  onModelOptionsChange={(nextOptions) => {
+                    updateSettings({
+                      imageViewerModelSelection: createModelSelection(
+                        imageViewerInstanceId,
+                        imageViewerModel,
+                        nextOptions,
+                      ),
+                    });
+                  }}
+                />
+              </div>
+            }
+          />
+        ) : null}
+
+        <SettingsRow
+          title="Show provider thinking"
+          description="Show normalized reasoning and thinking traces in chat. Tool calls remain visible when this is off."
+          control={
+            <Switch
+              checked={settings.showThinkingTraces}
+              onCheckedChange={(checked) =>
+                updateSettings({ showThinkingTraces: Boolean(checked) })
+              }
+              aria-label="Show provider thinking traces"
+            />
+          }
+        />
+
+        <SettingsRow
+          serverScoped
+          settingKeys={["diffReviewModelSelection"]}
+          title="Diff review agent"
+          description="Optional model used by the read-only Review changes action in chat. Off uses the global text generation model."
+          control={
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              {usesDedicatedDiffReviewer ? (
+                <>
+                  <ProviderModelPicker
+                    environmentId={environmentId}
+                    activeInstanceId={diffReviewSelection.instanceId}
+                    model={diffReviewSelection.model}
+                    lockedProvider={null}
+                    instanceEntries={textGenerationModelInstanceEntries}
+                    modelOptionsByInstance={diffReviewModelOptionsByInstance}
+                    triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
+                    triggerAriaLabel="Diff review agent model"
+                    onInstanceModelChange={(instanceId, model) => {
+                      const existing = settings.diffReviewModelSelection;
+                      updateSettings({
+                        diffReviewModelSelection:
+                          existing && existing.instanceId === instanceId
+                            ? createModelSelection(instanceId, model, existing.options)
+                            : createModelSelection(instanceId, model),
+                      });
+                    }}
+                  />
+                  <TraitsPicker
+                    provider={
+                      textGenerationModelInstanceEntries.find(
+                        (entry) => entry.instanceId === diffReviewSelection.instanceId,
+                      )?.driverKind ?? DEFAULT_DRIVER_KIND
+                    }
+                    models={
+                      textGenerationModelInstanceEntries.find(
+                        (entry) => entry.instanceId === diffReviewSelection.instanceId,
+                      )?.models ?? []
+                    }
+                    model={diffReviewSelection.model}
+                    prompt=""
+                    onPromptChange={() => {}}
+                    modelOptions={diffReviewSelection.options}
+                    allowPromptInjectedEffort={false}
+                    planModeEnabled={
+                      settings.planModeEnabled || selectsPlanAgent(diffReviewSelection.options)
+                    }
+                    triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
+                    onModelOptionsChange={(nextOptions) =>
+                      updateSettings({
+                        diffReviewModelSelection: createModelSelection(
+                          diffReviewSelection.instanceId,
+                          diffReviewSelection.model,
+                          nextOptions,
+                        ),
+                      })
+                    }
+                  />
+                </>
+              ) : null}
+              <Switch
+                checked={usesDedicatedDiffReviewer}
+                onCheckedChange={(checked) =>
+                  updateSettings({
+                    diffReviewModelSelection: checked
+                      ? createModelSelection(
+                          textGenerationModelSelection.instanceId,
+                          textGenerationModelSelection.model,
+                          textGenerationModelSelection.options,
+                        )
+                      : null,
+                  })
+                }
+                aria-label="Use a separate diff review agent"
+              />
+            </div>
+          }
+        />
+
+        <AgentPresetsSettings
+          settings={settings}
+          currentSelection={textGenerationModelSelection}
+          updateSettings={(patch) => updateSettings(patch)}
+        />
+
+        {HARNESS_HELPER_SETTINGS_AVAILABLE ? (
+          <>
+            <HarnessHelperModelRow
+              environmentId={environmentId}
+              settingKey="contextCompactorModelSelection"
+              title="Context compactor"
+              description="Optional lower-cost model for summarizing context when a provider exposes harness-owned compaction."
+              selection={settings.contextCompactorModelSelection}
+              settings={settings}
+              providers={serverProviders}
+              instanceEntries={textGenerationModelInstanceEntries}
+              fallbackSelection={textGenerationModelSelection}
+              onSelectionChange={(selection) =>
+                updateSettings({ contextCompactorModelSelection: selection })
+              }
+            />
+            <HarnessHelperModelRow
+              environmentId={environmentId}
+              settingKey="skillCuratorModelSelection"
+              title="Skill curator"
+              description="Optional model used only after a detected reusable workflow to draft a staged skill proposal."
+              selection={settings.skillCuratorModelSelection}
+              settings={settings}
+              providers={serverProviders}
+              instanceEntries={textGenerationModelInstanceEntries}
+              fallbackSelection={textGenerationModelSelection}
+              onSelectionChange={(selection) =>
+                updateSettings({ skillCuratorModelSelection: selection })
+              }
+            />
+            <HarnessHelperModelRow
+              environmentId={environmentId}
+              settingKey="memoryCuratorModelSelection"
+              title="Memory curator"
+              description="Optional model used only for approved or triggered memory proposals."
+              selection={settings.memoryCuratorModelSelection}
+              settings={settings}
+              providers={serverProviders}
+              instanceEntries={textGenerationModelInstanceEntries}
+              fallbackSelection={textGenerationModelSelection}
+              onSelectionChange={(selection) =>
+                updateSettings({ memoryCuratorModelSelection: selection })
+              }
+            />
+            <HarnessHelperModelRow
+              environmentId={environmentId}
+              settingKey="delegationDefaultModelSelection"
+              title="Delegation default"
+              description="Optional model selection for isolated delegated tasks when the selected provider supports them."
+              selection={settings.delegationDefaultModelSelection}
+              settings={settings}
+              providers={serverProviders}
+              instanceEntries={textGenerationModelInstanceEntries}
+              fallbackSelection={textGenerationModelSelection}
+              onSelectionChange={(selection) =>
+                updateSettings({ delegationDefaultModelSelection: selection })
+              }
+            />
+
+            <SettingsRow
+              serverScoped
+              settingKeys={["sealsInstructions"]}
+              title="Seals.md harness rules"
+              description="Persistent instructions included at the start of every provider turn, similar to global user rules."
+            >
+              <div className="mt-3 w-full pb-3.5">
+                <Textarea
+                  key={settings.sealsInstructions}
+                  defaultValue={settings.sealsInstructions}
+                  onBlur={(event) => {
+                    const sealsInstructions = event.target.value.trim();
+                    if (sealsInstructions !== settings.sealsInstructions) {
+                      updateSettings({ sealsInstructions });
+                    }
+                  }}
+                  rows={7}
+                  placeholder="Use concise answers. Run focused tests after edits."
+                  aria-label="Seals.md harness rules"
+                />
+              </div>
+            </SettingsRow>
+          </>
+        ) : null}
       </SettingsSection>
 
       <SettingsSection id="about" title="About">
@@ -3292,7 +3959,26 @@ export function GeneralSettingsPanel() {
 
 export function ArchivedThreadsPanel() {
   const { scope, groups: projectGroups, environments } = useSettingsScope();
-  const { unarchiveThread, confirmAndDeleteThread } = useThreadActions();
+  const { unarchiveThread, deleteThread } = useThreadActions();
+  const confirmThreadDelete = useClientSettings((settings) => settings.confirmThreadDelete);
+  const {
+    requestDeleteConfirmation,
+    requestConfirmation: requestWorktreeConfirmation,
+    deleteConfirmDialog,
+  } = useThreadDeleteConfirmation();
+  const confirmWorktreeDeletion = ({ path }: { path: string }) =>
+    requestWorktreeConfirmation({
+      title: "linked worktree",
+      count: 1,
+      single: true,
+      heading: "Delete linked worktree?",
+      description: [
+        "This thread is the only one linked to this worktree:",
+        path,
+        "",
+        "Delete the worktree too?",
+      ].join("\n"),
+    });
   const {
     snapshots: archivedSnapshots,
     error: archiveError,
@@ -3392,8 +4078,25 @@ export function ArchivedThreadsPanel() {
     return { groups: sortedGroups, hasMultipleEnvironments };
   })();
 
+  const deleteArchivedThread = async (threadRef: ScopedThreadRef) => {
+    const result = await deleteThread(threadRef, { confirmWorktreeDeletion });
+    if (result._tag === "Success") {
+      refreshArchivedThreads();
+    } else if (!isAtomCommandInterrupted(result)) {
+      const error = squashAtomCommandFailure(result);
+      toastManager.add(
+        stackedThreadToast({
+          type: "error",
+          title: "Failed to delete thread",
+          description: error instanceof Error ? error.message : "An error occurred.",
+        }),
+      );
+    }
+  };
+
   const handleArchivedThreadContextMenu = async (
     threadRef: ScopedThreadRef,
+    title: string,
     position: { x: number; y: number },
   ) => {
     const api = readLocalApi();
@@ -3424,134 +4127,135 @@ export function ArchivedThreadsPanel() {
     }
 
     if (clicked === "delete") {
-      const result = await confirmAndDeleteThread(threadRef);
-      if (result._tag === "Success") {
-        refreshArchivedThreads();
-      } else if (!isAtomCommandInterrupted(result)) {
-        const error = squashAtomCommandFailure(result);
-        toastManager.add(
-          stackedThreadToast({
-            type: "error",
-            title: "Failed to delete thread",
-            description: error instanceof Error ? error.message : "An error occurred.",
-          }),
-        );
+      if (confirmThreadDelete) {
+        requestDeleteConfirmation({
+          title,
+          count: 1,
+          single: true,
+          onConfirm: () => deleteArchivedThread(threadRef),
+        });
+        return;
       }
+      await deleteArchivedThread(threadRef);
     }
   };
 
   return (
-    <SettingsPageContainer>
-      {archivedGroups.length === 0 ? (
-        <SettingsSection
-          id={isLoadingArchive ? undefined : searchableSetting("archive").id}
-          title={searchableSetting("archive").title}
-        >
-          <SettingsRow
-            title={
-              <span className="inline-flex items-center gap-2">
-                {isLoadingArchive ? (
-                  <Spinner size="sm" tone="muted" />
-                ) : (
-                  <ArchiveIcon className="size-3.5 text-muted-foreground" />
-                )}
-                {isLoadingArchive
-                  ? "Loading archived threads"
-                  : archiveError
-                    ? "Could not load archived threads"
-                    : "No archived threads"}
-              </span>
-            }
-            description={
-              isLoadingArchive
-                ? "Checking connected environments."
-                : (archiveError ?? "Archived threads will appear here.")
-            }
-          />
-        </SettingsSection>
-      ) : (
-        archivedGroups.map(({ key, project, title, threads: projectThreads }, index) => (
+    <>
+      <SettingsPageContainer>
+        {archivedGroups.length === 0 ? (
           <SettingsSection
-            key={key}
-            id={index === 0 ? searchableSetting("archive").id : undefined}
-            title={title}
-            icon={<ProjectFavicon project={project} />}
+            id={isLoadingArchive ? undefined : searchableSetting("archive").id}
+            title={searchableSetting("archive").title}
           >
-            {projectThreads.map((thread) => (
-              <SettingsRow
-                key={`${thread.environmentId}:${thread.id}`}
-                onContextMenu={(event) => {
-                  event.preventDefault();
-                  void (async () => {
-                    const result = await settlePromise(() =>
-                      handleArchivedThreadContextMenu(
-                        scopeThreadRef(thread.environmentId, thread.id),
-                        {
-                          x: event.clientX,
-                          y: event.clientY,
-                        },
-                      ),
-                    );
-                    if (result._tag === "Failure") {
-                      const error = squashAtomCommandFailure(result);
-                      toastManager.add(
-                        stackedThreadToast({
-                          type: "error",
-                          title: "Archived thread action failed",
-                          description:
-                            error instanceof Error ? error.message : "An error occurred.",
-                        }),
-                      );
-                    }
-                  })();
-                }}
-                title={thread.title}
-                description={
-                  <span className={hasMultipleEnvironments ? "block truncate" : undefined}>
-                    {hasMultipleEnvironments ? `${thread.environmentLabel} · ` : null}
-                    Archived {formatRelativeTimeLabel(thread.archivedAt ?? thread.createdAt)}
-                    {" \u00b7 Created "}
-                    {formatRelativeTimeLabel(thread.createdAt)}
-                  </span>
-                }
-                control={
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="xs"
-                    className="shrink-0"
-                    onClick={() => {
-                      void (async () => {
-                        const result = await unarchiveThread(
-                          scopeThreadRef(thread.environmentId, thread.id),
-                        );
-                        if (result._tag === "Success") {
-                          refreshArchivedThreads();
-                          return;
-                        }
-                        if (!isAtomCommandInterrupted(result)) {
-                          const error = squashAtomCommandFailure(result);
-                          toastManager.add(
-                            stackedThreadToast({
-                              type: "error",
-                              title: "Failed to unarchive thread",
-                              description:
-                                error instanceof Error ? error.message : "An error occurred.",
-                            }),
-                          );
-                        }
-                      })();
-                    }}
-                  >
-                    <ArchiveX className="size-3.5" />
-                    <span>Unarchive</span>
-                  </Button>
-                }
-              />
-            ))}
+            <SettingsRow
+              title={
+                <span className="inline-flex items-center gap-2">
+                  {isLoadingArchive ? (
+                    <Spinner size="sm" tone="muted" />
+                  ) : (
+                    <ArchiveIcon className="size-3.5 text-muted-foreground" />
+                  )}
+                  {isLoadingArchive
+                    ? "Loading archived threads"
+                    : archiveError
+                      ? "Could not load archived threads"
+                      : "No archived threads"}
+                </span>
+              }
+              description={
+                isLoadingArchive
+                  ? "Checking connected environments."
+                  : (archiveError ?? "Archived threads will appear here.")
+              }
+            />
           </SettingsSection>
-        ))
-      )}
-    </SettingsPageContainer>
+        ) : (
+          archivedGroups.map(({ key, project, title, threads: projectThreads }, index) => (
+            <SettingsSection
+              key={key}
+              id={index === 0 ? searchableSetting("archive").id : undefined}
+              title={title}
+              icon={<ProjectFavicon project={project} />}
+            >
+              {projectThreads.map((thread) => (
+                <SettingsRow
+                  key={`${thread.environmentId}:${thread.id}`}
+                  onContextMenu={(event) => {
+                    event.preventDefault();
+                    void (async () => {
+                      const result = await settlePromise(() =>
+                        handleArchivedThreadContextMenu(
+                          scopeThreadRef(thread.environmentId, thread.id),
+                          thread.title,
+                          {
+                            x: event.clientX,
+                            y: event.clientY,
+                          },
+                        ),
+                      );
+                      if (result._tag === "Failure") {
+                        const error = squashAtomCommandFailure(result);
+                        toastManager.add(
+                          stackedThreadToast({
+                            type: "error",
+                            title: "Archived thread action failed",
+                            description:
+                              error instanceof Error ? error.message : "An error occurred.",
+                          }),
+                        );
+                      }
+                    })();
+                  }}
+                  title={thread.title}
+                  description={
+                    <span className={hasMultipleEnvironments ? "block truncate" : undefined}>
+                      {hasMultipleEnvironments ? `${thread.environmentLabel} · ` : null}
+                      Archived {formatRelativeTimeLabel(thread.archivedAt ?? thread.createdAt)}
+                      {" \u00b7 Created "}
+                      {formatRelativeTimeLabel(thread.createdAt)}
+                    </span>
+                  }
+                  control={
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      className="shrink-0"
+                      onClick={() => {
+                        void (async () => {
+                          const result = await unarchiveThread(
+                            scopeThreadRef(thread.environmentId, thread.id),
+                          );
+                          if (result._tag === "Success") {
+                            refreshArchivedThreads();
+                            return;
+                          }
+                          if (!isAtomCommandInterrupted(result)) {
+                            const error = squashAtomCommandFailure(result);
+                            toastManager.add(
+                              stackedThreadToast({
+                                type: "error",
+                                title: "Failed to unarchive thread",
+                                description:
+                                  error instanceof Error ? error.message : "An error occurred.",
+                              }),
+                            );
+                          }
+                        })();
+                      }}
+                    >
+                      <ArchiveX className="size-3.5" />
+                      <span>Unarchive</span>
+                    </Button>
+                  }
+                />
+              ))}
+            </SettingsSection>
+          ))
+        )}
+      </SettingsPageContainer>
+      {deleteConfirmDialog}
+    </>
   );
 }

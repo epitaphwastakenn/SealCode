@@ -3753,6 +3753,30 @@ describe("v2 run and attempt history", () => {
       expect.objectContaining({ id: "work-1" }),
       expect.objectContaining({ id: "provider-recovered" }),
     ]);
+
+    expect(foldRow?.summary).toMatchObject({
+      state: "completed",
+      toolCallCount: 1,
+      assistantResponseCount: 2,
+      agentCount: 0,
+      changedFileCount: null,
+    });
+
+    const commentaryVisibleRows = deriveMessagesTimelineRows({
+      timelineEntries,
+      isWorking: false,
+      preserveAssistantCommentary: true,
+      turnDiffSummaries: [],
+      supportsConversationRollback: false,
+    });
+    // The fold header moves down to where the hidden work starts.
+    expect(commentaryVisibleRows.map((row) => row.id)).toEqual([
+      "user-entry",
+      "assistant-thought-entry",
+      "turn-fold:turn-1",
+      "thread-created-entry",
+      "assistant-final-entry",
+    ]);
   });
   it("hides subagents in folded turns when they arrive before commentary", () => {
     const timelineEntries = [

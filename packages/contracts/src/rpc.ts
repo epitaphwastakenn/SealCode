@@ -22,6 +22,12 @@ import {
   ChatGptHandoffState,
 } from "./providerSetup.ts";
 import * as Schema from "effect/Schema";
+import { GlobalMcpStatus, GlobalMcpStatusUpdatedEvent, McpServerId } from "./mcp.ts";
+import {
+  ServerVoiceTranscriptionInput,
+  ServerVoiceTranscriptionResult,
+  VoiceTranscriptionError,
+} from "./voice.ts";
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
@@ -391,6 +397,7 @@ export const WS_METHODS = {
   agentSessionsScan: "agentSessions.scan",
   agentSessionsImport: "agentSessions.import",
   assetsCreateUrl: "assets.createUrl",
+  voiceTranscribe: "voice.transcribe",
   assetsPersistChatAttachments: "assets.persistChatAttachments",
   attachmentsCreateUploadUrl: "attachments.createUploadUrl",
   attachmentsDelete: "attachments.delete",
@@ -465,6 +472,8 @@ export const WS_METHODS = {
   serverProbe: "server.probe",
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
+  serverGetMcpStatuses: "server.getMcpStatuses",
+  serverReconnectMcp: "server.reconnectMcp",
   serverUpdateProvider: "server.updateProvider",
   serverUpdateServer: "server.updateServer",
   serverUpdateServerWithProgress: "server.updateServerWithProgress",
@@ -566,6 +575,7 @@ export const WS_METHODS = {
   subscribeDiscoveredLocalServers: "subscribeDiscoveredLocalServers",
   subscribeDeviceState: "subscribeDeviceState",
   subscribeServerConfig: "subscribeServerConfig",
+  subscribeMcpStatus: "subscribeMcpStatus",
   subscribeServerLifecycle: "subscribeServerLifecycle",
   subscribeAuthAccess: "subscribeAuthAccess",
   subscribeBackgroundPolicy: "subscribeBackgroundPolicy",
@@ -1271,6 +1281,31 @@ const WsAgentSessionsImportRpc = Rpc.make(WS_METHODS.agentSessionsImport, {
   ]),
 });
 
+export const WsVoiceTranscribeRpc = Rpc.make(WS_METHODS.voiceTranscribe, {
+  payload: ServerVoiceTranscriptionInput,
+  success: ServerVoiceTranscriptionResult,
+  error: Schema.Union([VoiceTranscriptionError, EnvironmentAuthorizationError]),
+});
+
+export const WsServerGetMcpStatusesRpc = Rpc.make(WS_METHODS.serverGetMcpStatuses, {
+  payload: Schema.Struct({}),
+  success: Schema.Array(GlobalMcpStatus),
+  error: EnvironmentAuthorizationError,
+});
+
+export const WsServerReconnectMcpRpc = Rpc.make(WS_METHODS.serverReconnectMcp, {
+  payload: Schema.Struct({ id: McpServerId }),
+  success: Schema.Array(GlobalMcpStatus),
+  error: EnvironmentAuthorizationError,
+});
+
+export const WsSubscribeMcpStatusRpc = Rpc.make(WS_METHODS.subscribeMcpStatus, {
+  payload: Schema.Struct({}),
+  success: GlobalMcpStatusUpdatedEvent,
+  error: EnvironmentAuthorizationError,
+  stream: true,
+});
+
 const WsAssetsCreateUrlRpc = Rpc.make(WS_METHODS.assetsCreateUrl, {
   payload: AssetCreateUrlInput,
   success: AssetCreateUrlResult,
@@ -1850,6 +1885,10 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 ) {}
 
 export const WsRpcGroup = RpcGroup.make(
+  WsVoiceTranscribeRpc,
+  WsServerGetMcpStatusesRpc,
+  WsServerReconnectMcpRpc,
+  WsSubscribeMcpStatusRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,

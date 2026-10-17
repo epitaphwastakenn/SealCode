@@ -2010,6 +2010,7 @@ function PullRequestsRouteView() {
             onAddBrowserInProfile={() => undefined}
             onAddTerminal={() => undefined}
             onAddDiff={() => undefined}
+            onAddDiffCenter={() => undefined}
             onAddFiles={() => undefined}
             onAddPullRequest={() => undefined}
             onAddPullRequests={() => undefined}
@@ -2017,6 +2018,7 @@ function PullRequestsRouteView() {
             browserAvailable={false}
             terminalAvailable={false}
             diffAvailable={false}
+            diffCenterAvailable={false}
             filesAvailable={false}
             pullRequestAvailable={false}
             pullRequestsAvailable={false}

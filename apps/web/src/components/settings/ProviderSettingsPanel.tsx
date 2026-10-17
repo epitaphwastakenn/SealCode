@@ -1039,6 +1039,19 @@ export function EnvironmentProviderSettings({
               : undefined,
           );
         }}
+        fallbackInstances={
+          mode === "editor"
+            ? rows
+                .filter((candidate) => candidate.instanceId !== row.instanceId)
+                .map((candidate) => ({
+                  instanceId: candidate.instanceId,
+                  displayName:
+                    candidate.instance.displayName?.trim() ||
+                    providerClients.get(candidate.driver)?.label ||
+                    String(candidate.instanceId),
+                }))
+            : undefined
+        }
         onDelete={
           mode === "editor" && !row.isDefault ? () => deleteProviderInstance(row) : undefined
         }

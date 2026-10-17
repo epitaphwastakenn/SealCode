@@ -10,12 +10,15 @@ import {
   type PersistedUiState,
   persistState,
   reorderProjects,
+  reorderThreads,
   resolveProjectExpanded,
   setDefaultAdvertisedEndpointKey,
+  setLastOpenThreadRoute,
   setProjectExpanded,
   setProjectPinned,
   setSidebarProjectScopeKey,
   setThreadChangedFilesExpanded,
+  setTimelineTurnExpanded,
   type UiState,
 } from "./uiStateStore";
 
@@ -25,10 +28,13 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     projectOrder: [],
     pinnedProjectKeys: [],
     sidebarProjectScopeKey: null,
+    threadOrderByGroup: {},
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
+    timelineExpandedTurnIdsByThread: {},
     defaultAdvertisedEndpointKey: null,
     pullRequestMergeMethod: "merge",
+    lastOpenThreadRoute: null,
     ...overrides,
   };
 }
@@ -86,6 +92,14 @@ describe("uiStateStore pure functions", () => {
     expect(setProjectExpanded(next, keys, false)).toBe(next);
   });
 
+  it("pins and unpins logical project groups", () => {
+    const pinned = setProjectPinned(makeUiState(), "logical-project", true);
+
+    expect(pinned.pinnedProjectKeys).toEqual(["logical-project"]);
+    expect(setProjectPinned(pinned, "logical-project", true)).toBe(pinned);
+    expect(setProjectPinned(pinned, "logical-project", false).pinnedProjectKeys).toEqual([]);
+  });
+
   it("reorders from the current atom-derived project order", () => {
     const project1 = ProjectId.make("project-1");
     const project2 = ProjectId.make("project-2");
@@ -121,6 +135,25 @@ describe("uiStateStore pure functions", () => {
     );
   });
 
+  it("persists thread order within a project group", () => {
+    const state = makeUiState();
+
+    const next = reorderThreads(
+      state,
+      "repo",
+      ["thread-a", "thread-b", "thread-c"],
+      "thread-c",
+      "thread-a",
+    );
+
+    expect(next.threadOrderByGroup).toEqual({
+      repo: ["thread-c", "thread-a", "thread-b"],
+    });
+    expect(
+      reorderThreads(next, "repo", ["thread-c", "thread-a", "thread-b"], "thread-c", "thread-c"),
+    ).toBe(next);
+  });
+
   it("stores explicit changed-file expansion choices", () => {
     const threadId = ThreadId.make("thread-1");
     const collapsed = setThreadChangedFilesExpanded(makeUiState(), threadId, "turn-1", false);
@@ -140,6 +173,19 @@ describe("uiStateStore pure functions", () => {
     });
   });
 
+  it("stores and removes expanded timeline turns per thread", () => {
+    const expanded = setTimelineTurnExpanded(makeUiState(), "thread-1", "turn-1", true);
+
+    expect(expanded.timelineExpandedTurnIdsByThread).toEqual({
+      "thread-1": ["turn-1"],
+    });
+    expect(setTimelineTurnExpanded(expanded, "thread-1", "turn-1", true)).toBe(expanded);
+    expect(
+      setTimelineTurnExpanded(expanded, "thread-1", "turn-1", false)
+        .timelineExpandedTurnIdsByThread,
+    ).toEqual({});
+  });
+
   it("stores the endpoint preference by stable key", () => {
     const next = setDefaultAdvertisedEndpointKey(makeUiState(), "desktop-core:lan:http");
 
@@ -157,6 +203,23 @@ describe("uiStateStore pure functions", () => {
     expect(setSidebarProjectScopeKey(scoped, "github.com/pingdotgg/t3code")).toBe(scoped);
     expect(setSidebarProjectScopeKey(scoped, null).sidebarProjectScopeKey).toBeNull();
     expect(setSidebarProjectScopeKey(scoped, "").sidebarProjectScopeKey).toBeNull();
+  });
+
+  it("stores the last open thread route without rewriting equal values", () => {
+    const initialState = makeUiState();
+    const route = {
+      kind: "server" as const,
+      environmentId: "environment-local",
+      threadId: "thread-1",
+    };
+    const next = setLastOpenThreadRoute(initialState, route);
+
+    expect(next.lastOpenThreadRoute).toEqual(route);
+    expect(setLastOpenThreadRoute(next, route)).toBe(next);
+    expect(setLastOpenThreadRoute(next, { kind: "draft", draftId: "draft-1" })).toEqual({
+      ...next,
+      lastOpenThreadRoute: { kind: "draft", draftId: "draft-1" },
+    });
   });
 });
 
@@ -180,6 +243,7 @@ describe("parsePersistedState", () => {
         invalid: "no" as unknown as boolean,
       },
       projectOrder: ["physical-b", "", "physical-a", "physical-b"],
+      pinnedProjectKeys: ["logical-b", "", "logical-a", "logical-b"],
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
         invalid: "not-a-date",
@@ -192,6 +256,9 @@ describe("parsePersistedState", () => {
           "turn-2": true,
         },
       },
+      timelineExpandedTurnIdsByThread: {
+        "environment:thread-1": ["turn-1", "turn-2"],
+      },
     });
 
     expect(parsed).toEqual({
@@ -199,7 +266,8 @@ describe("parsePersistedState", () => {
         logical: false,
       },
       projectOrder: ["physical-b", "physical-a"],
-      pinnedProjectKeys: [],
+      pinnedProjectKeys: ["logical-b", "logical-a"],
+      threadOrderByGroup: {},
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
@@ -212,6 +280,10 @@ describe("parsePersistedState", () => {
           "turn-2": true,
         },
       },
+      timelineExpandedTurnIdsByThread: {
+        "environment:thread-1": ["turn-1", "turn-2"],
+      },
+      lastOpenThreadRoute: null,
     });
   });
 
@@ -300,6 +372,8 @@ describe("uiStateStore persistence", () => {
         logical: false,
       },
       projectOrder: ["physical-b", "physical-a"],
+      pinnedProjectKeys: ["logical-b"],
+      threadOrderByGroup: {},
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
@@ -308,6 +382,9 @@ describe("uiStateStore persistence", () => {
           "turn-1": false,
           "turn-2": true,
         },
+      },
+      timelineExpandedTurnIdsByThread: {
+        "environment:thread-1": ["turn-1", "turn-2"],
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
     });
@@ -322,7 +399,8 @@ describe("uiStateStore persistence", () => {
         logical: false,
       },
       projectOrder: ["physical-b", "physical-a"],
-      pinnedProjectKeys: [],
+      pinnedProjectKeys: ["logical-b"],
+      threadOrderByGroup: {},
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
@@ -336,6 +414,10 @@ describe("uiStateStore persistence", () => {
         },
       },
       pullRequestMergeMethod: "merge",
+      timelineExpandedTurnIdsByThread: {
+        "environment:thread-1": ["turn-1", "turn-2"],
+      },
+      lastOpenThreadRoute: null,
     });
     expect(parsePersistedState(persisted)).toEqual({
       ...state,
@@ -352,6 +434,33 @@ describe("uiStateStore persistence", () => {
     expect(parsePersistedState(persisted).sidebarProjectScopeKey).toBe(
       "github.com/pingdotgg/t3code",
     );
+  });
+
+  it("round-trips the last open thread route and drops invalid values", () => {
+    const state = makeUiState({
+      lastOpenThreadRoute: {
+        kind: "server",
+        environmentId: "environment-local",
+        threadId: "thread-1",
+      },
+    });
+
+    persistState(state);
+
+    const persisted = JSON.parse(
+      localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
+    ) as PersistedUiState;
+    expect(persisted.lastOpenThreadRoute).toEqual({
+      kind: "server",
+      environmentId: "environment-local",
+      threadId: "thread-1",
+    });
+    expect(parsePersistedState(persisted).lastOpenThreadRoute).toEqual(state.lastOpenThreadRoute);
+    expect(
+      parsePersistedState({
+        lastOpenThreadRoute: { kind: "server", environmentId: "", threadId: "thread-1" },
+      }).lastOpenThreadRoute,
+    ).toBeNull();
   });
 
   it("drops the temporary expanded-only migration fallback when rewriting state", () => {

@@ -2,6 +2,7 @@ import {
   AntigravitySettings,
   ClaudeSettings,
   CodexSettings,
+  type McpSecretField,
   type ServerSettings,
   UsageLimitSourceConfig,
   secretSettingsFields,
@@ -50,6 +51,8 @@ export interface SettingsSecret {
   readonly sensitive: boolean;
   readonly providerInstanceId?: string;
   readonly environmentVariable?: string;
+  readonly mcpServerId?: string;
+  readonly mcpFieldName?: string;
 }
 
 type SecretValue = Pick<SettingsSecret, "value" | "redacted">;
@@ -136,6 +139,41 @@ export function mapSettingsSecrets(
     ]),
   ) as ServerSettings["sourceControlHosts"];
 
+  // Names match what SealCode 1.x stored, so existing MCP secrets keep resolving.
+  const mapMcpFields = (
+    serverId: string,
+    kind: "env" | "header",
+    fields: ReadonlyArray<McpSecretField>,
+  ) =>
+    fields.map((field) => {
+      const result = map({
+        secretName: `mcp-server-${encode(serverId)}-${kind}-${encode(field.name)}`,
+        kind: "environment",
+        value: field.value,
+        redacted: field.valueRedacted === true,
+        sensitive: field.sensitive,
+        mcpServerId: serverId,
+        mcpFieldName: field.name,
+      });
+      const { valueRedacted: _omit, ...rest } = field;
+      return {
+        ...rest,
+        value: result.value,
+        ...(result.redacted ? { valueRedacted: true } : {}),
+      };
+    });
+
+  const mcpServers = Object.fromEntries(
+    Object.entries(settings.mcpServers).map(([serverId, server]) => [
+      serverId,
+      {
+        ...server,
+        env: mapMcpFields(serverId, "env", server.env),
+        headers: mapMcpFields(serverId, "header", server.headers),
+      },
+    ]),
+  );
+
   const usageLimitSources = Object.fromEntries(
     Object.entries(settings.usageLimitSources).map(([id, source]) => [
       id,
@@ -151,5 +189,5 @@ export function mapSettingsSecrets(
     ]),
   ) as ServerSettings["usageLimitSources"];
 
-  return { ...settings, providerInstances, sourceControlHosts, usageLimitSources };
+  return { ...settings, providerInstances, mcpServers, sourceControlHosts, usageLimitSources };
 }

@@ -35,6 +35,13 @@ function recordEffect(action: string) {
 }
 
 vi.mock("../components/CustomSnoozeDialog", () => ({ requestCustomSnooze: vi.fn() }));
+vi.mock("../components/threadActionMenu", () => ({
+  useThreadDeleteConfirmation: () => ({
+    requestDeleteConfirmation: () => recordEffect("confirm"),
+    requestConfirmation: async () => false,
+    deleteConfirmDialog: null,
+  }),
+}));
 vi.mock("react", () => ({
   useCallback: (callback: unknown) => callback,
   useMemo: (factory: () => unknown) => factory(),

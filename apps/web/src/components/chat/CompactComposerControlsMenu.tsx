@@ -84,7 +84,7 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
           }}
         >
           {props.runtimeModeOptions.map((option) => (
-            <MenuRadioItem key={option.mode} value={option.mode}>
+            <MenuRadioItem key={option.mode} value={option.mode} data-runtime-mode={option.mode}>
               {option.label}
             </MenuRadioItem>
           ))}

@@ -679,6 +679,34 @@ describe("CodexAdapterV2 process spawning", () => {
     );
   });
 
+  it("adds the global MCP gateway beside the t3-code server", () => {
+    const threadId = ThreadId.make("thread-codex-mcp-global");
+    const params = CodexAdapterV2.codexThreadRuntimeParams({
+      mcpSession: {
+        environmentId: EnvironmentId.make("environment-codex-mcp-global"),
+        threadId,
+        providerSessionId: "mcp-session-codex-global",
+        providerInstanceId: ProviderInstanceId.make("codex"),
+        endpoint: "http://127.0.0.1:43123/mcp",
+        globalEndpoint: "http://127.0.0.1:43123/mcp/global",
+        authorizationHeader: "Bearer secret-codex-token",
+        browserToolsAvailable: true,
+      },
+    });
+
+    assert.deepEqual(params.config.mcp_servers, {
+      "t3-code": {
+        url: "http://127.0.0.1:43123/mcp",
+        tool_timeout_sec: 3_900,
+        http_headers: { Authorization: "Bearer secret-codex-token" },
+      },
+      "sealcode-global": {
+        url: "http://127.0.0.1:43123/mcp/global",
+        http_headers: { Authorization: "Bearer secret-codex-token" },
+      },
+    });
+  });
+
   it.effect("resolves Windows command shims through the shared spawn policy", () =>
     Effect.gen(function* () {
       const command = yield* CodexAdapterV2.makeCodexAppServerSpawnCommand({

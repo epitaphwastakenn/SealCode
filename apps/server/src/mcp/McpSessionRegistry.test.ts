@@ -43,6 +43,7 @@ it.effect("stores only a token hash, resolves the bearer token, and revokes by t
       capabilities: new Set(["preview"]),
     });
     expect(issued.config.endpoint).toBe("http://127.0.0.1:43123/mcp");
+    expect(issued.config.globalEndpoint).toBe("http://127.0.0.1:43123/mcp/global");
     const token = issued.config.authorizationHeader.replace(/^Bearer\s+/, "");
     expect(token.length).toBeGreaterThan(20);
 

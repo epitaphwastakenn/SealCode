@@ -972,6 +972,27 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
               },
             }),
           );
+          const globalEndpoint = mcpSession.globalEndpoint;
+          if (globalEndpoint !== undefined) {
+            yield* OpenCodeRuntime.runOpenCodeSdk("mcp.add", () =>
+              client.mcp.add({
+                name: "sealcode-global",
+                config: {
+                  type: "remote",
+                  url: globalEndpoint,
+                  headers: { Authorization: mcpSession.authorizationHeader },
+                  oauth: false,
+                },
+              }),
+            ).pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning(
+                  "Could not add SealCode's global MCP gateway to OpenCode.",
+                  cause,
+                ),
+              ),
+            );
+          }
         }
 
         const now = yield* DateTime.now;

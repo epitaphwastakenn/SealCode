@@ -1273,6 +1273,24 @@ export function createServerEnvironmentAtoms<R, E>(
         key: ({ environmentId, input }) => `${environmentId}:${input.instanceId}`,
       },
     }),
+    mcpStatuses: createEnvironmentRpcQueryAtomFamily(runtime, {
+      label: "environment-data:server:mcp-statuses",
+      tag: WS_METHODS.serverGetMcpStatuses,
+      staleTimeMs: 0,
+    }),
+    mcpStatusUpdates: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:server:mcp-status-updates",
+      tag: WS_METHODS.subscribeMcpStatus,
+      idleTtlMs: 0,
+    }),
+    reconnectMcp: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:reconnect-mcp",
+      tag: WS_METHODS.serverReconnectMcp,
+      concurrency: {
+        mode: "singleFlight",
+        key: ({ environmentId, input }) => `${environmentId}:${input.id}`,
+      },
+    }),
     signalProcess: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:signal-process",
       tag: WS_METHODS.serverSignalProcess,
@@ -1338,6 +1356,10 @@ export function createServerEnvironmentAtoms<R, E>(
         mode: "singleFlight",
         key: ({ environmentId }) => environmentId,
       },
+    }),
+    transcribeVoice: createEnvironmentRpcCommand(runtime, {
+      label: "environment-data:server:transcribe-voice",
+      tag: WS_METHODS.voiceTranscribe,
     }),
   };
 }

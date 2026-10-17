@@ -30,12 +30,11 @@ function describeUnavailableInstance(entry: ProviderInstanceEntry): string {
 const SELECTION_CLASS =
   "pointer-events-none absolute inset-x-0 top-0 motion-reduce:transition-none";
 const SELECTION_TRANSITION_CLASS = "transition-[translate,height] duration-300 ease-drawer";
-const SELECTION_TILE_CLASS =
-  "absolute inset-y-0 left-1 right-1 rounded-md bg-background shadow-xs ring-1 ring-border/60";
+const SELECTION_TILE_CLASS = "absolute inset-y-0 left-1 right-1 rounded-lg bg-primary/15";
 const SELECTION_BAR_CLASS =
-  "absolute right-0 top-1/2 h-5 w-0.75 -translate-y-1/2 rounded-l-full bg-primary";
+  "absolute right-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-l-full bg-primary shadow-xs";
 const RAIL_BUTTON_CLASS =
-  "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded-md transition-[background-color,scale] duration-150 hover:bg-foreground/10 focus-visible:bg-foreground/10 focus-visible:outline-none active:scale-94 motion-reduce:active:scale-100";
+  "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded-lg text-muted-foreground transition-[background-color,color,scale] duration-150 hover:bg-muted/70 hover:text-foreground focus-visible:bg-muted/70 focus-visible:outline-none active:scale-94 motion-reduce:active:scale-100";
 const BADGE_BASE_CLASS =
   "pointer-events-none absolute -right-0.5 top-0.5 z-10 flex size-3.5 items-center justify-center rounded-full bg-transparent shadow-sm ";
 const NEW_BADGE_CLASS = `${BADGE_BASE_CLASS} text-update-foreground `;
@@ -86,7 +85,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
 
   return (
     <Toolbar.Root
-      className="w-11 shrink-0 overflow-hidden bg-muted/30"
+      className="w-12 shrink-0 overflow-hidden border-r border-border/60 bg-muted/20"
       data-model-picker-sidebar="true"
       aria-label="Providers"
       orientation="vertical"
@@ -119,13 +118,16 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
                   <TooltipTrigger
                     render={
                       <Toolbar.Button
-                        className={RAIL_BUTTON_CLASS}
+                        className={cn(
+                          RAIL_BUTTON_CLASS,
+                          props.selectedInstanceId === "favorites" && "text-primary",
+                        )}
                         onClick={() => handleSelect("favorites")}
                         type="button"
                         aria-label="Favorites"
                         aria-pressed={props.selectedInstanceId === "favorites"}
                       >
-                        <StarIcon className="size-5 fill-current shrink-0" aria-hidden />
+                        <StarIcon className="size-4.5 fill-current shrink-0" aria-hidden />
                       </Toolbar.Button>
                     }
                   />
@@ -138,7 +140,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
                   </TooltipPopup>
                 </Tooltip>
               </div>
-              <div className="border-b border-border/70" aria-hidden="true" />
+              <div className="border-b border-border/60 my-0.5" aria-hidden="true" />
             </>
           ) : null}
 
@@ -166,8 +168,9 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
               <Toolbar.Button
                 className={cn(
                   RAIL_BUTTON_CLASS,
+                  isSelected && "text-primary hover:text-primary",
                   isDisabled &&
-                    "opacity-50 cursor-not-allowed hover:bg-transparent active:scale-100",
+                    "opacity-40 cursor-not-allowed hover:bg-transparent active:scale-100",
                 )}
                 data-provider-accent-color={entry.accentColor}
                 onClick={() => !isDisabled && handleSelect(entry.instanceId)}

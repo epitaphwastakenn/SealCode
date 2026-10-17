@@ -418,6 +418,15 @@ export function providerErrorPresentation(
   };
 }
 
+/**
+ * V2 tool items carry no MCP display metadata, so show the server and tool the
+ * model called instead of the joined `mcp__server__tool` provider name.
+ */
+function mcpToolLabel(toolName: string | null): string | null {
+  const match = toolName === null ? null : /^mcp__(.+?)__(.+)$/u.exec(toolName);
+  return match ? `${match[1]} → ${match[2]}` : null;
+}
+
 function projectedWorkEntry(row: OrchestrationV2ProjectedTurnItem): WorkLogEntry {
   const { item } = row;
   const title = item.title?.trim() || null;
@@ -530,8 +539,8 @@ function projectedWorkEntry(row: OrchestrationV2ProjectedTurnItem): WorkLogEntry
             ? formatReadToolLabel(readPath ?? "")
             : classified === "search"
               ? (formatSearchToolLabel({ input: item.input }) ?? item.toolName ?? "Tool call")
-              : (item.toolName ?? "Tool call")),
-        toolTitle: title ?? item.toolName ?? "Tool",
+              : (mcpToolLabel(item.toolName) ?? item.toolName ?? "Tool call")),
+        toolTitle: title ?? mcpToolLabel(item.toolName) ?? item.toolName ?? "Tool",
         toolData: { input: item.input, output: item.output },
       };
     }

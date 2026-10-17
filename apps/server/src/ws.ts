@@ -119,6 +119,8 @@ import * as ExternalLauncher from "./process/externalLauncher.ts";
 import * as ThreadManagementService from "./orchestration-v2/ThreadManagementService.ts";
 import * as CommandOutputHub from "./orchestration-v2/CommandOutputHub.ts";
 import * as McpAppRequests from "./mcpApps/McpAppRequests.ts";
+import * as GlobalMcpManager from "./mcp/GlobalMcpManager.ts";
+import * as VoiceTranscription from "./voiceTranscription.ts";
 import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
 import * as ThreadLaunchService from "./orchestration-v2/ThreadLaunchService.ts";
 import * as ThreadMessageIntake from "./orchestration-v2/ThreadMessageIntake.ts";
@@ -1258,6 +1260,8 @@ const layerWsRpc = (
       const storageCleanup = yield* StorageCleanup.StorageCleanup;
       const databaseStorage = yield* DatabaseStorage.DatabaseStorage;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
+      const globalMcpManager = yield* GlobalMcpManager.GlobalMcpManager;
+      const voiceTranscription = yield* VoiceTranscription.VoiceTranscription;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
       const workspaceFileSystem = yield* WorkspaceFileSystem.WorkspaceFileSystem;
@@ -2384,6 +2388,8 @@ const layerWsRpc = (
               : serverSettings.updateProviderInstance(providerInstanceMutation, nextPatch);
             return ServerSettings.redactServerSettingsForClient(settings);
           }),
+        [WS_METHODS.serverGetMcpStatuses]: (_input) => globalMcpManager.getStatuses,
+        [WS_METHODS.serverReconnectMcp]: ({ id }) => globalMcpManager.reconnectServer(id),
         [WS_METHODS.serverDiscoverSourceControl]: (_input) => sourceControlDiscovery.discover,
         [WS_METHODS.serverGetTraceDiagnostics]: (_input) =>
           TraceDiagnostics.readTraceDiagnostics({
@@ -2678,6 +2684,7 @@ const layerWsRpc = (
                 }),
             ),
           ),
+        [WS_METHODS.voiceTranscribe]: (input) => voiceTranscription.transcribe(input),
         [WS_METHODS.attachmentsCreateUploadUrl]: (input) => issueAttachmentUploadUrl(input),
         [WS_METHODS.attachmentsDelete]: (input) => deletePendingAttachment(input.attachmentId),
         [WS_METHODS.agentSessionsScan]: () => agentSessionScanner.scan,
@@ -3026,6 +3033,10 @@ const layerWsRpc = (
                 withLateEditorConfig(config, liveUpdates, externalLauncher),
               );
             }),
+          ),
+        [WS_METHODS.subscribeMcpStatus]: (_input) =>
+          globalMcpManager.streamStatusChanges.pipe(
+            Stream.map((statuses) => ({ type: "mcp.status.updated" as const, statuses })),
           ),
         [WS_METHODS.subscribeServerLifecycle]: (_input) =>
           Stream.unwrap(

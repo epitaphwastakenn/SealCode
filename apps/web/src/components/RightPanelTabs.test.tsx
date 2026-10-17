@@ -131,11 +131,13 @@ function renderTabs(
       onAddPullRequest={() => undefined}
       onAddPullRequests={() => undefined}
       onAddDiff={() => undefined}
+      onAddDiffCenter={() => undefined}
       onAddFiles={() => undefined}
       onAddDevice={() => undefined}
       browserAvailable
       terminalAvailable={false}
       diffAvailable={false}
+      diffCenterAvailable={false}
       filesAvailable={false}
       pullRequestAvailable={false}
       pullRequestsAvailable={false}

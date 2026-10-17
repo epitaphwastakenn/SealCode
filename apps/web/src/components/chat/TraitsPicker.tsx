@@ -99,7 +99,7 @@ function DefaultBadge() {
   );
 }
 
-function replaceDescriptorCurrentValue(
+export function replaceDescriptorCurrentValue(
   descriptors: ReadonlyArray<ProviderOptionDescriptor>,
   descriptorId: string,
   currentValue: string | boolean | undefined,
@@ -119,7 +119,7 @@ function replaceDescriptorCurrentValue(
   );
 }
 
-function getDescriptorStringValue(
+export function getDescriptorStringValue(
   descriptor: Extract<ProviderOptionDescriptor, { type: "select" }> | null,
   selection?: ModelSelection | null,
   reportedSelection?: ModelSelection | null,
@@ -211,7 +211,7 @@ function getSelectedTraits(
   };
 }
 
-function getTraitsSectionVisibility(input: {
+export function getTraitsSectionVisibility(input: {
   provider: ProviderDriverKind;
   models: ReadonlyArray<ServerProviderModel>;
   model: string | null | undefined;
@@ -251,6 +251,21 @@ function getTraitsSectionVisibility(input: {
       showAgent ||
       (selected.modelIsUnavailable && selected.descriptors.length > 0),
   };
+}
+
+/**
+ * Whether the primary reasoning control sits on its highest level. The composer
+ * frames itself and the model picker highlights the effort label when it does.
+ */
+export function isMaximumReasoningEffort(input: {
+  primarySelectDescriptor: Extract<ProviderOptionDescriptor, { type: "select" }> | null;
+  ultrathinkPromptControlled: boolean;
+}): boolean {
+  const descriptor = input.primarySelectDescriptor;
+  if (!descriptor || descriptor.options.length < 2) return false;
+  if (input.ultrathinkPromptControlled) return true;
+  const lastOption = descriptor.options.at(-1);
+  return lastOption !== undefined && getDescriptorStringValue(descriptor) === lastOption.id;
 }
 
 export function shouldRenderTraitsControls(input: {

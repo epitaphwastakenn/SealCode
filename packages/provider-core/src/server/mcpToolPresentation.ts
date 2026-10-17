@@ -19,6 +19,9 @@ export function normalizeMcpHttpUrl(value: unknown): string | undefined {
   }
 }
 
+/** The MCP server SealCode attaches to proxy the user's configured MCP servers. */
+const GLOBAL_GATEWAY_SERVER = "sealcode-global";
+
 export function mcpToolPresentation(input: {
   readonly toolName?: unknown;
   readonly serverName?: unknown;
@@ -36,15 +39,30 @@ export function mcpToolPresentation(input: {
     typeof input.source === "object" && input.source !== null ? input.source : undefined;
   const qualified =
     typeof input.toolName === "string" ? /^mcp__(.+?)__(.+)$/i.exec(input.toolName) : null;
-  const server = normalizeMcpText(input.serverName ?? qualified?.[1] ?? input.serverDisplayName);
-  const tool = normalizeMcpText(qualified?.[2] ?? input.toolName);
+  let server = normalizeMcpText(input.serverName ?? qualified?.[1] ?? input.serverDisplayName);
+  let tool = normalizeMcpText(qualified?.[2] ?? input.toolName);
+  let serverDisplayName = input.serverDisplayName;
+  if (server?.toLowerCase() === GLOBAL_GATEWAY_SERVER) {
+    // The gateway names each tool `mcp__<server>__<tool>`, so a client that qualifies it with
+    // the gateway's own name reports the upstream server inside the tool name, and one that
+    // reports the server separately leaves it in the tool name or in `qualified`.
+    const upstream =
+      /^mcp__(.+?)__(.+)$/i.exec(tool ?? "") ??
+      (qualified?.[1]?.toLowerCase() === GLOBAL_GATEWAY_SERVER ? null : qualified);
+    if (upstream) {
+      server = normalizeMcpText(upstream[1]);
+      tool = normalizeMcpText(upstream[2]);
+      // A name the provider supplies describes the gateway, not the upstream server.
+      serverDisplayName = undefined;
+    }
+  }
   if (server && tool && resolveT3McpToolDefinition(`${server}.${tool}`)) return {};
   const title =
     normalizeMcpText(input.title) ??
     (server && tool ? normalizeMcpText(tool.replace(/[_-]+/gu, " ")) : undefined);
   if (!server) return title ? { title } : {};
   const name =
-    normalizeMcpText(input.serverDisplayName) ??
+    normalizeMcpText(serverDisplayName) ??
     normalizeMcpText(source && Reflect.get(source, "name")) ??
     normalizeMcpText(server.replace(/[_-]+/gu, " ")) ??
     server;

@@ -39,6 +39,7 @@ import {
   roundWindowsCorners,
   setWindowsFloatingPanels,
 } from "./WindowsBackdrop.ts";
+import { drawsAppCaptionButtons, enableAppCaptionButtons } from "./WindowsCaptionButtons.ts";
 
 const TITLEBAR_HEIGHT = 40;
 // Matches --workspace-topbar-height in apps/web/src/index.css. Native macOS
@@ -248,7 +249,11 @@ export function concealPendingQuitWindow(
 function getWindowTitleBarOptions(
   shouldUseDarkColors: boolean,
   platform: NodeJS.Platform,
+  appCaptionButtons: boolean,
 ): WindowTitleBarOptions {
+  if (appCaptionButtons) {
+    return { titleBarStyle: "hidden" };
+  }
   if (platform === "darwin") {
     return {
       titleBarStyle: "hiddenInset",
@@ -283,7 +288,11 @@ function syncWindowAppearance(
     if (platform === "win32") {
       applyWindowsBackdrop(window);
     }
-    const { titleBarOverlay } = getWindowTitleBarOptions(shouldUseDarkColors, platform);
+    const { titleBarOverlay } = getWindowTitleBarOptions(
+      shouldUseDarkColors,
+      platform,
+      drawsAppCaptionButtons(window),
+    );
     if (typeof titleBarOverlay === "object") {
       window.setTitleBarOverlay(titleBarOverlay);
     }
@@ -381,6 +390,17 @@ export const make = Effect.gen(function* () {
           }).pipe(Effect.as<readonly Electron.Rectangle[]>([]));
     const initialBounds = resolveInitialMainWindowBounds(persistedBounds, displayBounds);
     const restoredPersistedBounds = persistedBounds !== null && initialBounds === persistedBounds;
+    const floatingPanels =
+      environment.platform === "win32" &&
+      (yield* clientSettings.get.pipe(
+        Effect.map(
+          Option.match({
+            onNone: () => DEFAULT_CLIENT_SETTINGS.floatingPanels,
+            onSome: (settings) => settings.floatingPanels,
+          }),
+        ),
+        Effect.orElseSucceed(() => DEFAULT_CLIENT_SETTINGS.floatingPanels),
+      ));
     if (persistedBounds !== null && initialBounds === DesktopAppSettings.DEFAULT_MAIN_WINDOW_SIZE) {
       yield* logWindowWarning("saved main window bounds could not be restored; using defaults");
     }
@@ -396,7 +416,7 @@ export const make = Effect.gen(function* () {
       ...getWindowBackdropOptions(environment.platform),
       ...iconOption,
       title: environment.displayName,
-      ...getWindowTitleBarOptions(shouldUseDarkColors, environment.platform),
+      ...getWindowTitleBarOptions(shouldUseDarkColors, environment.platform, floatingPanels),
       webPreferences: {
         preload: environment.preloadPath,
         // Chromium throttles hidden renderers: timers coalesce and rAF stops,
@@ -417,15 +437,7 @@ export const make = Effect.gen(function* () {
 
     yield* rendererHistory.register(window.webContents, { surface: "main" });
     if (environment.platform === "win32") {
-      const floatingPanels = yield* clientSettings.get.pipe(
-        Effect.map(
-          Option.match({
-            onNone: () => DEFAULT_CLIENT_SETTINGS.floatingPanels,
-            onSome: (settings) => settings.floatingPanels,
-          }),
-        ),
-        Effect.orElseSucceed(() => DEFAULT_CLIENT_SETTINGS.floatingPanels),
-      );
+      if (floatingPanels) enableAppCaptionButtons(window);
       setWindowsFloatingPanels(window, floatingPanels);
       roundWindowsCorners(window);
       const refreshBackdrop = () => applyWindowsBackdrop(window);

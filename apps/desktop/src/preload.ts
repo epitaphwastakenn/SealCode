@@ -6,6 +6,7 @@ import type {
   DesktopPreviewRecordingFrame,
   DesktopPreviewTabState,
   DesktopSnapShotEvent,
+  DesktopWindowControlsState,
 } from "@t3tools/contracts";
 import { exposeClerkBridge } from "@clerk/electron/preload";
 import { contextBridge, ipcRenderer, webFrame, webUtils } from "electron";
@@ -20,6 +21,11 @@ const SNAP_SHOT_EVENT_TYPES = new Set([
   "failed",
   "shortcut-changed",
 ]);
+function isWindowControlsState(value: unknown): value is DesktopWindowControlsState {
+  if (typeof value !== "object" || value === null) return false;
+  const { maximized, fullscreen } = value as { maximized?: unknown; fullscreen?: unknown };
+  return typeof maximized === "boolean" && typeof fullscreen === "boolean";
+}
 function isSnapShotEvent(value: unknown): value is DesktopSnapShotEvent {
   if (typeof value !== "object" || value === null) return false;
   const { type, id } = value as { type?: unknown; id?: unknown };
@@ -261,6 +267,20 @@ contextBridge.exposeInMainWorld("desktopBridge", {
       ipcRenderer.removeListener(IpcChannels.WINDOW_FULLSCREEN_STATE_CHANNEL, wrappedListener);
     };
   },
+  getWindowControlsState: () => {
+    const state: unknown = ipcRenderer.sendSync(IpcChannels.GET_WINDOW_CONTROLS_STATE_CHANNEL);
+    return isWindowControlsState(state) ? state : null;
+  },
+  onWindowControlsStateChange: (listener) => {
+    const wrappedListener = (_event: Electron.IpcRendererEvent, state: unknown) => {
+      if (isWindowControlsState(state)) listener(state);
+    };
+    ipcRenderer.on(IpcChannels.WINDOW_CONTROLS_STATE_CHANNEL, wrappedListener);
+    return () => {
+      ipcRenderer.removeListener(IpcChannels.WINDOW_CONTROLS_STATE_CHANNEL, wrappedListener);
+    };
+  },
+  runWindowControl: (action) => ipcRenderer.invoke(IpcChannels.WINDOW_CONTROL_CHANNEL, action),
   getUpdateState: () => ipcRenderer.invoke(IpcChannels.UPDATE_GET_STATE_CHANNEL),
   setUpdateChannel: (channel) =>
     ipcRenderer.invoke(IpcChannels.UPDATE_SET_CHANNEL_CHANNEL, channel),

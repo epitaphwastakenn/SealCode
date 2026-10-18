@@ -94,6 +94,18 @@ export const DesktopThemeSchema = Schema.Literals(["light", "dark", "system"]);
 export const DesktopUpdateChannelSchema = Schema.Literals(["latest", "nightly"]);
 export const DesktopAppStageLabelSchema = Schema.Literals(["Alpha", "Beta", "Dev", "Nightly"]);
 
+export const DesktopWindowControlsStateSchema = Schema.Struct({
+  maximized: Schema.Boolean,
+  fullscreen: Schema.Boolean,
+});
+export type DesktopWindowControlsState = typeof DesktopWindowControlsStateSchema.Type;
+export const DesktopWindowControlActionSchema = Schema.Literals([
+  "minimize",
+  "toggle-maximize",
+  "close",
+]);
+export type DesktopWindowControlAction = typeof DesktopWindowControlActionSchema.Type;
+
 export interface DesktopAppBranding {
   baseName: string;
   stageLabel: DesktopAppStageLabel;
@@ -1120,6 +1132,15 @@ export interface DesktopBridge {
   onQuitShortcut?: (listener: (event: QuitShortcutHintEvent) => void) => () => void;
   getWindowFullscreenState: () => boolean;
   onWindowFullscreenStateChange: (listener: (fullscreen: boolean) => void) => () => void;
+  /**
+   * Null when the OS draws the window's caption buttons. Otherwise the client
+   * draws them (Windows, window created with floating panels on).
+   */
+  getWindowControlsState?: () => DesktopWindowControlsState | null;
+  onWindowControlsStateChange?: (
+    listener: (state: DesktopWindowControlsState) => void,
+  ) => () => void;
+  runWindowControl?: (action: DesktopWindowControlAction) => Promise<void>;
   getUpdateState: () => Promise<DesktopUpdateState>;
   setUpdateChannel: (channel: DesktopUpdateChannel) => Promise<DesktopUpdateState>;
   checkForUpdate: () => Promise<DesktopUpdateCheckResult>;

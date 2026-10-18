@@ -2717,3 +2717,62 @@ html.electron-windows[data-floating-panels="true"] [data-slot="sidebar-wrapper"]
 .electron-windows[data-floating-panels="true"] {
   --desktop-window-right-resize-inset: 0px;
 }
+
+/* Windows windows created with floating panels have no native caption buttons
+   (see WindowsCaptionButtons.ts), so the app draws them. They reserve the
+   corner the native overlay would and sit inside the main panel's border, so
+   the hover fill keeps the panel's inset and top-right curve. */
+.app-caption-buttons {
+  --app-caption-buttons-width: 138px;
+  --workspace-topbar-height: 40px;
+  --workspace-controls-top: 0px;
+  --workspace-controls-left: 0.75rem;
+  --workspace-controls-right: calc(var(--app-caption-buttons-width) + 0.75rem);
+  --workspace-native-controls-inset: calc(var(--app-caption-buttons-width) + 0.75rem);
+}
+
+[data-window-caption-buttons] {
+  position: fixed;
+  top: 0;
+  right: 0;
+  z-index: 200;
+  display: flex;
+  height: var(--workspace-topbar-height);
+  color: var(--foreground);
+  -webkit-app-region: no-drag;
+}
+
+html[data-floating-panels="true"] [data-window-caption-buttons] {
+  top: calc(var(--floating-panel-gap) + 1px);
+  right: calc(var(--floating-panel-gap) + 1px);
+  overflow: hidden;
+  border-top-right-radius: calc(var(--floating-panel-radius) - 1px);
+}
+
+[data-window-caption-buttons] button {
+  display: grid;
+  place-items: center;
+  width: calc(var(--app-caption-buttons-width) / 3);
+  height: 100%;
+  font-family: "Segoe Fluent Icons", "Segoe MDL2 Assets";
+  font-size: 10px;
+  transition: background-color 100ms;
+}
+
+[data-window-caption-buttons] button:hover {
+  background-color: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+[data-window-caption-buttons] button:active {
+  background-color: color-mix(in srgb, currentColor 20%, transparent);
+}
+
+[data-window-caption-buttons] button[data-close]:hover {
+  background-color: #e81123;
+  color: white;
+}
+
+[data-window-caption-buttons] button[data-close]:active {
+  background-color: rgb(232 17 35 / 60%);
+  color: white;
+}

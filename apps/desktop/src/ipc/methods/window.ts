@@ -3,6 +3,8 @@ import {
   DesktopAppBrandingSchema,
   DesktopEnvironmentBootstrapSchema,
   DesktopThemeSchema,
+  DesktopWindowControlActionSchema,
+  DesktopWindowControlsStateSchema,
   EDITORS,
   EditorId,
   PickedThemeFileSchema,
@@ -38,6 +40,7 @@ import * as ElectronWindow from "../../electron/ElectronWindow.ts";
 import * as Electron from "electron";
 import * as MacPermissions from "../../permissions/MacPermissions.ts";
 import { safariPermissionCheck } from "../../preview/BrowserImport/SafariPermission.ts";
+import { getAppCaptionButtonsState, runWindowControl } from "../../window/WindowsCaptionButtons.ts";
 import * as IpcChannels from "../channels.ts";
 import * as DesktopIpc from "../DesktopIpc.ts";
 import {
@@ -87,6 +90,33 @@ export const getWindowFullscreenState = DesktopIpc.makeSyncIpcMethod({
     const electronWindow = yield* ElectronWindow.ElectronWindow;
     const window = yield* electronWindow.currentMainOrFirst;
     return Option.isSome(window) && window.value.isFullScreen();
+  }),
+});
+
+export const getWindowControlsState = DesktopIpc.makeSyncIpcMethod({
+  channel: IpcChannels.GET_WINDOW_CONTROLS_STATE_CHANNEL,
+  result: Schema.NullOr(DesktopWindowControlsStateSchema),
+  handler: Effect.fn("desktop.ipc.window.getWindowControlsState")(function* () {
+    const window = yield* (yield* ElectronWindow.ElectronWindow).main;
+    return Option.isSome(window) ? getAppCaptionButtonsState(window.value) : null;
+  }),
+});
+
+export const controlWindow = DesktopIpc.makeIpcMethod({
+  channel: IpcChannels.WINDOW_CONTROL_CHANNEL,
+  payload: DesktopWindowControlActionSchema,
+  result: Schema.Void,
+  handler: Effect.fn("desktop.ipc.window.controlWindow")(function* (action, event) {
+    const window = yield* (yield* ElectronWindow.ElectronWindow).main;
+    if (
+      event === undefined ||
+      Option.isNone(window) ||
+      window.value.isDestroyed() ||
+      window.value.webContents.id !== event.sender.id
+    ) {
+      return;
+    }
+    runWindowControl(window.value, action);
   }),
 });
 

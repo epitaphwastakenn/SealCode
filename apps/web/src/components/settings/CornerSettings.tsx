@@ -89,7 +89,7 @@ export function CornerSettingsSection() {
 
       <SettingsRow
         {...searchableSetting("floating-panels")}
-        description="Show the sidebar and the main area as separate rounded panels with a small gap around them. In the Windows app the gaps are see-through, so only the panels stay on the desktop."
+        description="Show the sidebar and the main area as separate rounded panels with a small gap around them. In the Windows app the gaps are see-through, so only the panels stay on the desktop, and the window buttons move into the panel the next time the app starts."
         resetAction={
           settings.floatingPanels !== DEFAULT_UNIFIED_SETTINGS.floatingPanels ? (
             <SettingResetButton

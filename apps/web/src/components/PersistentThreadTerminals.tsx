@@ -8,9 +8,10 @@ import {
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { projectScriptCwd, projectScriptRuntimeEnv } from "@t3tools/shared/projectScripts";
 import { resolveTerminalSessionLabel } from "@t3tools/shared/terminalLabels";
-import { memo, useEffect, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import { useComposerDraftStore } from "../composerDraftStore";
 import { useStableCallback } from "../hooks/useStableCallback";
+import { useEnterMotion, usePanelNavigationSuppressed } from "../panelAnimations";
 import type { TerminalContextSelection } from "../lib/terminalContext";
 import { cn } from "~/lib/utils";
 import {
@@ -237,6 +238,14 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
     bumpFocusRequestId();
   });
 
+  const drawerShown = active && visible;
+  const navigating = usePanelNavigationSuppressed();
+  const drawerMotionRef = useRef<HTMLDivElement | null>(null);
+  useEnterMotion(drawerMotionRef, drawerShown, "rise", {
+    onMount: "navigation",
+    when: drawerShown && !navigating,
+  });
+
   const handleAddTerminalContext = (selection: TerminalContextSelection) => {
     if (!visible) {
       return;
@@ -258,7 +267,7 @@ export const PersistentThreadTerminalDrawer = memo(function PersistentThreadTerm
         active && visible && "[[data-panel-animations=true]_&]:starting:grid-rows-[0fr]!",
       )}
     >
-      <div className="min-h-0 overflow-clip">
+      <div ref={drawerMotionRef} className="min-h-0 overflow-clip">
         <ThreadTerminalDrawer
           threadRef={threadRef}
           threadId={threadId}

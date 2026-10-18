@@ -3,6 +3,7 @@ import * as Schema from "effect/Schema";
 import {
   useEffect,
   useLayoutEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type CSSProperties,
@@ -34,6 +35,7 @@ import {
 } from "../hooks/useSettings";
 import {
   PanelAnimationSuppressionProvider,
+  useEnterMotion,
   usePanelAnimationSettings,
   usePanelNavigationSuppression,
 } from "../panelAnimations";
@@ -239,6 +241,10 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
   const routePanelAnimationsActive = panelAnimationsActive && !panelAnimationsSuppressed;
   const isOnSettings = pathname === "/settings" || pathname.startsWith("/settings/");
   const isMacosDesktop = isElectron && isMacPlatform(navigator.platform);
+  // Settings swaps the sidebar contents; each side slides in from where it sits
+  // in the hierarchy (settings deeper, threads back).
+  const sidebarSectionRef = useRef<HTMLDivElement | null>(null);
+  useEnterMotion(sidebarSectionRef, isOnSettings, isOnSettings ? "slide-end" : "slide-start");
   const [sidebarWidth, setSidebarWidth] = useState(readInitialThreadSidebarWidth);
   // Subscribed rather than read once: the clamp must track live window size,
   // and a clamped drag ends with an unchanged width, which skips the re-render
@@ -341,16 +347,18 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           }}
           style={windowControlsInsetStyle}
         >
-          {isOnSettings ? (
-            <>
-              <SidebarChromeHeader isElectron={isElectron} />
-              <SettingsSidebarNav pathname={pathname} />
-            </>
-          ) : legacySidebarEnabled ? (
-            <LegacyThreadSidebar />
-          ) : (
-            <ThreadSidebar />
-          )}
+          <div ref={sidebarSectionRef} className="flex min-h-0 flex-1 flex-col">
+            {isOnSettings ? (
+              <>
+                <SidebarChromeHeader isElectron={isElectron} />
+                <SettingsSidebarNav pathname={pathname} />
+              </>
+            ) : legacySidebarEnabled ? (
+              <LegacyThreadSidebar />
+            ) : (
+              <ThreadSidebar />
+            )}
+          </div>
           <SidebarRail onDoubleClick={resetSidebarWidth} />
         </Sidebar>
         {children}

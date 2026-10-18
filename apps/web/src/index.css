@@ -86,6 +86,95 @@ html[data-mobile-composer-route-transition="true"]::view-transition-old(t3-mobil
   }
 }
 
+/* Theme reveal (themeReveal.ts). The snapshot of the old colors stays on top and
+   two masks part it from the pointer: each hides the old colors on its side of
+   the gap, so as --theme-reveal-r grows the gap widens until nothing is left. */
+@property --theme-reveal-r {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+html[data-theme-reveal]::view-transition-group(root),
+html[data-theme-reveal]::view-transition-image-pair(root),
+html[data-theme-reveal]::view-transition-old(root),
+html[data-theme-reveal]::view-transition-new(root),
+html[data-theme-reveal]::view-transition-group(theme-reveal-seam),
+html[data-theme-reveal]::view-transition-new(theme-reveal-seam) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+html[data-theme-reveal]::view-transition-old(root) {
+  z-index: 1;
+  --theme-reveal-r: calc(-1 * var(--theme-reveal-feather));
+  mask-image:
+    linear-gradient(
+      var(--theme-reveal-angle),
+      #000 calc(var(--theme-reveal-at) - var(--theme-reveal-r) - var(--theme-reveal-feather)),
+      transparent calc(var(--theme-reveal-at) - var(--theme-reveal-r))
+    ),
+    linear-gradient(
+      var(--theme-reveal-angle),
+      transparent calc(var(--theme-reveal-at) + var(--theme-reveal-r)),
+      #000 calc(var(--theme-reveal-at) + var(--theme-reveal-r) + var(--theme-reveal-feather))
+    );
+}
+
+/* Only ever seen through its own transition group, above the snapshot. */
+[data-theme-reveal-seam] {
+  position: fixed;
+  inset: 0;
+  z-index: 2147483647;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+  view-transition-name: theme-reveal-seam;
+}
+
+[data-theme-reveal-band] {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: var(--theme-reveal-seam-width);
+  height: var(--theme-reveal-seam-length);
+  opacity: 0;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in oklab, var(--primary) 14%, transparent) 30%,
+    color-mix(in oklab, var(--primary) 42%, transparent) 46%,
+    color-mix(in oklab, color-mix(in oklab, var(--primary) 55%, white) 80%, transparent) 50%,
+    color-mix(in oklab, var(--primary) 42%, transparent) 54%,
+    color-mix(in oklab, var(--primary) 14%, transparent) 70%,
+    transparent
+  );
+  will-change: transform, opacity;
+}
+
+/* Interface animations off (the Motion setting, or reduced motion): popups
+   and dialogs open and close without their enter and exit transitions. Sheets
+   follow the panel animation setting instead. */
+html[data-ui-motion="off"]
+  :is(
+    [data-slot="alert-dialog-backdrop"],
+    [data-slot="alert-dialog-popup"],
+    [data-slot="combobox-surface"],
+    [data-slot="autocomplete-surface"],
+    [data-slot="command-dialog-backdrop"],
+    [data-slot="command-dialog-popup"],
+    [data-slot="dialog-backdrop"],
+    [data-slot="dialog-popup"],
+    [data-slot="menu-popup"],
+    [data-slot="menu-sub-content"],
+    [data-slot="popover-popup"],
+    [data-slot="preview-card-popup"],
+    [data-slot="select-popup"],
+    [data-slot="tooltip-popup"]
+  ) {
+  transition-duration: 0s !important;
+}
+
 :root {
   --app-scrollbar-width: 6px;
   --appearance-contrast-base: 100%;

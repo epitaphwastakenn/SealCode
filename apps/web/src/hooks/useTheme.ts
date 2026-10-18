@@ -22,6 +22,7 @@ import {
   type ThemeHalves,
   type ThemePreferenceMode,
 } from "../themePalette";
+import { revealThemeChange } from "../themeReveal";
 
 type Theme = ThemePreference;
 type ThemeSnapshot = {
@@ -133,6 +134,7 @@ let lastSnapshot: ThemeSnapshot | null = null;
 let snapshotStale = true;
 let lastDesktopTheme: "light" | "dark" | "system" | null = null;
 let lastAppliedTheme: Omit<ThemeSnapshot, "resolvedTheme"> | null = null;
+let lastAppliedLook: string | null = null;
 let themeStorageReadFailure: ThemeStorageError | null = null;
 
 function emitChange() {
@@ -338,9 +340,11 @@ function applyTheme(theme: Theme, { suppressTransitions = false, preservePreview
     appearanceMode,
     themeHalves,
   );
-  applyThemePalette(resolveThemeHalf(theme, themeHalves, resolvedAppearance), resolvedAppearance);
+  const appliedHalf = resolveThemeHalf(theme, themeHalves, resolvedAppearance);
+  applyThemePalette(appliedHalf, resolvedAppearance);
   document.documentElement.classList.toggle("dark", resolvedAppearance === "dark");
   lastAppliedTheme = { theme, systemDark, followSystem, appearanceMode, themeHalves };
+  lastAppliedLook = `${appliedHalf}|${resolvedAppearance}`;
   syncBrowserChromeTheme();
   syncDesktopTheme(theme, followSystem, appearanceMode);
   if (suppressTransitions) {
@@ -350,6 +354,43 @@ function applyTheme(theme: Theme, { suppressTransitions = false, preservePreview
       document.documentElement.classList.remove("no-transitions");
     });
   }
+}
+
+/** The palette and appearance `theme` would paint with the stored mode and halves. */
+function resolveThemeLook(theme: Theme): string {
+  const appearanceMode = readAppearanceModePreference(theme);
+  const followSystem = appearanceMode === "system";
+  const systemDark = followSystem ? getSystemDark() : false;
+  const themeHalves = readStoredThemeHalves();
+  const appearance = resolveThemeAppearance(
+    theme,
+    systemDark,
+    followSystem,
+    appearanceMode,
+    themeHalves,
+  );
+  return `${resolveThemeHalf(theme, themeHalves, appearance)}|${appearance}`;
+}
+
+/**
+ * Applies a theme the user (or the system) just switched to, behind the theme
+ * reveal when the colors on screen actually change. The store is notified with
+ * the change rather than before it, so React never paints new-theme state
+ * into the snapshot of the old colors.
+ */
+function applyThemeChange(theme: () => Theme) {
+  const change = () => {
+    applyTheme(theme(), { suppressTransitions: true });
+    emitChange();
+  };
+  const previewing =
+    typeof document !== "undefined" &&
+    document.documentElement.dataset?.themeId === THEME_PREVIEW_ID;
+  if (previewing || resolveThemeLook(theme()) === lastAppliedLook) {
+    change();
+    return;
+  }
+  revealThemeChange(change);
 }
 
 export async function syncDesktopThemePreference(
@@ -442,7 +483,8 @@ function getServerSnapshot() {
 function handleSystemAppearanceChange() {
   const storedTheme = getStored();
   if (readAppearanceModePreference(storedTheme) === "system") {
-    applyTheme(storedTheme, { suppressTransitions: true });
+    applyThemeChange(getStored);
+    return;
   }
   emitChange();
 }
@@ -531,8 +573,7 @@ function setTheme(next: Theme): boolean {
     });
     return false;
   }
-  applyTheme(next, { suppressTransitions: true });
-  emitChange();
+  applyThemeChange(() => next);
   return true;
 }
 
@@ -556,8 +597,7 @@ function setAppearanceMode(nextAppearanceMode: ThemePreferenceMode): boolean {
     return false;
   }
   themeStorageReadFailure = null;
-  applyTheme(getStored(), { suppressTransitions: true });
-  emitChange();
+  applyThemeChange(getStored);
   return true;
 }
 
@@ -586,8 +626,7 @@ function setThemeHalf(appearance: ThemeAppearance, themeId: string | null): bool
     });
     return false;
   }
-  applyTheme(getStored(), { suppressTransitions: true });
-  emitChange();
+  applyThemeChange(getStored);
   return true;
 }
 
@@ -608,8 +647,7 @@ function clearThemeHalves(): boolean {
     });
     return false;
   }
-  applyTheme(getStored(), { suppressTransitions: true });
-  emitChange();
+  applyThemeChange(getStored);
   return true;
 }
 

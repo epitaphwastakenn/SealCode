@@ -1,15 +1,16 @@
 import { Outlet, createFileRoute, redirect, useLocation } from "@tanstack/react-router";
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { RotateCcwIcon } from "lucide-react";
 import { Button } from "../components/ui/button";
 import { useSettingsRestore } from "../components/settings/SettingsPanels";
 
 import { SettingsBreadcrumb } from "../components/settings/SettingsBreadcrumb";
-import { SidebarInset } from "../components/ui/sidebar";
+import { RouteInset } from "../components/RouteInset";
 import { useNavigateToMainApp } from "../components/sidebar/mainAppLocation";
 import { WorkspacePageHeader } from "../components/WorkspacePageHeader";
 import { isElectron } from "../env";
 import { useEscapeToGoBack } from "../hooks/useNavigateBack";
+import { useEnterMotion } from "../panelAnimations";
 import {
   SettingsScopeProvider,
   useSettingsScope,
@@ -117,9 +118,11 @@ function SettingsContentLayout() {
       ? environment?.environmentId
       : JSON.stringify(search);
   const [restoreSignal, setRestoreSignal] = useState(0);
+  const pageRef = useRef<HTMLDivElement | null>(null);
+  useEnterMotion(pageRef, location.pathname, "rise", { onMount: "navigation" });
 
   return (
-    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none isolate">
+    <RouteInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none isolate">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         <WorkspacePageHeader electron={isElectron}>
           <div className="flex w-full items-center gap-3">
@@ -134,13 +137,17 @@ function SettingsContentLayout() {
           </div>
         </WorkspacePageHeader>
 
-        <div key={`${contentScopeKey}:${restoreSignal}`} className="min-h-0 flex flex-1 flex-col">
+        <div
+          key={`${contentScopeKey}:${restoreSignal}`}
+          ref={pageRef}
+          className="min-h-0 flex flex-1 flex-col"
+        >
           <SettingsScopeBoundary pathname={location.pathname}>
             <Outlet />
           </SettingsScopeBoundary>
         </div>
       </div>
-    </SidebarInset>
+    </RouteInset>
   );
 }
 

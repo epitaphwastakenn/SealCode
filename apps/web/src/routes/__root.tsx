@@ -58,6 +58,7 @@ import { cn } from "../lib/utils";
 import { applyAppearanceFontVariables } from "~/appearanceFonts";
 import { applyAppearanceContrast } from "~/appearanceContrast";
 import { useClientSettings } from "../hooks/useSettings";
+import { useInterfaceMotion } from "../panelAnimations";
 import {
   deriveLogicalProjectKeyFromSettings,
   derivePhysicalProjectKeyFromPath,
@@ -188,6 +189,7 @@ function RootRouteView() {
         <AnchoredToastProvider>
           <DocumentTitleSync />
           <ContrastAppearanceSync />
+          <MotionAppearanceSync />
           <EnvironmentThemeSync />
           <GlassAppearanceSync />
           <AppBackdrop />
@@ -226,6 +228,7 @@ function RootRouteView() {
       <AnchoredToastProvider>
         <DocumentTitleSync />
         <ContrastAppearanceSync />
+        <MotionAppearanceSync />
         <EnvironmentThemeSync />
         <GlassAppearanceSync />
         <AppBackdrop />
@@ -294,6 +297,14 @@ function ContrastAppearanceSync() {
     applyAppearanceContrast(document.documentElement, appearanceContrast);
   }, [appearanceContrast]);
 
+  return null;
+}
+
+function MotionAppearanceSync() {
+  const { active } = useInterfaceMotion();
+  useEffect(() => {
+    document.documentElement.dataset.uiMotion = active ? "on" : "off";
+  }, [active]);
   return null;
 }
 

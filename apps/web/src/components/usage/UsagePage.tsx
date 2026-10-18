@@ -33,6 +33,7 @@ import {
 
 import { isElectron } from "../../env";
 import { cn } from "../../lib/utils";
+import { useEnterMotion } from "../../panelAnimations";
 import { environmentPresentations } from "../../state/presentation";
 import { primaryServerKeybindingsAtom, serverEnvironment } from "../../state/server";
 import { isCommandPaletteOpen } from "../../commandPaletteBus";
@@ -65,7 +66,7 @@ import {
 } from "../ui/menu";
 import { ScrollArea } from "../ui/scroll-area";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
-import { SidebarInset } from "../ui/sidebar";
+import { RouteInset } from "../RouteInset";
 import { Skeleton } from "../ui/skeleton";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -192,6 +193,8 @@ export function UsagePage() {
   }));
   const metric = preferences.metric;
   const showingLimits = metric === "limits";
+  const metricBodyRef = useRef<HTMLDivElement | null>(null);
+  useEnterMotion(metricBodyRef, metric, "rise", { durationScale: 0.8 });
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [limitsNow, setLimitsNow] = useState(() => Date.now());
   const refreshingRef = useRef(false);
@@ -539,12 +542,12 @@ export function UsagePage() {
   );
 
   return (
-    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none isolate">
+    <RouteInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none isolate">
       <div className="flex min-h-0 min-w-0 flex-1 flex-col bg-background text-foreground">
         <WorkspacePageHeader electron={isElectron}>{topbarContent}</WorkspacePageHeader>
 
         <ScrollArea className="min-h-0 flex-1">
-          <WorkspacePageContainer width="wide">
+          <WorkspacePageContainer ref={metricBodyRef} width="wide">
             {selectedEnvironments.length === 0 ? (
               <p className="text-sm text-muted-foreground">
                 {environments.length === 0
@@ -1022,7 +1025,7 @@ export function UsagePage() {
           }}
         />
       ) : null}
-    </SidebarInset>
+    </RouteInset>
   );
 }
 

@@ -4,7 +4,7 @@ import { useMemo } from "react";
 
 import { NewThreadLinkView } from "../components/promptLinks/NewThreadLinkView";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../components/ui/empty";
-import { SidebarInset } from "../components/ui/sidebar";
+import { RouteInset } from "../components/RouteInset";
 
 // The query is read raw: the router's own search parsing turns `prompt=123` into a number.
 function NewThreadLinkRoute() {
@@ -12,14 +12,14 @@ function NewThreadLinkRoute() {
   const parsed = useMemo(() => parseNewThreadLink(search), [search]);
   if (!parsed.ok) {
     return (
-      <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
+      <RouteInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
         <Empty className="flex-1">
           <EmptyHeader className="max-w-md">
             <EmptyTitle>Could not open the link</EmptyTitle>
             <EmptyDescription>{parsed.error}</EmptyDescription>
           </EmptyHeader>
         </Empty>
-      </SidebarInset>
+      </RouteInset>
     );
   }
   return <NewThreadLinkView key={search} link={parsed.value} />;

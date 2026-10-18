@@ -1,4 +1,4 @@
-import type { ComponentPropsWithoutRef } from "react";
+import type { ComponentProps } from "react";
 
 import { cn } from "../lib/utils";
 
@@ -14,7 +14,7 @@ export function WorkspacePageContainer({
   width = "readable",
   className,
   ...props
-}: ComponentPropsWithoutRef<"div"> & { readonly width?: WorkspacePageWidth }) {
+}: ComponentProps<"div"> & { readonly width?: WorkspacePageWidth }) {
   return (
     <div
       className={cn(

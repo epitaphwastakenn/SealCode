@@ -529,6 +529,113 @@ export function formatResetsIn(window: ServerProviderUsageWindow, now: number): 
   return `resets in ${formatDuration(resetsAt - now)}`;
 }
 
+export interface ComposerUsageRow {
+  readonly window: ServerProviderUsageWindow;
+  readonly label: string;
+  /** Zero once the reset has passed: the stored percent was read before it. */
+  readonly usedPercent: number;
+}
+
+export interface ComposerUsage {
+  /** The quota group the model draws from, for providers that split windows by model family. */
+  readonly group: string | null;
+  readonly rows: readonly ComposerUsageRow[];
+  readonly peakPercent: number;
+}
+
+/**
+ * Antigravity bills Gemini models against its `gemini-*` buckets and Claude and
+ * GPT against the shared `3p-*` buckets; older accounts report per-family
+ * `claude-*` / `gpt-*` model quotas instead.
+ */
+function antigravityWindowPrefixes(model: string): readonly string[] | null {
+  const slug = model.toLowerCase();
+  if (slug.startsWith("gemini")) return ["gemini-"];
+  if (slug.startsWith("claude")) return ["3p-", "claude-"];
+  if (slug.startsWith("gpt")) return ["3p-", "gpt-"];
+  return null;
+}
+
+/** Claude's model-scoped weekly windows (`Weekly · Sonnet`) gate only that model. */
+function claudeScopedModelName(window: ServerProviderUsageWindow): string | null {
+  if (!window.id.startsWith("seven_day_")) return null;
+  return window.label.split(" · ")[1] ?? window.id.slice("seven_day_".length);
+}
+
+function namesModel(name: string, model: string): boolean {
+  const slug = model.toLowerCase();
+  const words = name
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  return words.length > 0 && words.every((word) => slug.includes(word));
+}
+
+/**
+ * The windows that gate the next turn on this instance and model, as Claude
+ * Code's usage meter shows them: the session window, the all-models weekly
+ * window, and a weekly window scoped to this model. A provider with neither a
+ * session nor a weekly window (monthly plans, Cursor's pools) shows what it has.
+ */
+export function composerUsage(
+  provider: ServerProvider | null | undefined,
+  model: string | null | undefined,
+  now: number,
+): ComposerUsage | null {
+  const limits = provider?.usageLimits;
+  if (!provider || !limits || limits.unavailable?.reason === "unsupported") return null;
+  let windows = limits.windows;
+  let group: string | null = null;
+  const prefixes =
+    provider.driver === "antigravity" && model ? antigravityWindowPrefixes(model) : null;
+  if (prefixes) {
+    windows = windows.filter((window) => prefixes.some((prefix) => window.id.startsWith(prefix)));
+    const [first] = windows;
+    group = first?.label.includes(" · ") ? (first.label.split(" · ")[0] ?? null) : null;
+  }
+  const scopedName = (window: ServerProviderUsageWindow) =>
+    provider.driver === "claudeAgent" ? claudeScopedModelName(window) : null;
+  const session = windows.find((window) => window.kind === "session");
+  const weekly = windows.find((window) => window.kind === "weekly" && scopedName(window) === null);
+  const modelWeekly = model
+    ? windows.find((window) => {
+        const name = scopedName(window);
+        return name !== null && namesModel(name, model);
+      })
+    : undefined;
+  const labelled = [
+    session ? { window: session, label: "Session" } : null,
+    weekly ? { window: weekly, label: "Weekly" } : null,
+    modelWeekly ? { window: modelWeekly, label: modelWeekly.label } : null,
+  ].filter((row) => row !== null);
+  const picked =
+    labelled.length > 0
+      ? labelled
+      : windows
+          .filter((window) => scopedName(window) === null)
+          .slice(0, 3)
+          .map((window) => ({
+            window,
+            label:
+              group && window.label.startsWith(`${group} · `)
+                ? window.label.slice(group.length + 3)
+                : window.label,
+          }));
+  if (picked.length === 0) return null;
+  const rows = picked.map(({ window, label }) => {
+    const resetsAt = resetMillis(window);
+    return {
+      window,
+      label,
+      usedPercent:
+        resetsAt !== null && resetsAt <= now
+          ? 0
+          : Math.round(Math.max(0, Math.min(100, window.usedPercent))),
+    };
+  });
+  return { group, rows, peakPercent: Math.max(...rows.map((row) => row.usedPercent)) };
+}
+
 export const USAGE_LIMITS_COMMAND = {
   name: "usage-limits",
   description: "Show this provider's usage limits",

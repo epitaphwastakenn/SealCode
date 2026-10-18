@@ -3,6 +3,7 @@ import {
   ProviderDriverKind,
   ProviderInstanceId,
   type ServerProvider,
+  type ServerProviderUsageWindow,
   UsageLimitSourceId,
 } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
@@ -11,6 +12,7 @@ import {
   type LimitAccount,
   isUsageLimitsCommand,
   collectProviderUsageLimits,
+  composerUsage,
   sameUsageLimitCommandCoverage,
   withUsageLimitsCommands,
   collectLimitAccounts,
@@ -1443,5 +1445,110 @@ describe("Antigravity limit presentation", () => {
       "3p-weekly",
     ]);
     expect(windows.map((window) => window.remainingPercent)).toEqual([80, 90, 10, 0]);
+  });
+});
+
+describe("composerUsage", () => {
+  const limits = (windows: ReadonlyArray<ServerProviderUsageWindow>) => ({
+    checkedAt: "2026-09-03T11:00:00.000Z",
+    windows,
+  });
+  const weekly = {
+    id: "seven_day",
+    kind: "weekly",
+    label: "Weekly",
+    usedPercent: 85,
+    windowDurationMins: 10_080,
+    resetsAt: "2026-09-05T12:00:00.000Z",
+  } as const;
+  const claude = (windows: ReadonlyArray<ServerProviderUsageWindow>) =>
+    provider({
+      instanceId: ProviderInstanceId.make("claudeAgent"),
+      driver: ProviderDriverKind.make("claudeAgent"),
+      usageLimits: limits(windows),
+    });
+
+  it("shows the session and weekly windows and rings the tighter one", () => {
+    const usage = composerUsage(claude([weekly, window]), "claude-opus-5-5", now);
+    expect(usage?.rows.map((row) => [row.label, row.usedPercent])).toEqual([
+      ["Session", 40],
+      ["Weekly", 85],
+    ]);
+    expect(usage?.peakPercent).toBe(85);
+  });
+
+  it("adds a Claude weekly window only when it is scoped to the selected model", () => {
+    const sonnet = {
+      ...weekly,
+      id: "seven_day_sonnet",
+      label: "Weekly · Sonnet",
+      usedPercent: 95,
+    } as const;
+    expect(
+      composerUsage(claude([window, weekly, sonnet]), "claude-sonnet-5-5", now)?.rows.map(
+        (row) => row.label,
+      ),
+    ).toEqual(["Session", "Weekly", "Weekly · Sonnet"]);
+    const opus = composerUsage(claude([window, weekly, sonnet]), "claude-opus-5-5", now);
+    expect(opus?.rows.map((row) => row.label)).toEqual(["Session", "Weekly"]);
+    expect(opus?.peakPercent).toBe(85);
+  });
+
+  it("reads Antigravity from the quota group the model bills against", () => {
+    const antigravity = provider({
+      instanceId: ProviderInstanceId.make("antigravity"),
+      driver: ProviderDriverKind.make("antigravity"),
+      usageLimits: limits([
+        { ...window, id: "gemini-5h", label: "Gemini · 5-hour", usedPercent: 20 },
+        { ...weekly, id: "gemini-weekly", label: "Gemini · Weekly", usedPercent: 10 },
+        { ...window, id: "3p-5h", label: "Claude & GPT (shared) · 5-hour", usedPercent: 90 },
+        { ...weekly, id: "3p-weekly", label: "Claude & GPT (shared) · Weekly", usedPercent: 100 },
+      ]),
+    });
+    const gemini = composerUsage(antigravity, "gemini-3.8-flash", now);
+    expect(gemini?.group).toBe("Gemini");
+    expect(gemini?.rows.map((row) => row.window.id)).toEqual(["gemini-5h", "gemini-weekly"]);
+    expect(gemini?.peakPercent).toBe(20);
+    const shared = composerUsage(antigravity, "claude-sonnet-4-6", now);
+    expect(shared?.group).toBe("Claude & GPT (shared)");
+    expect(shared?.peakPercent).toBe(100);
+  });
+
+  it("falls back to the windows a plan has when it reports no session or weekly window", () => {
+    const usage = composerUsage(
+      provider({
+        usageLimits: limits([{ ...window, id: "primary", kind: "monthly", label: "Monthly" }]),
+      }),
+      "gpt-5.5",
+      now,
+    );
+    expect(usage?.rows.map((row) => row.label)).toEqual(["Monthly"]);
+  });
+
+  it("counts a window whose reset has passed as empty", () => {
+    const usage = composerUsage(
+      claude([{ ...window, usedPercent: 99, resetsAt: "2026-09-03T11:59:00.000Z" }]),
+      "claude-opus-5-5",
+      now,
+    );
+    expect(usage?.peakPercent).toBe(0);
+  });
+
+  it("hides the meter when the instance has no windows to show", () => {
+    expect(composerUsage(provider({}), "gpt-5.5", now)).toBeNull();
+    expect(composerUsage(provider({ usageLimits: limits([]) }), "gpt-5.5", now)).toBeNull();
+    expect(
+      composerUsage(
+        provider({
+          usageLimits: {
+            ...limits([window]),
+            unavailable: { reason: "unsupported" },
+          },
+        }),
+        "gpt-5.5",
+        now,
+      ),
+    ).toBeNull();
+    expect(composerUsage(null, "gpt-5.5", now)).toBeNull();
   });
 });

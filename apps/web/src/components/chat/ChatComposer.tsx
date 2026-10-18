@@ -288,6 +288,7 @@ import {
 import { useEnvironmentQuery } from "~/state/query";
 import { useDebouncedValue } from "~/state/queries";
 import { ProviderModelPicker } from "./ProviderModelPicker";
+import { ComposerUsageMeter } from "./ComposerUsageMeter";
 import { resolveModelPickerSelectedModel } from "./ModelPickerContent";
 import {
   type ComposerCommandItem,
@@ -5279,6 +5280,9 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       onPromptChange={setPromptFromTraitsStable}
     />
   );
+  const composerUsageMeter = (
+    <ComposerUsageMeter provider={selectedProviderStatus} model={selectedModel} />
+  );
   const composerControls = showProviderUnavailable ? (
     <ComposerControl
       type="button"
@@ -5326,6 +5330,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         </Tooltip>
       ) : null}
       {composerControlsCollapsed ? composerModelPicker : null}
+      {composerControlsCollapsed ? composerUsageMeter : null}
 
       <>
         {restingBlockDefs.map((def, index) => {
@@ -7388,9 +7393,12 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   }
                   className="flex shrink-0 flex-nowrap items-center justify-end gap-2"
                 >
-                  {!composerControlsCollapsed && !showProviderUnavailable
-                    ? composerModelPicker
-                    : null}
+                  {!composerControlsCollapsed && !showProviderUnavailable ? (
+                    <>
+                      {composerModelPicker}
+                      {composerUsageMeter}
+                    </>
+                  ) : null}
                   {showComposerAttachAction ? (
                     <>
                       <input

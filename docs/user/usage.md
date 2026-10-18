@@ -104,6 +104,10 @@ current model's limits without leaving the conversation. The result opens above 
 closes when you dismiss it or send your next message. It uses the same snapshot as **Usage → Limits**, so it does not run the agent or refresh
 anything. The command is offered only for providers that appear under **Usage → Limits**.
 
+On web and desktop, the ring beside the composer's model picker shows the tightest of the selected
+model's session and weekly windows; hover or click it for each window and when it resets.
+Antigravity shows the quota group the model bills against: Gemini, or the Claude and GPT pool.
+
 OpenCode Go reports its session, weekly, and monthly allowance when OpenCode runs locally in
 the environment. T3 cannot report limits for external OpenCode servers because their credentials
 belong to the remote server. Limits need an OpenCode Go API key. A Console sign-in alone

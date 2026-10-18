@@ -431,6 +431,34 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
       ),
     );
 
+  const removeDirectory = (directory: string) =>
+    fs.remove(directory, { recursive: true, force: true }).pipe(
+      // Windows may retain file handles briefly after a process exits.
+      Effect.retry({
+        times: platform === "win32" ? 10 : 0,
+        schedule: Schedule.spaced("100 millis"),
+        while: (error) =>
+          error.reason._tag === "PermissionDenied" ||
+          error.reason._tag === "Busy" ||
+          error.reason._tag === "Unknown",
+      }),
+    );
+
+  // Older releases and interrupted installs are dead weight once a release is
+  // active (each is a few hundred MB). Releases a running session holds stay.
+  const pruneReleases = (keep: ReadonlySet<string>) =>
+    gate
+      .withPermit(
+        Effect.gen(function* () {
+          for (const entry of yield* fs.readDirectory(versionsDirectory)) {
+            const directory = path.join(versionsDirectory, entry);
+            if (keep.has(directory) || leases.has(directory)) continue;
+            yield* removeDirectory(directory).pipe(Effect.ignore);
+          }
+        }),
+      )
+      .pipe(Effect.ignore);
+
   const install = Effect.fn("AntigravityInstallation.install")(
     function* (asset: AntigravityReleaseAsset) {
       yield* resolveNodeExecutable("Antigravity", environment).pipe(
@@ -482,20 +510,20 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
       );
 
       if (yield* fs.exists(destination)) {
-        const existing = yield* completedRelease(asset.sha256);
-        if (existing.version !== asset.version) {
-          return yield* installationError(
-            "verify",
-            "The existing managed release has the wrong version. Remove it before reinstalling.",
+        const existing = yield* completedRelease(asset.sha256).pipe(Effect.option);
+        if (Option.isSome(existing) && existing.value.version === asset.version) {
+          yield* report("verifying", "Checking the installed runtime.");
+          yield* validate(existing.value, asset.version).pipe(
+            Effect.scoped,
+            Effect.timeout(VALIDATION_TIMEOUT),
           );
+          yield* activate();
+          yield* pruneReleases(new Set([destination]));
+          return;
         }
-        yield* report("verifying", "Checking the installed runtime.");
-        yield* validate(existing, asset.version).pipe(
-          Effect.scoped,
-          Effect.timeout(VALIDATION_TIMEOUT),
-        );
-        yield* activate();
-        return;
+        // A half-written or mismatched copy left by an older install would
+        // otherwise block this release for good. Nothing can run from it.
+        yield* removeDirectory(destination);
       }
 
       const available = yield* Effect.tryPromise(() =>
@@ -697,6 +725,7 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
         ),
       );
       yield* activate();
+      yield* pruneReleases(new Set([destination, staging]));
     },
     Effect.scoped,
     Effect.mapError(

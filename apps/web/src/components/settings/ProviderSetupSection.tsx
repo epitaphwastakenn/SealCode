@@ -193,7 +193,8 @@ function ProviderSetupActions({
           <div className="space-y-2">
             {usesCustomBinary ? (
               <p className="text-muted-foreground">
-                Uses the custom binary path below. Installation keeps that path.
+                Uses the custom binary path below. Installing switches to the managed runtime and
+                clears that path.
               </p>
             ) : null}
             {!installed && !provider.setup?.canInstall ? (

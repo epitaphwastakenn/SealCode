@@ -6,6 +6,7 @@ import {
   type ProviderInstallState,
 } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -62,64 +63,63 @@ const makeHarness = Effect.fn("providerInstallation.test.makeHarness")(function*
   const calls: string[] = [];
   let protectedPaths: ReadonlyArray<string> = [];
   const configured = input.instance ?? instance();
-  const router = yield* makeProviderInstallation().pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        ServerSettings.layerTest(input.settings),
-        Layer.mock(ProviderInstanceRegistry.ProviderInstanceRegistry)({
-          getInstance: (id) =>
-            Effect.succeed(id === configured.instanceId ? configured : undefined),
-          listInstances: Effect.succeed([configured]),
+  const context = yield* Layer.build(
+    Layer.mergeAll(
+      ServerSettings.layerTest(input.settings),
+      Layer.mock(ProviderInstanceRegistry.ProviderInstanceRegistry)({
+        getInstance: (id) => Effect.succeed(id === configured.instanceId ? configured : undefined),
+        listInstances: Effect.succeed([configured]),
+      }),
+      Layer.mock(ProviderRegistry.ProviderRegistry)({
+        refreshInstance: () =>
+          Effect.sync(() => {
+            calls.push("refresh");
+            return [];
+          }),
+      }),
+      Layer.mock(CodexInstallation.CodexInstallation)({
+        managedDirectory: "/unused-managed-codex",
+        start: Effect.sync(() => {
+          calls.push("codex-start");
+          return { ...state, driver: ProviderDriverKind.make("codex") };
         }),
-        Layer.mock(ProviderRegistry.ProviderRegistry)({
-          refreshInstance: () =>
-            Effect.sync(() => {
-              calls.push("refresh");
-              return [];
-            }),
-        }),
-        Layer.mock(CodexInstallation.CodexInstallation)({
-          managedDirectory: "/unused-managed-codex",
-          start: Effect.sync(() => {
-            calls.push("codex-start");
+        cancel: () =>
+          Effect.sync(() => {
+            calls.push("codex-cancel");
             return { ...state, driver: ProviderDriverKind.make("codex") };
           }),
-          cancel: () =>
-            Effect.sync(() => {
-              calls.push("codex-cancel");
-              return { ...state, driver: ProviderDriverKind.make("codex") };
-            }),
-          state: Effect.succeed({ ...state, driver: ProviderDriverKind.make("codex") }),
-          changes: Stream.succeed({ ...state, driver: ProviderDriverKind.make("codex") }),
-          remove: (paths) =>
-            Effect.sync(() => {
-              protectedPaths = paths ?? [];
-              calls.push("codex-remove");
-            }),
+        state: Effect.succeed({ ...state, driver: ProviderDriverKind.make("codex") }),
+        changes: Stream.succeed({ ...state, driver: ProviderDriverKind.make("codex") }),
+        remove: (paths) =>
+          Effect.sync(() => {
+            protectedPaths = paths ?? [];
+            calls.push("codex-remove");
+          }),
+      }),
+      Layer.mock(AntigravityInstallation.AntigravityInstallation)({
+        managedDirectory: "/unused-managed-runtime",
+        start: Effect.sync(() => {
+          calls.push("start");
+          return state;
         }),
-        Layer.mock(AntigravityInstallation.AntigravityInstallation)({
-          managedDirectory: "/unused-managed-runtime",
-          start: Effect.sync(() => {
-            calls.push("start");
+        cancel: () =>
+          Effect.sync(() => {
+            calls.push("cancel");
             return state;
           }),
-          cancel: () =>
-            Effect.sync(() => {
-              calls.push("cancel");
-              return state;
-            }),
-          state: Effect.succeed(state),
-          changes: Stream.succeed(state),
-          remove: (paths) =>
-            Effect.sync(() => {
-              protectedPaths = paths ?? [];
-              calls.push("remove");
-            }),
-        }),
-      ),
+        state: Effect.succeed(state),
+        changes: Stream.succeed(state),
+        remove: (paths) =>
+          Effect.sync(() => {
+            protectedPaths = paths ?? [];
+            calls.push("remove");
+          }),
+      }),
     ),
   );
-  return { router, calls, protectedPaths: () => protectedPaths };
+  const router = yield* makeProviderInstallation().pipe(Effect.provide(context));
+  const settings = Context.get(context, ServerSettings.ServerSettingsService);
+  return { router, calls, settings, protectedPaths: () => protectedPaths };
 });
 
 describe("provider installation routing", () => {
@@ -144,7 +144,7 @@ describe("provider installation routing", () => {
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 
-  it.effect("keeps external installs manual without hiding shared install status", () =>
+  it.effect("keeps a custom executable from being removed without hiding install status", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness({
         settings: {
@@ -156,13 +156,30 @@ describe("provider installation routing", () => {
           },
         },
       });
-      const start = yield* Effect.flip(harness.router.start({ instanceId }));
       const remove = yield* Effect.flip(harness.router.remove({ instanceId }));
-      assert.include(start.detail, "custom executable");
       assert.include(remove.detail, "custom executable");
       const observed = yield* Stream.runCollect(harness.router.subscribe({ instanceId }));
       assert.deepEqual(Array.from(observed), [state]);
       assert.deepEqual(harness.calls, []);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  it.effect("drops a leftover custom Antigravity path when installing the managed runtime", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({
+        settings: {
+          providerInstances: {
+            [ProviderInstanceId.make("antigravity")]: {
+              driver: ProviderDriverKind.make("antigravity"),
+              config: { binaryPath: "/old/agy", authMethod: "oauth-personal" },
+            },
+          },
+        },
+      });
+      yield* harness.router.start({ instanceId });
+      assert.deepEqual(harness.calls, ["start"]);
+      const saved = (yield* harness.settings.getSettings).providerInstances[instanceId];
+      assert.deepEqual(saved?.config, { authMethod: "oauth-personal" });
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

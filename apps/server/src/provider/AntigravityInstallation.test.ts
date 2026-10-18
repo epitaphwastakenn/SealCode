@@ -300,8 +300,9 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
       expect(path.dirname(selected.harnessPath)).toBe(path.dirname(selected.executablePath));
       expect(yield* fs.readFileString(selected.executablePath)).toBe(serverContents);
       expect(yield* fs.readFileString(selected.harnessPath)).toBe(harnessContents);
+      // The previous release had no running session, so it went with the install.
       expect(yield* fs.readDirectory(path.join(installation.managedDirectory, "versions"))).toEqual(
-        expect.arrayContaining([previousReleaseId, (yield* releaseAsset()).sha256]),
+        [(yield* releaseAsset()).sha256],
       );
       expect(requests).toEqual([(yield* releaseAsset()).url]);
     }),
@@ -912,6 +913,31 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
       yield* installation.remove();
       expect(yield* fs.exists(installation.managedDirectory)).toBe(false);
     }),
+  );
+
+  it.effect(
+    "replaces a broken copy of the release and drops older releases and failed installs",
+    () =>
+      Effect.gen(function* () {
+        const { installation, fs, path, stagingReleased } = yield* makeHarness({ previous: true });
+        const asset = yield* releaseAsset();
+        const versions = path.join(installation.managedDirectory, "versions");
+        const broken = path.join(versions, asset.sha256);
+        yield* fs.makeDirectory(broken);
+        yield* fs.writeFileString(path.join(broken, asset.executable.name), "partial");
+        yield* fs.makeDirectory(path.join(versions, ".install-crashed"));
+
+        yield* installation.start;
+        expect(yield* terminalState(installation)).toMatchObject({
+          phase: "succeeded",
+          installedVersion: "fixture-new",
+        });
+        yield* Deferred.await(stagingReleased);
+        const current = yield* installation.resolve();
+        expect(current.managedVersionDirectory).toBe(broken);
+        expect(yield* fs.readFileString(current.executablePath)).toBe(serverContents);
+        expect(yield* fs.readDirectory(versions)).toEqual([asset.sha256]);
+      }),
   );
 
   it.effect(

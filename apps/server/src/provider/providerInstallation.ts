@@ -105,7 +105,32 @@ export const makeProviderInstallation = Effect.fn("makeProviderInstallation")(fu
     ) =>
       new ProviderSetupError({ instanceId, operation: error.operation, detail: error.detail });
 
+  // Installing asks for the managed runtime. A custom Antigravity path left by
+  // an older setup would keep shadowing it, and install would refuse to run.
+  const clearAntigravityBinaryPath = Effect.fn("ProviderInstallation.clearAntigravityBinaryPath")(
+    function* (instanceId: ProviderInstanceId) {
+      const instance = yield* instances.getInstance(instanceId);
+      if (instance?.driverKind !== ANTIGRAVITY) return;
+      const settingsError = () =>
+        new ProviderSetupError({
+          instanceId,
+          operation: "install",
+          detail: "Could not clear the custom Antigravity executable path.",
+        });
+      const current = yield* settings.getSettings.pipe(Effect.mapError(settingsError));
+      const entry = current.providerInstances[instanceId];
+      if (entry === undefined || !hasBinaryPath(entry.config) || !entry.config.binaryPath.trim()) {
+        return;
+      }
+      const { binaryPath: _cleared, ...config } = entry.config;
+      yield* settings
+        .updateProviderInstance({ operation: "upsert", instanceId, instance: { ...entry, config } })
+        .pipe(Effect.mapError(settingsError));
+    },
+  );
+
   const start = Effect.fn("ProviderInstallation.start")(function* (input: ProviderSetupInput) {
+    yield* clearAntigravityBinaryPath(input.instanceId);
     const { installation } = yield* requireInstance(input.instanceId, "install", true);
     return yield* installation.start.pipe(Effect.mapError(failure(input.instanceId)));
   });

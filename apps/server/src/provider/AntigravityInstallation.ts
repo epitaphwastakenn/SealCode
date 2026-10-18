@@ -39,7 +39,9 @@ import {
 
 const DRIVER = ProviderDriverKind.make("antigravity");
 const DOWNLOAD_TIMEOUT = "45 minutes";
-const VALIDATION_TIMEOUT = "90 seconds";
+// The first start unpacks about 1 GB; a slow disk or an antivirus scanning
+// those files can take minutes on a machine where it normally takes seconds.
+const VALIDATION_TIMEOUT = "5 minutes";
 const FREE_SPACE_MARGIN = 256 * 1024 * 1024;
 const RECORD_MAX_BYTES = 8 * 1024;
 const RELEASE_RECORD = ".install-complete.json";
@@ -459,6 +461,21 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
       )
       .pipe(Effect.ignore);
 
+  const checkRuntime = (executable: AntigravityExecutable, expectedVersion: string) =>
+    validate(executable, expectedVersion).pipe(
+      Effect.scoped,
+      Effect.timeoutOrElse({
+        duration: VALIDATION_TIMEOUT,
+        orElse: () =>
+          Effect.fail(
+            installationError(
+              "verify",
+              "Antigravity did not finish starting within 5 minutes during its install check. Antivirus scanning of its first start is the usual cause: let it finish or allow the runtime folder, then retry.",
+            ),
+          ),
+      }),
+    );
+
   const install = Effect.fn("AntigravityInstallation.install")(
     function* (asset: AntigravityReleaseAsset) {
       yield* resolveNodeExecutable("Antigravity", environment).pipe(
@@ -513,10 +530,7 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
         const existing = yield* completedRelease(asset.sha256).pipe(Effect.option);
         if (Option.isSome(existing) && existing.value.version === asset.version) {
           yield* report("verifying", "Checking the installed runtime.");
-          yield* validate(existing.value, asset.version).pipe(
-            Effect.scoped,
-            Effect.timeout(VALIDATION_TIMEOUT),
-          );
+          yield* checkRuntime(existing.value, asset.version);
           yield* activate();
           yield* pruneReleases(new Set([destination]));
           return;
@@ -676,8 +690,11 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
         yield* fs.chmod(path.join(pairDirectory, asset.executable.name), 0o755);
         yield* fs.chmod(path.join(pairDirectory, asset.harness.name), 0o755);
       }
-      yield* report("verifying", "Checking the downloaded runtime.");
-      yield* validate(
+      yield* report(
+        "verifying",
+        "Checking the downloaded runtime. Its first start can take a few minutes.",
+      );
+      yield* checkRuntime(
         {
           executablePath: path.join(pairDirectory, asset.executable.name),
           harnessPath: path.join(pairDirectory, asset.harness.name),
@@ -686,7 +703,7 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
           managedVersionDirectory: pairDirectory,
         },
         asset.version,
-      ).pipe(Effect.scoped, Effect.timeout(VALIDATION_TIMEOUT));
+      );
       const record: InstalledRelease = {
         releaseId: asset.sha256,
         version: asset.version,
@@ -703,10 +720,7 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
           completedRelease(asset.sha256).pipe(
             Effect.flatMap((existing) =>
               existing.version === asset.version
-                ? validate(existing, asset.version).pipe(
-                    Effect.scoped,
-                    Effect.timeout(VALIDATION_TIMEOUT),
-                  )
+                ? checkRuntime(existing, asset.version)
                 : Effect.fail(
                     installationError(
                       "activate",

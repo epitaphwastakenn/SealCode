@@ -11,23 +11,17 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as PlatformError from "effect/PlatformError";
-import * as Queue from "effect/Queue";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import * as TestClock from "effect/testing/TestClock";
 import { HttpClient, HttpClientResponse } from "effect/http";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import * as AntigravityInstallation from "./AntigravityInstallation.ts";
-import { ANTIGRAVITY_AUTH_BROWSER_MARKER } from "./antigravityAuthSupport.ts";
 import {
   resolveAntigravityReleaseAsset,
   type AntigravityReleaseAsset,
 } from "./antigravityRelease.ts";
-
-import antigravityInitialize from "../../../../packages/effect-acp/test/fixtures/antigravity-initialize.json" with { type: "json" };
 
 const serverContents = "antigravity runtime\n";
 const harnessContents = "local harness\n";
@@ -131,8 +125,6 @@ interface HarnessOptions {
   readonly path?: string;
   readonly previous?: boolean;
   readonly fileSystem?: FileSystem.FileSystem;
-  readonly validate?: AntigravityInstallation.AntigravityInstallationOptions["validate"];
-  readonly useDefaultValidation?: boolean;
 }
 
 const makeHarness = Effect.fn("test.makeAntigravityInstallation")(function* (
@@ -157,10 +149,6 @@ const makeHarness = Effect.fn("test.makeAntigravityInstallation")(function* (
   }
   const stagingReleased = yield* Deferred.make<void>();
   const requests: string[] = [];
-  const validations: Array<{
-    executable: AntigravityInstallation.AntigravityExecutable;
-    version: string;
-  }> = [];
   const installationFs = options.fileSystem ?? fs;
   const trackedFs = FileSystem.FileSystem.of({
     ...installationFs,
@@ -176,14 +164,6 @@ const makeHarness = Effect.fn("test.makeAntigravityInstallation")(function* (
   const installation = yield* AntigravityInstallation.makeAntigravityInstallation({
     baseDir,
     releaseAsset: asset,
-    ...(options.useDefaultValidation
-      ? {}
-      : {
-          validate: (executable: AntigravityInstallation.AntigravityExecutable, version: string) =>
-            Effect.sync(() => validations.push({ executable, version })).pipe(
-              Effect.andThen(options.validate?.(executable, version) ?? Effect.void),
-            ),
-        }),
   }).pipe(
     Effect.provideService(FileSystem.FileSystem, trackedFs),
     Effect.provideService(HostProcess.Platform, platform),
@@ -220,7 +200,7 @@ const makeHarness = Effect.fn("test.makeAntigravityInstallation")(function* (
       ),
     ),
   );
-  return { installation, fs, path, baseDir, requests, validations, stagingReleased };
+  return { installation, fs, path, baseDir, requests, stagingReleased };
 });
 
 const terminalState = (installation: AntigravityInstallation.AntigravityInstallation["Service"]) =>
@@ -248,30 +228,32 @@ const expectPreviousRelease = Effect.fn("test.expectPreviousAntigravityRelease")
 it.layer(NodeServices.layer)("Antigravity installation", (it) => {
   it.effect("reports missing Node before downloading the standalone provider runtime", () =>
     Effect.gen(function* () {
-      const { installation, requests, validations } = yield* makeHarness();
+      const { installation, requests } = yield* makeHarness();
       yield* installation.start;
       expect(yield* terminalState(installation)).toMatchObject({
         phase: "failed",
         message: expect.stringContaining("Install Node.js"),
       });
       expect(requests).toEqual([]);
-      expect(validations).toEqual([]);
     }).pipe(Effect.provideService(HostProcess.IsExecutable, true)),
   );
 
-  it.effect("verifies both files before activating a streamed download", () =>
+  it.effect("keeps the previous release active until a streamed download is in place", () =>
     Effect.gen(function* () {
-      const enteredValidation = yield* Deferred.make<void>();
-      const finishValidation = yield* Deferred.make<void>();
-      const { installation, fs, path, validations, requests, stagingReleased } = yield* makeHarness(
-        {
-          previous: true,
-          validate: () =>
-            Deferred.succeed(enteredValidation, undefined).pipe(
-              Effect.andThen(Deferred.await(finishValidation)),
+      const entered = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const { installation, fs, path, requests, stagingReleased } = yield* makeHarness({
+        previous: true,
+        body: Stream.concat(
+          Stream.make(completeArchive.subarray(0, 31)),
+          Stream.fromEffect(
+            Deferred.succeed(entered, undefined).pipe(
+              Effect.andThen(Deferred.await(release)),
+              Effect.as(completeArchive.subarray(31)),
             ),
-        },
-      );
+          ),
+        ),
+      });
       const initial = yield* installation.changes.pipe(
         Stream.runHead,
         Effect.map(Option.getOrThrow),
@@ -279,15 +261,10 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
       expect(initial).toMatchObject({ phase: "idle", installedVersion: previousVersion });
       const started = yield* installation.start;
       expect(started).toMatchObject({ phase: "downloading", downloadedBytes: 0 });
-      yield* Deferred.await(enteredValidation);
+      yield* Deferred.await(entered);
       yield* expectPreviousRelease(installation);
-      const validation = validations[0];
-      expect(validation?.version).toBe("fixture-new");
-      if (!validation) return yield* Effect.die("Expected runtime validation.");
-      expect(yield* fs.readFileString(validation.executable.executablePath)).toBe(serverContents);
-      expect(yield* fs.readFileString(validation.executable.harnessPath)).toBe(harnessContents);
 
-      yield* Deferred.succeed(finishValidation, undefined);
+      yield* Deferred.succeed(release, undefined);
       expect(yield* terminalState(installation)).toMatchObject({
         phase: "succeeded",
         operationId: started.operationId,
@@ -308,264 +285,17 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
     }),
   );
 
-  it.effect.each(
-    [
-      {
-        name: "the expected release with protocol 1",
-        protocolVersion: 1,
-        agentName: "antigravity-acp",
-        version: "fixture-new",
-        valid: true,
-      },
-      {
-        name: "the expected release with protocol 2 and legacy fields",
-        protocolVersion: 2,
-        agentName: "antigravity-acp",
-        version: "fixture-new",
-        valid: true,
-      },
-      {
-        name: "an unsupported protocol version",
-        protocolVersion: 3,
-        agentName: "antigravity-acp",
-        version: "fixture-new",
-        valid: false,
-      },
-      { name: "a different agent", agentName: "other-agent", version: "fixture-new", valid: false },
-      {
-        name: "a different version",
-        agentName: "antigravity-acp",
-        version: "other-version",
-        valid: false,
-      },
-      {
-        name: "the Windows ARM release with locked child processes",
-        platform: "win32" as const,
-        arch: "arm64" as const,
-        agentName: "antigravity-acp",
-        version: "fixture-new",
-        valid: true,
-      },
-      {
-        name: "an invalid Windows ARM release with locked child processes",
-        platform: "win32" as const,
-        arch: "arm64" as const,
-        agentName: "antigravity-acp",
-        version: "other-version",
-        valid: false,
-      },
-      {
-        name: "a cancelled Windows ARM verification with locked child processes",
-        platform: "win32" as const,
-        arch: "arm64" as const,
-        agentName: "antigravity-acp",
-        version: "fixture-new",
-        cancel: true,
-        valid: false,
-      },
-    ].flatMap((testCase) => {
-      const cleanupErrorTags =
-        testCase.platform === "win32"
-          ? (["Unknown", "PermissionDenied", "Busy"] as const)
-          : (["Unknown"] as const);
-      return cleanupErrorTags.map((cleanupErrorTag) => ({
-        ...testCase,
-        cleanupErrorTag,
-        name: `${cleanupErrorTag}: ${testCase.name}`,
-      }));
-    }),
-  )("validates $name with initialize only and removes the disposable profile", (testCase) =>
-    Effect.gen(function* () {
-      const fs = yield* FileSystem.FileSystem;
-      const platform = testCase.platform ?? hostPlatform;
-      const encoder = new TextEncoder();
-      const decodeRequest = Schema.decodeUnknownEffect(
-        Schema.fromJsonString(
-          Schema.Struct({
-            id: Schema.Union([Schema.String, Schema.Number]),
-            method: Schema.String,
-          }),
-        ),
-      );
-      const methods: string[] = [];
-      const profiles = new Set<string>();
-      const cleanupRetryStarted = yield* Deferred.make<void>();
-      const initializationStarted = yield* Deferred.make<void>();
-      let childProcessesRunning = false;
-      let profileRemovalAttempts = 0;
-      let closedRuntimes = 0;
-      const spawner = ChildProcessSpawner.make(
-        Effect.fn("test.spawnAntigravityValidator")(function* (command) {
-          if (command._tag !== "StandardCommand") {
-            return yield* Effect.die("Expected one validation process.");
-          }
-          const profile = command.options.env?.GEMINI_HOME;
-          if (!profile) return yield* Effect.die("Expected a disposable validation profile.");
-          profiles.add(profile);
-          const helper = command.args[0] === "-e";
-          if (!helper) childProcessesRunning = true;
-          if (!helper) {
-            if (platform === "win32") {
-              expect(command.options.env?.TEMP).toBe(profile);
-              expect(command.options.env?.TMP).toBe(profile);
-            } else {
-              expect(command.options.env?.TMPDIR).toBe(profile);
-            }
-          }
-          const output = yield* Queue.unbounded<Uint8Array>();
-          const exited = yield* Deferred.make<ChildProcessSpawner.ExitCode>();
-          const terminate = Deferred.succeed(exited, ChildProcessSpawner.ExitCode(0)).pipe(
-            Effect.asVoid,
-          );
-          yield* Effect.addFinalizer(() =>
-            terminate.pipe(
-              Effect.andThen(Queue.shutdown(output)),
-              Effect.andThen(
-                Effect.sync(() => {
-                  if (!helper) closedRuntimes += 1;
-                }),
-              ),
-            ),
-          );
-          return ChildProcessSpawner.makeHandle({
-            pid: ChildProcessSpawner.ProcessId(helper ? 1 : 2),
-            exitCode: helper
-              ? Effect.succeed(ChildProcessSpawner.ExitCode(0))
-              : Deferred.await(exited),
-            isRunning: Deferred.isDone(exited).pipe(Effect.map((done) => !done)),
-            kill: () =>
-              Effect.sync(() => {
-                if (!helper) childProcessesRunning = false;
-              }).pipe(Effect.andThen(terminate)),
-            unref: Effect.succeed(Effect.void),
-            stdin: Sink.forEach((bytes: Uint8Array) =>
-              Effect.gen(function* () {
-                const request = yield* decodeRequest(new TextDecoder().decode(bytes)).pipe(
-                  Effect.orDie,
-                );
-                methods.push(request.method);
-                if (testCase.cancel) {
-                  yield* Deferred.succeed(initializationStarted, undefined);
-                  return;
-                }
-                yield* Queue.offer(
-                  output,
-                  encoder.encode(
-                    `${encodeJsonString({
-                      jsonrpc: "2.0",
-                      id: request.id,
-                      ...(request.method === "initialize"
-                        ? {
-                            result: {
-                              ...antigravityInitialize,
-                              protocolVersion: testCase.protocolVersion ?? 2,
-                              agentInfo: { name: testCase.agentName, version: testCase.version },
-                            },
-                          }
-                        : {
-                            error: {
-                              code: -32601,
-                              message: "Validation must not sign in or create sessions.",
-                            },
-                          }),
-                    })}\n`,
-                  ),
-                );
-              }),
-            ),
-            stdout: helper ? Stream.empty : Stream.fromQueue(output),
-            stderr: helper
-              ? Stream.make(
-                  encoder.encode(
-                    `${ANTIGRAVITY_AUTH_BROWSER_MARKER}${encodeJsonString(command.args.at(-1))}\n`,
-                  ),
-                )
-              : Stream.empty,
-            all: Stream.empty,
-            getInputFd: () => Sink.drain,
-            getOutputFd: () => Stream.empty,
-          });
-        }),
-      );
-      const { installation, stagingReleased } = yield* makeHarness({
-        previous: true,
-        useDefaultValidation: true,
-        platform,
-        ...(testCase.arch ? { arch: testCase.arch } : {}),
-        archive:
-          platform === "win32" ? Buffer.from(zipFixtures.windows, "base64") : completeArchive,
-        fileSystem: FileSystem.FileSystem.of({
-          ...fs,
-          remove: (target, options) =>
-            Effect.suspend(() => {
-              if (platform === "win32" && profiles.has(target)) {
-                profileRemovalAttempts += 1;
-                expect(childProcessesRunning).toBe(false);
-                // Even after the tree exits, Windows can briefly retain a DLL handle.
-                if (profileRemovalAttempts === 1) {
-                  return Deferred.succeed(cleanupRetryStarted, undefined).pipe(
-                    Effect.andThen(
-                      Effect.fail(
-                        PlatformError.systemError({
-                          _tag: testCase.cleanupErrorTag,
-                          module: "FileSystem",
-                          method: "remove",
-                          description: "Unpacked DLL is in use",
-                        }),
-                      ),
-                    ),
-                  );
-                }
-              }
-              return fs.remove(target, options);
-            }),
-        }),
-      }).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
-      const started = yield* installation.start;
-      const cancellation = testCase.cancel
-        ? yield* Deferred.await(initializationStarted).pipe(
-            Effect.andThen(installation.cancel(started.operationId!)),
-            Effect.forkChild,
-          )
-        : undefined;
-      if (platform === "win32") {
-        yield* Effect.raceFirst(
-          Deferred.await(cleanupRetryStarted).pipe(Effect.andThen(TestClock.adjust("100 millis"))),
-          terminalState(installation),
-        );
-      }
-      if (cancellation) yield* Fiber.join(cancellation);
-      expect((yield* terminalState(installation)).phase).toBe(
-        testCase.cancel ? "cancelled" : testCase.valid ? "succeeded" : "failed",
-      );
-      yield* Deferred.await(stagingReleased);
-      expect(methods).toEqual(["initialize"]);
-      expect(closedRuntimes).toBe(1);
-      expect(profiles.size).toBe(1);
-      if (platform === "win32") expect(profileRemovalAttempts).toBe(2);
-      for (const profile of profiles) {
-        expect(yield* fs.exists(profile)).toBe(false);
-      }
-      if (testCase.valid) {
-        expect((yield* installation.resolve()).version).toBe("fixture-new");
-      } else {
-        yield* expectPreviousRelease(installation);
-      }
-    }),
-  );
-
   it.effect("accepts an encoded Content-Length when the body is compressed", () =>
     Effect.gen(function* () {
       // dl.google.com gzips the archive and reports the encoded size. The decoded
       // stream is still checked byte for byte and by hash.
-      const { installation, validations } = yield* makeHarness({
+      const { installation } = yield* makeHarness({
         contentLength: completeArchive.byteLength - 1_000,
         contentEncoding: "gzip",
       });
       yield* installation.start;
       const state = yield* terminalState(installation);
       expect(state.phase).toBe("succeeded");
-      expect(validations).toHaveLength(1);
     }),
   );
 
@@ -583,11 +313,11 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
     { name: "path traversal", archive: Buffer.from(zipFixtures.traversal, "base64") },
     { name: "symbolic link", archive: Buffer.from(zipFixtures.symlink, "base64") },
     { name: "oversized member", archive: Buffer.from(zipFixtures.oversizedMember, "base64") },
-  ])("rejects $name before runtime validation", ({ completeAsset, ...options }) =>
+  ])("rejects $name before activating anything", ({ completeAsset, ...options }) =>
     Effect.gen(function* () {
       const asset =
         completeAsset === undefined ? undefined : { ...(yield* releaseAsset()), ...completeAsset };
-      const { installation, validations, stagingReleased, fs, path } = yield* makeHarness({
+      const { installation, stagingReleased, fs, path } = yield* makeHarness({
         ...options,
         ...(asset === undefined ? {} : { asset }),
         previous: true,
@@ -596,7 +326,6 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
       const state = yield* terminalState(installation);
       expect(state.phase).toBe("failed");
       expect(state.message).toBeTruthy();
-      expect(validations).toEqual([]);
       yield* Deferred.await(stagingReleased);
       yield* expectPreviousRelease(installation);
       expect(yield* fs.readDirectory(path.join(installation.managedDirectory, "versions"))).toEqual(
@@ -648,7 +377,7 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
       }),
   );
 
-  it.effect.each(["downloading", "extracting", "verifying"] as const)(
+  it.effect.each(["downloading", "extracting"] as const)(
     "cancels during %s and waits for open resources to close",
     (phase) =>
       Effect.gen(function* () {
@@ -660,7 +389,7 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
           Effect.andThen(Deferred.await(release)),
           Effect.onInterrupt(() => Deferred.succeed(interrupted, undefined)),
         );
-        const { installation, stagingReleased, path, validations } = yield* makeHarness({
+        const { installation, stagingReleased, path } = yield* makeHarness({
           previous: true,
           body:
             phase === "downloading"
@@ -669,7 +398,6 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
                   Stream.fromEffect(barrier.pipe(Effect.as(completeArchive.subarray(31)))),
                 )
               : undefined,
-          validate: phase === "verifying" ? () => barrier : undefined,
           fileSystem: FileSystem.FileSystem.of({
             ...fs,
             sink: (target, options) =>
@@ -691,7 +419,6 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
         yield* Deferred.await(interrupted);
         yield* Deferred.await(stagingReleased);
         yield* expectPreviousRelease(installation);
-        expect(validations).toHaveLength(phase === "verifying" ? 1 : 0);
         expect(
           yield* fs.readDirectory(path.join(installation.managedDirectory, "versions")),
         ).toEqual([previousReleaseId]);
@@ -706,8 +433,6 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
       const fs = yield* FileSystem.FileSystem;
       const cleanupStarted = yield* Deferred.make<void>();
       const releaseCleanup = yield* Deferred.make<void>();
-      const nextValidationStarted = yield* Deferred.make<void>();
-      const releaseNextValidation = yield* Deferred.make<void>();
       const firstWorker = yield* Deferred.make<Fiber.Fiber<unknown, unknown>>();
       const cleanupError = PlatformError.systemError({
         _tag: "PermissionDenied",
@@ -716,17 +441,8 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
         description: "EPERM: pointer temp directory is in use",
       });
       let firstPointer = true;
-      let validationCount = 0;
       const { installation, stagingReleased } = yield* makeHarness({
         previous: true,
-        validate: () => {
-          validationCount += 1;
-          return validationCount === 2
-            ? Deferred.succeed(nextValidationStarted, undefined).pipe(
-                Effect.andThen(Deferred.await(releaseNextValidation)),
-              )
-            : Effect.void;
-        },
         fileSystem: FileSystem.FileSystem.of({
           ...fs,
           makeTempDirectoryScoped: (settings) => {
@@ -756,32 +472,20 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
           phase: "succeeded",
           installedVersion: "fixture-new",
         });
+        // A newer install of the same release reuses it while the first
+        // install's pointer cleanup is still pending.
         const current = testCase.restart ? yield* installation.start : first;
-        if (testCase.restart) yield* Deferred.await(nextValidationStarted);
 
         yield* Deferred.succeed(releaseCleanup, undefined);
         yield* Fiber.await(yield* Deferred.await(firstWorker));
         yield* Deferred.await(stagingReleased);
-        expect(yield* installation.state).toMatchObject({
-          operationId: current.operationId,
-          phase: testCase.restart ? "verifying" : "succeeded",
-          installedVersion: "fixture-new",
-        });
         expect((yield* installation.resolve()).version).toBe("fixture-new");
-
-        yield* Deferred.succeed(releaseNextValidation, undefined);
         expect(yield* terminalState(installation)).toMatchObject({
           operationId: current.operationId,
           phase: "succeeded",
           installedVersion: "fixture-new",
         });
-      }).pipe(
-        Effect.ensuring(
-          Deferred.succeed(releaseCleanup, undefined).pipe(
-            Effect.andThen(Deferred.succeed(releaseNextValidation, undefined)),
-          ),
-        ),
-      );
+      }).pipe(Effect.ensuring(Deferred.succeed(releaseCleanup, undefined)));
     }),
   );
 
@@ -915,23 +619,6 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
     }),
   );
 
-  it.effect("installs the verified release when its first start outlasts the check", () =>
-    Effect.gen(function* () {
-      const { installation } = yield* makeHarness({ validate: () => Effect.never });
-      yield* installation.start;
-      yield* installation.changes.pipe(
-        Stream.filter((state) => state.phase === "verifying"),
-        Stream.runHead,
-      );
-      yield* TestClock.adjust("2 minutes");
-      expect(yield* terminalState(installation)).toMatchObject({
-        phase: "succeeded",
-        installedVersion: "fixture-new",
-      });
-      expect((yield* installation.resolve()).version).toBe("fixture-new");
-    }),
-  );
-
   it.effect(
     "replaces a broken copy of the release and drops older releases and failed installs",
     () =>
@@ -1042,7 +729,7 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
         const asset = yield* releaseAsset(archive, "win32");
         let denyPointerRename = true;
         const renameTargets: string[] = [];
-        const { installation, requests, validations } = yield* makeHarness({
+        const { installation, requests } = yield* makeHarness({
           previous: true,
           platform: "win32",
           archive,
@@ -1075,7 +762,6 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
         expect((yield* terminalState(installation)).phase).toBe("succeeded");
         expect((yield* installation.resolve()).version).toBe("fixture-new");
         expect(requests).toEqual([]);
-        expect(validations).toHaveLength(2);
         expect(renameTargets).toEqual([
           path.join(installation.managedDirectory, "active.json"),
           path.join(installation.managedDirectory, "active.json"),

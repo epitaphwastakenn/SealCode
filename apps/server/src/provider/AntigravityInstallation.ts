@@ -21,17 +21,11 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
-import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
 
 import * as ServerConfig from "../config.ts";
 import { openZipArchive } from "../zipArchive.ts";
-import { makeAntigravityAcpRuntime } from "./acp/AntigravityAcpSupport.ts";
-import {
-  buildAntigravityAcpSpawnInput,
-  prepareAntigravityProfile,
-} from "./antigravityAuthSupport.ts";
 import {
   resolveAntigravityReleaseAsset,
   type AntigravityReleaseAsset,
@@ -39,10 +33,6 @@ import {
 
 const DRIVER = ProviderDriverKind.make("antigravity");
 const DOWNLOAD_TIMEOUT = "45 minutes";
-// Every start unpacks about 1 GB (15-20s on a fast machine), and the very
-// first one is also the antivirus's first look at those files, which can take
-// minutes on its own.
-const VALIDATION_TIMEOUT = "2 minutes";
 const FREE_SPACE_MARGIN = 256 * 1024 * 1024;
 const RECORD_MAX_BYTES = 8 * 1024;
 const RELEASE_RECORD = ".install-complete.json";
@@ -119,10 +109,6 @@ export class AntigravityInstallation extends Context.Service<
 export interface AntigravityInstallationOptions {
   readonly baseDir: string;
   readonly releaseAsset?: AntigravityReleaseAsset | null;
-  readonly validate?: (
-    executable: AntigravityExecutable,
-    expectedVersion: string,
-  ) => Effect.Effect<void, AntigravityInstallationError, Scope.Scope>;
 }
 
 const installationError = (operation: string, detail: string, cause?: unknown) =>
@@ -154,7 +140,6 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
   const path = yield* Path.Path;
   const crypto = yield* Crypto.Crypto;
   const http = yield* HttpClient.HttpClient;
-  const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const serviceScope = yield* Effect.scope;
   const platform = yield* HostProcess.Platform;
   const arch = yield* HostProcess.Architecture;
@@ -349,98 +334,6 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
         ),
     );
 
-  const validate =
-    options.validate ??
-    Effect.fn("AntigravityInstallation.validate")(
-      function* (executable: AntigravityExecutable, expectedVersion: string) {
-        const validationScope = yield* Effect.scope;
-        const profileDirectory = yield* Effect.acquireRelease(
-          fs.makeTempDirectory({ prefix: "t3-antigravity-validate-" }),
-          (directory) =>
-            fs.remove(directory, { recursive: true, force: true }).pipe(
-              // Windows may retain DLL handles briefly after taskkill returns.
-              Effect.retry({
-                times: platform === "win32" ? 10 : 0,
-                schedule: Schedule.spaced("100 millis"),
-                while: (error) =>
-                  error.reason._tag === "PermissionDenied" ||
-                  error.reason._tag === "Busy" ||
-                  error.reason._tag === "Unknown",
-              }),
-              // An antivirus can hold the unpacked files past the retries; a
-              // leftover temp folder must not fail an install that passed.
-              Effect.catch((error) =>
-                Effect.logWarning("Could not remove the Antigravity check's temp folder", {
-                  directory,
-                  reason: error.reason._tag,
-                }),
-              ),
-            ),
-        );
-        const profile = yield* prepareAntigravityProfile({
-          profileDirectory,
-          platform,
-          baseEnv: environment,
-          // The profile is scoped, so it cleans up the unpack; a shallow
-          // root keeps it under Windows' path limit.
-          tempDirectory: profileDirectory,
-        });
-        const runtime = yield* makeAntigravityAcpRuntime({
-          spawn: buildAntigravityAcpSpawnInput({
-            installation: executable,
-            profile,
-            cwd: profileDirectory,
-            baseEnv: environment,
-          }),
-          cwd: profileDirectory,
-          childProcessSpawner:
-            platform === "win32"
-              ? ChildProcessSpawner.make(
-                  Effect.fnUntraced(function* (command) {
-                    const child = yield* spawner.spawn(command);
-                    // Stop PyInstaller's tree before ACP closes its pipes. Once
-                    // the launcher exits, taskkill cannot reach its children,
-                    // which keep the executable and unpacked DLLs locked.
-                    yield* Scope.addFinalizer(
-                      validationScope,
-                      child.kill({ forceKillAfter: "1 second" }).pipe(Effect.orDie),
-                    );
-                    return child;
-                  }),
-                )
-              : spawner,
-          clientInfo: { name: "t3-code", version: "0.0.0" },
-        });
-        const initialized = yield* runtime.initialize();
-        if (
-          initialized.agentInfo?.name !== "antigravity-acp" ||
-          initialized.agentInfo.version !== expectedVersion ||
-          // Antigravity 1.1.1 can report 2 with the legacy ACP response shape.
-          // The ACP client chooses the session wire format from that shape.
-          (initialized.protocolVersion !== 1 && initialized.protocolVersion !== 2) ||
-          initialized.agentCapabilities?.loadSession !== true ||
-          !initialized.agentCapabilities.sessionCapabilities?.resume ||
-          !initialized.agentCapabilities.auth?.logout ||
-          !initialized.authMethods?.some((method) => method.id === "oauth-personal")
-        ) {
-          return yield* installationError(
-            "verify",
-            "The downloaded runtime did not identify as the expected Google Antigravity release.",
-          );
-        }
-      },
-      Effect.provideService(FileSystem.FileSystem, fs),
-      Effect.provideService(Path.Path, path),
-      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-      Effect.provideService(Crypto.Crypto, crypto),
-      Effect.mapError(
-        wrapFailure(
-          "verify",
-          "The downloaded Antigravity runtime could not start in this environment.",
-        ),
-      ),
-    );
-
   const removeDirectory = (directory: string) =>
     fs.remove(directory, { recursive: true, force: true }).pipe(
       // Windows may retain file handles briefly after a process exits.
@@ -468,24 +361,6 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
         }),
       )
       .pipe(Effect.ignore);
-
-  // A runtime that crashes or answers as the wrong release fails the check at
-  // once. One that is still starting when time runs out is the pinned,
-  // SHA-256-verified release on a slow first start, so it is installed anyway.
-  const checkRuntime = (executable: AntigravityExecutable, expectedVersion: string) =>
-    validate(executable, expectedVersion).pipe(
-      Effect.scoped,
-      Effect.timeoutOption(VALIDATION_TIMEOUT),
-      Effect.flatMap(
-        Option.match({
-          onSome: () => Effect.void,
-          onNone: () =>
-            Effect.logWarning("Antigravity was still starting when its install check ran out", {
-              version: expectedVersion,
-            }),
-        }),
-      ),
-    );
 
   const install = Effect.fn("AntigravityInstallation.install")(
     function* (asset: AntigravityReleaseAsset) {
@@ -540,8 +415,6 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
       if (yield* fs.exists(destination)) {
         const existing = yield* completedRelease(asset.sha256).pipe(Effect.option);
         if (Option.isSome(existing) && existing.value.version === asset.version) {
-          yield* report("verifying", "Checking the installed runtime.");
-          yield* checkRuntime(existing.value, asset.version);
           yield* activate();
           yield* pruneReleases(new Set([destination]));
           return;
@@ -701,20 +574,6 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
         yield* fs.chmod(path.join(pairDirectory, asset.executable.name), 0o755);
         yield* fs.chmod(path.join(pairDirectory, asset.harness.name), 0o755);
       }
-      yield* report(
-        "verifying",
-        "Checking the downloaded runtime. Its first start can take a few minutes.",
-      );
-      yield* checkRuntime(
-        {
-          executablePath: path.join(pairDirectory, asset.executable.name),
-          harnessPath: path.join(pairDirectory, asset.harness.name),
-          source: "managed",
-          version: asset.version,
-          managedVersionDirectory: pairDirectory,
-        },
-        asset.version,
-      );
       const record: InstalledRelease = {
         releaseId: asset.sha256,
         version: asset.version,
@@ -731,7 +590,7 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
           completedRelease(asset.sha256).pipe(
             Effect.flatMap((existing) =>
               existing.version === asset.version
-                ? checkRuntime(existing, asset.version)
+                ? Effect.void
                 : Effect.fail(
                     installationError(
                       "activate",

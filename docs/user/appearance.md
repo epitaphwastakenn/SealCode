@@ -31,7 +31,12 @@ applies to the web and desktop clients.
 
 ## Motion
 
-The main sidebar, right panel, and terminal drawer open and close immediately by default. Move the
+**Interface animations** fade and slide content in as you switch threads, tabs, and pages, open menus
+and panels, and change themes. Turn it off in **Settings > Appearance > Motion**; reduced motion in
+your operating system also turns it off.
+
+Panels resize without motion by default: the main sidebar, right panel, and terminal drawer open and
+close at full size immediately. Move the
 **Panel animations** slider above 0 ms to add motion, up to 400 ms, unless reduced motion is enabled
 in your operating system. Moving between threads always snaps to the selected thread's panel state
 without replaying its transitions.

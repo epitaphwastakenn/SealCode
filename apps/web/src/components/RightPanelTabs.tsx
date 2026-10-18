@@ -56,6 +56,7 @@ import { isElectron } from "~/env";
 import type { DesktopPreviewOverlay } from "~/previewStateStore";
 import type { RightPanelSurface } from "~/rightPanelStore";
 import { cn } from "~/lib/utils";
+import { useEnterMotion, usePanelNavigationSuppressed } from "~/panelAnimations";
 import { resolveShortcutCommand, type ShortcutMatchContext } from "~/keybindings";
 import { readLocalApi } from "~/localApi";
 import { Button } from "~/components/ui/button";
@@ -840,6 +841,18 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
   const { resolvedTheme } = useTheme();
   const tabListRef = useRef<HTMLDivElement>(null);
   const addSurfaceTriggerRef = useRef<HTMLButtonElement>(null);
+  const panelHostRef = useRef<HTMLDivElement | null>(null);
+  const surfaceContentRef = useRef<HTMLDivElement | null>(null);
+  const panelOpen = props.open !== false;
+  const navigating = usePanelNavigationSuppressed();
+  // The sheet slides in on its own; the inline panel reveals from its outer edge.
+  // A thread switch shows the panel in place, like the panel resize transitions.
+  useEnterMotion(panelHostRef, panelOpen, "reveal-end", {
+    onMount: "navigation",
+    when: panelOpen && props.mode === "inline" && !navigating,
+  });
+  // Opacity only: browser tabs place a native view from this content box.
+  useEnterMotion(surfaceContentRef, props.activeSurfaceId, "fade", { durationScale: 0.7 });
   const [renamingDevice, setRenamingDevice] = useState<string | null>(null);
   const [addSurfaceMenuOpen, setAddSurfaceMenuOpen] = useState(false);
   const [tabScrollState, setTabScrollState] = useState({
@@ -1130,6 +1143,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
   return (
     <PreviewPanelShell
       mode={props.mode}
+      hostRef={panelHostRef}
       {...(props.maximized !== undefined ? { maximized: props.maximized } : {})}
       {...(props.open !== undefined ? { open: props.open } : {})}
       {...(props.widthStorageKey !== undefined ? { widthStorageKey: props.widthStorageKey } : {})}
@@ -1181,7 +1195,7 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
                     onAuxClick={(event) => handleTabAuxClick(event, surface)}
                     onContextMenu={(event) => void handleTabContextMenu(event, surface)}
                     className={cn(
-                      "cursor-pointer group/tab flex h-6 max-w-36 shrink-0 items-center gap-0.5 rounded-md pr-2 pl-1.5 text-xs",
+                      "cursor-pointer group/tab flex h-6 max-w-36 shrink-0 items-center gap-0.5 rounded-md pr-2 pl-1.5 text-xs transition-[background-color,color] duration-150",
                       ownsDesktopTitleBar && "[-webkit-app-region:no-drag]",
                       active
                         ? "bg-accent text-foreground"
@@ -1419,7 +1433,11 @@ export function RightPanelTabs(props: RightPanelTabsProps) {
           />
         ) : null}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col" data-right-panel-surface-content>
+      <div
+        ref={surfaceContentRef}
+        className="flex min-h-0 flex-1 flex-col"
+        data-right-panel-surface-content
+      >
         {props.activeSurfaceId === null ? (
           <RightPanelEmptyState
             onAddBrowser={props.onAddBrowser}

@@ -79,6 +79,7 @@ import { usePullRequestDefaultMergeMethodResolver } from "./usePullRequestAction
 import { changeRequestRepositoryUrl, gitHubPullRequestBrowserUrl } from "~/lib/openPullRequestLink";
 import { usePreparePullRequestThreadAction } from "~/lib/sourceControlActions";
 import { cn } from "~/lib/utils";
+import { useEnterMotion } from "~/panelAnimations";
 import { readLocalApi } from "~/localApi";
 import type { ReviewCommentContext } from "~/reviewCommentContext";
 import { useProjects, useServerConfigs } from "~/state/entities";
@@ -568,6 +569,8 @@ export function PullRequestDetailPanel({
   const [threadPickerOpen, setThreadPickerOpen] = useState(false);
   const [openReviewRequest, setOpenReviewRequest] = useState(0);
   const [tab, setTab] = useState<DetailTab>("summary");
+  const tabBodyRef = useRef<HTMLDivElement | null>(null);
+  useEnterMotion(tabBodyRef, tab, "fade", { durationScale: 0.7 });
   const [timelineOrder, setTimelineOrder] = useState<"newest" | "oldest">("newest");
   const [codeCommitScope, setCodeCommitScope] = useState<{
     readonly pullRequestKey: string;
@@ -2740,6 +2743,7 @@ export function PullRequestDetailPanel({
       </div>
 
       <div
+        ref={tabBodyRef}
         className="relative flex min-h-0 flex-1 flex-col overflow-hidden"
         onScrollCapture={(event) => {
           const scroller = scrollerByTab.current[tab];

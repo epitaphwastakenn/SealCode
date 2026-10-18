@@ -34,6 +34,7 @@ interface PreviewPanelShellProps {
    */
   widthStorageKey?: string;
   defaultWidth?: number;
+  hostRef?: RefObject<HTMLDivElement | null>;
   children: ReactNode;
 }
 
@@ -46,7 +47,8 @@ export function PreviewPanelShell(props: PreviewPanelShellProps) {
 }
 
 function ResizablePreviewPanelShell(props: PreviewPanelShellProps) {
-  const hostRef = useRef<HTMLDivElement | null>(null);
+  const localHostRef = useRef<HTMLDivElement | null>(null);
+  const hostRef = props.hostRef ?? localHostRef;
   const inlineSize = usePreviewPanelInlineSize(hostRef, {
     enabled: props.mode === "inline" && !props.maximized,
     widthStorageKey: props.widthStorageKey,
@@ -58,7 +60,6 @@ function ResizablePreviewPanelShell(props: PreviewPanelShellProps) {
 function PreviewPanelShellFrame(
   props: PreviewPanelShellProps & {
     inlineSize: PreviewPanelInlineSize;
-    hostRef?: RefObject<HTMLDivElement | null>;
   },
 ) {
   const useDragRegion = isElectron && props.mode !== "sheet" && props.mode !== "embedded";

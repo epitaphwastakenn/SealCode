@@ -293,7 +293,7 @@ import {
   useEnvironmentSettings,
 } from "../hooks/useSettings";
 import { useNowMinute } from "../hooks/useNowMinute";
-import { usePanelAnimationSettings, usePanelPresence } from "../panelAnimations";
+import { useEnterMotion, usePanelAnimationSettings, usePanelPresence } from "../panelAnimations";
 import { useNewThreadHandler } from "../hooks/useHandleNewThread";
 import { useRemoveClonedProject } from "../hooks/useRemoveClonedProject";
 import { useOpenPanelPullRequestUrl } from "../hooks/useOpenPanelPullRequestUrl";
@@ -2981,6 +2981,13 @@ export default function ChatView(props: ChatViewProps) {
     activeThreadKey,
   );
   const displayedThreadRef = parseScopedThreadKey(displayedTimelineKey);
+  // Keyed on the timeline on screen, so a held timeline animates only once the
+  // switched-to thread actually replaces it, and draft promotion never replays it.
+  const timelineMotionRef = useRef<HTMLDivElement | null>(null);
+  useEnterMotion(timelineMotionRef, displayedTimelineKey, "rise", {
+    onMount: "navigation",
+    durationScale: 0.8,
+  });
   const {
     worktreeSetup,
     isPreparingWorktree,
@@ -8172,7 +8179,10 @@ export default function ChatView(props: ChatViewProps) {
                 }}
               />
             </div>
-            <div className="relative flex min-h-0 flex-1 flex-col bg-background">
+            <div
+              ref={timelineMotionRef}
+              className="relative flex min-h-0 flex-1 flex-col bg-background"
+            >
               <MessagesTimeline
                 citationRequest={paintOnlyDisplayedTimeline ? null : citationRequest}
                 citationHistoryLoading={threadDetailLoading}

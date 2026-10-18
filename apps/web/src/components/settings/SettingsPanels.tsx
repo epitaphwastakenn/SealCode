@@ -801,6 +801,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.panelAnimationDurationMs !== DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs
       ? ["Panel animations"]
       : []),
+    ...(settings.interfaceAnimationsEnabled !== DEFAULT_UNIFIED_SETTINGS.interfaceAnimationsEnabled
+      ? ["Interface animations"]
+      : []),
     ...(settings.environmentIdentificationMode !==
     DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode
       ? ["Environment identification"]
@@ -1001,6 +1004,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       glassSidebarEnabled: DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled,
       glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity,
       panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
+      interfaceAnimationsEnabled: DEFAULT_UNIFIED_SETTINGS.interfaceAnimationsEnabled,
       sidebarThreadPreviewCount: DEFAULT_UNIFIED_SETTINGS.sidebarThreadPreviewCount,
       sidebarProjectGroupingMode: DEFAULT_UNIFIED_SETTINGS.sidebarProjectGroupingMode,
       sidebarProjectSortOrder: DEFAULT_UNIFIED_SETTINGS.sidebarProjectSortOrder,
@@ -1732,6 +1736,33 @@ export function AppearanceSettingsPanel() {
       </SettingsSection>
 
       <SettingsSection id="motion" title="Motion">
+        <SettingsRow
+          {...searchableSetting("interface-animations")}
+          description="Animate navigation, tabs, menus and theme changes. Reduced motion in your system settings turns these off."
+          resetAction={
+            settings.interfaceAnimationsEnabled !==
+            DEFAULT_UNIFIED_SETTINGS.interfaceAnimationsEnabled ? (
+              <SettingResetButton
+                label="interface animations"
+                onClick={() =>
+                  updateSettings({
+                    interfaceAnimationsEnabled: DEFAULT_UNIFIED_SETTINGS.interfaceAnimationsEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.interfaceAnimationsEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ interfaceAnimationsEnabled: Boolean(checked) })
+              }
+              aria-label="Animate navigation, tabs, menus and theme changes"
+            />
+          }
+        />
+
         <SettingsRow
           {...searchableSetting("panel-animations")}
           description="Set how fast panels open and close."

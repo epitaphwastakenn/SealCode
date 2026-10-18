@@ -34,7 +34,7 @@ import { usePullRequestHandoffs } from "../pullRequest/usePullRequestActions";
 import { sortScopedProjectsForSidebar } from "../Sidebar.logic";
 import { Button } from "../ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../ui/empty";
-import { SidebarInset } from "../ui/sidebar";
+import { RouteInset } from "../RouteInset";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { WorkspacePageHeader } from "../WorkspacePageHeader";
 import { placeLinkedPrompt, warnAboutHiddenCharacters } from "./linkedPrompt";
@@ -345,7 +345,7 @@ function LinkPage({
   readonly children?: ReactNode;
 }) {
   return (
-    <SidebarInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
+    <RouteInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none">
       {isElectron ? <WorkspacePageHeader electron /> : null}
       <Empty className="flex-1">
         <EmptyHeader className="max-w-md">
@@ -354,6 +354,6 @@ function LinkPage({
           {children ? <div className="mt-5 flex justify-center gap-2">{children}</div> : null}
         </EmptyHeader>
       </Empty>
-    </SidebarInset>
+    </RouteInset>
   );
 }

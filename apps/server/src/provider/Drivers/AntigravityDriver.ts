@@ -47,6 +47,7 @@ import type { ServerProviderDraft } from "@t3tools/provider-core/server/snapshot
 import {
   removeAntigravityRuntimeTempDirs,
   removeAntigravitySessionFiles,
+  settleOrphanedAntigravityCommands,
 } from "../acp/AntigravitySessionFiles.ts";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
@@ -261,18 +262,36 @@ export const AntigravityDriver: ProviderDriver<
             runtimeTempDirectory,
           }),
         }).pipe(Effect.provideService(Crypto.Crypto, crypto));
+        const settleOrphanedCommands = (sessionId: string | undefined) =>
+          sessionId === undefined
+            ? Effect.void
+            : settleOrphanedAntigravityCommands({ profileDirectory, sessionId }).pipe(
+                Effect.provideService(FileSystem.FileSystem, fileSystem),
+                Effect.provideService(Path.Path, path),
+              );
         return {
           ...runtime,
           start: () =>
-            runtime
-              .start()
-              .pipe(
-                Effect.tapError((cause): Effect.Effect<void> =>
-                  input.onAuthorizationUrl === undefined && isAntigravitySignInRequiredError(cause)
-                    ? provider.onAuthRequired
-                    : Effect.void,
-                ),
+            settleOrphanedCommands(input.resumeSessionId).pipe(
+              Effect.andThen(runtime.start()),
+              Effect.tapError((cause): Effect.Effect<void> =>
+                input.onAuthorizationUrl === undefined && isAntigravitySignInRequiredError(cause)
+                  ? provider.onAuthRequired
+                  : Effect.void,
               ),
+            ),
+          loadSession: (sessionId, options) =>
+            settleOrphanedCommands(sessionId).pipe(
+              Effect.andThen(runtime.loadSession(sessionId, options)),
+            ),
+          resumeSession: (sessionId, options) =>
+            settleOrphanedCommands(sessionId).pipe(
+              Effect.andThen(runtime.resumeSession(sessionId, options)),
+            ),
+          forkSession: (sessionId, options) =>
+            settleOrphanedCommands(sessionId).pipe(
+              Effect.andThen(runtime.forkSession(sessionId, options)),
+            ),
         };
       });
 

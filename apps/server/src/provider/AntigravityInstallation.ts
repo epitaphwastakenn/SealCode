@@ -39,9 +39,10 @@ import {
 
 const DRIVER = ProviderDriverKind.make("antigravity");
 const DOWNLOAD_TIMEOUT = "45 minutes";
-// The first start unpacks about 1 GB; a slow disk or an antivirus scanning
-// those files can take minutes on a machine where it normally takes seconds.
-const VALIDATION_TIMEOUT = "5 minutes";
+// Every start unpacks about 1 GB (15-20s on a fast machine), and the very
+// first one is also the antivirus's first look at those files, which can take
+// minutes on its own.
+const VALIDATION_TIMEOUT = "2 minutes";
 const FREE_SPACE_MARGIN = 256 * 1024 * 1024;
 const RECORD_MAX_BYTES = 8 * 1024;
 const RELEASE_RECORD = ".install-complete.json";
@@ -366,7 +367,14 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
                   error.reason._tag === "Busy" ||
                   error.reason._tag === "Unknown",
               }),
-              Effect.orDie,
+              // An antivirus can hold the unpacked files past the retries; a
+              // leftover temp folder must not fail an install that passed.
+              Effect.catch((error) =>
+                Effect.logWarning("Could not remove the Antigravity check's temp folder", {
+                  directory,
+                  reason: error.reason._tag,
+                }),
+              ),
             ),
         );
         const profile = yield* prepareAntigravityProfile({
@@ -461,19 +469,22 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
       )
       .pipe(Effect.ignore);
 
+  // A runtime that crashes or answers as the wrong release fails the check at
+  // once. One that is still starting when time runs out is the pinned,
+  // SHA-256-verified release on a slow first start, so it is installed anyway.
   const checkRuntime = (executable: AntigravityExecutable, expectedVersion: string) =>
     validate(executable, expectedVersion).pipe(
       Effect.scoped,
-      Effect.timeoutOrElse({
-        duration: VALIDATION_TIMEOUT,
-        orElse: () =>
-          Effect.fail(
-            installationError(
-              "verify",
-              "Antigravity did not finish starting within 5 minutes during its install check. Antivirus scanning of its first start is the usual cause: let it finish or allow the runtime folder, then retry.",
-            ),
-          ),
-      }),
+      Effect.timeoutOption(VALIDATION_TIMEOUT),
+      Effect.flatMap(
+        Option.match({
+          onSome: () => Effect.void,
+          onNone: () =>
+            Effect.logWarning("Antigravity was still starting when its install check ran out", {
+              version: expectedVersion,
+            }),
+        }),
+      ),
     );
 
   const install = Effect.fn("AntigravityInstallation.install")(

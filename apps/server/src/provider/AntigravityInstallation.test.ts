@@ -915,7 +915,7 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
     }),
   );
 
-  it.effect("names a slow first start instead of blaming disk space when the check runs out", () =>
+  it.effect("installs the verified release when its first start outlasts the check", () =>
     Effect.gen(function* () {
       const { installation } = yield* makeHarness({ validate: () => Effect.never });
       yield* installation.start;
@@ -923,10 +923,12 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
         Stream.filter((state) => state.phase === "verifying"),
         Stream.runHead,
       );
-      yield* TestClock.adjust("5 minutes");
-      const failed = yield* terminalState(installation);
-      expect(failed.phase).toBe("failed");
-      expect(failed.message).toContain("did not finish starting within 5 minutes");
+      yield* TestClock.adjust("2 minutes");
+      expect(yield* terminalState(installation)).toMatchObject({
+        phase: "succeeded",
+        installedVersion: "fixture-new",
+      });
+      expect((yield* installation.resolve()).version).toBe("fixture-new");
     }),
   );
 

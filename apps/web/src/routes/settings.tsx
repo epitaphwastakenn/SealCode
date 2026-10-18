@@ -119,7 +119,11 @@ function SettingsContentLayout() {
       : JSON.stringify(search);
   const [restoreSignal, setRestoreSignal] = useState(0);
   const pageRef = useRef<HTMLDivElement | null>(null);
-  useEnterMotion(pageRef, location.pathname, "rise", { onMount: "navigation" });
+  // Leaving settings re-renders this layout once with the destination path.
+  useEnterMotion(pageRef, location.pathname, "rise", {
+    onMount: "navigation",
+    when: location.pathname.startsWith("/settings"),
+  });
 
   return (
     <RouteInset className="h-dvh min-h-0 overflow-hidden overscroll-y-none isolate">

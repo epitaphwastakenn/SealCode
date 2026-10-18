@@ -404,6 +404,7 @@ const make = Effect.gen(function* () {
   ) => {
     statuses.set(server.id, {
       id: server.id,
+      displayName: server.displayName,
       state,
       toolCount,
       ...(failure === undefined ? {} : { errorMessage: errorMessage(failure, output) }),

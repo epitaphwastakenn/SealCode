@@ -184,7 +184,7 @@ describe("GlobalMcpManager", () => {
       const manager = yield* GlobalMcpManager.GlobalMcpManager;
       yield* manager.reload;
       expect(yield* manager.getStatuses).toMatchObject([
-        { id: "robloxstudio", state: "ready", toolCount: 1 },
+        { id: "robloxstudio", displayName: "Roqer", state: "ready", toolCount: 1 },
       ]);
       expect((yield* manager.getCatalog).tools[0]?.serverDisplayName).toBe("Roqer");
 

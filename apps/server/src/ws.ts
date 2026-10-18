@@ -121,6 +121,7 @@ import * as ThreadManagementService from "./orchestration-v2/ThreadManagementSer
 import * as CommandOutputHub from "./orchestration-v2/CommandOutputHub.ts";
 import * as McpAppRequests from "./mcpApps/McpAppRequests.ts";
 import * as GlobalMcpManager from "./mcp/GlobalMcpManager.ts";
+import { McpToolVisibility } from "./mcp/McpToolVisibility.ts";
 import * as RobloxStudioStatus from "./roblox/RobloxStudioStatus.ts";
 import * as VoiceTranscription from "./voiceTranscription.ts";
 import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
@@ -1265,6 +1266,7 @@ const layerWsRpc = (
       const databaseStorage = yield* DatabaseStorage.DatabaseStorage;
       const serverSettings = yield* ServerSettings.ServerSettingsService;
       const globalMcpManager = yield* GlobalMcpManager.GlobalMcpManager;
+      const mcpToolVisibility = yield* McpToolVisibility;
       const robloxStudioStatus = yield* RobloxStudioStatus.RobloxStudioStatusService;
       const voiceTranscription = yield* VoiceTranscription.VoiceTranscription;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
@@ -2403,7 +2405,17 @@ const layerWsRpc = (
               : serverSettings.updateProviderInstance(providerInstanceMutation, nextPatch);
             return ServerSettings.redactServerSettingsForClient(settings);
           }),
-        [WS_METHODS.serverGetMcpStatuses]: (_input) => globalMcpManager.getStatuses,
+        [WS_METHODS.serverGetMcpStatuses]: ({ threadId }) =>
+          threadId === undefined
+            ? globalMcpManager.getStatuses
+            : Effect.all([
+                globalMcpManager.getStatuses,
+                mcpToolVisibility.hiddenServers({ threadId }),
+              ]).pipe(
+                Effect.map(([statuses, hidden]) =>
+                  statuses.filter((status) => !hidden.has(status.id)),
+                ),
+              ),
         [WS_METHODS.serverReconnectMcp]: ({ id }) => globalMcpManager.reconnectServer(id),
         [WS_METHODS.serverGetRobloxStudioStatus]: (_input) => robloxStudioStatus.get,
         [WS_METHODS.serverDiscoverSourceControl]: (_input) => sourceControlDiscovery.discover,

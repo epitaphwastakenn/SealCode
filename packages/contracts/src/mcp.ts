@@ -45,6 +45,7 @@ export type GlobalMcpServerStatusState = typeof GlobalMcpServerStatusState.Type;
 
 export const GlobalMcpStatus = Schema.Struct({
   id: McpServerId,
+  displayName: Schema.optionalKey(Schema.String),
   state: GlobalMcpServerStatusState,
   toolCount: Schema.Number.check(Schema.isGreaterThanOrEqualTo(0)),
   errorMessage: Schema.optionalKey(Schema.String),
@@ -72,7 +73,10 @@ export const validateGlobalMcpServerMap = (servers: GlobalMcpServerMap): string 
     }
     seenIds.add(server.id);
 
-    const validateFields = (kind: "environment variable" | "header", fields: ReadonlyArray<McpSecretField>) => {
+    const validateFields = (
+      kind: "environment variable" | "header",
+      fields: ReadonlyArray<McpSecretField>,
+    ) => {
       const names = new Set<string>();
       for (const field of fields) {
         if (names.has(field.name)) {

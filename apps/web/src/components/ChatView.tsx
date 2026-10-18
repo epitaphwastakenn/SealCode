@@ -409,6 +409,8 @@ import {
 } from "./chat/PanelLayoutControls";
 import { expandedImageKey, type ExpandedImagePreview } from "./chat/ExpandedImagePreview";
 import { ThreadDetailsPanel, type ThreadDetailsPanelProps } from "./chat/ThreadDetailsPanel";
+import { runtimeModeConfig } from "./chat/runtimeModeConfig";
+import { providerClients } from "./settings/providerDriverMeta";
 import { NoActiveThreadState } from "./NoActiveThreadState";
 import {
   type EnvironmentOption,
@@ -7931,6 +7933,29 @@ export default function ChatView(props: ChatViewProps) {
       }}
     />
   ) : null;
+  const sessionModelSelection = activeThread.modelSelection;
+  const sessionProvider =
+    providerStatuses.find((status) => status.instanceId === sessionModelSelection.instanceId) ??
+    null;
+  const sessionProviderLabel =
+    sessionProvider?.displayName?.trim() ||
+    (sessionProvider ? providerClients.get(sessionProvider.driver)?.label : undefined);
+  const threadSession = {
+    modelLabel:
+      sessionProvider?.models.find((model) => model.slug === sessionModelSelection.model)?.name ??
+      sessionModelSelection.model,
+    modelDetail: [sessionProviderLabel, runtimeModeConfig[runtimeMode].label]
+      .filter((part) => part !== undefined && part !== "")
+      .join(" · "),
+    contextWindow: activeContextWindow,
+    backgroundWork: presentPendingBackgroundWork(pendingBackgroundTasks)?.items ?? [],
+    // Pi gets only SealCode's own tools, and the newer OpenCode runtime reports no MCP support.
+    receivesMcpServers:
+      sessionProvider?.driver !== "pi" &&
+      serverProjection?.providerSessions.findLast(
+        (session) => session.providerInstanceId === sessionModelSelection.instanceId,
+      )?.capabilities.tools.supportsMcpTools !== false,
+  };
   const threadDetailsPanelProps: ThreadDetailsPanelProps = {
     anchor: threadPanelPopoverAnchorRef,
     handle: threadPanelPopoverHandle,
@@ -7979,6 +8004,7 @@ export default function ChatView(props: ChatViewProps) {
     onAddProjectScript: saveProjectScriptStable,
     onUpdateProjectScript: updateProjectScriptStable,
     onDeleteProjectScript: deleteProjectScriptStable,
+    session: threadSession,
   };
   const panelToggleControlProps = {
     terminalAvailable: activeProject !== null,

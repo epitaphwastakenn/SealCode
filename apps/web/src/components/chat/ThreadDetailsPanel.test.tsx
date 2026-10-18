@@ -27,6 +27,9 @@ vi.mock("./ThreadAutomationsPanel", () => ({
 vi.mock("./ThreadRelationshipsControl", () => ({
   ThreadRelationshipsPanel: () => null,
 }));
+vi.mock("./ThreadSessionPanel", () => ({
+  ThreadSessionPanel: () => null,
+}));
 vi.mock("./ThreadDetailsCard", () => ({
   ThreadDetailsCard: ({ children }: { children: (density: "full") => React.ReactNode }) =>
     children("full"),
@@ -78,6 +81,13 @@ describe("ThreadDetailsPanel", () => {
       onAddProjectScript: vi.fn() as ThreadDetailsPanelProps["onAddProjectScript"],
       onUpdateProjectScript: vi.fn() as ThreadDetailsPanelProps["onUpdateProjectScript"],
       onDeleteProjectScript: vi.fn() as ThreadDetailsPanelProps["onDeleteProjectScript"],
+      session: {
+        modelLabel: null,
+        modelDetail: null,
+        contextWindow: null,
+        backgroundWork: [],
+        receivesMcpServers: true,
+      },
     };
 
     renderToStaticMarkup(<ThreadDetailsPanel {...props} />);

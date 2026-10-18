@@ -5,7 +5,9 @@ import type { McpThreadCaller } from "./McpInvocationContext.ts";
 
 export interface McpToolVisibilityShape {
   /** Global MCP servers whose tools this thread's agent does not get. */
-  readonly hiddenServers: (thread: McpThreadCaller) => Effect.Effect<ReadonlySet<string>>;
+  readonly hiddenServers: (
+    thread: Pick<McpThreadCaller, "threadId">,
+  ) => Effect.Effect<ReadonlySet<string>>;
 }
 
 /** Every thread sees every server unless a feature scopes its own servers, as Roblox Studio does. */

@@ -1,14 +1,10 @@
 name: Release
 
+# SealCode publishes its own releases from sealcode-release.yml. This upstream
+# pipeline needs T3 Code's signing, relay and store secrets, so on the fork it
+# only runs by hand: a release tag or the half-hourly nightly would otherwise
+# start it next to SealCode's.
 on:
-  push:
-    tags:
-      - "v*.*.*"
-      - "!v*-nightly.*"
-      - "!v*-preview.*"
-  schedule:
-    # Avoid minute zero, when GitHub scheduled jobs are busiest.
-    - cron: "8,38 * * * *"
   workflow_dispatch:
     inputs:
       channel:

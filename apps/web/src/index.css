@@ -139,6 +139,8 @@ html[data-theme-reveal]::view-transition-old(root) {
   width: var(--theme-reveal-seam-width);
   height: var(--theme-reveal-seam-length);
   opacity: 0;
+  /* themeReveal.ts composes the transform around the pointer, not the band's center. */
+  transform-origin: 0 0;
   background: linear-gradient(
     90deg,
     transparent,

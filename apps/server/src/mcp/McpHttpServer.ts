@@ -27,6 +27,7 @@ import * as HtmlRender from "../htmlRender/HtmlRender.ts";
 import * as ThreadCommandExecutor from "../orchestration-v2/ThreadCommandExecutor.ts";
 import * as ThreadManagementService from "../orchestration-v2/ThreadManagementService.ts";
 import * as GlobalMcpGateway from "./GlobalMcpGateway.ts";
+import * as ComputerUseGateway from "../computerUse/ComputerUseGateway.ts";
 import * as ProviderRegistry from "../provider/ProviderRegistry.ts";
 import * as AnalyticsService from "../telemetry/AnalyticsService.ts";
 import {
@@ -1055,6 +1056,10 @@ export const layerGlobalMcpGateway = GlobalMcpGateway.layerRoutes.pipe(
   Layer.provide(layerMcpAuthMiddleware),
 );
 
+export const layerComputerUseGateway = ComputerUseGateway.layerRoutes.pipe(
+  Layer.provide(layerMcpAuthMiddleware),
+);
+
 export const layer = Layer.mergeAll(
   Layer.mergeAll(
     layerPreviewToolkit,
@@ -1070,4 +1075,5 @@ export const layer = Layer.mergeAll(
     layerHtmlToolkit,
   ).pipe(Layer.provideMerge(layerMcpTransport)),
   layerGlobalMcpGateway,
+  layerComputerUseGateway,
 );

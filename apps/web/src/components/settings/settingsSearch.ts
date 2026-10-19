@@ -1063,6 +1063,17 @@ export const SETTINGS_SEARCH_ITEMS = [
     ],
   },
   {
+    id: "computer-use",
+    title: "Uso do computador",
+    to: "/settings/connections",
+    searchTerms: [
+      "computer use mouse keyboard screen screenshot overlay desktop apps paint uso do computador tela",
+    ],
+    desktopOnly: true,
+    windowsOnly: true,
+    localBackendManagementOnly: true,
+  },
+  {
     id: "global-mcp-servers",
     title: "Global MCP servers",
     to: "/settings/connections",

@@ -70,6 +70,7 @@ import * as BrowserImport from "./preview/BrowserImport/BrowserImport.ts";
 import * as LinuxBrowserSecret from "./preview/BrowserImport/LinuxBrowserSecret.ts";
 import * as BrowserSession from "./preview/BrowserSession.ts";
 import * as DesktopBrowserHost from "./preview/DesktopBrowserHost.ts";
+import * as ComputerUseHost from "./computerUse/ComputerUseHost.ts";
 import * as PreviewManager from "./preview/Manager.ts";
 import * as PreviewPasskeys from "./preview/Passkeys.ts";
 import * as DesktopWindow from "./window/DesktopWindow.ts";
@@ -191,6 +192,7 @@ const layerDesktopBackend = DesktopBackendPool.layer.pipe(
   Layer.provideMerge(DesktopWslEnvironment.layer),
   Layer.provideMerge(DesktopWslServerTree.layer),
   Layer.provideMerge(DesktopTelemetryPublisher.layer),
+  Layer.provideMerge(ComputerUseHost.layer),
   Layer.provideMerge(layerDesktopWindow),
 );
 

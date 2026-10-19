@@ -611,6 +611,44 @@ describe("ClaudeAdapterV2 MCP query overrides", () => {
     });
   });
 
+  it("attaches computer use and pre-approves it only outside a read-only sandbox", () => {
+    const threadId = ThreadId.make("thread-claude-mcp-computer-use");
+    const mcpSession = {
+      ...mcpSessionFor(threadId),
+      computerUseEndpoint: "http://127.0.0.1:43123/mcp/computer-use",
+    };
+    const writable = ClaudeAdapterV2.claudeMcpQueryOverrides({
+      mcpSession,
+      readOnlySandbox: false,
+    });
+    assert.deepEqual(writable.mcpServers?.["computer-use"], {
+      type: "http",
+      url: "http://127.0.0.1:43123/mcp/computer-use",
+      headers: { Authorization: "Bearer secret-claude-token" },
+      timeout: ClaudeAdapterV2.CLAUDE_COMPUTER_USE_MCP_TOOL_TIMEOUT_MS,
+    });
+    assert.isTrue(
+      writable.allowedTools?.includes(ClaudeAdapterV2.CLAUDE_COMPUTER_USE_MCP_TOOL_WILDCARD),
+    );
+
+    const readOnly = ClaudeAdapterV2.claudeMcpQueryOverrides({ mcpSession, readOnlySandbox: true });
+    assert.isDefined(readOnly.mcpServers?.["computer-use"]);
+    assert.isFalse(
+      readOnly.allowedTools?.includes(ClaudeAdapterV2.CLAUDE_COMPUTER_USE_MCP_TOOL_WILDCARD),
+    );
+  });
+
+  it("leaves computer use out when the session was not granted it", () => {
+    const overrides = ClaudeAdapterV2.claudeMcpQueryOverrides({
+      mcpSession: mcpSessionFor(ThreadId.make("thread-claude-mcp-no-computer-use")),
+      readOnlySandbox: false,
+    });
+    assert.isUndefined(overrides.mcpServers?.["computer-use"]);
+    assert.isFalse(
+      overrides.allowedTools?.includes(ClaudeAdapterV2.CLAUDE_COMPUTER_USE_MCP_TOOL_WILDCARD),
+    );
+  });
+
   it("extends an explicit allowlist with the t3-code wildcard", () => {
     const threadId = ThreadId.make("thread-claude-mcp-with-allowlist");
     const mcpSession = mcpSessionFor(threadId);

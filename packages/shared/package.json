@@ -115,6 +115,10 @@
       "types": "./src/toolActivity.ts",
       "import": "./src/toolActivity.ts"
     },
+    "./computerUse": {
+      "types": "./src/computerUse.ts",
+      "import": "./src/computerUse.ts"
+    },
     "./terminalOutput": {
       "types": "./src/terminalOutput.ts",
       "import": "./src/terminalOutput.ts"

@@ -60,6 +60,7 @@ import {
 import {
   type ChatAttachment,
   ClaudeSettings,
+  COMPUTER_USE_MCP_SERVER_NAME,
   defaultInstanceIdForDriver,
   type ModelSelection,
   type OrchestrationV2ConversationMessage,
@@ -1283,6 +1284,10 @@ export function makeClaudeQueryOptions(input: {
 }
 
 export const CLAUDE_T3_MCP_TOOL_WILDCARD = "mcp__t3-code__*";
+export const CLAUDE_COMPUTER_USE_MCP_TOOL_WILDCARD = `mcp__${COMPUTER_USE_MCP_SERVER_NAME}__*`;
+// Each call is one pointer or key action, but request_access waits on the
+// person at the computer and the gateway allows it ten minutes.
+export const CLAUDE_COMPUTER_USE_MCP_TOOL_TIMEOUT_MS = 11 * 60 * 1_000;
 
 // Must stay in sync with the Tool.Readonly annotations on OrchestratorToolkit;
 // ClaudeAdapterV2.test.ts cross-checks this list against the toolkit.
@@ -1333,9 +1338,16 @@ export function claudeMcpQueryOverrides(input: {
   if (session === undefined) {
     return input.allowedTools === undefined ? {} : { allowedTools: input.allowedTools };
   }
+  // Computer use gates every app behind its own access dialog, so outside a
+  // read-only sandbox its tools skip the provider's per-call prompt.
   const mcpAllowedTools = input.readOnlySandbox
     ? CLAUDE_READ_ONLY_T3_MCP_ALLOWED_TOOLS
-    : [CLAUDE_T3_MCP_TOOL_WILDCARD];
+    : [
+        CLAUDE_T3_MCP_TOOL_WILDCARD,
+        ...(session.computerUseEndpoint === undefined
+          ? []
+          : [CLAUDE_COMPUTER_USE_MCP_TOOL_WILDCARD]),
+      ];
   return {
     allowedTools: Array.from(new Set([...(input.allowedTools ?? []), ...mcpAllowedTools])),
     mcpServers: {
@@ -1358,6 +1370,18 @@ export function claudeMcpQueryOverrides(input: {
               },
               // Studio playtests and Blender jobs outlast the default tool timeout.
               timeout: CLAUDE_T3_MCP_TOOL_TIMEOUT_MS,
+            },
+          }),
+      ...(session.computerUseEndpoint === undefined
+        ? {}
+        : {
+            [COMPUTER_USE_MCP_SERVER_NAME]: {
+              type: "http" as const,
+              url: session.computerUseEndpoint,
+              headers: {
+                Authorization: session.authorizationHeader,
+              },
+              timeout: CLAUDE_COMPUTER_USE_MCP_TOOL_TIMEOUT_MS,
             },
           }),
     },

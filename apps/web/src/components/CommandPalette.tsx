@@ -73,6 +73,7 @@ import {
   MonitorIcon,
   MoonIcon,
   PaletteIcon,
+  SwatchBookIcon,
   RotateCcwIcon,
   SettingsIcon,
   SquarePenIcon,
@@ -105,8 +106,10 @@ import {
   promptLinkRepositoryOf,
 } from "./promptLinks/copyPromptLink";
 import { useClientSettings } from "../hooks/useSettings";
+import { applyAppearancePreset } from "../appearancePresetActions";
+import { appearanceMatchesPreset } from "../appearancePresets";
 import { useStableCallback } from "../hooks/useStableCallback";
-import { useTheme } from "../hooks/useTheme";
+import { readThemeState, useTheme } from "../hooks/useTheme";
 import { useCustomThemes } from "../hooks/useCustomThemes";
 import { useEnvironmentThemeDefinitions } from "../hooks/useEnvironmentTheme";
 import { BUILT_IN_THEMES } from "@t3tools/shared/themePalettes";
@@ -1959,6 +1962,37 @@ function OpenCommandPaletteDialog(props: {
     ],
   };
   actionItems.push(changeAppearanceItem);
+
+  if (clientSettings.appearancePresets.length > 0) {
+    const themeState = readThemeState();
+    actionItems.push({
+      kind: "submenu",
+      value: "action:apply-appearance-preset",
+      searchTerms: ["appearance preset", "look", "preset", "glass", "background", "wallpaper"],
+      title: "Apply appearance preset",
+      icon: <SwatchBookIcon className={ITEM_ICON_CLASS} />,
+      addonIcon: <SwatchBookIcon className={ADDON_ICON_CLASS} />,
+      groups: [
+        {
+          value: "appearance-presets",
+          label: "Apply appearance preset",
+          items: clientSettings.appearancePresets.map((preset) => ({
+            kind: "action",
+            value: `appearance-preset:${preset.id}`,
+            title: preset.name,
+            searchTerms: [preset.name, "appearance preset", "look"],
+            icon: <SwatchBookIcon className={ITEM_ICON_CLASS} />,
+            titleTrailingContent: appearanceMatchesPreset(preset, clientSettings, themeState) ? (
+              <span className="text-xs text-muted-foreground/70">Current</span>
+            ) : undefined,
+            run: async () => {
+              applyAppearancePreset(preset);
+            },
+          })),
+        },
+      ],
+    });
+  }
 
   // The parent pushes an intent into this mounted dialog; applying it clears the
   // parent's intent and may navigate, so it runs after commit but before paint.

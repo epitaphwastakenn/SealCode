@@ -651,6 +651,58 @@ function clearThemeHalves(): boolean {
   return true;
 }
 
+/** The whole color-theme choice, as an appearance preset stores it. */
+export interface ThemeState {
+  readonly theme: Theme;
+  readonly mode: ThemePreferenceMode;
+  readonly light?: string;
+  readonly dark?: string;
+}
+
+export function readThemeState(): ThemeState {
+  const theme = getStored();
+  const halves = readStoredThemeHalvesRaw();
+  return {
+    theme,
+    mode: readAppearanceModePreference(theme),
+    ...(halves.light === undefined ? {} : { light: halves.light }),
+    ...(halves.dark === undefined ? {} : { dark: halves.dark }),
+  };
+}
+
+/** Restores a saved theme choice in one step, so the reveal animates once. */
+export function applyThemeState(state: ThemeState): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    writeThemePreference(state.theme);
+    writeAppearanceModePreference(state.mode);
+    if (state.light === undefined && state.dark === undefined) {
+      window.localStorage.removeItem(THEME_HALVES_STORAGE_KEY);
+    } else {
+      window.localStorage.setItem(
+        THEME_HALVES_STORAGE_KEY,
+        JSON.stringify({
+          ...(state.light === undefined ? {} : { light: state.light }),
+          ...(state.dark === undefined ? {} : { dark: state.dark }),
+        }),
+      );
+    }
+  } catch (cause) {
+    const error = isThemeStorageError(cause)
+      ? cause
+      : new ThemeStorageError({ operation: "write", storageKey: STORAGE_KEY, cause });
+    console.error(error.message, {
+      operation: error.operation,
+      storageKey: error.storageKey,
+      ...safeErrorLogAttributes(error),
+    });
+    return false;
+  }
+  themeStorageReadFailure = null;
+  applyThemeChange(getStored);
+  return true;
+}
+
 function refreshTheme({ preservePreview = false } = {}): void {
   if (typeof window === "undefined") return;
   lastAppliedTheme = null;

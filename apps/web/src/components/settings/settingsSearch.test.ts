@@ -77,6 +77,7 @@ describe("searchSettings", () => {
       "glass-app",
       "setting-glass-opacity",
       "panel-glass-opacity",
+      "appearance-presets",
     ]);
     expect(searchSettings("panel animations").map((item) => item.id)).toEqual(["panel-animations"]);
     expect(searchSettings("thè\u{1ab0}mes")[0]?.id).toBe("theme");

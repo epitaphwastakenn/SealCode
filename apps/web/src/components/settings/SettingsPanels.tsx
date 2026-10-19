@@ -187,6 +187,7 @@ import {
 import { searchableSetting } from "./settingsSearch";
 import { BackgroundSettingsSection } from "./BackgroundSettings";
 import { CornerSettingsSection } from "./CornerSettings";
+import { AppearancePresetsSection } from "./AppearancePresetSettings";
 import { ProjectFavicon } from "../ProjectFavicon";
 import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
 
@@ -1389,6 +1390,8 @@ export function AppearanceSettingsPanel() {
 
   return (
     <SettingsPageContainer>
+      <AppearancePresetsSection />
+
       <SettingsSection id="appearance" title="Colors & themes" variant="plain" hideTitle>
         <div id={searchableSetting("theme").id}>
           <ThemeLibrary

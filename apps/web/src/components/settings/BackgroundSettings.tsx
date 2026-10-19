@@ -29,6 +29,7 @@ import {
   saveBackdropImage,
 } from "~/lib/backdrop/backdropStore";
 import { randomUUID } from "~/lib/utils";
+import { backdropImageInUse } from "~/appearancePresets";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
@@ -188,11 +189,19 @@ export function BackgroundSettingsSection() {
       const previousId = backdrop?.imageId ?? null;
       const next = newAppBackdrop({ imageId, imageName: file.name, animated });
       // Swapping the picture keeps the look the user built.
-      updateSettings({
-        glassAppEnabled: true,
-        backdrop: backdrop ? { ...next, ...backdropLook(backdrop), style: backdrop.style } : next,
-      });
-      if (previousId !== null) void deleteBackdropImage(previousId);
+      const nextBackdrop = backdrop
+        ? { ...next, ...backdropLook(backdrop), style: backdrop.style }
+        : next;
+      updateSettings({ glassAppEnabled: true, backdrop: nextBackdrop });
+      if (
+        previousId !== null &&
+        !backdropImageInUse(previousId, {
+          backdrop: nextBackdrop,
+          appearancePresets: settings.appearancePresets,
+        })
+      ) {
+        void deleteBackdropImage(previousId);
+      }
     } catch (error) {
       toastManager.add({
         type: "error",
@@ -204,7 +213,14 @@ export function BackgroundSettingsSection() {
 
   const removeImage = () => {
     if (!backdrop) return;
-    void deleteBackdropImage(backdrop.imageId);
+    if (
+      !backdropImageInUse(backdrop.imageId, {
+        backdrop: null,
+        appearancePresets: settings.appearancePresets,
+      })
+    ) {
+      void deleteBackdropImage(backdrop.imageId);
+    }
     updateSettings({ backdrop: null });
   };
 

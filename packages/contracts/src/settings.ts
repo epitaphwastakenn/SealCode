@@ -321,6 +321,60 @@ export type ModelPreferences = {
   readonly providerModelPreferences: typeof ProviderModelPreferences.Type;
 };
 
+// SealCode: a named snapshot of the app's look (Settings > Appearance >
+// Presets). The settings are a patch, so a preset saved before a field existed
+// leaves that field as it is when applied.
+export const AppearancePresetSettings = Schema.Struct({
+  appearanceContrast: Schema.optionalKey(AppearanceContrast),
+  chatWidth: Schema.optionalKey(ChatWidth),
+  diffColorScheme: Schema.optionalKey(DiffColorScheme),
+  interfaceAnimationsEnabled: Schema.optionalKey(Schema.Boolean),
+  panelAnimationDurationMs: Schema.optionalKey(PanelAnimationDurationMs),
+  glassSidebarEnabled: Schema.optionalKey(Schema.Boolean),
+  glassOpacity: Schema.optionalKey(GlassOpacity),
+  glassAppEnabled: Schema.optionalKey(Schema.Boolean),
+  panelGlassOpacity: Schema.optionalKey(PanelGlassOpacity),
+  backdrop: Schema.optionalKey(Schema.NullOr(AppBackdrop)),
+  cornerRadius: Schema.optionalKey(CornerRadius),
+  smoothCorners: Schema.optionalKey(Schema.Boolean),
+  floatingPanels: Schema.optionalKey(Schema.Boolean),
+  fontFamilySans: Schema.optionalKey(FontFamilyPreference),
+  fontFamilyCode: Schema.optionalKey(FontFamilyPreference),
+  fontFamilyComposer: Schema.optionalKey(FontFamilyPreference),
+  fontFamilyTerminal: Schema.optionalKey(FontFamilyPreference),
+  fontSizeInterface: Schema.optionalKey(InterfaceFontSize),
+  fontSizePrompt: Schema.optionalKey(PromptFontSize),
+  fontSizeCode: Schema.optionalKey(CodeFontSize),
+  fontSizeTerminal: Schema.optionalKey(TerminalFontSize),
+  fontSmoothing: Schema.optionalKey(Schema.Boolean),
+});
+export type AppearancePresetSettings = typeof AppearancePresetSettings.Type;
+export const APPEARANCE_PRESET_SETTING_KEYS = Object.keys(
+  AppearancePresetSettings.fields,
+) as ReadonlyArray<keyof AppearancePresetSettings>;
+
+/** The color theme lives in the client's own storage, so a preset carries it alongside. */
+export const AppearancePresetTheme = Schema.Struct({
+  theme: TrimmedNonEmptyString,
+  mode: Schema.Literals(["light", "dark", "system"]),
+  light: Schema.optionalKey(TrimmedNonEmptyString),
+  dark: Schema.optionalKey(TrimmedNonEmptyString),
+});
+export type AppearancePresetTheme = typeof AppearancePresetTheme.Type;
+
+export const AppearancePreset = Schema.Struct({
+  id: TrimmedNonEmptyString,
+  name: TrimmedNonEmptyString,
+  settings: AppearancePresetSettings,
+  theme: Schema.optionalKey(AppearancePresetTheme),
+});
+export type AppearancePreset = typeof AppearancePreset.Type;
+
+export const MAX_APPEARANCE_PRESETS = 24;
+const AppearancePresets = Schema.Array(AppearancePreset).check(
+  Schema.isMaxLength(MAX_APPEARANCE_PRESETS),
+);
+
 export const ClientSettingsSchema = Schema.Struct({
   // SealCode plays its harness sounds out of the box.
   notificationMode: NotificationMode.pipe(
@@ -457,6 +511,7 @@ export const ClientSettingsSchema = Schema.Struct({
   backdropStyles: Schema.Array(BackdropStyle)
     .check(Schema.isMaxLength(MAX_BACKDROP_STYLES))
     .pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  appearancePresets: AppearancePresets.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   contextWindowMeterEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   composerCollapseOnScroll: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   composerRichTextEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -1765,6 +1820,7 @@ export const ClientSettingsPatch = Schema.Struct({
   backdropStyles: Schema.optionalKey(
     Schema.Array(BackdropStyle).check(Schema.isMaxLength(MAX_BACKDROP_STYLES)),
   ),
+  appearancePresets: Schema.optionalKey(AppearancePresets),
   contextWindowMeterEnabled: Schema.optionalKey(Schema.Boolean),
   composerCollapseOnScroll: Schema.optionalKey(Schema.Boolean),
   composerRichTextEnabled: Schema.optionalKey(Schema.Boolean),

@@ -231,6 +231,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["transparency tint panels solid see through glass amount"],
   },
   {
+    id: "appearance-presets",
+    title: "Appearance presets",
+    to: "/settings/appearance",
+    searchTerms: ["preset look save switch theme glass background wallpaper profile"],
+  },
+  {
     id: "corner-radius",
     title: "Corner roundness",
     to: "/settings/appearance",

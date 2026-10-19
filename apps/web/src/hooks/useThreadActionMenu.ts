@@ -13,7 +13,6 @@ import {
   type ThreadId,
 } from "@t3tools/contracts";
 import { useRouter } from "@tanstack/react-router";
-import { useCallback, useMemo } from "react";
 
 import { resolveSnoozePresets } from "../components/Sidebar.snooze";
 import {
@@ -71,15 +70,11 @@ export function useThreadActionMenu(input: {
   const projects = useProjects();
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
-  const logicalProjectKeyByPhysicalKey = useMemo(
-    () =>
-      buildPhysicalToLogicalProjectKeyMap({
-        projects,
-        settings: projectGroupingSettings,
-        primaryEnvironmentId,
-      }),
-    [primaryEnvironmentId, projectGroupingSettings, projects],
-  );
+  const logicalProjectKeyByPhysicalKey = buildPhysicalToLogicalProjectKeyMap({
+    projects,
+    settings: projectGroupingSettings,
+    primaryEnvironmentId,
+  });
   const {
     settleThread,
     unsettleThread,
@@ -119,263 +114,231 @@ export function useThreadActionMenu(input: {
     onError: (error) => failureToast("Failed to copy thread ID", error),
   });
 
-  const openMenu = useCallback(
-    (position: { x: number; y: number }) => {
-      if (threadRef === null) return;
-      void (async () => {
-        const api = readLocalApi();
-        if (!api) return;
-        const thread = readThreadShell(threadRef);
-        if (!thread) return;
-        const now = new Date();
-        const supports = {
-          settlement: readEnvironmentSupportsSettlement(threadRef.environmentId),
-          autoSettleOptOut: readEnvironmentSupportsAutoSettleOptOut(threadRef.environmentId),
-          snooze: readEnvironmentSupportsSnooze(threadRef.environmentId),
-          pinning: readEnvironmentSupportsPinning(threadRef.environmentId),
-          titleRegeneration: readEnvironmentSupportsTitleRegeneration(threadRef.environmentId),
-        };
-        const isRegeneratingTitle = thread.titleRegeneration != null;
-        const snoozePresets = resolveSnoozePresets(now, timestampFormat);
-        const items = buildThreadActionMenuItems({
-          canOperate: readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope),
-          branch: thread.branch ?? null,
-          projectFilter: null,
-          isPinned: thread.pinnedAt != null,
-          isSettled: supports.settlement && thread.settledOverride === "settled",
-          autoSettleEnabled: thread.autoSettleDisabledAt == null,
-          isSnoozed: supports.snooze && effectiveSnoozed(thread, { now: now.toISOString() }),
-          canSnoozeNow: canSnooze(thread, { now: now.toISOString() }),
-          isRegeneratingTitle,
-          isRunning: !threadRuntimeCanArchive(thread.runtime),
-          supports,
-          snoozePresets,
-        });
-        const clicked = await settlePromise(() => api.contextMenu.show(items, position));
-        if (clicked._tag === "Failure" || clicked.value === null) return;
-        const action: ThreadActionMenuId = clicked.value;
-        if (
-          threadActionRequiresOperate(action) &&
-          !readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope)
-        ) {
-          failureToast(
-            "Thread action unavailable",
-            new Error("This connection cannot change threads."),
+  const openMenu = (position: { x: number; y: number }) => {
+    if (threadRef === null) return;
+    void (async () => {
+      const api = readLocalApi();
+      if (!api) return;
+      const thread = readThreadShell(threadRef);
+      if (!thread) return;
+      const now = new Date();
+      const supports = {
+        settlement: readEnvironmentSupportsSettlement(threadRef.environmentId),
+        autoSettleOptOut: readEnvironmentSupportsAutoSettleOptOut(threadRef.environmentId),
+        snooze: readEnvironmentSupportsSnooze(threadRef.environmentId),
+        pinning: readEnvironmentSupportsPinning(threadRef.environmentId),
+        titleRegeneration: readEnvironmentSupportsTitleRegeneration(threadRef.environmentId),
+      };
+      const isRegeneratingTitle = thread.titleRegeneration != null;
+      const snoozePresets = resolveSnoozePresets(now, timestampFormat);
+      const items = buildThreadActionMenuItems({
+        canOperate: readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope),
+        branch: thread.branch ?? null,
+        projectFilter: null,
+        isPinned: thread.pinnedAt != null,
+        isSettled: supports.settlement && thread.settledOverride === "settled",
+        autoSettleEnabled: thread.autoSettleDisabledAt == null,
+        isSnoozed: supports.snooze && effectiveSnoozed(thread, { now: now.toISOString() }),
+        canSnoozeNow: canSnooze(thread, { now: now.toISOString() }),
+        isRegeneratingTitle,
+        isRunning: !threadRuntimeCanArchive(thread.runtime),
+        supports,
+        snoozePresets,
+      });
+      const clicked = await settlePromise(() => api.contextMenu.show(items, position));
+      if (clicked._tag === "Failure" || clicked.value === null) return;
+      const action: ThreadActionMenuId = clicked.value;
+      if (
+        threadActionRequiresOperate(action) &&
+        !readEnvironmentScope(threadRef.environmentId, AuthOrchestrationOperateScope)
+      ) {
+        failureToast(
+          "Thread action unavailable",
+          new Error("This connection cannot change threads."),
+        );
+        return;
+      }
+      if (action.startsWith("snooze:")) {
+        const preset =
+          action === "snooze:custom"
+            ? await requestCustomSnooze()
+            : snoozePresets.find((candidate) => `snooze:${candidate.id}` === action);
+        if (!preset) return;
+        const result = await snoozeThread(threadRef, preset.snoozedUntil);
+        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+          failureToast("Failed to snooze thread", squashAtomCommandFailure(result));
+        }
+        return;
+      }
+      const reportFailure = async (
+        title: string,
+        run: () => Promise<AtomCommandResult<unknown, unknown>>,
+      ) => {
+        const result = await run();
+        if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
+          failureToast(title, squashAtomCommandFailure(result));
+        }
+      };
+      switch (action) {
+        case "project-settings": {
+          const project = projects.find(
+            (candidate) =>
+              candidate.environmentId === thread.environmentId && candidate.id === thread.projectId,
+          );
+          if (!project) return;
+          const projectKey =
+            logicalProjectKeyByPhysicalKey.get(derivePhysicalProjectKey(project)) ??
+            deriveLogicalProjectKeyFromSettings(project, projectGroupingSettings);
+          void router.navigate({
+            to: "/projects/$projectKey",
+            params: { projectKey },
+          });
+          return;
+        }
+        case "new-thread-on-branch": {
+          const result = await settlePromise(() =>
+            handleNewThread(scopeProjectRef(threadRef.environmentId, thread.projectId), {
+              branch: thread.branch,
+              worktreePath: thread.worktreePath,
+              envMode: thread.worktreePath ? "worktree" : "local",
+              startFromOrigin: false,
+            }),
+          );
+          if (result._tag === "Failure") {
+            failureToast("Could not create thread", squashAtomCommandFailure(result));
+          }
+          return;
+        }
+        case "settle":
+          await reportFailure("Failed to settle thread", () => settleThread(threadRef));
+          return;
+        case "unsettle":
+          await reportFailure("Failed to un-settle thread", () => unsettleThread(threadRef));
+          return;
+        case "unsnooze":
+          await reportFailure("Failed to wake thread", () => unsnoozeThread(threadRef));
+          return;
+        case "pin":
+          await reportFailure("Failed to pin thread", () => pinThread(threadRef));
+          return;
+        case "unpin": {
+          await reportFailure("Failed to unpin thread", () => confirmAndUnpinThread(threadRef));
+          return;
+        }
+        case "auto-settle:enabled":
+        case "auto-settle:disabled":
+          await reportFailure("Failed to update auto-settle", () =>
+            setThreadAutoSettle(threadRef, action === "auto-settle:enabled"),
           );
           return;
+        case "rename":
+          onStartRename();
+          return;
+        case "regenerate-title":
+          if (isRegeneratingTitle) return;
+          await reportFailure("Failed to regenerate thread title", () =>
+            updateThreadMetadata({
+              environmentId: threadRef.environmentId,
+              input: { threadId: threadRef.threadId, regenerateTitle: true },
+            }),
+          );
+          return;
+        case "mark-unread":
+          markThreadUnread(threadRef);
+          return;
+        case "copy-path": {
+          const workspacePath = thread.worktreePath ?? projectCwd;
+          if (!workspacePath) {
+            toastManager.add(
+              stackedThreadToast({
+                type: "error",
+                title: "Path unavailable",
+                description: "This thread does not have a workspace path to copy.",
+              }),
+            );
+            return;
+          }
+          copyPathToClipboard(workspacePath, { path: workspacePath });
+          return;
         }
-        if (action.startsWith("snooze:")) {
-          const preset =
-            action === "snooze:custom"
-              ? await requestCustomSnooze()
-              : snoozePresets.find((candidate) => `snooze:${candidate.id}` === action);
-          if (!preset) return;
-          const result = await snoozeThread(threadRef, preset.snoozedUntil);
+        case "copy-branch":
+          if (thread.branch) {
+            copyBranchToClipboard(thread.branch, { branch: thread.branch });
+          }
+          return;
+        case "copy-thread-id":
+          copyThreadIdToClipboard(thread.id, { threadId: thread.id });
+          return;
+        case "archive": {
+          if (confirmThreadArchive) {
+            const confirmed = await settlePromise(() =>
+              api.dialogs.confirm(`Archive thread "${thread.title}"?`),
+            );
+            if (confirmed._tag === "Failure" || !confirmed.value) return;
+          }
+          let didArchive = false;
+          const result = await archiveThread(threadRef, {
+            onArchived: () => {
+              didArchive = true;
+            },
+          });
           if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-            failureToast("Failed to snooze thread", squashAtomCommandFailure(result));
+            failureToast(
+              didArchive ? "Thread archived, but navigation failed" : "Failed to archive thread",
+              squashAtomCommandFailure(result),
+            );
           }
           return;
         }
-        const reportFailure = async (
-          title: string,
-          run: () => Promise<AtomCommandResult<unknown, unknown>>,
-        ) => {
-          const result = await run();
-          if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-            failureToast(title, squashAtomCommandFailure(result));
-          }
-        };
-        switch (action) {
-          case "project-settings": {
-            const project = projects.find(
-              (candidate) =>
-                candidate.environmentId === thread.environmentId &&
-                candidate.id === thread.projectId,
-            );
-            if (!project) return;
-            const projectKey =
-              logicalProjectKeyByPhysicalKey.get(derivePhysicalProjectKey(project)) ??
-              deriveLogicalProjectKeyFromSettings(project, projectGroupingSettings);
-            void router.navigate({
-              to: "/projects/$projectKey",
-              params: { projectKey },
-            });
-            return;
-          }
-          case "new-thread-on-branch": {
-            const result = await settlePromise(() =>
-              handleNewThread(scopeProjectRef(threadRef.environmentId, thread.projectId), {
-                branch: thread.branch,
-                worktreePath: thread.worktreePath,
-                envMode: thread.worktreePath ? "worktree" : "local",
-                startFromOrigin: false,
-              }),
-            );
-            if (result._tag === "Failure") {
-              failureToast("Could not create thread", squashAtomCommandFailure(result));
-            }
-            return;
-          }
-          case "settle":
-            await reportFailure("Failed to settle thread", () => settleThread(threadRef));
-            return;
-          case "unsettle":
-            await reportFailure("Failed to un-settle thread", () => unsettleThread(threadRef));
-            return;
-          case "unsnooze":
-            await reportFailure("Failed to wake thread", () => unsnoozeThread(threadRef));
-            return;
-          case "pin":
-            await reportFailure("Failed to pin thread", () => pinThread(threadRef));
-            return;
-          case "unpin": {
-            await reportFailure("Failed to unpin thread", () => confirmAndUnpinThread(threadRef));
-            return;
-          }
-          case "auto-settle:enabled":
-          case "auto-settle:disabled":
-            await reportFailure("Failed to update auto-settle", () =>
-              setThreadAutoSettle(threadRef, action === "auto-settle:enabled"),
-            );
-            return;
-          case "rename":
-            onStartRename();
-            return;
-          case "regenerate-title":
-            if (isRegeneratingTitle) return;
-            await reportFailure("Failed to regenerate thread title", () =>
-              updateThreadMetadata({
-                environmentId: threadRef.environmentId,
-                input: { threadId: threadRef.threadId, regenerateTitle: true },
-              }),
-            );
-            return;
-          case "mark-unread":
-            markThreadUnread(threadRef);
-            return;
-          case "copy-path": {
-            const workspacePath = thread.worktreePath ?? projectCwd;
-            if (!workspacePath) {
-              toastManager.add(
-                stackedThreadToast({
-                  type: "error",
-                  title: "Path unavailable",
-                  description: "This thread does not have a workspace path to copy.",
+        case "delete": {
+          const deleteNow = async () => {
+            const deleted = await deleteThread(threadRef, {
+              confirmWorktreeDeletion: ({ path }) =>
+                requestConfirmation({
+                  title: "linked worktree",
+                  count: 1,
+                  single: true,
+                  heading: "Delete linked worktree?",
+                  description: [
+                    "This thread is the only one linked to this worktree:",
+                    path,
+                    "",
+                    "Delete the worktree too?",
+                  ].join("\n"),
                 }),
-              );
-              return;
-            }
-            copyPathToClipboard(workspacePath, { path: workspacePath });
-            return;
-          }
-          case "copy-branch":
-            if (thread.branch) {
-              copyBranchToClipboard(thread.branch, { branch: thread.branch });
-            }
-            return;
-          case "copy-thread-id":
-            copyThreadIdToClipboard(thread.id, { threadId: thread.id });
-            return;
-          case "archive": {
-            if (confirmThreadArchive) {
-              const confirmed = await settlePromise(() =>
-                api.dialogs.confirm(`Archive thread "${thread.title}"?`),
-              );
-              if (confirmed._tag === "Failure" || !confirmed.value) return;
-            }
-            let didArchive = false;
-            const result = await archiveThread(threadRef, {
-              onArchived: () => {
-                didArchive = true;
-              },
             });
-            if (result._tag === "Failure" && !isAtomCommandInterrupted(result)) {
-              failureToast(
-                didArchive ? "Thread archived, but navigation failed" : "Failed to archive thread",
-                squashAtomCommandFailure(result),
-              );
+            if (
+              deleted._tag === "Failure" &&
+              !isAtomCommandInterrupted(deleted) &&
+              // A failure with the thread already gone is worktree cleanup
+              // failing after a successful delete — deleteThread has toasted
+              // that itself, and "Failed to delete thread" would be a lie.
+              readThreadShell(threadRef) !== null
+            ) {
+              failureToast("Failed to delete thread", squashAtomCommandFailure(deleted));
             }
+          };
+          if (confirmThreadDelete) {
+            requestDeleteConfirmation({
+              title: thread.title,
+              count: 1,
+              single: true,
+              onConfirm: deleteNow,
+            });
             return;
           }
-          case "delete": {
-            const deleteNow = async () => {
-              const deleted = await deleteThread(threadRef, {
-                confirmWorktreeDeletion: ({ path }) =>
-                  requestConfirmation({
-                    title: "linked worktree",
-                    count: 1,
-                    single: true,
-                    heading: "Delete linked worktree?",
-                    description: [
-                      "This thread is the only one linked to this worktree:",
-                      path,
-                      "",
-                      "Delete the worktree too?",
-                    ].join("\n"),
-                  }),
-              });
-              if (
-                deleted._tag === "Failure" &&
-                !isAtomCommandInterrupted(deleted) &&
-                // A failure with the thread already gone is worktree cleanup
-                // failing after a successful delete — deleteThread has toasted
-                // that itself, and "Failed to delete thread" would be a lie.
-                readThreadShell(threadRef) !== null
-              ) {
-                failureToast("Failed to delete thread", squashAtomCommandFailure(deleted));
-              }
-            };
-            if (confirmThreadDelete) {
-              requestDeleteConfirmation({
-                title: thread.title,
-                count: 1,
-                single: true,
-                onConfirm: deleteNow,
-              });
-              return;
-            }
-            await deleteNow();
-            return;
-          }
-          default:
-            return;
+          await deleteNow();
+          return;
         }
-      })();
-    },
-    [
-      archiveThread,
-      confirmThreadArchive,
-      confirmThreadDelete,
-      confirmAndUnpinThread,
-      copyBranchToClipboard,
-      copyPathToClipboard,
-      copyThreadIdToClipboard,
-      deleteThread,
-      handleNewThread,
-      logicalProjectKeyByPhysicalKey,
-      markThreadUnread,
-      onStartRename,
-      pinThread,
-      projectCwd,
-      projectGroupingSettings,
-      projects,
-      requestConfirmation,
-      requestDeleteConfirmation,
-      router,
-      setThreadAutoSettle,
-      settleThread,
-      snoozeThread,
-      threadRef,
-      timestampFormat,
-      unsettleThread,
-      unsnoozeThread,
-      updateThreadMetadata,
-    ],
-  );
+        default:
+          return;
+      }
+    })();
+  };
 
-  const closeMenu = useCallback(() => {
+  const closeMenu = () => {
     void readLocalApi()?.contextMenu.close();
-  }, []);
+  };
 
   return { openMenu, closeMenu, deleteConfirmDialog };
 }

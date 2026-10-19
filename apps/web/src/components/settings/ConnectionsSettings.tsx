@@ -10,7 +10,6 @@ import {
   TerminalIcon,
 } from "lucide-react";
 import { useAtomValue } from "@effect/atom-react";
-import { Atom } from "effect/reactivity";
 import {
   type KeyboardEvent,
   type ReactNode,
@@ -48,6 +47,7 @@ import {
   RelayConnectionRegistration,
   RelayConnectionTarget,
   connectionRoutes,
+  hasSavedBearerRoute,
   connectionStatusText,
   environmentMcpUrl,
 } from "@t3tools/client-runtime/connection";
@@ -70,6 +70,7 @@ import {
   canRevokeOtherClients,
   isQrShareableEndpoint,
   isWslSettingsRowVisible,
+  missingTailscaleEndpointDescription,
   selectQrEndpointOption,
   togglePairingScopeSelection,
 } from "./ConnectionsSettings.logic";
@@ -185,7 +186,12 @@ import {
 import { APP_VERSION } from "~/branding";
 import { requestConfirmDialog } from "~/confirmDialog";
 import { useAtomCommand } from "../../state/use-atom-command";
-import { primaryServerKeybindingsAtom, serverEnvironment } from "~/state/server";
+import { environmentIdsKey } from "~/state/environmentAtomList";
+import {
+  environmentUpdateStatesAtom,
+  primaryServerKeybindingsAtom,
+  serverEnvironment,
+} from "~/state/server";
 import { ConnectionStatusDot } from "../ConnectionStatusDot";
 import {
   OutdatedServerUpdateAction,
@@ -1464,6 +1470,7 @@ function SavedBackendListRow({
   const [permissionsOpen, setPermissionsOpen] = useState(false);
   const environmentId = environment.environmentId;
   const unsupported = environment.connection.phase === "unsupported";
+  const blocked = unsupported && !hasSavedBearerRoute(environment.entry);
   const enabled = environment.entry.enabled && !unsupported;
   const isConnected = environment.connection.phase === "connected";
   const isRemoving = removingEnvironmentId === environmentId;
@@ -1701,14 +1708,14 @@ function SavedBackendListRow({
             <Switch
               size="sm"
               checked={enabled}
-              disabled={isRemoving || unsupported}
+              disabled={isRemoving || blocked}
               aria-label={`${enabled ? "Switch off" : "Switch on"} ${environment.label}`}
               onCheckedChange={(checked) => onSetEnabled(environmentId, checked)}
             />
           }
         />
         <TooltipPopup side="top">
-          {unsupported ? "Client not supported" : enabled ? "Switch off" : "Switch on"}
+          {blocked ? "Client not supported" : enabled ? "Switch off" : "Switch on"}
         </TooltipPopup>
       </Tooltip>
       <Menu>
@@ -2027,13 +2034,15 @@ export function ConnectionsSettings() {
   const listedEnvironments = savedEnvironments.filter(
     (environment) => !isDesktopLocalConnectionTarget(environment.entry.target),
   );
-  const savedServerUpdateStatesAtom = Atom.make((get) =>
-    savedEnvironments.map((environment) => ({
-      environment,
-      updateStatus: get(serverEnvironment.updateStateAtom(environment.environmentId)).status,
-    })),
+  const savedUpdateStates = useAtomValue(
+    environmentUpdateStatesAtom(
+      environmentIdsKey(savedEnvironments.map(({ environmentId }) => environmentId)),
+    ),
   );
-  const savedServerUpdateStates = useAtomValue(savedServerUpdateStatesAtom);
+  const savedServerUpdateStates = savedEnvironments.map((environment, index) => ({
+    environment,
+    updateStatus: savedUpdateStates[index]!.status,
+  }));
   const savedServerUpdateTargets = savedServerUpdateStates.flatMap(
     ({ environment, updateStatus }): ServerUpdateTarget[] => {
       const mismatch = resolveServerConfigVersionMismatch(environment.serverConfig);
@@ -3263,7 +3272,7 @@ export function ConnectionsSettings() {
           ? tailscaleHttpsEndpoint.status === "available"
             ? tailscaleHttpsEndpoint.httpBaseUrl
             : "Use Tailscale Serve to expose this backend through a MagicDNS HTTPS URL."
-          : "Start Tailscale to set up HTTPS access through MagicDNS."
+          : missingTailscaleEndpointDescription(desktopServerExposureState)
       }
       control={
         tailscaleHttpsEndpoint ? (

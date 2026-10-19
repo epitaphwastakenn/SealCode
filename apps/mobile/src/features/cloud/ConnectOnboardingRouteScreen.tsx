@@ -1,10 +1,11 @@
+import { Button } from "../../components/ui/Button";
 import { Toolbar } from "../../components/ui/Toolbar";
 import { ScreenScrollView as ScrollView } from "../../components/ui/ScreenScrollView";
 
 import { useAuth } from "@clerk/expo";
 import { StackActions, useNavigation } from "@react-navigation/native";
-import { useCallback, useEffect, useState } from "react";
-import { Platform, Pressable, RefreshControl, View } from "react-native";
+import { useEffect, useState } from "react";
+import { Platform, RefreshControl, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { reportAtomCommandResult, settlePromise } from "@t3tools/client-runtime/state/runtime";
@@ -49,24 +50,18 @@ function ConfiguredConnectOnboardingRouteScreen() {
   });
 
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const handleRefresh = useCallback(() => {
-    void (async () => {
-      setIsRefreshing(true);
-      try {
-        await refreshRelayEnvironments();
-      } finally {
-        setIsRefreshing(false);
-      }
-    })();
-  }, [refreshRelayEnvironments]);
+  const handleRefresh = () => {
+    setIsRefreshing(true);
+    void refreshRelayEnvironments().finally(() => setIsRefreshing(false));
+  };
 
-  const handleClose = useCallback(() => {
+  const handleClose = () => {
     navigation.goBack();
-  }, [navigation]);
+  };
 
   // Persist before dismissing so a quick sign-out/sign-in cannot race ahead
   // of the preference write; the write is a local secure-store update.
-  const handleDontShowAgain = useCallback(() => {
+  const handleDontShowAgain = () => {
     void (async () => {
       if (userId) {
         const result = await settlePromise(() => optOutOfConnectOnboarding(userId));
@@ -74,7 +69,7 @@ function ConfiguredConnectOnboardingRouteScreen() {
       }
       navigation.goBack();
     })();
-  }, [navigation, userId]);
+  };
 
   return (
     <View collapsable={false} className="flex-1 bg-sheet">
@@ -131,14 +126,7 @@ function ConfiguredConnectOnboardingRouteScreen() {
         )}
 
         {userId ? (
-          <Pressable
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={handleDontShowAgain}
-            className="items-center py-1 active:opacity-70"
-          >
-            <Text className="text-xs text-foreground-muted">{"Don't show this again"}</Text>
-          </Pressable>
+          <Button label={"Don't show this again"} tone="text" onPress={handleDontShowAgain} />
         ) : null}
       </ScrollView>
     </View>

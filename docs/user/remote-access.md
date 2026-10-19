@@ -179,6 +179,12 @@ If SSH reconnecting fails after an app update, retry the launch once. Removing
 the connection stops a server that SealCode launched; a server that was already
 running is left alone.
 
+Each desktop app keeps one session on the host for its SSH connection and reuses
+it when it reconnects. Revoke sessions you no longer use in **Settings →
+Connections** on the host, or on a headless host with `t3 auth session list` and
+`t3 auth session revoke <id>`. A desktop that can still sign in over SSH pairs
+again on its next connect.
+
 For Antigravity's Google callback on a remote host, see
 [remote sign-in](./providers-antigravity.md#sign-in-from-a-remote-device).
 
@@ -225,8 +231,9 @@ The server shows the exact line for how you started it, such as
 `sudo npx t3 browser setup`, and keeps your `PATH` when Node is installed only
 for your user. Where `t3` is not on your `PATH`, such as with only the
 desktop app installed, it names the full path of the app's own `t3` instead. It allows Chrome's sandbox with an AppArmor profile and installs
-any missing libraries with apt. It is safe to run again. Without `sudo`, it
-only reports what it would change.
+any missing libraries and system fonts with apt; pages that load without text
+can mean the host has no fonts. It is safe to run again. Without `sudo`, it only
+reports what it would change.
 
 The browser always runs in Chrome's sandbox. Where you cannot change the host,
 set `T3CODE_SERVER_BROWSER_SANDBOX=0` for the environment to run without it.

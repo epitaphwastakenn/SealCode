@@ -386,6 +386,7 @@ export function layerWithRegistry<Error>(
         IdAllocator.layer,
         layerProviderEventIngestorProvided,
         layerServerSettings,
+        layerStores,
       ),
     ),
   );
@@ -403,6 +404,8 @@ export function layerWithRegistry<Error>(
         layerRunExecutionServiceProvided,
         layerRuntime,
         SealTurnInput.layerPassthrough,
+        layerServerConfig,
+        layerServerSettings,
       ),
     ),
   );
@@ -422,6 +425,8 @@ export function layerWithRegistry<Error>(
         layerProviderSessionManagerProvided,
         ThreadCommandExecutor.layer,
         layerRuntime,
+        layerServerConfig,
+        layerServerSettings,
       ),
     ),
   );

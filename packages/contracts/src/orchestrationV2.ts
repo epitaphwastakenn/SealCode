@@ -1087,6 +1087,11 @@ export const OrchestrationV2ConversationMessage = Schema.Struct({
   ...OrchestrationV2CreationFields,
   scheduledTaskId: Schema.optional(ScheduledTaskId),
   senderThreadId: Schema.optional(ThreadId),
+  /**
+   * The message is the script a provider-native workflow run executes, not prose. Clients show
+   * the workflow's opening instead and keep the script behind a disclosure.
+   */
+  workflowScript: Schema.optional(Schema.Boolean),
   id: MessageId,
   threadId: ThreadId,
   runId: Schema.NullOr(RunId),
@@ -1337,6 +1342,7 @@ export const OrchestrationV2TurnItem = Schema.Union([
     messageId: MessageId,
     scheduledTaskId: Schema.optional(ScheduledTaskId),
     senderThreadId: Schema.optional(ThreadId),
+    workflowScript: OrchestrationV2ConversationMessage.fields.workflowScript,
     inputIntent: OrchestrationV2UserMessageInputIntent,
     text: Schema.String,
     context: Schema.optional(OrchestrationMessageContext),
@@ -1776,6 +1782,8 @@ export const OrchestrationV2PendingRuntimeRequestSummary = Schema.Struct({
   id: RuntimeRequestId,
   kind: OrchestrationV2RuntimeRequest.fields.kind,
   createdAt: Schema.DateTimeUtc,
+  /** False for async questions the run keeps working past. Absent from older servers. */
+  blocking: Schema.optional(Schema.Boolean),
 });
 export type OrchestrationV2PendingRuntimeRequestSummary =
   typeof OrchestrationV2PendingRuntimeRequestSummary.Type;
@@ -2092,6 +2100,7 @@ export const OrchestrationV2TurnItemJson = Schema.Union([
     messageId: MessageId,
     scheduledTaskId: Schema.optional(ScheduledTaskId),
     senderThreadId: Schema.optional(ThreadId),
+    workflowScript: OrchestrationV2ConversationMessage.fields.workflowScript,
     inputIntent: OrchestrationV2UserMessageInputIntent,
     text: Schema.String,
     context: Schema.optional(OrchestrationMessageContext),
@@ -2987,6 +2996,8 @@ const OrchestrationV2InternalCommand = Schema.Union([
     ...ThreadPullRequestKey.fields,
     startedAt: IsoDateTime,
     watch: Schema.NullOr(ThreadPullRequestWatch),
+    /** With `watch: null`, the state the ended watch keeps instead of its last saved one. */
+    endedWatch: Schema.optional(ThreadPullRequestWatch),
     wake: Schema.optional(
       Schema.Struct({
         messageId: MessageId,

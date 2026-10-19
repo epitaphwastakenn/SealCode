@@ -71,6 +71,7 @@ import { MobileAppSettingsRow } from "./MobileAppSettingsRow";
 import {
   canCheckForUpdate,
   getDesktopUpdateButtonTooltip,
+  getDesktopUpdateDisabledReason,
   getDesktopUpdateInstallConfirmationMessage,
   isDesktopUpdateButtonDisabled,
   resolveDesktopUpdateButtonAction,
@@ -115,9 +116,10 @@ import {
 } from "../../providerInstances";
 import { ensureLocalApi, readLocalApi } from "../../localApi";
 import { isMacPlatform } from "../../lib/utils";
+import { useEnvironmentProviders } from "../../state/environments";
 import { EMPTY_SERVER_PROVIDERS } from "../../state/server";
 import { useArchivedThreadSnapshots } from "../../lib/archivedThreadsState";
-import { formatRelativeTimeLabel } from "../../timestampFormat";
+import { RelativeTime } from "../RelativeTime";
 import { Button } from "../ui/button";
 import { useThreadDeleteConfirmation } from "../threadActionMenu";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
@@ -661,7 +663,7 @@ function AboutVersionSection() {
   const description =
     action === "download" || action === "install"
       ? "Update available."
-      : "Current version of the application.";
+      : (getDesktopUpdateDisabledReason(updateState) ?? "Current version of the application.");
 
   return (
     <>
@@ -1051,6 +1053,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       browserRecordingShowKeyPresses: DEFAULT_UNIFIED_SETTINGS.browserRecordingShowKeyPresses,
       browserRecordingShowMousePresses: DEFAULT_UNIFIED_SETTINGS.browserRecordingShowMousePresses,
       browserLinkTarget: DEFAULT_UNIFIED_SETTINGS.browserLinkTarget,
+      browserSearchEngine: DEFAULT_UNIFIED_SETTINGS.browserSearchEngine,
+      browserCustomSearchUrl: DEFAULT_UNIFIED_SETTINGS.browserCustomSearchUrl,
       browserAutoShowFloatingPreview: DEFAULT_UNIFIED_SETTINGS.browserAutoShowFloatingPreview,
       pullRequestLinksOpenInApp: DEFAULT_UNIFIED_SETTINGS.pullRequestLinksOpenInApp,
       enableAgentBrowserAccess: DEFAULT_UNIFIED_SETTINGS.enableAgentBrowserAccess,
@@ -2448,7 +2452,11 @@ export function GeneralSettingsPanel() {
   const lastEnabledProjectGroupingMode = useRef<SidebarProjectGroupingMode>(
     readLastEnabledProjectGroupingMode(),
   );
-  const serverProviders = environment?.serverConfig?.providers ?? EMPTY_SERVER_PROVIDERS;
+  const providersByEnvironment = useEnvironmentProviders();
+  const serverProviders =
+    (environment?.serverConfig
+      ? providersByEnvironment.get(environment.environmentId)
+      : undefined) ?? EMPTY_SERVER_PROVIDERS;
   const supportsAutoSettlement =
     connectedEnvironments.length > 0 &&
     connectedEnvironments.every(
@@ -4292,16 +4300,16 @@ export function ArchivedThreadsPanel() {
                   description={
                     <span className={hasMultipleEnvironments ? "block truncate" : undefined}>
                       {hasMultipleEnvironments ? `${thread.environmentLabel} · ` : null}
-                      Archived {formatRelativeTimeLabel(thread.archivedAt ?? thread.createdAt)}
+                      Archived <RelativeTime timestamp={thread.archivedAt ?? thread.createdAt} />
                       {" \u00b7 Created "}
-                      {formatRelativeTimeLabel(thread.createdAt)}
+                      <RelativeTime timestamp={thread.createdAt} />
                     </span>
                   }
                   control={
                     <Button
                       type="button"
                       variant="outline"
-                      size="xs"
+                      size="sm"
                       className="shrink-0"
                       onClick={() => {
                         void (async () => {

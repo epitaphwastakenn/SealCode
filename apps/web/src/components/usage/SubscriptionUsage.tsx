@@ -33,7 +33,7 @@ export function SubscriptionUsageSection({
   readonly hiddenProviders: ReadonlySet<UsageProviderKind>;
   readonly now: number;
 }) {
-  const presentations = useAtomValue(environmentPresentations.presentationsAtom);
+  const presentations = useAtomValue(environmentPresentations.presentationsWithProvidersAtom);
   // Only providers that actually reported something get a card; the V2 server
   // does not fill subscription usage for most drivers yet, and a wall of
   // "unavailable" cards would read as an error.

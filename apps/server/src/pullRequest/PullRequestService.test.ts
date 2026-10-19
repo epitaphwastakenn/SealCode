@@ -36,6 +36,9 @@ import * as SourceControlProviderRegistry from "../sourceControl/SourceControlPr
 import * as SourceControlRateLimit from "@t3tools/source-control-core/server/SourceControlRateLimit";
 import * as ForgejoCli from "@t3tools/source-control-forgejo/server/ForgejoCli";
 import * as ForgejoPullRequestProvider from "@t3tools/source-control-forgejo/server/ForgejoPullRequestProvider";
+import * as BitbucketApi from "@t3tools/source-control-bitbucket/server/BitbucketApi";
+import * as BitbucketPullRequestApi from "@t3tools/source-control-bitbucket/server/BitbucketPullRequestApi";
+import * as BitbucketPullRequestProvider from "@t3tools/source-control-bitbucket/server/BitbucketPullRequestProvider";
 import * as GitHubRest from "@t3tools/source-control-github/server/GitHubRest";
 import * as GitHubCredentials from "@t3tools/source-control-github/server/GitHubCredentials";
 import * as GitHubPullRequestApi from "@t3tools/source-control-github/server/GitHubPullRequestApi";
@@ -921,6 +924,82 @@ it.effect("uses a provider's raw cursor advance when it consumed malformed rows"
   }),
 );
 
+it.effect("continues Bitbucket listings through tied timestamps and terminates", () =>
+  Effect.gen(function* () {
+    const boundary = "2026-10-12T00:00:00.000Z";
+    const older = "2026-10-11T00:00:00.000Z";
+    const rows = [1, 2, 3, 4, 5].map((id) => ({
+      id,
+      title: `Pull request ${id}`,
+      state: "OPEN",
+      created_on: older,
+      updated_on: id <= 3 ? boundary : older,
+      source: { branch: { name: `feat/${id}` } },
+      destination: { branch: { name: "main" } },
+      links: { html: { href: `https://bitbucket.org/acme/web/pull-requests/${id}` } },
+    }));
+    const provider = yield* BitbucketPullRequestProvider.make.pipe(
+      Effect.provide(
+        BitbucketPullRequestApi.layer.pipe(
+          Layer.provide(
+            Layer.mock(BitbucketApi.BitbucketApi)({
+              request: ({ url }) => {
+                if (url === "/user") {
+                  return Effect.succeed({
+                    body: JSON.stringify({ nickname: "bilal" }),
+                    truncated: false,
+                  });
+                }
+                const filter =
+                  new URL(url, "https://api.bitbucket.org").searchParams.get("q") ?? "";
+                const updatedBefore = /updated_on <= (\S+)/.exec(filter)?.[1];
+                const excluded = new Set(
+                  Array.from(filter.matchAll(/id != (\d+)/g), (match) => Number(match[1])),
+                );
+                const values = rows.filter(
+                  (row) =>
+                    (updatedBefore === undefined || row.updated_on <= updatedBefore) &&
+                    !excluded.has(row.id),
+                );
+                return Effect.succeed({ body: JSON.stringify({ values }), truncated: false });
+              },
+            }),
+          ),
+        ),
+      ),
+    );
+    const service = yield* makeService({
+      projects: [
+        project({
+          id: "p1",
+          title: "web",
+          workspaceRoot: "/w",
+          repository: "acme/web",
+          provider: "bitbucket",
+          host: "bitbucket.org",
+        }),
+      ],
+      providers: [provider],
+    });
+    let page = yield* service.list({ state: "open", limit: 2 });
+    assert.deepStrictEqual(
+      page.entries.map((entry) => entry.number),
+      [1, 2],
+    );
+    for (const expected of [[3, 4], [5]]) {
+      assert.isTrue(page.truncated);
+      assert.isNotEmpty(page.nextCursors);
+      page = yield* service.list({ state: "open", limit: 2, cursors: page.nextCursors });
+      assert.deepStrictEqual(
+        page.entries.map((entry) => entry.number),
+        expected,
+      );
+    }
+    assert.isFalse(page.truncated);
+    assert.deepStrictEqual(page.nextCursors, {});
+  }),
+);
+
 it.effect("reads only the repositories it was asked to carry on with", () =>
   Effect.gen(function* () {
     const listed: string[] = [];
@@ -947,7 +1026,9 @@ it.effect("reads only the repositories it was asked to carry on with", () =>
     });
 
     assert.deepStrictEqual(listed, ["acme/web"]);
-    assert.deepStrictEqual(cursors, [{ updatedBefore: "2026-07-02T00:00:00Z", delivered: 99 }]);
+    assert.deepStrictEqual(cursors, [
+      { updatedBefore: "2026-07-02T00:00:00Z", delivered: 99, seenAt: [7] },
+    ]);
     assert.strictEqual(result.providers.length, 1);
   }),
 );
@@ -4554,7 +4635,7 @@ it.effect("carries a slice on without sending the rows it already sent", () =>
       [4],
     );
     assert.deepStrictEqual(result.nextCursors, {
-      "github.com acme/web": "2026-07-02T00:00:00Z|2|3,3,4",
+      "github.com acme/web": "2026-07-02T00:00:00Z|2|3,4",
     });
   }),
 );
@@ -6214,6 +6295,65 @@ it.effect("names the signed-in account in the detail, and says nothing where the
   }),
 );
 
+it.effect("partial host viewed writes invalidate marks but keep the diff cached", () =>
+  Effect.gen(function* () {
+    let diffReads = 0;
+    const states = new Map<string, "viewed" | "unviewed">([
+      ["a.ts", "unviewed"],
+      ["b.ts", "unviewed"],
+    ]);
+    const service = yield* makeService({
+      projects: [project({ id: "p1", title: "web", workspaceRoot: "/a", repository: "acme/web" })],
+      providers: [
+        fakeProvider(SourceControlProviderKind.make("github"), {
+          capabilities: {
+            ...fakeProvider(SourceControlProviderKind.make("github")).capabilities,
+            viewedFiles: "host",
+          },
+          getDiff: () =>
+            Effect.sync(() => {
+              diffReads += 1;
+              return { patch: "@@", truncated: false, nextCursor: null };
+            }),
+          getFilesViewed: () =>
+            Effect.sync(() => ({
+              files: [...states].map(([path, state]) => ({ path, state })),
+              truncated: false,
+            })),
+          setFilesViewed: () =>
+            Effect.gen(function* () {
+              states.set("a.ts", "viewed");
+              return yield* new PullRequestProviderError({
+                provider: SourceControlProviderKind.make("github"),
+                operation: "setFilesViewed",
+                reason: "failed",
+                detail: "Second mutation refused",
+              });
+            }),
+        }),
+      ],
+    });
+    const ref = { projectId: "p1" as ProjectId, repository: "acme/web", number: 10 };
+    yield* service.diff(ref);
+    assert.deepStrictEqual((yield* service.filesViewed(ref)).files, [
+      { path: "a.ts", state: "unviewed" },
+      { path: "b.ts", state: "unviewed" },
+    ]);
+    yield* Effect.flip(
+      service.setFilesViewed({
+        ...ref,
+        files: [...states.keys()].map((path) => ({ path, viewed: true })),
+      }),
+    );
+    yield* service.diff(ref);
+    assert.strictEqual(diffReads, 1);
+    assert.deepStrictEqual((yield* service.filesViewed(ref)).files, [
+      { path: "a.ts", state: "viewed" },
+      { path: "b.ts", state: "unviewed" },
+    ]);
+  }),
+);
+
 it.effect("keeps the diff cached across a file being ticked off", () =>
   Effect.gen(function* () {
     let diffReads = 0;
@@ -7713,4 +7853,124 @@ it.effect.each([
       });
       assert.deepStrictEqual(calls, [expected]);
     }),
+);
+
+it.effect("expands only files the change request changes, across every slice of its diff", () =>
+  Effect.gen(function* () {
+    const read: Array<string> = [];
+    const service = yield* makeService({
+      projects: [
+        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+      ],
+      providers: [
+        fakeProvider(SourceControlProviderKind.make("github"), {
+          getDiff: (input) =>
+            Effect.succeed(
+              input.cursor === undefined
+                ? {
+                    patch: [
+                      "diff --git a/src/old.ts b/src/new.ts",
+                      "rename from src/old.ts",
+                      "rename to src/new.ts",
+                      "--- a/src/old.ts",
+                      "+++ b/src/new.ts",
+                      "",
+                    ].join("\n"),
+                    truncated: false,
+                    nextCursor: "2",
+                  }
+                : {
+                    patch: [
+                      "diff --git a/gone.md b/gone.md",
+                      "deleted file mode 100644",
+                      "--- a/gone.md",
+                      "+++ /dev/null",
+                      "",
+                    ].join("\n"),
+                    truncated: false,
+                    nextCursor: null,
+                  },
+            ),
+          getDiffFileContents: (input) =>
+            Effect.sync(() => {
+              read.push(`${input.oldPath}->${input.newPath}`);
+              return { oldContents: "old", newContents: "new" };
+            }),
+        }),
+      ],
+    });
+    const ref = { projectId: "p1" as ProjectId, repository: "pingdotgg/t3code", number: 1 };
+
+    yield* service.diffFileContents({
+      ...ref,
+      changeType: "rename-changed",
+      oldPath: "src/old.ts",
+      newPath: "src/new.ts",
+    });
+    yield* service.diffFileContents({
+      ...ref,
+      changeType: "deleted",
+      oldPath: "gone.md",
+      newPath: "gone.md",
+    });
+    const outside = yield* service
+      .diffFileContents({ ...ref, changeType: "deleted", oldPath: ".env", newPath: ".env" })
+      .pipe(Effect.flip);
+    const halfRename = yield* service
+      .diffFileContents({
+        ...ref,
+        changeType: "change",
+        oldPath: "src/secret.ts",
+        newPath: "src/new.ts",
+      })
+      .pipe(Effect.flip);
+
+    assert.strictEqual(outside._tag, "PullRequestOperationError");
+    assert.strictEqual(halfRename._tag, "PullRequestOperationError");
+    assert.deepStrictEqual(read, ["src/old.ts->src/new.ts", "gone.md->gone.md"]);
+  }),
+);
+
+it.effect("checks expanded files against a diff too large to cache without fetching it again", () =>
+  Effect.gen(function* () {
+    let diffReads = 0;
+    const filler = `+${"x".repeat(300 * 1024)}`;
+    const service = yield* makeService({
+      projects: [
+        project({ id: "p1", title: "t3code", workspaceRoot: "/a", repository: "pingdotgg/t3code" }),
+      ],
+      providers: [
+        fakeProvider(SourceControlProviderKind.make("github"), {
+          getDiff: () =>
+            Effect.sync(() => {
+              diffReads += 1;
+              return {
+                patch: ["a.ts", "b.ts"]
+                  .flatMap((name) => [
+                    `diff --git a/${name} b/${name}`,
+                    `--- a/${name}`,
+                    `+++ b/${name}`,
+                    "@@ -0,0 +1 @@",
+                    filler,
+                  ])
+                  .join("\n"),
+                truncated: false,
+                nextCursor: null,
+              };
+            }),
+          getDiffFileContents: () => Effect.succeed({ oldContents: "old", newContents: "new" }),
+        }),
+      ],
+    });
+    const ref = { projectId: "p1" as ProjectId, repository: "pingdotgg/t3code", number: 1 };
+    for (const name of ["a.ts", "b.ts"]) {
+      yield* service.diffFileContents({
+        ...ref,
+        changeType: "change",
+        oldPath: name,
+        newPath: name,
+      });
+    }
+    assert.strictEqual(diffReads, 1);
+  }),
 );

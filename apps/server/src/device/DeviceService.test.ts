@@ -5,6 +5,7 @@ import {
   DeviceOperationError,
   LOCAL_DEVICE_HOST_ID,
   ThreadId,
+  type DeviceSummary,
   type DeviceServiceState,
   type ServerSettings as Settings,
   type SshDeviceHostConfig,
@@ -12,6 +13,7 @@ import {
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as NetService from "@t3tools/shared/Net";
+import { SshCommandError } from "@t3tools/ssh/errors";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Deferred from "effect/Deferred";
@@ -89,13 +91,18 @@ const fixture = Effect.fn("fixture")(function* (
   const agentStarts: string[] = [];
   const agentStops: string[] = [];
   const requests: string[] = [];
+  const devices: Array<Omit<DeviceSummary, "hostId">> = [];
+  const encoderResult = yield* Ref.make({ code: 0, stdout: " V....D libx264", stderr: "" });
   let booted = false;
   let shutDown = false;
   const ready: DeviceHost.DeviceHostReady = {
     nodePath: process.execPath,
     hub: { origin: "http://device.test" },
     helpers: { serveSimAxSettings: null, serveSimCli: null },
-    run: () => Effect.succeed({ code: 0, stdout: "Pixel_API_35\n", stderr: "" }),
+    run: (command) =>
+      command === "emulator"
+        ? Effect.succeed({ code: 0, stdout: "Pixel_API_35\n", stderr: "" })
+        : Ref.get(encoderResult),
   };
   const host: DeviceHost.DeviceHost["Service"] = {
     ...(inspectError
@@ -114,7 +121,10 @@ const fixture = Effect.fn("fixture")(function* (
       id: LOCAL_DEVICE_HOST_ID,
       kind: "local",
       label: "Test server",
-      platforms: [{ platform: "android", available: true }],
+      platforms: [
+        { platform: "android", available: true },
+        { platform: "ios", available: true },
+      ],
       hubInstalled: true,
       agentDeviceInstalled: false,
     }),
@@ -206,29 +216,35 @@ const fixture = Effect.fn("fixture")(function* (
               ),
             );
           }
+          if (request.url.endsWith("/grid/api/start")) {
+            return HttpClientResponse.fromWeb(request, Response.json({ ok: true }));
+          }
           return HttpClientResponse.fromWeb(
             request,
             Response.json({
-              simulators: [],
-              emulators: booted
-                ? [
-                    {
-                      id: "emulator-5554",
-                      name: "Pixel_API_35",
-                      platform: "android",
-                      version: "Android 15",
-                      booted: true,
-                      physical: false,
-                    },
-                  ]
-                : [],
+              simulators: devices.filter((device) => device.platform === "ios"),
+              emulators: [
+                ...devices.filter((device) => device.platform === "android"),
+                ...(booted
+                  ? [
+                      {
+                        id: "emulator-5554",
+                        name: "Pixel_API_35",
+                        platform: "android",
+                        version: "Android 15",
+                        booted: true,
+                        physical: false,
+                      },
+                    ]
+                  : []),
+              ],
             }),
           );
         }),
       ),
     ),
   );
-  return { service, starts, agentStarts, agentStops, requests, settings };
+  return { service, starts, agentStarts, agentStops, requests, settings, devices, encoderResult };
 });
 
 describe("device setup consent", () => {
@@ -345,6 +361,88 @@ describe("device setup consent", () => {
       const state = yield* service.state;
       expect(state.devices.map((device) => device.id)).toEqual(["emulator-5554"]);
       expect(state.bootingDevices).toEqual([]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("blocks only emulator video until ffmpeg is usable, then allows retry", () =>
+    Effect.gen(function* () {
+      const { service, requests, devices, encoderResult } = yield* fixture();
+      devices.push(
+        {
+          id: DeviceId.make("physical-android"),
+          name: "Pixel",
+          platform: "android",
+          version: "Android 15",
+          booted: true,
+          physical: true,
+        },
+        {
+          id: DeviceId.make("ios-simulator"),
+          name: "iPhone",
+          platform: "ios",
+          version: "iOS 18",
+          booted: true,
+          physical: false,
+        },
+      );
+      yield* Ref.set(encoderResult, { code: 127, stdout: "", stderr: "spawn ffmpeg ENOENT" });
+      const state = yield* service.configure({ enabled: true });
+      expect(state.devices.map((device) => device.id)).toEqual([
+        "ios-simulator",
+        "physical-android",
+        "Pixel_API_35",
+      ]);
+      const threadId = ThreadId.make("emulator-video-readiness");
+      const physical = yield* service.open({
+        threadId,
+        deviceId: "physical-android",
+        platform: "android",
+      });
+      const ios = yield* service.open({ threadId, deviceId: "ios-simulator", platform: "ios" });
+      expect(physical.deviceId).toBe("physical-android");
+      expect(ios.deviceId).toBe("ios-simulator");
+
+      const openEmulator = service.open({
+        threadId,
+        deviceId: "Pixel_API_35",
+        platform: "android",
+      });
+      const missing = yield* openEmulator.pipe(Effect.flip);
+      expect(missing.message).toMatch(/ffmpeg/i);
+      expect(missing.message).toMatch(/emulator/i);
+      expect(requests.filter((url) => url.endsWith("/boot"))).toEqual([]);
+      expect((yield* service.state).sessions).toEqual([physical, ios]);
+      expect((yield* service.state).bootingDevices ?? []).toEqual([]);
+
+      yield* Ref.set(encoderResult, { code: 1, stdout: "", stderr: "cannot execute ffmpeg" });
+      expect((yield* openEmulator.pipe(Effect.flip)).message).toMatch(/ffmpeg/i);
+      yield* Ref.set(encoderResult, {
+        code: 0,
+        stdout: " V....D libx264rgb   libx264 H.264 / AVC RGB (codec h264)",
+        stderr: "",
+      });
+      expect((yield* openEmulator.pipe(Effect.flip)).message).toMatch(/libx264/i);
+      expect(requests.filter((url) => url.endsWith("/boot"))).toEqual([]);
+      expect((yield* service.state).sessions).toEqual([physical, ios]);
+
+      devices.push({
+        id: DeviceId.make("emulator-5556"),
+        name: "Already_booted",
+        platform: "android",
+        version: "Android 15",
+        booted: true,
+        physical: false,
+      });
+      expect(
+        (yield* service
+          .open({ threadId, deviceId: "emulator-5556", platform: "android" })
+          .pipe(Effect.flip)).message,
+      ).toMatch(/libx264/i);
+
+      yield* Ref.set(encoderResult, { code: 0, stdout: " V....D libx264", stderr: "" });
+      const emulator = yield* openEmulator;
+      expect(emulator.deviceId).toBe("emulator-5554");
+      expect(requests.filter((url) => url.endsWith("/boot"))).toHaveLength(1);
     }).pipe(Effect.scoped),
   );
 
@@ -694,6 +792,84 @@ it.effect("host retry exposes actionable failure without internal IDs or diagnos
   }).pipe(Effect.scoped),
 );
 
+it.effect.each([
+  {
+    name: "missing Node among private diagnostic lines",
+    exitCode: 1,
+    stderr:
+      "private diagnostics\r\nNode is missing from the non-interactive SSH PATH\r\nprivate diagnostics",
+    expected:
+      "Connected over SSH, but Node is not on this host's PATH for non-interactive SSH commands.",
+  },
+  {
+    name: "another remote command failure",
+    exitCode: 2,
+    stderr: "private diagnostics",
+    expected: "Connected over SSH, but the device host check failed (exit code 2).",
+  },
+  {
+    name: "an unrecognized exit-one diagnostic",
+    exitCode: 1,
+    stderr: "private diagnostics: Node is missing from the non-interactive SSH PATH",
+    expected: "Connected over SSH, but the device host check failed (exit code 1).",
+  },
+  {
+    name: "a connection failure",
+    exitCode: 255,
+    stderr: "Node is missing from the non-interactive SSH PATH",
+    expected: "Could not connect to this host over SSH.",
+  },
+  {
+    name: "a command that could not start",
+    exitCode: null,
+    stderr: "private diagnostics",
+    expected: "Could not connect to this host over SSH.",
+  },
+  {
+    name: "an untyped offline cause",
+    exitCode: undefined,
+    stderr: "private diagnostics",
+    expected: "Could not connect to this host over SSH.",
+  },
+])("reports $name through manual and agent host readiness", ({ exitCode, stderr, expected }) =>
+  Effect.gen(function* () {
+    const failure = new DeviceHost.DeviceHostError({
+      hostId: LOCAL_DEVICE_HOST_ID,
+      step: "probe",
+      cause:
+        exitCode === undefined
+          ? "offline"
+          : new SshCommandError({
+              command: ["ssh", "private arguments"],
+              exitCode,
+              stderr,
+              stdout: "private output",
+              message: "private diagnostics",
+            }),
+    });
+    const { service, settings } = yield* fixture(Effect.void, undefined, false, failure);
+    yield* Ref.update(settings, (current) => ({
+      ...current,
+      enableDeviceSupport: true,
+      enableAgentDeviceAccess: true,
+    }));
+    for (const readiness of [service.readiness(), service.agentReadinessIfSupported()]) {
+      const error = yield* readiness.pipe(Effect.flip);
+      expect(error).toMatchObject({ reason: expected, cause: failure });
+      expect((yield* service.state).hostStatuses[LOCAL_DEVICE_HOST_ID]).toEqual({
+        status: "failed",
+        detail: expected,
+      });
+    }
+    for (const state of [yield* service.list, yield* service.retryHost(LOCAL_DEVICE_HOST_ID)]) {
+      expect(state.hostStatuses[LOCAL_DEVICE_HOST_ID]).toEqual({
+        status: "failed",
+        detail: expected,
+      });
+    }
+  }).pipe(Effect.scoped),
+);
+
 it.effect("version discovery does not grant consent or start device tools", () =>
   Effect.gen(function* () {
     const { service, starts, agentStarts, requests } = yield* fixture();
@@ -884,5 +1060,67 @@ it.effect("reconciles SSH host settings without publishing no-op changes", () =>
   }).pipe(
     Effect.scoped,
     Effect.provide(Layer.mergeAll(ServerSettings.layerTest(), NodeServices.layer)),
+  ),
+);
+
+it.effect("a failed tool update reports npm's exit code but not its output", () =>
+  Effect.gen(function* () {
+    const host: DeviceHost.DeviceHost["Service"] = {
+      id: LOCAL_DEVICE_HOST_ID,
+      summary: Effect.succeed({
+        id: LOCAL_DEVICE_HOST_ID,
+        kind: "local",
+        label: "Test server",
+        platforms: [],
+        hubInstalled: false,
+        agentDeviceInstalled: false,
+      }),
+      platformAvailability: (platform) => Effect.succeed({ platform, available: false }),
+      ensureReady: () => Effect.die("Updating a tool does not start the hub"),
+      ensureAgentReady: () => Effect.die("Updating a tool does not start the agent"),
+      current: Effect.succeed(null),
+      stopAgent: Effect.void,
+      stop: Effect.void,
+    };
+    const npmFailure = {
+      code: ChildProcessSpawner.ExitCode(243),
+      stdout: "",
+      stderr: "npm error EACCES https://private:credential@registry.example.test/expo-device-hub",
+      timedOut: false,
+      stdoutTruncated: false,
+      stderrTruncated: false,
+      stdoutInvalidUtf8: false,
+      stderrInvalidUtf8: false,
+    };
+    const service = yield* DeviceService.make.pipe(
+      Effect.provideService(DeviceHost.DeviceHost, host),
+      Effect.provideService(ProcessRunner.ProcessRunner, {
+        run: () => Effect.succeed(npmFailure),
+      }),
+      Effect.provideService(
+        HttpClient.HttpClient,
+        HttpClient.make(() => Effect.die("Updating a tool makes no hub requests")),
+      ),
+    );
+
+    const error = yield* service.updateTool("hub").pipe(Effect.flip);
+    expect(error).toMatchObject({
+      _tag: "DeviceOperationError",
+      reason: "command_failed",
+      exitCode: 243,
+    });
+    expect(error.message).toBe(
+      "Device update device tool failed: The device command failed (exit code 243).",
+    );
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        ServerSettings.layerTest({ enableDeviceSupport: true }),
+        ServerConfig.layerTest(process.cwd(), { prefix: "t3-device-update-" }),
+        NodeCrypto.layer,
+        NetService.layer,
+      ).pipe(Layer.provideMerge(NodeServices.layer)),
+    ),
+    Effect.scoped,
   ),
 );

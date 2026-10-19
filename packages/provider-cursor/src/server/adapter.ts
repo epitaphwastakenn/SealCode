@@ -27,6 +27,7 @@ import {
   type OrchestrationV2Subagent,
   type OrchestrationV2TurnItem,
   type ProviderInstanceId,
+  type ServerProviderModel,
   type ThreadId,
 } from "@t3tools/contracts";
 import { CursorSettings } from "../settings.ts";
@@ -46,7 +47,7 @@ import { mcpToolPresentation } from "@t3tools/provider-core/server/mcpToolPresen
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import { CursorTransportFailure } from "./transportFailure.ts";
-import { cursorSdkModelSelection } from "./sdkModel.ts";
+import { cursorContextWindowTokens, cursorSdkModelSelection } from "./sdkModel.ts";
 import {
   discoverCursorSkills,
   hasCursorSkillMention,
@@ -74,6 +75,7 @@ import {
   subagentThreadTitle,
 } from "@t3tools/provider-core/server/subagentProjection";
 import * as CursorAgentSdk from "./CursorAgentSdk.ts";
+import { ConfigurationError } from "./sdk.ts";
 export { cursorSdkModelSelection } from "./sdkModel.ts";
 
 export const CURSOR_DRIVER_KIND = CursorAgentSdk.CURSOR_PROVIDER;
@@ -336,6 +338,35 @@ export function makeCursorAgentOptions(input: {
     ...(mcpServers === undefined ? {} : { mcpServers }),
   };
 }
+
+/**
+ * Raised when Cursor rejects the selected model, usually a custom model outside
+ * the account catalog. `makeProviderFailure` shows its message to the user.
+ */
+class CursorModelUnavailableError extends Schema.TaggedError<CursorModelUnavailableError>()(
+  "CursorModelUnavailableError",
+  {
+    model: Schema.String,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message(): string {
+    return `Cursor cannot run the model "${this.model}". Cursor only runs models from your Cursor account. Choose one of those, or use OpenCode for OpenRouter and other API-key models.`;
+  }
+}
+
+/**
+ * Maps runner failures from opening or sending to an agent. The SDK checks the
+ * model against the account catalog before either and rejects it with an
+ * uncoded ConfigurationError listing every account model, so its message
+ * prefix is the only signal.
+ */
+const classifyCursorModelRejection =
+  (modelSelection: ModelSelection) => (error: CursorAgentSdk.CursorAgentSdkRunnerError) =>
+    error.cause instanceof ConfigurationError &&
+    error.cause.message.startsWith("Cannot use this model:")
+      ? new CursorModelUnavailableError({ model: modelSelection.model, cause: error.cause })
+      : error;
 
 function stableJson(value: unknown): string {
   try {
@@ -857,6 +888,7 @@ export interface CursorAdapterV2Options {
   readonly instanceId: ProviderInstanceId;
   readonly settings: CursorSettings;
   readonly environment: NodeJS.ProcessEnv;
+  readonly getModels?: () => ReadonlyArray<ServerProviderModel>;
 }
 
 export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
@@ -2105,19 +2137,21 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
             yield* existing.session.close.pipe(Effect.ignore);
             yield* Ref.set(liveAgent, null);
           }
-          const sdkSession = yield* runner.open({
-            operation: openInput.operation,
-            ...(openInput.agentId === undefined ? {} : { agentId: openInput.agentId }),
-            options: makeCursorAgentOptions({
-              ...(apiKey === undefined ? {} : { apiKey }),
-              modelSelection: openInput.modelSelection,
-              runtimePolicy: openInput.runtimePolicy,
+          const sdkSession = yield* runner
+            .open({
+              operation: openInput.operation,
+              ...(openInput.agentId === undefined ? {} : { agentId: openInput.agentId }),
+              options: makeCursorAgentOptions({
+                ...(apiKey === undefined ? {} : { apiKey }),
+                modelSelection: openInput.modelSelection,
+                runtimePolicy: openInput.runtimePolicy,
+                threadId: openInput.threadId,
+                mcpSession: yield* mcpSessions.read(openInput.threadId),
+              }),
               threadId: openInput.threadId,
-              mcpSession: yield* mcpSessions.read(openInput.threadId),
-            }),
-            threadId: openInput.threadId,
-            providerSessionId: input.providerSessionId,
-          });
+              providerSessionId: input.providerSessionId,
+            })
+            .pipe(Effect.mapError(classifyCursorModelRejection(openInput.modelSelection)));
           const next = {
             nativeThreadId: sdkSession.agentId,
             session: sdkSession,
@@ -2178,6 +2212,7 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
                       new ProviderAdapter.ProviderAdapterProtocolError({
                         driver: CursorAgentSdk.CURSOR_PROVIDER,
                         detail: `Failed to read attachment '${attachment.id}'.`,
+                        reason: "attachment_unreadable",
                         payload: cause,
                       }),
                   ),
@@ -2211,6 +2246,7 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
               return yield* new ProviderAdapter.ProviderAdapterProtocolError({
                 driver: CursorAgentSdk.CURSOR_PROVIDER,
                 detail: `Cursor provider turn ${current.providerTurnId} is still active.`,
+                reason: "previous_turn_active",
               });
             }
             const agentId = nativeThreadId(turnInput.providerThread);
@@ -2226,21 +2262,23 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
             const pendingUpdates: Array<InteractionUpdate> = [];
             let context: ActiveCursorTurn | null = null;
             // MCP send overrides replace the ambient servers loaded when the agent opens.
-            const sdkRun = yield* agent.session.send({
-              message,
-              options: {
-                model: cursorSdkModelSelection(turnInput.modelSelection),
-                mode: turnInput.runtimePolicy.interactionMode === "plan" ? "plan" : "agent",
-              },
-              onDelta: (update) => {
-                if (context === null) {
-                  return Effect.sync(() => {
-                    pendingUpdates.push(update);
-                  });
-                }
-                return handleInteractionUpdate(context, update);
-              },
-            });
+            const sdkRun = yield* agent.session
+              .send({
+                message,
+                options: {
+                  model: cursorSdkModelSelection(turnInput.modelSelection),
+                  mode: turnInput.runtimePolicy.interactionMode === "plan" ? "plan" : "agent",
+                },
+                onDelta: (update) => {
+                  if (context === null) {
+                    return Effect.sync(() => {
+                      pendingUpdates.push(update);
+                    });
+                  }
+                  return handleInteractionUpdate(context, update);
+                },
+              })
+              .pipe(Effect.mapError(classifyCursorModelRejection(turnInput.modelSelection)));
             const startedAt = yield* DateTime.now;
             const completed = yield* Deferred.make<void, never>();
             const providerTurnId = idAllocator.derive.providerTurn({
@@ -2318,14 +2356,18 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
                       status,
                       ...(status === "failed"
                         ? {
-                            failure: makeProviderFailure({
-                              cause:
-                                transportFailure ?? (result as { readonly error?: unknown }).error,
-                              class:
-                                transportFailure === undefined
-                                  ? "provider_error"
-                                  : "transport_error",
-                            }),
+                            failure:
+                              transportFailure === undefined
+                                ? makeProviderFailure({
+                                    cause: result.error,
+                                    // makeProviderFailure never reads a cause's own text.
+                                    message: result.error?.message,
+                                    class: "provider_error",
+                                  })
+                                : makeProviderFailure({
+                                    cause: transportFailure,
+                                    class: "transport_error",
+                                  }),
                           }
                         : {}),
                     });
@@ -2341,7 +2383,13 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
                       ...(context.interrupted
                         ? {}
                         : {
-                            failure: makeProviderFailure({ cause, class: "transport_error" }),
+                            failure: makeProviderFailure({
+                              cause,
+                              message: CursorAgentSdk.isCursorAgentSdkRunnerError(cause)
+                                ? CursorAgentSdk.cursorSdkFailureMessage(cause)
+                                : undefined,
+                              class: "transport_error",
+                            }),
                           }),
                     });
                   }
@@ -2393,6 +2441,10 @@ export const makeCursorAdapterV2 = Effect.fn("makeCursorAdapterV2")(function* (
           driver: CursorAgentSdk.CURSOR_PROVIDER,
           providerSessionId: input.providerSessionId,
           providerSession: session,
+          getModelContextWindow: (selection) =>
+            selection.instanceId === adapterOptions.instanceId
+              ? cursorContextWindowTokens(selection, adapterOptions.getModels?.() ?? [])
+              : undefined,
           events: Stream.fromEffectRepeat(Queue.take(events)),
           ensureThread: Effect.fn("CursorAdapterV2.ensureThread")(
             function* (threadInput: ProviderAdapter.ProviderAdapterV2EnsureThreadInput) {

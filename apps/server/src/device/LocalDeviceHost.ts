@@ -224,6 +224,10 @@ const hubEnvironment = Effect.fn("LocalDeviceHost.hubEnvironment")(function* (
   return env;
 });
 
+/** Only a Mac can list Apple simulators; elsewhere the hub's attempt surfaces as an error. */
+const hubPlatformArguments = (hostPlatform: NodeJS.Platform) =>
+  hostPlatform === "darwin" ? [] : ["--platform", "android"];
+
 export const make = Effect.fn("LocalDeviceHost.make")(function* () {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const config = yield* ServerConfig.ServerConfig;
@@ -233,6 +237,7 @@ export const make = Effect.fn("LocalDeviceHost.make")(function* () {
   const runner = yield* ProcessRunner.ProcessRunner;
   const httpClient = yield* HttpClient.HttpClient;
   const environment = yield* HostProcess.Environment;
+  const workingDirectory = yield* HostProcess.WorkingDirectory;
   const hostPlatform = yield* HostProcess.Platform;
   const sdk = yield* androidSdk;
   const hostEnvironment = deviceHostEnvironment(environment, sdk.root, hostPlatform, path);
@@ -394,8 +399,10 @@ export const make = Effect.fn("LocalDeviceHost.make")(function* () {
               "127.0.0.1",
               "--hide-sidebar",
               "--hide-boot-device",
+              ...hubPlatformArguments(hostPlatform),
             ],
             {
+              cwd: workingDirectory,
               detached: false,
               shell: false,
               stdout: "pipe",
@@ -761,6 +768,7 @@ export const make = Effect.fn("LocalDeviceHost.make")(function* () {
               )
             : command,
         args,
+        cwd: workingDirectory,
         env: hostEnvironment,
         timeout: Duration.millis(options?.timeoutMs ?? 20_000),
         timeoutBehavior: "timedOutResult",
@@ -770,7 +778,7 @@ export const make = Effect.fn("LocalDeviceHost.make")(function* () {
         Effect.map((result) => ({
           stdout: result.stdout,
           stderr: result.stderr,
-          code: Number(result.code),
+          code: result.timedOut ? 124 : Number(result.code ?? 127),
         })),
         Effect.catch((cause) => Effect.succeed({ stdout: "", stderr: String(cause), code: 127 })),
       );

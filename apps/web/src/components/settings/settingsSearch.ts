@@ -819,6 +819,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["links default browser in-app browser external open"],
   },
   {
+    id: "browser-search-engine",
+    title: "Search engine",
+    to: "/settings/integrations",
+    searchTerms: ["address bar duckduckgo google bing brave kagi ecosia custom"],
+  },
+  {
     id: "pull-request-links-open-in-app",
     title: "Open pull requests in SealCode",
     to: "/settings/integrations",

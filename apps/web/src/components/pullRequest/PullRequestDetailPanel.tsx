@@ -8,16 +8,17 @@ import {
   scopeProjectRef,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
-import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
+import {
+  isAtomCommandInterrupted,
+  squashAtomCommandFailure,
+} from "@t3tools/client-runtime/state/runtime";
 import {
   AuthOrchestrationOperateScope,
   AuthSourceControlWriteScope,
   type EnvironmentId,
   type PullRequestAction,
-  type PullRequestActivity,
   type PullRequestDetail,
   type PullRequestMergeMethod,
-  type PullRequestSummary,
   type PullRequestListEntry,
   type PullRequestUpdateMethod,
   type PullRequestRef,
@@ -99,7 +100,7 @@ import { PullRequestStackMenu } from "./PullRequestStackMenu";
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { PullRequestThreadLinks } from "./PullRequestThreadLinks";
 import { vcsEnvironment } from "~/state/vcs";
-import { formatRelativeTimeLabel } from "~/timestampFormat";
+import { RelativeTime } from "~/components/RelativeTime";
 import { useUiStateStore } from "~/uiStateStore";
 
 import { EnvironmentMachineIcon } from "../EnvironmentMachineIcon";
@@ -158,6 +159,7 @@ import {
   pullRequestFindingKey,
   pullRequestHandoffLabels,
   PULL_REQUEST_MERGE_METHOD_LABELS,
+  checkoutFailureDescription,
   readableFailure,
   readPullRequestDetailSnapshot,
   resolvePullRequestReferenceHost,
@@ -387,13 +389,11 @@ function reportCheckoutCommandError(error: Error) {
   });
 }
 
-function useResolvedPullRequestReference(
+function resolvePullRequestReference(
   requestedReference: PullRequestRef,
   repositoryIdentity: Parameters<typeof resolvePullRequestReferenceHost>[1],
   supportsThreadPullRequests: boolean,
 ): PullRequestRef {
-  // Calls no hooks, so the compiler needs the directive to memoize it.
-  "use memo";
   return supportsThreadPullRequests
     ? resolvePullRequestReferenceHost(requestedReference, repositoryIdentity)
     : {
@@ -403,21 +403,78 @@ function useResolvedPullRequestReference(
       };
 }
 
-function usePullRequestDetailSummary(data: PullRequestDetail | null) {
-  // Calls no hooks, so the compiler needs the directive to memoize it.
-  "use memo";
+function pullRequestRefKey(reference: PullRequestRef) {
+  return `${reference.projectId}:${reference.host ?? ""}:${reference.repository}#${reference.number}`;
+}
+
+function pullRequestDetailSummary(data: PullRequestDetail | null) {
   return data === null ? null : { ...data, checksState: pullRequestChecksState(data.checks) };
 }
 
-function useDisplayedPullRequestDetail(
-  resolvedCoreDetail: PullRequestDetail | null,
-  observedSummary: PullRequestSummary | null,
+/**
+ * Loads a pull request's detail and activity and merges them, with the snapshot cache, the shared
+ * summary and the list row, into the detail the panel shows.
+ */
+function usePullRequestDetail(
+  environmentId: EnvironmentId,
+  reference: PullRequestRef,
   listEntry: PullRequestListEntry | null,
-  activity: PullRequestActivity | null,
-  canWriteSourceControl: boolean,
 ) {
-  // Calls no hooks, so the compiler needs the directive to memoize it.
-  "use memo";
+  const scopeKey = `${environmentId}:${pullRequestRefKey(reference)}`;
+  const canWriteSourceControl = useEnvironmentScope(environmentId, AuthSourceControlWriteScope);
+  const detailQuery = useEnvironmentQuery(
+    pullRequestEnvironment.detail({ environmentId, input: reference }),
+  );
+  const activityQuery = useEnvironmentQuery(
+    pullRequestEnvironment.activity({ environmentId, input: reference }),
+  );
+  const [cachedDetail, setCachedDetail] = useState(() =>
+    readPullRequestDetailSnapshot(
+      typeof window === "undefined" ? undefined : window.localStorage,
+      environmentId,
+      reference,
+    ),
+  );
+  const [cachedDetailKey, setCachedDetailKey] = useState(scopeKey);
+  if (cachedDetailKey !== scopeKey) {
+    setCachedDetailKey(scopeKey);
+    setCachedDetail(
+      detailQuery.data ??
+        readPullRequestDetailSnapshot(
+          typeof window === "undefined" ? undefined : window.localStorage,
+          environmentId,
+          reference,
+        ),
+    );
+  } else if (detailQuery.data !== null && detailQuery.data !== cachedDetail) {
+    setCachedDetail(detailQuery.data);
+  }
+  const saveDetailSnapshot = useEffectEvent((data: PullRequestDetail) => {
+    writePullRequestDetailSnapshot(
+      typeof window === "undefined" ? undefined : window.localStorage,
+      environmentId,
+      reference,
+      data,
+    );
+  });
+  useEffect(() => {
+    if (detailQuery.data !== null) saveDetailSnapshot(detailQuery.data);
+  }, [detailQuery.data]);
+  const detailSummary = pullRequestDetailSummary(detailQuery.data);
+  const observedSummary = useSharedPullRequestSummary(
+    environmentId,
+    reference,
+    detailSummary,
+    detailQuery.dataUpdatedAt,
+  );
+  const activity = activityQuery.data;
+  const resolvedCoreDetail = resolveDisplayedPullRequestDetail({
+    live: detailQuery.data,
+    cached: cachedDetail,
+    reference,
+  });
+  // Every hook runs above this line: a hook between the merge and the panel's plain readers of
+  // `detail` would cost it its cache scope.
   const listSummary = listEntry === null ? null : pullRequestListEntryToSummary(listEntry);
   // The list row is also published to the shared cache, but only after this commit's layout
   // effects run, so it is compared directly rather than trusted to be there already.
@@ -483,16 +540,22 @@ function useDisplayedPullRequestDetail(
           commits: activity?.commits ?? [],
           reactions: activity?.reactions ?? [],
         };
-  return { sharedSummary, coreDetail, detail };
+  return {
+    canWriteSourceControl,
+    detailQuery,
+    activityQuery,
+    activity,
+    sharedSummary,
+    coreDetail,
+    detail,
+  };
 }
 
-function useMarkdownContext(
+function pullRequestMarkdownContext(
   hostClient: ReturnType<typeof sourceControlClients.get>,
   repositoryUrl: string | null,
   threadRef: ScopedThreadRef | null,
 ) {
-  // Calls no hooks, so the compiler needs the directive to memoize it.
-  "use memo";
   return {
     repositoryUrl:
       repositoryUrl === null ? null : hostClient.referenceAutolinkRepositoryUrl(repositoryUrl),
@@ -500,13 +563,11 @@ function useMarkdownContext(
   };
 }
 
-function useStackReference(
+function pullRequestStackReference(
   detail: Pick<PullRequestDetail, "url" | "capabilities"> | null,
   reference: PullRequestRef,
   supportsThreadPullRequests: boolean,
 ) {
-  // Calls no hooks, so the compiler needs the directive to memoize it.
-  "use memo";
   return detail === null || detail.capabilities.stacks !== true || !supportsThreadPullRequests
     ? null
     : { ...reference, host: reference.host ?? parseChangeRequestUrl(detail.url)?.host };
@@ -552,12 +613,18 @@ export function PullRequestDetailPanel({
   const repositoryIdentity = project?.repositoryIdentity;
   const supportsThreadPullRequests =
     environmentConfigs.get(environmentId)?.environment.capabilities.threadPullRequests === true;
-  const reference = useResolvedPullRequestReference(
+  const reference = resolvePullRequestReference(
     requestedReference,
     repositoryIdentity,
     supportsThreadPullRequests,
   );
-  const pullRequestKey = `${reference.projectId}:${reference.host ?? ""}:${reference.repository}#${reference.number}`;
+  const loadingCheckoutCommand = loadingPullRequestCheckoutCommand(reference, repositoryIdentity);
+  const unavailableGitHubUrl = gitHubPullRequestBrowserUrl(
+    repositoryIdentity,
+    reference.repository,
+    reference.number,
+  );
+  const pullRequestKey = pullRequestRefKey(reference);
   const matchingListEntry =
     listEntry?.projectId === reference.projectId &&
     listEntry.repository.toLowerCase() === reference.repository.toLowerCase() &&
@@ -669,66 +736,16 @@ export function PullRequestDetailPanel({
   };
   const inlineConfirm = useInlineActionConfirm(pullRequestKey);
   const [handoff, setHandoff] = useState<string | null>(null);
-  const canWriteSourceControl = useEnvironmentScope(environmentId, AuthSourceControlWriteScope);
-  const detailQuery = useEnvironmentQuery(
-    pullRequestEnvironment.detail({ environmentId, input: reference }),
-  );
-  const activityQuery = useEnvironmentQuery(
-    pullRequestEnvironment.activity({ environmentId, input: reference }),
-  );
   const turnRefresh = usePullRequestTurnRefresh(environmentId);
-  const [cachedDetail, setCachedDetail] = useState(() =>
-    readPullRequestDetailSnapshot(
-      typeof window === "undefined" ? undefined : window.localStorage,
-      environmentId,
-      reference,
-    ),
-  );
-  const [cachedDetailKey, setCachedDetailKey] = useState(tabScopeKey);
-  if (cachedDetailKey !== tabScopeKey) {
-    setCachedDetailKey(tabScopeKey);
-    setCachedDetail(
-      detailQuery.data ??
-        readPullRequestDetailSnapshot(
-          typeof window === "undefined" ? undefined : window.localStorage,
-          environmentId,
-          reference,
-        ),
-    );
-  } else if (detailQuery.data !== null && detailQuery.data !== cachedDetail) {
-    setCachedDetail(detailQuery.data);
-  }
-  const saveDetailSnapshot = useEffectEvent((data: PullRequestDetail) => {
-    writePullRequestDetailSnapshot(
-      typeof window === "undefined" ? undefined : window.localStorage,
-      environmentId,
-      reference,
-      data,
-    );
-  });
-  useEffect(() => {
-    if (detailQuery.data !== null) saveDetailSnapshot(detailQuery.data);
-  }, [detailQuery.data]);
-  const resolvedCoreDetail = resolveDisplayedPullRequestDetail({
-    live: detailQuery.data,
-    cached: cachedDetail,
-    reference,
-  });
-  const detailSummary = usePullRequestDetailSummary(detailQuery.data);
-  const observedSummary = useSharedPullRequestSummary(
-    environmentId,
-    reference,
-    detailSummary,
-    detailQuery.dataUpdatedAt,
-  );
-  const activity = activityQuery.data;
-  const { sharedSummary, coreDetail, detail } = useDisplayedPullRequestDetail(
-    resolvedCoreDetail,
-    observedSummary,
-    matchingListEntry,
-    activity,
+  const {
     canWriteSourceControl,
-  );
+    detailQuery,
+    activityQuery,
+    activity,
+    sharedSummary,
+    coreDetail,
+    detail,
+  } = usePullRequestDetail(environmentId, reference, matchingListEntry);
   const handoffSummary = detail ?? sharedSummary;
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { copyToClipboard: copyReference } = useCopyToClipboard<string>({
@@ -764,7 +781,8 @@ export function PullRequestDetailPanel({
   }
   const repositoryUrl = detail === null ? null : changeRequestRepositoryUrl(detail.url);
   const hostClient = sourceControlClients.get(detail?.provider);
-  const markdownContext = useMarkdownContext(hostClient, repositoryUrl, threadRef);
+  const openOnHostText = openOnHostLabel(hostClient);
+  const markdownContext = pullRequestMarkdownContext(hostClient, repositoryUrl, threadRef);
   const authorProfileUrl =
     detail?.author && repositoryUrl !== null
       ? hostClient.authorProfileUrl(detail.author.login, repositoryUrl)
@@ -777,7 +795,7 @@ export function PullRequestDetailPanel({
         detail?.headRepositoryNameWithOwner,
         changeRequestRepositoryUrl(handoffSummary.url),
       )
-    : loadingPullRequestCheckoutCommand(reference, repositoryIdentity);
+    : loadingCheckoutCommand;
   const branchRefsQuery = useEnvironmentQuery(
     detail === null
       ? null
@@ -793,7 +811,7 @@ export function PullRequestDetailPanel({
   const isStackedPullRequest =
     detail !== null &&
     isStackedPullRequestBase(detail.baseBranch, branchRefsQuery.data?.refs ?? []);
-  const stackReference = useStackReference(detail, reference, supportsThreadPullRequests);
+  const stackReference = pullRequestStackReference(detail, reference, supportsThreadPullRequests);
   const nativeStackQuery = usePullRequestStack(environmentId, stackReference);
   const nativeStack = nativeStackQuery.data;
   const supportsStackActions =
@@ -816,7 +834,6 @@ export function PullRequestDetailPanel({
     nativeStackQuery.refresh();
   };
   const [refreshToken, setRefreshToken] = useState(0);
-  const codeRefreshToken = refreshToken + (turnRefresh ?? 0);
   const [activityRevision, setActivityRevision] = useState<{
     readonly key: string;
     readonly updatedAt: string;
@@ -883,11 +900,6 @@ export function PullRequestDetailPanel({
   const [titleSaving, setTitleSaving] = useState(false);
   const newThread = useNewThreadHandler();
   const { environments } = useEnvironments();
-  const unavailableGitHubUrl = gitHubPullRequestBrowserUrl(
-    repositoryIdentity,
-    reference.repository,
-    reference.number,
-  );
   const pickableEnvironments =
     context === "page"
       ? resolvePickableEnvironments(
@@ -1208,12 +1220,12 @@ export function PullRequestDetailPanel({
     });
     if (prepared._tag === "Failure") {
       setHandoff(null);
-      const detailMessage =
-        prepareThread.error instanceof Error ? prepareThread.error.message : null;
       toastManager.update(toastId, {
         type: "error",
         title: "Could not prepare the pull request checkout",
-        ...(detailMessage ? { description: detailMessage } : {}),
+        description: checkoutFailureDescription(
+          isAtomCommandInterrupted(prepared) ? undefined : squashAtomCommandFailure(prepared),
+        ),
       });
       return;
     }
@@ -1725,7 +1737,7 @@ export function PullRequestDetailPanel({
                       </button>
                     }
                   />
-                  <TooltipPopup side="top">{openOnHostLabel(hostClient)}</TooltipPopup>
+                  <TooltipPopup side="top">{openOnHostText}</TooltipPopup>
                 </Tooltip>
               </>
             ) : null}
@@ -1784,7 +1796,7 @@ export function PullRequestDetailPanel({
                       </button>
                     }
                   />
-                  <TooltipPopup side="top">{openOnHostLabel(hostClient)}</TooltipPopup>
+                  <TooltipPopup side="top">{openOnHostText}</TooltipPopup>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger
@@ -2209,7 +2221,7 @@ export function PullRequestDetailPanel({
                   ) : null}
                   <MenuItem onClick={() => void readLocalApi()?.shell.openExternal(detail.url)}>
                     <ArrowUpRightIcon className="size-3.5" />
-                    {openOnHostLabel(hostClient)}
+                    {openOnHostText}
                   </MenuItem>
                   <MenuItem onClick={() => copyReference(detail.url, "PR link")}>
                     <LinkIcon className="size-3.5" />
@@ -2334,7 +2346,9 @@ export function PullRequestDetailPanel({
                       variant="avatar"
                       className="shrink-0"
                     />
-                    <span className="shrink-0">{formatRelativeTimeLabel(detail.updatedAt)}</span>
+                    <span className="shrink-0">
+                      <RelativeTime timestamp={detail.updatedAt} />
+                    </span>
                   </span>
                   <span aria-hidden className="h-3 w-px shrink-0 bg-border/70" />
                   <span className="flex min-w-0 flex-1 items-center gap-1.5 font-mono text-2xs text-muted-foreground/65">
@@ -2505,7 +2519,11 @@ export function PullRequestDetailPanel({
                 author={
                   <PullRequestActorLabel actor={detail.author} profileUrl={authorProfileUrl} />
                 }
-                updated={<span>updated {formatRelativeTimeLabel(detail.updatedAt)}</span>}
+                updated={
+                  <span>
+                    updated <RelativeTime timestamp={detail.updatedAt} />
+                  </span>
+                }
                 checkout={
                   checkoutCommand ? (
                     <PullRequestCopyableCode
@@ -2863,7 +2881,8 @@ export function PullRequestDetailPanel({
                     fixFindingLabel={handoffLabels.fixFinding}
                     {...(canFixFindings ? { onFixFinding: startFixFinding } : {})}
                     onRefresh={refreshDetail}
-                    refreshToken={codeRefreshToken}
+                    refreshToken={refreshToken}
+                    backgroundRefreshToken={turnRefresh ?? 0}
                     revealRequest={codeRevealRequest}
                   />
                 </Suspense>

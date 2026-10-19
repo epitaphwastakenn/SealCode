@@ -31,6 +31,11 @@ Use `mod+shift+l` to reuse the previous worktree directly.
 `composer.voice` starts or stops a voice note and defaults to `mod+shift+v`. See
 [Speech to text](./speech-to-text.md).
 
+To change effort one step without opening the picker, bind
+**Composer: Increase Effort** and **Composer: Decrease Effort** in Keybindings.
+Both are unbound by default. Increase wraps from the highest level to the
+lowest, and decrease wraps from the lowest level to the highest.
+
 In the model picker, press Left in an empty search field or Shift+Tab to reach
 the provider list. Use Up/Down to move and Enter to choose. Right returns to
 model search. `mod+shift+up` and `mod+shift+down` switch providers directly and clear the

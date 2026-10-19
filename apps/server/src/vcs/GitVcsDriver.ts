@@ -32,6 +32,7 @@ import {
   type VcsStatusResult,
   type WorktreeSubmodules,
 } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import {
   makeGitVcsDriverCore,
   PATCH_RENDER_PREFIX_ARGS,
@@ -306,6 +307,7 @@ export class GitVcsDriver extends Context.Service<
     readonly prepareCommitContext: (
       cwd: string,
       filePaths?: readonly string[],
+      options?: { readonly includePatch?: boolean },
     ) => Effect.Effect<GitPreparedCommitContext | null, GitCommandError>;
     readonly commit: (
       cwd: string,
@@ -464,7 +466,8 @@ function parseGitRemoteVerboseOutput(
       continue;
     }
 
-    const match = /^(\S+)\s+(\S+)\s+\((fetch|push)\)$/.exec(trimmed);
+    // Partial clones append the promisor filter, e.g. `(fetch) [blob:none]`.
+    const match = /^(\S+)\s+(\S+)\s+\((fetch|push)\)(?:\s+\[[^\]]+\])?$/.exec(trimmed);
     if (!match) {
       continue;
     }
@@ -783,6 +786,7 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
   // an unclean restart can leave 0-byte files under refs/t3/** that break every
   // later fetch and push. Checkpoint writes flush before they are published;
   // macOS defaults to writeout-only, which does not reach the disk either.
+  // On macOS, VcsProcess retries unsupported full flushes with plain fsync.
   const durableWrite = [
     "-c",
     "core.fsync=objects,reference",
@@ -790,14 +794,24 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
     "core.fsyncMethod=fsync",
   ] as const;
 
+  // Checkpoints must handle existing paths beyond Windows MAX_PATH, even when
+  // core.longpaths is disabled in the user's Git configuration.
+  const longPaths = (yield* HostProcess.Platform) === "win32" ? ["-c", "core.longpaths=true"] : [];
+
   const checkpoints: VcsDriver.VcsCheckpointOps = {
     captureCheckpoint: Effect.fn("GitVcsDriver.checkpoints.captureCheckpoint")(function* (input) {
       const operation = VcsProcess.CHECKPOINT_CAPTURE_OPERATION;
+      // core.splitIndex governs every index Git writes, so an unguarded write to the
+      // scratch index can expire the sharedindex.* the real .git/index still uses.
       const indexConfig = [
         "-c",
         "core.fsmonitor=false",
         "-c",
         "sparse.expectFilesOutsideOfPatterns=false",
+        "-c",
+        "core.splitIndex=false",
+        "-c",
+        "splitIndex.sharedIndexExpire=never",
       ];
       const gitCommonDir = yield* resolveGitCommonDir(input.cwd);
       const indexId = yield* crypto.randomUUIDv4().pipe(Effect.orDie);
@@ -933,7 +947,7 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
               cwd: input.cwd,
               args: sparseCheckout
                 ? [...indexConfig, "-c", "index.sparse=true", "read-tree", "--reset", "HEAD"]
-                : ["read-tree", "HEAD"],
+                : [...indexConfig, "read-tree", "HEAD"],
               env: commitEnv,
             });
           }
@@ -946,6 +960,7 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
             args: [
               ...indexConfig,
               ...durableWrite,
+              ...longPaths,
               "add",
               ...(sparseCheckout ? ["--sparse"] : []),
               "-A",
@@ -964,7 +979,15 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
                 const untracked = yield* execute({
                   operation,
                   cwd: input.cwd,
-                  args: ["ls-files", "--others", "--exclude-standard", "-z", "--", "."],
+                  args: [
+                    ...longPaths,
+                    "ls-files",
+                    "--others",
+                    "--exclude-standard",
+                    "-z",
+                    "--",
+                    ".",
+                  ],
                   env: commitEnv,
                   maxOutputBytes: WORKSPACE_FILES_MAX_OUTPUT_BYTES,
                 });
@@ -1084,7 +1107,16 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
         yield* execute({
           operation,
           cwd: input.cwd,
-          args: ["restore", "--source", commitOid, "--worktree", "--staged", "--", "."],
+          args: [
+            ...longPaths,
+            "restore",
+            "--source",
+            commitOid,
+            "--worktree",
+            "--staged",
+            "--",
+            ".",
+          ],
         });
       }
       // Restoring away the last tracked file can remove a nested workspace directory.
@@ -1104,7 +1136,7 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
       const cleaned = yield* execute({
         operation,
         cwd: input.cwd,
-        args: ["clean", "-fd", "--", "."],
+        args: [...longPaths, "clean", "-fd", "--", "."],
         allowNonZeroExit: true,
       });
       if (cleaned.exitCode !== 0) {
@@ -1133,7 +1165,7 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
         yield* execute({
           operation,
           cwd: input.cwd,
-          args: ["reset", "--quiet", "--", "."],
+          args: [...longPaths, "reset", "--quiet", "--", "."],
         });
       }
 

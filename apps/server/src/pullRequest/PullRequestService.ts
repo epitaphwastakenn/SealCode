@@ -4,6 +4,7 @@ import {
   sourceControlRepositorySelector,
 } from "@t3tools/shared/sourceControl";
 import { normalizeGitRemoteUrl } from "@t3tools/shared/git";
+import { parseDiffFilePaths } from "@t3tools/source-control-core/server/diffFileRevisions";
 import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -375,11 +376,11 @@ function listCursorAt(
   fetched: ReadonlyArray<ProviderChangeRequest>,
   deliveredCount: number,
 ): string {
-  const seenAt = [
+  const seenAt = new Set([
     ...(previous?.updatedBefore === boundary ? previous.seenAt : []),
     ...fetched.filter((item) => item.updatedAt === boundary).map((item) => item.number),
-  ];
-  return `${boundary}|${(previous?.delivered ?? 0) + deliveredCount}|${seenAt.join(",")}`;
+  ]);
+  return `${boundary}|${(previous?.delivered ?? 0) + deliveredCount}|${[...seenAt].join(",")}`;
 }
 
 function isProviderUnusable(error: PullRequestProviderError): boolean {
@@ -1175,7 +1176,11 @@ export const make = Effect.gen(function* () {
               ...(cursor === undefined
                 ? {}
                 : {
-                    cursor: { updatedBefore: cursor.updatedBefore, delivered: cursor.delivered },
+                    cursor: {
+                      updatedBefore: cursor.updatedBefore,
+                      delivered: cursor.delivered,
+                      seenAt: cursor.seenAt,
+                    },
                   }),
             })
             .pipe(
@@ -1717,7 +1722,7 @@ export const make = Effect.gen(function* () {
       ),
     );
 
-  const diffFileContents: PullRequestService["Service"]["diffFileContents"] = (input) =>
+  const readDiffFileContents: PullRequestService["Service"]["diffFileContents"] = (input) =>
     requireProject(input).pipe(
       Effect.flatMap((project) => {
         const read = project.api.getDiffFileContents;
@@ -1770,7 +1775,7 @@ export const make = Effect.gen(function* () {
           // Deliberately not `invalidatedByMutation`: ticking a file off says nothing about the
           // change request, and dropping a 300-file diff on every checkbox is the whole cost of
           // the feature.
-          Effect.tap(() => Effect.sync(() => bumpFilesViewedEpoch(ref))),
+          Effect.ensuring(Effect.sync(() => bumpFilesViewedEpoch(ref))),
         ),
       ),
     );
@@ -3247,6 +3252,91 @@ export const make = Effect.gen(function* () {
           ...args,
         );
       });
+
+  /**
+   * The file names in each diff slice, keyed as the slice is. Names stay small when a patch is too
+   * large to cache, so expanding a file in a large change request does not fetch its diff again.
+   */
+  const diffFiles = (() => {
+    const held = new Map<
+      string,
+      {
+        readonly at: number;
+        readonly files: ReadonlySet<string>;
+        readonly nextCursor: string | null;
+      }
+    >();
+    const ttlMs = Duration.toMillis(DIFF_CACHE_TTL);
+    const fileKey = (oldPath: string, newPath: string) => JSON.stringify([oldPath, newPath]);
+    const sliceKey = (input: PullRequestDiffInput) =>
+      JSON.stringify([refCacheKey(input), input.cursor ?? null, input.commit ?? null]);
+    const read = (input: PullRequestDiffInput) =>
+      Effect.gen(function* () {
+        const key = sliceKey(input);
+        const now = yield* Clock.currentTimeMillis;
+        const cached = held.get(key);
+        if (cached !== undefined && now - cached.at <= ttlMs) return cached;
+        const slice = yield* diff(input);
+        const entry = {
+          at: now,
+          files: new Set(
+            parseDiffFilePaths(slice.patch).map((file) =>
+              fileKey(file.oldPath ?? file.newPath ?? "", file.newPath ?? file.oldPath ?? ""),
+            ),
+          ),
+          nextCursor: slice.nextCursor,
+        };
+        held.delete(key);
+        if (held.size >= DIFF_CACHE_CAPACITY) {
+          const oldest = held.keys().next().value;
+          if (oldest !== undefined) held.delete(oldest);
+        }
+        held.set(key, entry);
+        return entry;
+      });
+    return { read: credentialCached(read), fileKey };
+  })();
+  /**
+   * Whether the change request, or the one commit asked for, changes this file under these names.
+   * Walks the same slices the reader was shown, reading only their file names once held.
+   */
+  const changesFile = (input: PullRequestDiffFileContentsInput) => {
+    const wanted = diffFiles.fileKey(input.oldPath, input.newPath);
+    const walk = (cursor: string | undefined): Effect.Effect<boolean, PullRequestError> =>
+      diffFiles
+        .read({
+          ...input,
+          ...(cursor === undefined ? {} : { cursor }),
+          ...(input.commit === undefined ? {} : { commit: input.commit }),
+        })
+        .pipe(
+          Effect.flatMap((slice) =>
+            slice.files.has(wanted)
+              ? Effect.succeed(true)
+              : slice.nextCursor === null
+                ? Effect.succeed(false)
+                : walk(slice.nextCursor),
+          ),
+        );
+    return walk(undefined);
+  };
+  // Only the files the change request itself changes: these are read with the project's own
+  // credential, and a reader who may look at the change request may not thereby read the rest of
+  // the repository.
+  const diffFileContents: PullRequestService["Service"]["diffFileContents"] = (input) =>
+    changesFile(input).pipe(
+      Effect.flatMap((changed) =>
+        changed
+          ? readDiffFileContents(input)
+          : Effect.fail(
+              new PullRequestOperationError({
+                operation: "diffFileContents",
+                detail: "This file is not part of the change request.",
+                reason: "not-found",
+              }),
+            ),
+      ),
+    );
 
   return PullRequestService.of({
     routing,

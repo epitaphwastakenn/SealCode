@@ -270,8 +270,14 @@ const make = Effect.gen(function* () {
         if (isLink) continue;
         if ((yield* fs.realPath(target)) !== target) return null;
         const stat = yield* fs.stat(target);
-        if (stat.type === "File") bytes += Number(stat.size);
-        else if (stat.type === "Directory") {
+        if (stat.type === "File") {
+          // Removing a shared hardlink leaves its blocks allocated.
+          if (Option.getOrElse(stat.nlink, () => 1n) !== 1n) continue;
+          bytes += Option.match(stat.blocks, {
+            onNone: () => Number(stat.size),
+            onSome: (blocks) => Number(blocks * 512n),
+          });
+        } else if (stat.type === "Directory") {
           const names = yield* fs.readDirectory(target);
           entries += names.length;
           if (entries > 2_000_000) return null;
@@ -291,11 +297,9 @@ const make = Effect.gen(function* () {
   // The snapshot takes seconds on large databases, so it runs on the reader
   // worker instead of the event loop.
   const readThreads = Effect.fn("StorageCleanup.readThreads")(function* () {
-    const { threads } = yield* projections
-      .getShellSnapshot({ location: "active" })
-      .pipe(NodeSqliteClient.readOnly);
+    const snapshot = yield* projections.getShellSnapshot().pipe(NodeSqliteClient.readOnly);
     const projects = yield* projectStore.listShells();
-    return { projects, threads };
+    return { projects, threads: [...snapshot.threads, ...snapshot.archivedThreads] };
   });
 
   const containsProjectRoot = Effect.fn("StorageCleanup.containsProjectRoot")(function* (
@@ -588,6 +592,7 @@ const make = Effect.gen(function* () {
     )).filter((thread) => thread.worktreePath !== null && thread.branch !== null);
     const snapshot = yield* readThreads();
     const refreshedDefaultRefs = new Map<string, Set<string>>();
+    const defaultBranches = new Map<string, string | null>();
     const groups = Map.groupBy(
       snapshot.threads.filter((thread) => thread.worktreePath !== null),
       (thread) => path.resolve(thread.worktreePath!),
@@ -680,7 +685,30 @@ const make = Effect.gen(function* () {
         if (!eligible && (settings.worktreeUnchanged || settings.worktreeOnMerge)) {
           const repositoryCwd = path.resolve(project.workspaceRoot);
           const remote = yield* git.resolvePrimaryRemoteName(repositoryCwd);
-          const branch = yield* git.resolveDefaultBranchName(repositoryCwd, remote);
+          const defaultBranchKey = `${repositoryCwd}\0${remote}`;
+          let branch = defaultBranches.get(defaultBranchKey);
+          if (branch === undefined) {
+            branch = yield* git.resolveDefaultBranchName(repositoryCwd, remote);
+            // Without a local HEAD ref, only the remote can identify its default;
+            // a conventional name may be a feature branch.
+            if (branch === null) {
+              branch = yield* git
+                .execute({
+                  operation: "StorageCleanup.resolveDefaultBranch",
+                  cwd: repositoryCwd,
+                  args: ["ls-remote", "--symref", "--", remote, "HEAD"],
+                  timeoutMs: 20_000,
+                })
+                .pipe(
+                  Effect.map(
+                    (result) =>
+                      /^ref: refs\/heads\/(.+)\tHEAD\r?$/m.exec(result.stdout)?.[1] ?? null,
+                  ),
+                  Effect.orElseSucceed(() => null),
+                );
+            }
+            defaultBranches.set(defaultBranchKey, branch);
+          }
           if (branch === null) return keep("default branch is unavailable");
           const defaultRef = `refs/remotes/${remote}/${branch}`;
           const refreshed = refreshedDefaultRefs.get(repositoryCwd) ?? new Set<string>();
@@ -740,9 +768,9 @@ const make = Effect.gen(function* () {
           const latestProjects = yield* projectStore.listShells();
           if (yield* containsProjectRoot(worktreePath, [project, ...latestProjects]))
             return "contains a project checkout";
-          const latest = (yield* projections.getThreadWorktreePaths()).filter(
-            (entry) => path.resolve(entry.worktreePath) === worktreePath,
-          );
+          const latest = (yield* projections.getThreadWorktreePaths({
+            includeArchived: true,
+          })).filter((entry) => path.resolve(entry.worktreePath) === worktreePath);
           if (hasTerminal(worktreePath)) return "open terminal";
           if (deleted) {
             if (
@@ -835,7 +863,7 @@ const make = Effect.gen(function* () {
           yield* cleanupGit(worktreePath, ["clean", "-ffdx"], "git clean");
         yield* cleanupGit(
           project.workspaceRoot,
-          ["-c", "status.showUntrackedFiles=normal", "worktree", "remove", worktreePath],
+          ["-c", "status.showUntrackedFiles=normal", "worktree", "remove", "--", worktreePath],
           "git worktree remove",
         );
         entries.push({ ...entry, outcome: "removed", reason: sentence(removalReason), bytes });

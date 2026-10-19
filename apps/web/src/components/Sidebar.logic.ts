@@ -118,7 +118,8 @@ export const animateSidebarLayoutChanges: AnimateLayoutChanges = (args) =>
 
 // Snoozed rows can leave the shelf, but dropping into it is not supported
 // because snoozing requires a wake time. The Working shelf (beta) follows live
-// status, so it is neither a drag source nor a destination.
+// status, so its rows only drag out as chat context, never between sidebar
+// sections.
 
 export type SidebarSection = "pinned" | "active" | "working" | "snoozed" | "settled";
 
@@ -293,6 +294,7 @@ export function planSidebarThreadDrop(input: {
     activeKeysById,
     activeReorderableKeys,
   } = input;
+  if (activeSection === "working") return { kind: "none" };
   if (input.supportsSettlement === false && (target.section === "settled" || activeSettled)) {
     return { kind: "none" };
   }
@@ -518,6 +520,26 @@ export function isSidebarSubagentThread(thread: Pick<SidebarThreadSummary, "line
   return thread.lineage.relationshipToParent === "subagent";
 }
 
+// Subagent threads have no sidebar row, so an open subagent is represented by
+// its nearest non-subagent ancestor. A broken chain (missing parent, cycle,
+// other environment) resolves to the thread itself, which then matches no row.
+export function resolveSidebarRowThreadId(
+  threadId: ThreadId,
+  environmentId: EnvironmentId,
+  threads: readonly Pick<SidebarThreadSummary, "id" | "environmentId" | "lineage">[],
+): ThreadId {
+  const findThread = (id: ThreadId) =>
+    threads.find((thread) => thread.id === id && thread.environmentId === environmentId);
+  const visited = new Set<ThreadId>();
+  let thread = findThread(threadId);
+  while (thread !== undefined && isSidebarSubagentThread(thread)) {
+    if (thread.lineage.parentThreadId === null || visited.has(thread.id)) return threadId;
+    visited.add(thread.id);
+    thread = findThread(thread.lineage.parentThreadId);
+  }
+  return thread?.id ?? threadId;
+}
+
 export function filterSidebarV2VisibleThreads<
   T extends Pick<SidebarThreadSummary, "archivedAt" | "lineage"> & {
     environmentId: string;
@@ -589,7 +611,7 @@ const THREAD_STATUS_PRIORITY: Record<ThreadStatusPill["state"], number> = {
   "plan-ready": 3,
   monitoring: 2,
   completed: 1,
-  failed: 6,
+  failed: 4.5,
   stopped: 1,
   ready: 0,
 };
@@ -719,6 +741,20 @@ export function hasUnseenCompletion(thread: ThreadStatusInput): boolean {
 
   const lastVisitedAt = Date.parse(thread.lastVisitedAt);
   if (Number.isNaN(lastVisitedAt)) return true;
+  return completedAt > lastVisitedAt;
+}
+
+/**
+ * A failed latest run the person hasn't looked at since it ended. Unlike a
+ * completion, a thread nobody has opened yet (an automation's, say) counts:
+ * its failure still needs someone.
+ */
+function hasUnseenFailure(thread: ThreadStatusInput): boolean {
+  if (thread.latestRun?.status !== "failed") return false;
+  if (!thread.lastVisitedAt) return true;
+  const completedAt = Date.parse(thread.latestRun.completedAt ?? "");
+  const lastVisitedAt = Date.parse(thread.lastVisitedAt);
+  if (Number.isNaN(completedAt) || Number.isNaN(lastVisitedAt)) return true;
   return completedAt > lastVisitedAt;
 }
 
@@ -1140,6 +1176,17 @@ export function resolveThreadStatusPill(input: {
       label: "Waiting",
       colorClass: "text-sidebar-muted-foreground",
       dotClass: "bg-sidebar-muted-foreground",
+      pulse: false,
+    };
+  }
+
+  if (hasUnseenFailure(thread)) {
+    const state = "failed" as const;
+    return {
+      state,
+      label: presentThreadState(state).label,
+      colorClass: "text-red-600 dark:text-red-300/90",
+      dotClass: "bg-red-500 dark:bg-red-300/90",
       pulse: false,
     };
   }

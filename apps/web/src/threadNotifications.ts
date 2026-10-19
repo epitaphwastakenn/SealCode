@@ -1,3 +1,4 @@
+import type { EnvironmentId, ThreadId } from "@t3tools/contracts";
 import type { ClientSettings } from "@t3tools/contracts/settings";
 
 import errorUrl from "./assets/sealcode-error.mp3";
@@ -19,6 +20,21 @@ export function hasNotificationSound(mode: NotificationMode) {
 
 export function hasDesktopNotifications(mode: NotificationMode) {
   return mode === "notifications" || mode === "notifications-and-sound";
+}
+
+const TAG_HASH_OFFSET_BASIS = 0xcbf29ce484222325n;
+const TAG_HASH_PRIME = 0x100000001b3n;
+const TAG_HASH_MASK = 0xffffffffffffffffn;
+
+/** Windows drops toast notifications with the 73-character environment/thread tag. */
+export function threadNotificationTag(environmentId: EnvironmentId, threadId: ThreadId): string {
+  const key = `${environmentId}:${threadId}`;
+  let hash = TAG_HASH_OFFSET_BASIS;
+  for (let index = 0; index < key.length; index += 1) {
+    hash ^= BigInt(key.charCodeAt(index));
+    hash = (hash * TAG_HASH_PRIME) & TAG_HASH_MASK;
+  }
+  return hash.toString(16).padStart(16, "0");
 }
 
 let originalFavicon: HTMLLinkElement | undefined;
@@ -77,6 +93,8 @@ const NOTIFICATION_SOUND_URLS = {
 
 let audioContext: AudioContext | undefined;
 const buffers = new Map<string, Promise<AudioBuffer>>();
+/** When each sound's current playback ends, on the audio context's clock. */
+const playingUntil = new Map<string, number>();
 
 /** Called from a gesture so browsers allow later background playback. */
 export function unlockNotificationAudio() {
@@ -102,12 +120,18 @@ export async function playNotificationSound(
     }
     const decoded = await buffer;
     if (!shouldPlay() || context.state !== "running") return;
+    // Threads that finish together each ask for this sound, and full-volume copies sum into
+    // clipping. One playback stands for the burst. Checked after the decode, since every caller
+    // in a burst is waiting on it. The other kind keeps its own slot, so an input alert is still
+    // heard over a completion.
+    if (context.currentTime < (playingUntil.get(url) ?? 0)) return;
     const source = context.createBufferSource();
     source.buffer = decoded;
     const gain = context.createGain();
     gain.gain.value = Math.min(1, volume / 100);
     source.connect(gain).connect(context.destination);
     source.start();
+    playingUntil.set(url, context.currentTime + decoded.duration);
   } catch {
     buffers.delete(url);
   }

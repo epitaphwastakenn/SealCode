@@ -5,7 +5,6 @@ import {
   getDisplayModelName,
   getProviderRowLabel,
   getTriggerDisplayModelLabel,
-  type ModelEsque,
 } from "./providerIconUtils";
 import { ComboboxItem } from "../ui/combobox";
 import { Button } from "../ui/button";
@@ -18,7 +17,7 @@ import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 
 // Small at-a-glance hints in each row. They come from the model name because
 // providers do not report these traits consistently.
-function getModelCapabilityTags(model: ModelEsque): string[] {
+function getModelCapabilityTags(model: { slug: string; name: string }): string[] {
   const tags: string[] = [];
   const text = `${model.slug} ${model.name}`.toLowerCase();
   if (
@@ -57,9 +56,15 @@ function getModelCapabilityTags(model: ModelEsque): string[] {
   return tags;
 }
 
+// Rows take the model's fields rather than the picker's item object, and one shared toggle
+// handler, because the picker rebuilds its items on every search keystroke; that keeps memo
+// effective for rows whose content did not change.
 export const ModelListRow = memo(function ModelListRow(props: {
   index: number;
-  model: ModelEsque;
+  slug: string;
+  name: string;
+  shortName?: string | undefined;
+  subProvider?: string | undefined;
   instanceId: ProviderInstanceId;
   driverKind: ProviderDriverKind;
   providerDisplayName: string;
@@ -76,23 +81,29 @@ export const ModelListRow = memo(function ModelListRow(props: {
   unavailable?: boolean;
   jumpLabel?: string | null;
   disabledReason?: string | null;
-  onToggleFavorite: () => void;
-  onDoubleClick?: () => void;
+  onToggleFavorite: (instanceId: ProviderInstanceId, slug: string) => void;
+  onDoubleClick?: ((instanceId: ProviderInstanceId, slug: string) => void) | undefined;
 }) {
-  const providerLabel = getProviderRowLabel(props.providerDisplayName, props.model.subProvider);
-  const capabilityTags = getModelCapabilityTags(props.model);
+  const model = {
+    slug: props.slug,
+    name: props.name,
+    shortName: props.shortName,
+    subProvider: props.subProvider,
+  };
+  const providerLabel = getProviderRowLabel(props.providerDisplayName, props.subProvider);
+  const capabilityTags = getModelCapabilityTags(model);
 
   const row = (
     <ComboboxItem
       hideIndicator
       index={props.index}
-      value={modelPickerModelKey(props.instanceId, props.model.slug)}
+      value={modelPickerModelKey(props.instanceId, props.slug)}
       disabled={Boolean(props.disabledReason)}
       onDoubleClick={(event) => {
         if (props.disabledReason) return;
         event.preventDefault();
         event.stopPropagation();
-        props.onDoubleClick?.();
+        props.onDoubleClick?.(props.instanceId, props.slug);
       }}
       variant="card"
       className={cn(
@@ -130,9 +141,9 @@ export const ModelListRow = memo(function ModelListRow(props: {
         <div className="flex min-w-0 items-center gap-1.5">
           <div className="min-w-0 truncate text-xs font-semibold leading-snug">
             {props.useTriggerLabel
-              ? getTriggerDisplayModelLabel(props.model)
+              ? getTriggerDisplayModelLabel(model)
               : getDisplayModelName(
-                  props.model,
+                  model,
                   props.preferShortName ? { preferShortName: true } : undefined,
                 )}
           </div>
@@ -180,7 +191,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
                 className="-mr-1 shrink-0"
                 onClick={(event) => {
                   event.stopPropagation();
-                  props.onToggleFavorite();
+                  props.onToggleFavorite(props.instanceId, props.slug);
                 }}
                 onKeyDown={(event) => {
                   event.stopPropagation();

@@ -248,29 +248,36 @@ export const makeAntigravityUsageProbe = Effect.fn("makeAntigravityUsageProbe")(
       accessToken = cached.accessToken;
       account = cached.account;
     }
+    // Endpoints can report different quota groups (the daily endpoint has
+    // returned the Claude/GPT group without Gemini), so merge every endpoint's
+    // windows. The most-used reading of a bucket wins, as in modelWindows.
     const fetchWindows = Effect.fn("AntigravityUsageProbe.fetchWindows")(function* <E>(
       operation: string,
       parse: (response: unknown) => Effect.Effect<ServerProviderUsageWindow[], E>,
     ) {
-      const windows = new Map<string, ServerProviderUsageWindow>();
-      for (const endpoint of ENDPOINTS) {
-        const reported = yield* request(
-          HttpClientRequest.post(`${endpoint}/v1internal:${operation}`).pipe(
-            HttpClientRequest.setHeaders({
-              Authorization: `Bearer ${accessToken}`,
-              "User-Agent": `antigravity/hub/1.0.0 (aidev_client; os_type=${platform}; arch=${architecture}; cl=963137146)`,
-            }),
-            HttpClientRequest.bodyJsonUnsafe(token.project_id ? { project: token.project_id } : {}),
+      const responses = yield* Effect.forEach(
+        ENDPOINTS,
+        (endpoint) =>
+          request(
+            HttpClientRequest.post(`${endpoint}/v1internal:${operation}`).pipe(
+              HttpClientRequest.setHeaders({
+                Authorization: `Bearer ${accessToken}`,
+                "User-Agent": `antigravity/hub/1.0.0 (aidev_client; os_type=${platform}; arch=${architecture}; cl=963137146)`,
+              }),
+              HttpClientRequest.bodyJsonUnsafe(
+                token.project_id ? { project: token.project_id } : {},
+              ),
+            ),
+          ).pipe(
+            Effect.flatMap(parse),
+            Effect.orElseSucceed(() => []),
           ),
-        ).pipe(
-          Effect.flatMap(parse),
-          Effect.orElseSucceed(() => []),
-        );
-        for (const window of reported) {
-          const previous = windows.get(window.id);
-          if (!previous || window.usedPercent > previous.usedPercent)
-            windows.set(window.id, window);
-        }
+        { concurrency: "unbounded" },
+      );
+      const windows = new Map<string, ServerProviderUsageWindow>();
+      for (const window of responses.flat()) {
+        const previous = windows.get(window.id);
+        if (!previous || window.usedPercent > previous.usedPercent) windows.set(window.id, window);
       }
       return [...windows.values()];
     });

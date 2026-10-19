@@ -25,7 +25,7 @@ import {
 
 import { useComposerDraftStore, type DraftId } from "../composerDraftStore";
 import { EnvironmentMachineIcon } from "./EnvironmentMachineIcon";
-import { useProject, useThreadShell, useThreadShellsForProjectRefs } from "../state/entities";
+import { useProject, useQuietThreadShell, useThreadShellsForProjectRefs } from "../state/entities";
 import {
   type EnvMode,
   type EnvironmentOption,
@@ -426,8 +426,13 @@ function useLabelsOverflow(element: HTMLDivElement | null): boolean {
     const current = element;
     const compact = overflows;
     if (!current) return;
-    const available = current.clientWidth;
-    if (available === 0) return;
+    const stripWidth = current.clientWidth;
+    if (stripWidth === 0) return;
+    const stripStyle = getComputedStyle(current);
+    const available =
+      stripWidth -
+      (Number.parseFloat(stripStyle.paddingInlineStart) || 0) -
+      (Number.parseFloat(stripStyle.paddingInlineEnd) || 0);
     const contentWidth = (parent: Element): number => {
       const gap = Number.parseFloat(getComputedStyle(parent).columnGap) || 0;
       let width = 0;
@@ -446,7 +451,7 @@ function useLabelsOverflow(element: HTMLDivElement | null): boolean {
       }
       return width + gap * Math.max(0, counted - 1);
     };
-    const stripGap = Number.parseFloat(getComputedStyle(current).columnGap) || 0;
+    const stripGap = Number.parseFloat(stripStyle.columnGap) || 0;
     let needed = 0;
     let groups = 0;
     for (const child of current.children) {
@@ -587,7 +592,7 @@ export const BranchToolbar = memo(function BranchToolbar({
   const draftThread = useComposerDraftStore((store) =>
     draftId ? store.getDraftSession(draftId) : store.getDraftThreadByRef(threadRef),
   );
-  const serverThread = useThreadShell(threadRef);
+  const serverThread = useQuietThreadShell(threadRef);
   const setDraftThreadContext = useComposerDraftStore((store) => store.setDraftThreadContext);
   const activeProjectRef = serverThread
     ? scopeProjectRef(serverThread.environmentId, serverThread.projectId)
@@ -645,14 +650,15 @@ export const BranchToolbar = memo(function BranchToolbar({
     ],
   );
 
-  const showEnvironmentPicker = Boolean(
-    availableEnvironments && availableEnvironments.length > 1 && onEnvironmentChange,
-  );
+  const hasMultipleEnvironments = (availableEnvironments?.length ?? 0) > 1;
+  const showEnvironmentPicker = hasMultipleEnvironments && onEnvironmentChange !== undefined;
   const activeEnvironmentOption =
     availableEnvironments?.find((env) => env.environmentId === environmentId) ?? null;
+  // Started threads get no handler but still show which machine they run on,
+  // matching the strip visibility ChatView computes from the same inputs.
   const showEnvironmentIndicator = shouldShowEnvironmentIndicator({
     activeEnvironment: activeEnvironmentOption,
-    canPickEnvironment: showEnvironmentPicker,
+    canPickEnvironment: hasMultipleEnvironments,
   });
   const [stripElement, setStripElement] = useState<HTMLDivElement | null>(null);
   const labelsOverflow = useLabelsOverflow(stripElement);
@@ -755,7 +761,7 @@ export const BranchToolbar = memo(function BranchToolbar({
                 envLocked={envLocked}
                 environmentId={environmentId}
                 availableEnvironments={availableEnvironments}
-                {...(showEnvironmentPicker && onEnvironmentChange ? { onEnvironmentChange } : {})}
+                {...(showEnvironmentPicker ? { onEnvironmentChange } : {})}
               />
               {showGitControls ? (
                 <Separator

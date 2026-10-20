@@ -5,7 +5,8 @@ import * as Schema from "effect/Schema";
 
 /**
  * The Roblox skill pack agents load with `load_skill`: roblox-brain by TabooHarmony (MIT),
- * vendored unchanged under `resources/studio-skills`. A server build carries it as one JSON file.
+ * vendored under `resources/studio-skills` with SealCode additions (see its PROVENANCE.md). A server
+ * build carries it as one JSON file.
  */
 
 export interface StudioSkill {

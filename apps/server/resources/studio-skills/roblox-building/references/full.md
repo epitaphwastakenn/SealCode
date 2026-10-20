@@ -84,6 +84,116 @@ Roblox's [Studio Assistant guide](https://create.roblox.com/docs/assistant/guide
 
 Use native Parts or CSG for simple collision and blockout geometry. Use a separate low-cost collision model when the visible mesh is large, detailed, or non-interactive. Let measured playtests and profiling, not class counts, decide performance changes.
 
+## Modeling a custom mesh (SealCode additions)
+
+These rules apply when you model a prop yourself (for example in Blender through a Blender MCP) rather than reuse or generate one.
+
+- **House style:** before the first job, inspect the meshes already in the
+  place: their sizes, `Material`, `Color` and `TextureID`, and how their edges
+  are finished (sharp, one-segment bevel, chipped). Match them: a new prop
+  that is sharper, busier or textured where the rest is flat stands out.
+- **Flat colour per MeshPart, set in Studio** (`Color` plus `Material`
+  `Plastic`): the usual convention where a place's props use no texture. Make
+  each region of another colour its own object, so it arrives as its own
+  MeshPart, export it untextured, and paint each part after insert. Use it
+  when the place's existing meshes are coloured that way.
+- **Colour on upload:** a baked texture survives the upload; a flat material
+  base colour does not, and arrives white. Where the place's props are flat
+  colours set in Studio, split each colour into its own object instead and
+  paint the MeshParts after insert.
+- Build its topology as "Topology" below says: quad columns and strips from
+  placed vertices, a tight frame around lettering, and chips by
+  `bmesh.ops.bevel`, never booleans or `bisect_plane` on a visible face.
+- Never leave two coplanar faces overlapping; they flicker in Studio
+  (z-fighting).
+
+### Topology
+
+Roblox draws the triangles the model arrives as, and a wireframe shows a
+generated mesh at once: long fans out of a corner, thin slivers, stray cuts.
+Model it the way a person would.
+
+- Build the mesh from vertices you place: rows and columns with `bmesh`
+  (`bm.verts.new`, `bm.faces.new`), or a primitive you then edit. Never cut a
+  visible face with a boolean; it leaves fans and slivers.
+- Curves and arches: one column of quads per segment, running down to the
+  base, so the side is a row of strips, not one face. Add a horizontal loop
+  only where detail sits.
+- Triangles only where the detail needs them, inside a tight frame around it
+  (a rectangle hugging the lettering). Never leave a large ngon around a
+  detail: it triangulates into a fan from a far corner.
+- Faces nobody sees (a base on the ground) are quad strips too, not one ngon
+  with vertices along its edges: those triangulate into zero-area slivers.
+- Spend triangles on clean topology. A tombstone went from 290 to 424
+  triangles when rebuilt this way and looked far better; stay in the budget,
+  not under it.
+
+### Lettering and engraving
+
+Never boolean text or a carving into a face. Build it:
+
+1. Letter outlines from the font: a text curve with `extrude = 0` and
+   `resolution_u = 3`, converted to a mesh. Its boundary edges are the outline.
+2. Walls: one quad per outline edge, from the front face back to the depth.
+   The floor is the font's own faces, moved back by the depth.
+3. Front face around the letters: `bmesh.ops.triangle_fill(use_beauty=True)`
+   over the edges of a tight rectangle plus the outline, then delete the
+   triangles whose centre falls inside a letter, and run
+   `bmesh.ops.beautify_fill` on the inner edges only. Put the rectangle's
+   sides on column edges and its top and bottom on horizontal loops, so the
+   quads around it meet it vertex to vertex.
+4. Put the engraving in its own object (its own MeshPart) when it needs
+   another colour.
+5. Keep the glyphs as the font draws them. Space letters that touch
+   (`space_character`) rather than overlapping them, and never merge outline
+   vertices to remove short edges: it bends the letters. A few thin triangles
+   at a glyph's corners are fine; check in the solid view that the word
+   still reads.
+
+### Chips and wear
+
+Chip a corner with `bmesh.ops.bevel(affect="VERTICES", segments=1)` and a worn
+edge with `affect="EDGES"`; on an older Blender pass `vertex_only=True`
+instead of `affect` (inside `try`/`except TypeError`). Never cut chips with
+`bisect_plane` and `holes_fill`: they leave thin slivers. Chip where the faces
+around the corner are small; on a large face the chip's new corner fans across
+it, so first add a loop near the corner (a `bisect_plane` cut that clears and
+fills nothing).
+
+If a `bisect_plane` cut must be closed, fill only that cut's edges (the
+`geom_cut` it returns). Never run `holes_fill` over every edge of the mesh: it
+also closes the openings you made on purpose, such as an engraving, and the
+cap sits on another face and flickers.
+
+### Reviewing a model before upload
+
+A model is ready only after you have looked at its wireframe and its topology
+as well as the solid look, from the side, the top and two opposite
+three-quarter corners:
+
+- Count, per object, vertices, faces, quads, triangles and ngons as modeled,
+  and the triangles it has in the game.
+- Look for near-zero-area triangles, thin triangles (an angle under 4°), long
+  triangles (over 15:1), coplanar faces that overlap (z-fighting), and fan
+  vertices (more than 12 edges). Half of a thin quad strip is not a problem.
+  They come from booleans, ngon fills and `bisect_plane` cuts: rebuild that
+  region as "Topology" says.
+- The numbers judge the mesh, not the shape: lettering or a silhouette can be
+  wrong with a clean wireframe. Read the solid view for that.
+- When you hand the model over, show the user the wireframe and the counts,
+  not only the solid view.
+
+Ready to place:
+
+1. The wireframe is clean (see "Topology"): quads and strips, triangles only
+   inside the frame around a detail, and no slivers or fans you cannot explain.
+2. Triangles are within budget; the measured size is within about 10% of the
+   intended size.
+3. After insert, read back the MeshParts, size, pivot and anchoring.
+4. Screenshot it at the distance players will see it.
+5. Record provenance: a `SealCodeAssetId` string attribute on the Model with
+   the uploaded asset id.
+
 ## EditableImage and EditableMesh (runtime pixel/vertex editing)
 
 `EditableImage` and `EditableMesh` are runtime-editable image and mesh objects (not `Instance`s, so `Instance.new` does not work). Create them through `AssetService`:

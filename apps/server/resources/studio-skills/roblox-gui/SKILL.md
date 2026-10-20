@@ -2,7 +2,7 @@
 name: roblox-gui
 description: "Use when building or fixing Roblox menus, HUDs, shops, dialogs, or UI that must work on phones, tablets, desktop and console."
 when_to_use: "Also when changing or reviewing any UI, or when UI overlaps, is cut off, too small, misplaced or unreadable on mobile, a phone, tablet, TV or with a controller."
-last_reviewed: 2026-10-14
+last_reviewed: 2026-10-20
 sources:
   - https://create.roblox.com/docs/ui
   - https://create.roblox.com/docs/ui/position-and-size
@@ -49,5 +49,9 @@ HUDs, menus, shops, dialogs, world UI, and layout bugs on phone, tablet, desktop
 - Layouts own repeated layout; UI shows server state; a button is not an authority boundary.
 - Reactive UI: per-screen cleanup; repeat open/close to test leaks. Loading UI in `ReplicatedFirst`.
 - TextBox submit, grids, truncation, RichText safety, deprecated APIs: full.md.
+- Size from the viewport, not from your monitor: outer regions in Scale (anchored with `AnchorPoint`), fixed details in Offset, and a `UISizeConstraint` on every panel so it neither shrinks below readable on a phone nor sprawls on a 4K screen. Shapes that must keep proportions get a `UIAspectRatioConstraint`. Pure-Offset outer frames are the usual cause of UI that only fits one device.
+- Text is never cut off, never spills out of its box, and never shrinks below readable. Every label picks a policy (full.md §4, "Text must always fit"): fixed `TextSize` in a box that fits it, `TextScaled` only with a `UITextSizeConstraint` (MinTextSize readable on a phone), or `AutomaticSize` inside a layout that can grow. `TextWrapped` for anything longer than a word; `TextTruncate` only where an ellipsis is a deliberate design choice. Check `TextFits`, not just the look on one screen.
+- Touch targets stay at least about 44 px on the smallest supported phone, with room between them.
+- A screen is not done until it was checked on the device matrix (full.md §11.9): phone landscape and portrait, tablet, laptop, desktop and TV/console. With SealCode's Studio tools: `capture_device_matrix` for the side-by-side look, then a playtest with `inspect_ui {mode: 'audit'}` on each device and no `text_obscured`, `text_straddles_edge`, `text_overflow` or `content_beyond_scroll` findings left.
 
 > Details: [references/full.md](references/full.md)

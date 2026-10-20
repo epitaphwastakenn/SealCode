@@ -40,6 +40,7 @@ Load for geometry, props, maps, and spatial onboarding via MCP or Luau.
 - Use permitted images; wait for jobs to finish.
 - `EditableImage`/`EditableMesh`: permission + memory limits.
 - Native Parts/CSG when reuse/generation is unsuitable.
+- Modeling a mesh yourself: match the place's house style, clean quad topology, no booleans on visible faces, built lettering and bevelled chips; review the wireframe before upload (full.md "Modeling a custom mesh").
 - **Asset privacy:** new accounts/groups create Images/Decals/Meshes Restricted — blank texture/invisible mesh usually means a missing grant, not corruption. Read the Output error; grant the experience in Creator Dashboard. See `roblox-studio-mcp`.
 
 ### Player Scale

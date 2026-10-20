@@ -15,6 +15,7 @@ import { findEsmImportsOfExternalPackages } from "../../../scripts/lib/cli-execu
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import { packFiles } from "../src/roblox/roqerPack.ts";
 import { StudioPluginBundle } from "../src/studioBridge/StudioPluginInstaller.ts";
+import { StudioSkillBundle } from "../src/studioBridge/studioSkills.ts";
 import {
   ServerCliBuildAssetMissingError,
   ServerCliCommandExitError,
@@ -24,6 +25,7 @@ import {
 } from "./cliErrors.ts";
 
 const encodeStudioPluginBundle = Schema.encodeEffect(StudioPluginBundle);
+const encodeStudioSkillBundle = Schema.encodeEffect(StudioSkillBundle);
 
 const RepoRoot = Effect.service(Path.Path).pipe(
   Effect.flatMap((path) => path.fromFileUrl(new URL("../../..", import.meta.url))),
@@ -119,6 +121,27 @@ const buildCmd = Command.make(
       );
       yield* Effect.log(
         `[cli] Bundled the Studio plugin (${String(studioPluginSources.length)} modules) into dist/studio-plugin.json`,
+      );
+
+      // The Roblox skill pack, also as one JSON file.
+      const studioSkillsDir = path.join(serverDir, "resources/studio-skills");
+      const studioSkillFiles = [];
+      for (const entry of (yield* fs.readDirectory(studioSkillsDir, {
+        recursive: true,
+      })).toSorted()) {
+        if (!entry.endsWith(".md")) continue;
+        studioSkillFiles.push({
+          path: entry.split(path.sep).join("/"),
+          text: yield* fs.readFileString(path.join(studioSkillsDir, entry)),
+        });
+      }
+      yield* fs.writeFileString(
+        path.join(serverDir, "dist/studio-skills.json"),
+        yield* encodeStudioSkillBundle(studioSkillFiles),
+      );
+      yield* fs.copyFile(
+        path.join(studioSkillsDir, "ROBLOX-BRAIN-LICENSE.txt"),
+        path.join(serverDir, "dist/ROBLOX-BRAIN-LICENSE.txt"),
       );
 
       const roqerDir = path.join(serverDir, "resources/roqer");

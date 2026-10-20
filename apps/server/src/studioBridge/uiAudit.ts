@@ -273,7 +273,7 @@ const drawsAbove = (a: NormalizedUiElement, b: NormalizedUiElement): boolean | u
     }
   }
   if (common < 0) return undefined;
-  const screen = [...chainA].reverse().find((element) => element.className === "ScreenGui");
+  const screen = chainA.toReversed().find((element) => element.className === "ScreenGui");
   const zOf = (element: RawUiElement | undefined) => (finite(element?.zIndex) ? element.zIndex : 1);
   const [za, zb] =
     screen?.zIndexBehavior === "Global"

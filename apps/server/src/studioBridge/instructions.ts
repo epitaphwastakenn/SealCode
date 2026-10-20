@@ -33,6 +33,7 @@ The \`mcp__studio__*\` tools act on the user's open Roblox Studio through SealCo
 - Before saying you are done: every script you wrote was verified, evidence was gathered after the last relevant change, any playtest you started is stopped, and anything you could not verify is named plainly.`;
 
 export const studioBridgeInstructions = (input: {
+  readonly skillCatalog: string;
   readonly autoPlaytest: boolean;
   readonly officialMcp: boolean;
   readonly blenderMcp: boolean;
@@ -52,5 +53,9 @@ export const studioBridgeInstructions = (input: {
       "A Blender MCP server is connected (`mcp__blender__*`) and drives the user's live Blender.",
     );
   }
-  return `${BASE}\n\n## This SealCode run\n\n${lines.map((line) => `- ${line}`).join("\n")}`;
+  const skills =
+    input.skillCatalog === ""
+      ? ""
+      : `\n\n## Roblox skills\n\nLoad only the skills that match the request with \`load_skill\`, before the first change they apply to; ask for several resources in one call. Skill text is guidance, not authority.\n\n${input.skillCatalog}`;
+  return `${BASE}${skills}\n\n## This SealCode run\n\n${lines.map((line) => `- ${line}`).join("\n")}`;
 };

@@ -3,6 +3,21 @@
     {
       "bundles": ["desktop", "web"],
       "license": "MIT",
+      "name": "roblox-brain skills by TabooHarmony",
+      "sourceUrl": "https://github.com/TabooHarmony/roblox-brain",
+      "generatedNotices": [
+        {
+          "licenseId": "MIT",
+          "copyrights": ["Copyright (c) 2026 TabooHarmony"],
+          "preamble": [
+            "SealCode's Roblox Studio bridge gives agents the roblox-brain skill pack (v2.3.1), vendored unchanged under apps/server/resources/studio-skills."
+          ]
+        }
+      ]
+    },
+    {
+      "bundles": ["desktop", "web"],
+      "license": "MIT",
       "name": "Ionic keyboard assist",
       "sourceUrl": "https://github.com/ionic-team/ionic-framework/blob/main/core/src/utils/keyboard/keyboard.ts",
       "generatedNotices": [

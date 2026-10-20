@@ -6,6 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 
 import { downscaleRgba, encodePng } from "./png.ts";
+import { loadStudioSkills, renderSkillResources } from "./studioSkills.ts";
 import { StudioEndpoints, type StudioRole } from "./protocol.ts";
 import * as StudioBridge from "./StudioBridge.ts";
 import { placeKey, preferRuntimeClient } from "./StudioRouter.ts";
@@ -130,8 +131,13 @@ export class StudioTools extends Context.Service<
   }
 >()("t3/studioBridge/StudioTools") {}
 
+const SKILL_CACHE_THREADS = 64;
+
 const make = Effect.gen(function* () {
   const bridge = yield* StudioBridge.StudioBridge;
+  const skills = yield* loadStudioSkills;
+  // Skill files each thread already received, so a repeat request costs a line, not the file.
+  const loadedSkills = new Map<string, Set<string>>();
 
   /** Calls one endpoint on the routed peer; the plugin's answer comes back as data. */
   const call = (input: {
@@ -1406,7 +1412,54 @@ const make = Effect.gen(function* () {
       });
     });
 
+  const loadSkill = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
+    Effect.sync(() => {
+      const name = str(args.name);
+      if (name === undefined) return errorResult("invalid_arguments", "name is required.");
+      const requested = Array.isArray(args.resources)
+        ? args.resources.filter(
+            (entry): entry is string => typeof entry === "string" && entry !== "",
+          )
+        : [];
+      const resources = requested.length > 0 ? requested : [str(args.resource) ?? "SKILL.md"];
+      const thread = context.threadId ?? "";
+      const seen = loadedSkills.get(thread) ?? new Set<string>();
+      const rendered = renderSkillResources({
+        library: skills,
+        name,
+        resources,
+        alreadyLoaded: seen,
+      });
+      for (const key of rendered.loaded) seen.add(key);
+      loadedSkills.delete(thread);
+      loadedSkills.set(thread, seen);
+      if (loadedSkills.size > SKILL_CACHE_THREADS) {
+        const oldest = loadedSkills.keys().next().value;
+        if (oldest !== undefined) loadedSkills.delete(oldest);
+      }
+      return {
+        content: [{ type: "text", text: rendered.text }],
+        ...(rendered.ok ? {} : { isError: true }),
+      } satisfies StudioToolResult;
+    });
+
   const list: ReadonlyArray<StudioToolDefinition> = [
+    {
+      name: "load_skill",
+      title: "Load Roblox skill",
+      description:
+        "Loads a Roblox skill (guidance for UI, data, networking, building and more) from the catalog in your instructions: SKILL.md by default, or resource / resources (up to 10 paths such as references/full.md) when the skill points to them.",
+      inputSchema: object(
+        {
+          name: { type: "string", enum: [...skills.skills.keys()] },
+          resource: { type: "string" },
+          resources: { type: "array", items: { type: "string" } },
+        },
+        ["name"],
+      ),
+      risk: "read",
+      run: loadSkill,
+    },
     {
       name: "get_bridge_status",
       title: "Studio bridge status",

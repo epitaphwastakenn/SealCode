@@ -12,6 +12,7 @@ import * as Schema from "effect/Schema";
 
 import * as ServerConfig from "../config.ts";
 import { studioBridgeInstructions } from "../studioBridge/instructions.ts";
+import { loadStudioSkills, skillCatalog } from "../studioBridge/studioSkills.ts";
 import { DEFAULT_STUDIO_BRIDGE_PORT } from "../studioBridge/protocol.ts";
 import { unpackFiles } from "./roqerPack.ts";
 
@@ -495,6 +496,8 @@ const make = Effect.gen(function* () {
       Buffer.from(yield* crypto.randomBytes(24).pipe(Effect.orDie)).toString("base64url"),
   };
 
+  const studioSkillCatalog = skillCatalog(yield* loadStudioSkills);
+
   const environment: RobloxStudioEnvironment = {
     roqer,
     studioBridge,
@@ -559,6 +562,7 @@ const make = Effect.gen(function* () {
       if (roblox.mode === "sealcode" && roblox.instructions) {
         if (!(yield* appliesTo(settings, input.workspaceRoot ?? input.cwd))) return undefined;
         return studioBridgeInstructions({
+          skillCatalog: studioSkillCatalog,
           autoPlaytest: roblox.autoPlaytest,
           officialMcp: roblox.officialMcpAlongside && environment.officialMcpPath !== undefined,
           blenderMcp: roblox.blenderMcp,

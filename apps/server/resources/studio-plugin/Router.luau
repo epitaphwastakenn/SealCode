@@ -16,6 +16,9 @@ local Eval = require(script.Parent.Handlers.Eval)
 local Ui = require(script.Parent.Handlers.Ui)
 local Input = require(script.Parent.Handlers.Input)
 local Device = require(script.Parent.Handlers.Device)
+local Camera = require(script.Parent.Handlers.Camera)
+local Assets = require(script.Parent.Handlers.Assets)
+local Mesh = require(script.Parent.Handlers.Mesh)
 
 local Router = {}
 
@@ -53,6 +56,9 @@ local ROUTES = {
 	["simulate-keyboard-input"] = Input.keyboard,
 	["device-get"] = Device.get,
 	["device-set"] = Device.set,
+	["camera"] = Camera.run,
+	["insert-asset"] = Assets.insert,
+	["import-mesh"] = Mesh.import,
 }
 
 local MUTATING = {}
@@ -82,10 +88,13 @@ local function remember(id: string, response)
 	end
 end
 
-local function refusal(endpoint: string)
+local function refusal(endpoint: string, tool: string?)
 	local toggles = State.currentToggles()
 	if toggles.paused then
 		return "The user paused the agent in Studio's SealCode panel. Ask them to resume it."
+	end
+	if not State.toolEnabled(tool) then
+		return "The user turned off the " .. tostring(tool) .. " tool in Studio's SealCode panel. Work without it, or ask them to turn it back on."
 	end
 	if MUTATING[endpoint] and toggles.readOnly then
 		return "The user set Studio's SealCode panel to read-only, so changes are refused."
@@ -157,12 +166,15 @@ function Router.dispatch(message, send: (string, any) -> ())
 	task.spawn(function()
 		local response
 		if type(message.logicalId) == "string" then
-			local blocked = refusal(endpoint)
+			local blocked = refusal(endpoint, meta.tool)
 			response = if blocked
 				then { error = blocked, errorCode = "refused_in_studio" }
 				else Broker.forward(message.logicalId, endpoint, message.data)
 		else
-			response = Router.runLocal(endpoint, message.data)
+			local blocked = refusal(endpoint, meta.tool)
+			response = if blocked
+				then { error = blocked, errorCode = "refused_in_studio" }
+				else Router.runLocal(endpoint, message.data)
 		end
 		entry.durationMs = math.floor((os.clock() - entry.startedAt) * 1000)
 		entry.state = if response.error ~= nil or response.success == false then "error" else "ok"

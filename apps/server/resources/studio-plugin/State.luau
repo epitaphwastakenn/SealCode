@@ -22,7 +22,7 @@ State.placeName = nil
 State.activity = {}
 State.inFlight = 0
 State.notice = nil
-State.toggles = { paused = false, readOnly = false, allowLuau = true }
+State.toggles = { paused = false, readOnly = false, allowLuau = true, disabledTools = {} }
 State.transportLog = {}
 
 local listeners = {}
@@ -60,10 +60,19 @@ end
 function State.loadToggles()
 	local saved = State.getSetting("toggles")
 	if type(saved) == "table" then
+		local disabled = {}
+		if type(saved.disabledTools) == "table" then
+			for name, off in saved.disabledTools do
+				if type(name) == "string" and off == true then
+					disabled[name] = true
+				end
+			end
+		end
 		State.toggles = {
 			paused = saved.paused == true,
 			readOnly = saved.readOnly == true,
 			allowLuau = saved.allowLuau ~= false,
+			disabledTools = disabled,
 		}
 	end
 end
@@ -75,6 +84,16 @@ function State.setToggle(name: string, value: boolean)
 		State.onToggle()
 	end
 	State.changed()
+end
+
+function State.setToolEnabled(name: string, enabled: boolean)
+	local disabled = table.clone(State.toggles.disabledTools or {})
+	disabled[name] = if enabled then nil else true
+	State.setToggle("disabledTools", disabled)
+end
+
+function State.toolEnabled(name: string?): boolean
+	return name == nil or not (State.currentToggles().disabledTools or {})[name]
 end
 
 -- Play DataModels read the toggles the user set in the edit window; settings are shared.

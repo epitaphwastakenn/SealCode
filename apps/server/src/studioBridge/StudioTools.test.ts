@@ -4,6 +4,8 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 
+import { RobloxStudioConfig } from "../roblox/RobloxStudioConfig.ts";
+import { ServerSettingsService } from "../serverSettings.ts";
 import { STUDIO_PROTOCOL_VERSION } from "./protocol.ts";
 import * as StudioBridge from "./StudioBridge.ts";
 import { handleMcpMessage } from "./studioMcp.ts";
@@ -11,6 +13,8 @@ import * as StudioTools from "./StudioTools.ts";
 
 const layer = StudioTools.layer.pipe(
   Layer.provideMerge(StudioBridge.layer),
+  Layer.provide(ServerSettingsService.layerTest()),
+  Layer.provide(Layer.succeed(RobloxStudioConfig, RobloxStudioConfig.defaultValue())),
   Layer.provide(NodeServices.layer),
 );
 
@@ -299,6 +303,24 @@ describe("StudioTools", () => {
         Effect.void,
       );
       expect(notification.kind).toBe("accepted");
+    }).pipe(Effect.provide(layer)),
+  );
+});
+
+describe("Studio panel catalog", () => {
+  it.effect("lists every tool exactly once, so each one has a switch", () =>
+    Effect.gen(function* () {
+      const tools = yield* StudioTools.StudioTools;
+      const catalog = yield* Effect.promise(() =>
+        import("node:fs/promises").then((fs) =>
+          fs.readFile(
+            new URL("../../resources/studio-plugin/Catalog.luau", import.meta.url),
+            "utf8",
+          ),
+        ),
+      );
+      const listed = [...catalog.matchAll(/\{ "([a-z_]+)", "/gu)].map((match) => match[1]);
+      expect(listed.toSorted()).toEqual(tools.list.map((tool) => tool.name).toSorted());
     }).pipe(Effect.provide(layer)),
   );
 });

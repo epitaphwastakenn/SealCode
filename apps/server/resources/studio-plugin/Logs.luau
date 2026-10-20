@@ -66,7 +66,7 @@ function Logs.start()
 			push(tostring(item.message), LEVELS[item.messageType] or "OUT", tonumber(item.timestamp) or os.time())
 		end
 	end
-	LogService.MessageOut:Connect(function(message, messageType)
+	require(script.Parent.Lifetime).connect(LogService.MessageOut, function(message, messageType)
 		push(message, LEVELS[messageType] or "OUT", DateTime.now().UnixTimestampMillis / 1000)
 	end)
 end

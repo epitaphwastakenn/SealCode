@@ -10,7 +10,7 @@ local Input = {}
 local virtual = nil
 local lastFrame = os.clock()
 pcall(function()
-	RunService.RenderStepped:Connect(function()
+	require(script.Parent.Parent.Lifetime).connect(RunService.RenderStepped, function()
 		lastFrame = os.clock()
 	end)
 end)

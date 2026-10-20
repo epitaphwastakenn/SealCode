@@ -78,6 +78,26 @@ const STUDIO_TOOLS: Readonly<Record<string, readonly [title: string, detail?: De
   ],
   capture_device_matrix: ["Device matrix", (args) => count(args.entries, "device")],
   load_skill: ["Load skill", (args) => text(args.name)],
+  camera: [
+    "Camera",
+    (args) =>
+      [text(args.action), text(args.angle), args.screenshot === true ? "+ screenshot" : undefined]
+        .filter(Boolean)
+        .join(" ") || undefined,
+  ],
+  search_assets: ["Search the Creator Store for", (args) => text(args.query)],
+  get_asset_details: [
+    "Check asset",
+    (args) => (typeof args.assetId === "number" ? String(args.assetId) : undefined),
+  ],
+  insert_asset: [
+    "Insert asset",
+    (args) =>
+      text(args.name) ?? (typeof args.assetId === "number" ? String(args.assetId) : undefined),
+  ],
+  manage_studio: ["Studio windows", (args) => text(args.action)],
+  blender: ["Blender job"],
+  import_mesh: ["Import mesh", (args) => text(args.name)],
 };
 
 export const isStudioTool = (tool: string | undefined): boolean =>

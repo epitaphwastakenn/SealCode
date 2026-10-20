@@ -56,7 +56,14 @@ const number = (value: unknown): number =>
   typeof value === "number" && Number.isFinite(value) ? value : 0;
 
 /** The listener for one run: plugin endpoints behind the install key, MCP behind its token. */
-const routesFor = (input: { readonly pluginKey: string; readonly mcpToken: string }) => {
+const routesFor = (input: {
+  readonly pluginKey: string;
+  readonly mcpToken: string;
+  readonly bundle: Effect.Effect<
+    StudioPluginInstaller.PluginBundle,
+    StudioPluginInstaller.StudioPluginInstallError
+  >;
+}) => {
   /**
    * Browsers send Origin; Studio's HttpService does not. Refusing any Origin keeps web pages
    * from talking to the bridge even before the key is checked.
@@ -110,11 +117,7 @@ const routesFor = (input: { readonly pluginKey: string; readonly mcpToken: strin
             capabilities: Array.isArray(body.capabilities)
               ? body.capabilities.filter((entry): entry is string => typeof entry === "string")
               : [],
-            toggles: {
-              paused: toggles.paused === true,
-              readOnly: toggles.readOnly === true,
-              allowLuau: toggles.allowLuau !== false,
-            },
+            toggles,
           })
           .pipe(
             Effect.map((accepted) => json(200, { success: true, ...accepted })),
@@ -208,6 +211,14 @@ const routesFor = (input: { readonly pluginKey: string; readonly mcpToken: strin
           );
       }),
     ),
+    plugin(StudioRoutes.bundle, () =>
+      input.bundle.pipe(
+        Effect.map((bundle) => json(200, { success: true, ...bundle })),
+        Effect.catch((error) =>
+          Effect.succeed(json(500, { success: false, message: error.message })),
+        ),
+      ),
+    ),
     plugin(StudioRoutes.bye, (body) =>
       Effect.gen(function* () {
         const bridge = yield* StudioBridge.StudioBridge;
@@ -264,7 +275,12 @@ const make = Effect.gen(function* () {
       "base64url",
     );
     const scope = yield* Scope.make("sequential");
-    const listening = yield* HttpRouter.serve(routesFor({ pluginKey, mcpToken: studio.mcpToken }), {
+    const routes = routesFor({
+      pluginKey,
+      mcpToken: studio.mcpToken,
+      bundle: installer.bundle({ port: studio.port, key: pluginKey }),
+    });
+    const listening = yield* HttpRouter.serve(routes, {
       disableListenLog: true,
       disableLogger: true,
     }).pipe(

@@ -120,6 +120,8 @@ export interface StudioToggles {
   readonly paused: boolean;
   readonly readOnly: boolean;
   readonly allowLuau: boolean;
+  /** Tools the user switched off in the Studio panel. */
+  readonly disabledTools: ReadonlyArray<string>;
 }
 
 export interface StudioHelloInput {
@@ -136,7 +138,8 @@ export interface StudioHelloInput {
   readonly studioVersion: string;
   readonly pluginHash: string;
   readonly capabilities: ReadonlyArray<string>;
-  readonly toggles: StudioToggles;
+  /** The panel's switches as the plugin sent them; sanitized here. */
+  readonly toggles: unknown;
 }
 
 export interface StudioPeer extends RoutablePeer {
@@ -266,11 +269,19 @@ const sanitizeToggles = (value: unknown): StudioToggles => {
     paused: record.paused === true,
     readOnly: record.readOnly === true,
     allowLuau: record.allowLuau !== false,
+    disabledTools:
+      typeof record.disabledTools === "object" && record.disabledTools !== null
+        ? Object.entries(record.disabledTools as Record<string, unknown>)
+            .filter(([name, off]) => off === true && name.length <= 64)
+            .map(([name]) => name)
+            .toSorted()
+            .slice(0, 100)
+        : [],
   };
 };
 
 const togglesKey = (toggles: StudioToggles): string =>
-  `${String(toggles.paused)}/${String(toggles.readOnly)}/${String(toggles.allowLuau)}`;
+  `${String(toggles.paused)}/${String(toggles.readOnly)}/${String(toggles.allowLuau)}/${toggles.disabledTools.join(",")}`;
 
 const statusKey = (status: {
   readonly agentLinked: boolean;

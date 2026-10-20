@@ -1,290 +1,128 @@
 --!nocheck
--- SealCode's Studio plugin. One copy runs in every DataModel Studio creates: the edit window
--- (with the panel), and the play server while a playtest runs. Client DataModels cannot make
--- HTTP requests and stay idle.
+-- The installed loader. It owns what must outlive an update (the dock widget and the toolbar
+-- button) and runs App from the modules beside it. When SealCode has newer plugin code, App
+-- hands the new sources to `reload`, which stops this copy and starts the new one in place, so
+-- the user never reopens the place and Studio windows do not pile up.
 
-local HttpService = game:GetService("HttpService")
-local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
-local Selection = game:GetService("Selection")
 
-local root = script
-local Config = require(root.Config)
-local State = require(root.State)
-local Logs = require(root.Logs)
-local Util = require(root.Util)
-local Transport = require(root.Transport)
-local Place = require(root.Handlers.Place)
-local Luau = require(root.Handlers.Luau)
+local WIDGET_ID = "SealCodeStudioPanel"
 
-State.plugin = plugin
-Luau.plugin = plugin
+local current = nil
+local widget = nil
+local failedHash = nil
+local host = {}
 
-local role
-if RunService:IsEdit() then
-	role = "edit"
-elseif Players.LocalPlayer ~= nil then
-	role = "client"
-else
-	role = "server"
-end
-State.role = role
-
-if role == "client" then
-	-- No HTTP here: the play server relays requests over the broker.
-	Logs.start()
-	local Router = require(root.Router)
-	require(root.Broker).startClient(Router.runLocal)
-	return
-end
-
-Logs.start()
-State.loadToggles()
-require(root.Handlers.Eval).cleanEdit()
-
-local pluginSessionId = HttpService:GenerateGUID(false)
-local PLACE_ID_ATTRIBUTE = "SealCodePlaceId"
-
--- Published places are `place:<id>`; unsaved ones get a GUID kept on ServerStorage so it
--- travels with the file and into its playtests. Only the edit window ever creates one.
-local function instanceId(): string
-	if game.PlaceId ~= 0 then
-		return "place:" .. tostring(game.PlaceId)
-	end
-	local storage = game:GetService("ServerStorage")
-	local id = storage:GetAttribute(PLACE_ID_ATTRIBUTE)
-	if type(id) ~= "string" and role == "edit" then
-		id = string.lower(string.gsub(HttpService:GenerateGUID(false), "-", ""))
-		pcall(function()
-			storage:SetAttribute(PLACE_ID_ATTRIBUTE, id)
+function host.widget()
+	if widget == nil then
+		local info = DockWidgetPluginGuiInfo.new(Enum.InitialDockState.Float, false, false, 340, 560, 280, 320)
+		local ok = pcall(function()
+			widget = plugin:CreateDockWidgetPluginGuiAsync(WIDGET_ID, info)
 		end)
+		if not ok or widget == nil then
+			widget = plugin:CreateDockWidgetPluginGui(WIDGET_ID, info)
+		end
+		widget.Name = WIDGET_ID
+		widget.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 	end
-	if type(id) ~= "string" then
-		return "anon:unsaved-" .. pluginSessionId
-	end
-	return "anon:" .. id
+	return widget
 end
 
-local CAPABILITIES = { "events" }
-local function probe(name: string, check: () -> boolean)
-	local ok, result = pcall(check)
-	if ok and result then
-		table.insert(CAPABILITIES, name)
-	end
-end
-probe("scriptEditor", function()
-	return game:GetService("ScriptEditorService") ~= nil
-end)
-probe("loadstring", function()
-	return loadstring ~= nil and loadstring("return 1") ~= nil
-end)
-probe("capture", function()
-	return game:GetService("CaptureService") ~= nil
-end)
-probe("studioTest", function()
-	return game:GetService("StudioTestService") ~= nil
-end)
-probe("reflection", function()
-	return game:GetService("ReflectionService") ~= nil
-end)
-
-local function identity()
-	State.placeName = Place.placeName()
-	return {
-		protocol = Config.protocol,
-		build = Config.build,
-		pluginSessionId = pluginSessionId,
-		instanceId = instanceId(),
-		role = role,
-		placeId = game.PlaceId,
-		gameId = game.GameId,
-		placeName = State.placeName,
-		dataModelName = game.Name,
-		isRunning = RunService:IsRunning(),
-		studioVersion = version(),
-		pluginHash = Config.pluginHash,
-		capabilities = CAPABILITIES,
-		toggles = State.currentToggles(),
-	}
-end
-
-local sessionHooks = {}
-Transport.configure({
-	identity = identity,
-	onSession = function()
-		for _, hook in sessionHooks do
-			task.spawn(hook)
-		end
-	end,
-	onNotify = function(message)
-		local text = "[SealCode] " .. tostring(message.title) .. (if message.body then ": " .. tostring(message.body) else "")
-		if message.level == "error" or message.level == "warning" then
-			warn(text)
-		else
-			print(text)
-		end
-		State.notice = tostring(message.title)
-		State.changed()
-		task.delay(15, function()
-			if State.notice == tostring(message.title) then
-				State.notice = nil
-				State.changed()
-			end
-		end)
-	end,
-})
-
-plugin.Unloading:Connect(function()
-	Transport.byeSync()
-end)
-
-if role == "server" then
-	require(root.Handlers.Runtime).afterEndTest = Transport.stop
-	local Broker = require(root.Broker)
-	Broker.startServer({
-		register = Transport.registerClient,
-		unregister = Transport.unregisterClient,
-	})
-	sessionHooks.server = function()
-		Broker.reregisterAll(Transport.registerClient)
-	end
-	-- No UI in a play DataModel: connect at once so the playtest's peer shows up.
-	Transport.start()
-	return
-end
-
--- Edit window from here on.
-local Panel = require(root.Panel)
-
-local AUTO_CONNECT = "autoConnect"
-local widget = Panel.create(plugin, {
-	toggleConnection = function()
-		if Transport.isActive() then
-			Transport.stop()
-			State.setSetting(AUTO_CONNECT, false)
-		else
-			State.setSetting(AUTO_CONNECT, true)
-			Transport.start()
-		end
-		State.changed()
-	end,
-	retryNow = function()
-		if not Transport.isActive() then
-			Transport.start()
-		else
-			Transport.retryNow()
-		end
-	end,
-	isActive = Transport.isActive,
-})
-
-task.delay(1, function()
-	local ok, toolbar = pcall(function()
-		return plugin:CreateToolbar(Config.productName)
+local function boot(root: Instance): boolean
+	local ok, result = pcall(function()
+		return require(root.App).start(plugin, host)
 	end)
 	if not ok then
+		warn("[SealCode] The Studio plugin failed to start: " .. tostring(result))
+		return false
+	end
+	current = result
+	return true
+end
+
+-- Builds the new modules as a detached tree and swaps them in; falls back to the installed copy.
+function host.reload(files, pluginHash: string)
+	if failedHash == pluginHash then
 		return
 	end
-	local button = toolbar:CreateButton(
-		"SealCodeStudioToggle",
-		"Show the SealCode panel: connection, agent activity and safety toggles",
-		"",
-		Config.productName
-	)
-	button.ClickableWhenViewportHidden = true
-	button.Click:Connect(function()
-		widget.Enabled = not widget.Enabled
+	local root = Instance.new("Folder")
+	root.Name = "SealCodeStudio_" .. tostring(pluginHash)
+	local built, err = pcall(function()
+		for _, file in files do
+			local parent = root
+			local segments = string.split(file.path, "/")
+			for i = 1, #segments - 1 do
+				local folder = parent:FindFirstChild(segments[i])
+				if folder == nil then
+					folder = Instance.new("Folder")
+					folder.Name = segments[i]
+					folder.Parent = parent
+				end
+				parent = folder
+			end
+			local name = string.gsub(segments[#segments], "%.luau$", "")
+			if name ~= "Main.server" then
+				local module = Instance.new("ModuleScript")
+				module.Name = name
+				module.Source = file.source
+				module.Parent = parent
+			end
+		end
 	end)
-	widget:GetPropertyChangedSignal("Enabled"):Connect(function()
-		button:SetActive(widget.Enabled)
-	end)
-end)
+	if not built then
+		failedHash = pluginHash
+		warn("[SealCode] Could not build the updated plugin: " .. tostring(err))
+		return
+	end
+	if current then
+		pcall(current.stop)
+		current = nil
+	end
+	host.reloaded = true
+	if boot(root) then
+		print("[SealCode] Studio plugin updated in place.")
+	else
+		failedHash = pluginHash
+		boot(script)
+	end
+end
 
--- Say once in Output when the link fails, since the panel starts closed.
-local warnedPhase = nil
-State.onChanged(function()
-	local phase = State.connection.phase
-	if (phase == "refused" or (phase == "retrying" and State.connection.failures == 6)) and warnedPhase ~= phase then
-		warnedPhase = phase
-		warn("[SealCode] Studio is not linked to SealCode: " .. tostring(State.connection.detail) .. " (open the SealCode panel from the Plugins tab for details)")
-	elseif phase == "connected" and warnedPhase ~= nil then
-		warnedPhase = nil
-		print("[SealCode] Studio is linked to SealCode.")
+boot(script)
+
+plugin.Unloading:Connect(function()
+	if current then
+		pcall(current.stop)
 	end
 end)
 
-local autoConnect = State.getSetting(AUTO_CONNECT)
-if autoConnect ~= false then
-	task.delay(2, Transport.start)
-end
-
--- Publishing or renaming the place changes its identity: tell the bridge.
-local lastIdentity = nil
-local function checkIdentity()
-	local current = instanceId() .. "|" .. game.Name
-	if lastIdentity ~= nil and current ~= lastIdentity then
-		Transport.refreshIdentity()
-	end
-	lastIdentity = current
-end
-game:GetPropertyChangedSignal("PlaceId"):Connect(checkIdentity)
-game:GetPropertyChangedSignal("Name"):Connect(checkIdentity)
-task.spawn(function()
-	while true do
-		task.wait(2)
-		checkIdentity()
-	end
-end)
-
--- Events for SealCode: the user's selection (debounced, compact) and new errors.
-local selectionVersion = 0
-local function activeScriptPath()
-	local ok, active = pcall(function()
-		return game:GetService("StudioService").ActiveScript
-	end)
-	return if ok and active then Util.pathOf(active) else nil
-end
-local function emitSelection()
-	selectionVersion += 1
-	local mine = selectionVersion
-	task.delay(0.3, function()
-		if mine ~= selectionVersion then
+-- The toolbar button lives here so it survives updates; only the edit window shows one.
+if RunService:IsEdit() then
+	task.delay(1, function()
+		local ok, toolbar = pcall(function()
+			return plugin:CreateToolbar("SealCode")
+		end)
+		if not ok then
 			return
 		end
-		local selected = Selection:Get()
-		local items = {}
-		for i, instance in selected do
-			if i > 20 then
-				break
-			end
-			table.insert(items, { path = Util.pathOf(instance), className = instance.ClassName })
+		local button = toolbar:CreateButton(
+			"SealCodeStudioToggle",
+			"Show the SealCode panel: connection, agent activity, safety and tool switches",
+			"",
+			"SealCode"
+		)
+		button.ClickableWhenViewportHidden = true
+		button.Click:Connect(function()
+			local panel = host.widget()
+			panel.Enabled = not panel.Enabled
+		end)
+		host.widget():GetPropertyChangedSignal("Enabled"):Connect(function()
+			button:SetActive(widget.Enabled)
+		end)
+		-- Show the panel once, so a new user finds the switches without hunting for them.
+		if plugin:GetSetting("SealCodeStudio.v1.panelShown") ~= true then
+			plugin:SetSetting("SealCodeStudio.v1.panelShown", true)
+			host.widget().Enabled = true
 		end
-		Transport.emit({ type = "selection_changed", count = #selected, items = items, activeScript = activeScriptPath() })
+		button:SetActive(host.widget().Enabled)
 	end)
-end
-Selection.SelectionChanged:Connect(emitSelection)
-pcall(function()
-	game:GetService("StudioService"):GetPropertyChangedSignal("ActiveScript"):Connect(emitSelection)
-end)
-sessionHooks.selection = emitSelection
-
-local errorsThisSecond = 0
-local errorWindow = 0
-Logs.onEntry(function(entry)
-	if entry.level ~= "ERR" or string.sub(entry.message, 1, 10) == "[SealCode]" then
-		return
-	end
-	local now = os.clock()
-	if now - errorWindow > 1 then
-		errorWindow = now
-		errorsThisSecond = 0
-	end
-	errorsThisSecond += 1
-	if errorsThisSecond <= 10 then
-		Transport.emit({ type = "log_error", message = string.sub(entry.message, 1, 2000), seq = entry.seq })
-	end
-end)
-
-State.onToggle = function()
-	Transport.emit({ type = "toggles_changed", toggles = State.toggles })
 end

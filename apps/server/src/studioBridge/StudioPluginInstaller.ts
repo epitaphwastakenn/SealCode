@@ -155,6 +155,11 @@ export const pluginHashOf = (sources: ReadonlyArray<PluginSource>): string =>
     .digest("hex")
     .slice(0, 16);
 
+export interface PluginBundle {
+  readonly pluginHash: string;
+  readonly files: ReadonlyArray<PluginSource>;
+}
+
 export interface PluginInstallResult {
   readonly path: string;
   readonly pluginHash: string;
@@ -171,6 +176,11 @@ export class StudioPluginInstaller extends Context.Service<
     }) => Effect.Effect<PluginInstallResult, StudioPluginInstallError>;
     /** Removes the plugin, so Studio does not keep looking for a bridge that is turned off. */
     readonly uninstall: Effect.Effect<boolean>;
+    /** The current plugin modules, for a Studio that updates itself in place (hot reload). */
+    readonly bundle: (input: {
+      readonly port: number;
+      readonly key: string;
+    }) => Effect.Effect<PluginBundle, StudioPluginInstallError>;
   }
 >()("t3/studioBridge/StudioPluginInstaller") {}
 
@@ -273,7 +283,21 @@ const make = Effect.gen(function* () {
     );
   });
 
-  return StudioPluginInstaller.of({ install, uninstall });
+  const bundle: StudioPluginInstaller["Service"]["bundle"] = (input) =>
+    loadSources.pipe(
+      Effect.map((sources) => {
+        const pluginHash = pluginHashOf(sources);
+        return {
+          pluginHash,
+          files: [
+            ...sources.filter((file) => file.path !== "Main.server.luau"),
+            { path: "Config.luau", source: configModule({ ...input, pluginHash }) },
+          ],
+        };
+      }),
+    );
+
+  return StudioPluginInstaller.of({ install, uninstall, bundle });
 });
 
 export const layer = Layer.effect(StudioPluginInstaller, make);

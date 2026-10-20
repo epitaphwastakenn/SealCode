@@ -4,6 +4,7 @@
 -- Every relay has a deadline: a frozen or departed client answers "client_unresponsive" instead
 -- of holding the request until the bridge gives up.
 
+local Lifetime = require(script.Parent.Lifetime)
 local HttpService = game:GetService("HttpService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -47,7 +48,7 @@ function Broker.startServer(options)
 		remote.Archivable = false
 		remote.Parent = ReplicatedStorage
 	end
-	remote.OnServerEvent:Connect(function(player, relayId, response)
+	Lifetime.connect(remote.OnServerEvent, function(player, relayId, response)
 		local entry = waiting[relayId]
 		if entry and entry.player == player then
 			entry.response = response
@@ -82,8 +83,8 @@ function Broker.startServer(options)
 		playerByLogical[id] = nil
 		task.spawn(options.unregister, id)
 	end
-	Players.PlayerAdded:Connect(add)
-	Players.PlayerRemoving:Connect(remove)
+	Lifetime.connect(Players.PlayerAdded, add)
+	Lifetime.connect(Players.PlayerRemoving, remove)
 	for _, player in Players:GetPlayers() do
 		add(player)
 	end
@@ -136,7 +137,7 @@ function Broker.startClient(handle: (string, any) -> any)
 		if not event:IsA("RemoteEvent") then
 			return
 		end
-		event.OnClientEvent:Connect(function(relayId, endpoint, data)
+		Lifetime.connect(event.OnClientEvent, function(relayId, endpoint, data)
 			task.spawn(function()
 				local response
 				if not Broker.CLIENT_ENDPOINTS[endpoint] then

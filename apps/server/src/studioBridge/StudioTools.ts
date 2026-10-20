@@ -2,10 +2,22 @@ import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 
+import { blenderExecutableFor, RobloxStudioConfig } from "../roblox/RobloxStudioConfig.ts";
+import * as ServerSettings from "../serverSettings.ts";
+import { parseObj, runBlenderJob } from "./blenderJobs.ts";
+import { assetDetails, assetThumbnail, searchStore } from "./creatorStore.ts";
 import { downscaleRgba, encodePng } from "./png.ts";
+import {
+  closeStudio,
+  findStudioExecutable,
+  launchStudio,
+  listStudioWindows,
+  normalizePlaceName,
+} from "./studioProcesses.ts";
 import { loadStudioSkills, renderSkillResources } from "./studioSkills.ts";
 import { StudioEndpoints, type StudioRole } from "./protocol.ts";
 import * as StudioBridge from "./StudioBridge.ts";
@@ -135,6 +147,9 @@ const SKILL_CACHE_THREADS = 64;
 
 const make = Effect.gen(function* () {
   const bridge = yield* StudioBridge.StudioBridge;
+  const robloxConfig = yield* RobloxStudioConfig;
+  const serverSettings = yield* ServerSettings.ServerSettingsService;
+  const fileSystem = yield* FileSystem.FileSystem;
   const skills = yield* loadStudioSkills;
   // Skill files each thread already received, so a repeat request costs a line, not the file.
   const loadedSkills = new Map<string, Set<string>>();
@@ -1406,7 +1421,7 @@ const make = Effect.gen(function* () {
         })),
         pendingRequests: snapshot.pendingRequests,
         hint: snapshot.pluginReloadNeeded
-          ? "SealCode just updated the Studio plugin. Studio loads plugins when a place opens: reopen the place, or restart Studio, to pick up the new one."
+          ? "SealCode just updated the Studio plugin. Connected places update themselves in place within a few seconds; a place that stays on the old copy can be reopened with manage_studio (open with closeOthers)."
           : snapshot.peers.length === 0
             ? "No Studio is connected: ask the user to open the place in Roblox Studio and check the SealCode panel (Plugins tab)."
             : undefined,
@@ -1443,6 +1458,341 @@ const make = Effect.gen(function* () {
         ...(rendered.ok ? {} : { isError: true }),
       } satisfies StudioToolResult;
     });
+
+  const camera = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      const { payload } = yield* call({
+        tool: "camera",
+        args,
+        context,
+        endpoint: StudioEndpoints.camera,
+        data: {
+          action: str(args.action) ?? "get",
+          paths: args.paths,
+          angle: str(args.angle) === "custom" ? undefined : str(args.angle),
+          yaw: num(args.yaw),
+          pitch: num(args.pitch),
+          padding: num(args.padding),
+          position: args.position,
+          lookAt: args.lookAt,
+          fieldOfView: num(args.fieldOfView),
+        },
+        summary: str(args.action),
+      });
+      const outdated = outdatedPlugin(payload);
+      if (outdated !== undefined) return outdated;
+      if (args.screenshot !== true || isFailurePayload(payload)) return jsonResult(payload);
+      const captured = yield* captureImage({
+        args,
+        context,
+        tool: "camera",
+        maxSize: Math.min(Math.max(Math.floor(num(args.maxSize) ?? 1280), 256), 4096),
+        budgetBytes: MAX_INLINE_IMAGE_BYTES,
+        target: str(args.target) ?? "edit",
+      });
+      if (!captured.ok) return captured.result;
+      return {
+        content: [
+          jsonText({
+            camera: payload,
+            screenshot: { width: captured.width, height: captured.height },
+          }),
+          { type: "image", data: captured.png.toString("base64"), mimeType: "image/png" },
+        ],
+      } satisfies StudioToolResult;
+    }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
+
+  const searchAssets = (args: Args): Effect.Effect<StudioToolResult> =>
+    searchStore({
+      type: str(args.type),
+      query: str(args.query),
+      maxResults: Math.min(Math.max(Math.floor(num(args.maxResults) ?? 12), 1), 50),
+      sortBy: str(args.sortBy),
+      includePaid: args.includePaid === true,
+    }).pipe(
+      Effect.map((found) =>
+        jsonResult({
+          success: true,
+          ...found,
+          next:
+            found.results.length === 0
+              ? "Nothing free matched: try simpler words, another type, or sortBy Top."
+              : "Check the best two or three with get_asset_details before insert_asset.",
+        }),
+      ),
+      Effect.catch((error) => Effect.succeed(errorResult("store_unavailable", error.message))),
+    );
+
+  const assetDetailsTool = (args: Args): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      const id = num(args.assetId);
+      if (id === undefined) return errorResult("invalid_arguments", "assetId is required.");
+      const details = yield* assetDetails(id);
+      if (details === undefined) {
+        return errorResult("not_found", `Asset ${String(id)} was not found.`);
+      }
+      const thumbnail = yield* assetThumbnail(id, "420x420").pipe(
+        Effect.orElseSucceed(() => undefined),
+      );
+      return {
+        content: [
+          jsonText({ success: true, ...details, insertable: details.priceUsd === 0 }),
+          ...(thumbnail === undefined
+            ? []
+            : [
+                {
+                  type: "image" as const,
+                  data: thumbnail.toString("base64"),
+                  mimeType: "image/png",
+                },
+              ]),
+        ],
+      } satisfies StudioToolResult;
+    }).pipe(
+      Effect.catch((error) => Effect.succeed(errorResult("store_unavailable", error.message))),
+    );
+
+  const manageStudio = (args: Args): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      const action = str(args.action) ?? "status";
+      if (action === "status") {
+        const windows = yield* listStudioWindows;
+        const peers = (yield* bridge.peers).filter((peer) => peer.role === "edit");
+        return jsonResult({
+          success: true,
+          windows: windows.map((window) => ({
+            pid: window.pid,
+            title: window.title,
+            place: window.place,
+            connected: peers.some(
+              (peer) =>
+                window.place !== undefined && normalizePlaceName(peer.placeName) === window.place,
+            ),
+          })),
+        });
+      }
+      if (action === "close") {
+        const pid = num(args.pid);
+        if (pid === undefined) {
+          return errorResult("invalid_arguments", "close needs pid (see status).");
+        }
+        const windows = yield* listStudioWindows;
+        if (!windows.some((window) => window.pid === pid)) {
+          return errorResult("not_found", `No Roblox Studio process has pid ${String(pid)}.`);
+        }
+        const force = args.force === true;
+        yield* closeStudio(pid, force);
+        const gone = yield* waitUntil(
+          listStudioWindows.pipe(
+            Effect.map((list) => !list.some((window) => window.pid === pid)),
+            Effect.orElseSucceed(() => false),
+          ),
+          force ? 10_000 : 8_000,
+        );
+        return jsonResult({
+          success: gone,
+          closed: gone,
+          ...(gone
+            ? {}
+            : {
+                message:
+                  "Studio is still open: it is most likely asking whether to save changes. Ask the user to answer it, or close with force=true to discard unsaved changes.",
+              }),
+        });
+      }
+      if (action === "open") {
+        const executable = yield* findStudioExecutable;
+        if (executable === undefined) {
+          return errorResult("studio_not_found", "Roblox Studio is not installed for this user.");
+        }
+        const placeFile = str(args.placeFile);
+        if (placeFile !== undefined) {
+          const exists = yield* fileSystem
+            .exists(placeFile)
+            .pipe(Effect.orElseSucceed(() => false));
+          if (!exists) return errorResult("not_found", `No place file at ${placeFile}.`);
+        }
+        // Studio refuses to open a file another window holds (a modal "file in use" dialog),
+        // so with closeOthers the older windows of that file close first.
+        if (placeFile !== undefined && args.closeOthers === true) {
+          const fileName = normalizePlaceName(placeFile.split(/[\\/]/u).at(-1) ?? "");
+          const holders = (yield* listStudioWindows).filter((window) => window.place === fileName);
+          for (const window of holders) yield* closeStudio(window.pid, false);
+          const released =
+            holders.length === 0 ||
+            (yield* waitUntil(
+              listStudioWindows.pipe(
+                Effect.map(
+                  (list) => !list.some((window) => holders.some((h) => h.pid === window.pid)),
+                ),
+                Effect.orElseSucceed(() => false),
+              ),
+              10_000,
+            ));
+          if (!released) {
+            return errorResult(
+              "save_prompt_open",
+              `The window that has ${fileName} open is asking whether to save changes. Ask the user to answer it (or close it with force=true if they agree to lose them), then open again.`,
+            );
+          }
+        }
+        const before = new Set((yield* bridge.peers).map((peer) => peer.pluginSessionId));
+        const olderWindows = yield* listStudioWindows;
+        const pid = yield* launchStudio({
+          executable,
+          placeFile,
+          placeId: num(args.placeId),
+          universeId: num(args.universeId),
+        });
+        if (args.waitForConnection === false) {
+          return jsonResult({ success: true, pid, waited: false });
+        }
+        const isFresh = (peer: StudioBridge.StudioPeer) =>
+          peer.role === "edit" && !before.has(peer.pluginSessionId);
+        const connected = yield* waitUntil(
+          bridge.peers.pipe(Effect.map((peers) => peers.some(isFresh))),
+          150_000,
+        );
+        const fresh = (yield* bridge.peers).find(isFresh);
+        const closed: number[] = [];
+        if (connected && fresh !== undefined && args.closeOthers === true) {
+          for (const window of olderWindows) {
+            if (
+              window.place !== undefined &&
+              window.place === normalizePlaceName(fresh.placeName)
+            ) {
+              if (yield* closeStudio(window.pid, false)) closed.push(window.pid);
+            }
+          }
+        }
+        // A window with unsaved changes stays open on Studio's save prompt; say which.
+        const stillOpen =
+          closed.length === 0
+            ? []
+            : yield* Effect.sleep(Duration.seconds(6)).pipe(
+                Effect.andThen(listStudioWindows),
+                Effect.map((list) =>
+                  closed.filter((closedPid) => list.some((window) => window.pid === closedPid)),
+                ),
+                Effect.orElseSucceed(() => []),
+              );
+        return jsonResult({
+          success: connected,
+          pid,
+          connected,
+          ...(stillOpen.length > 0
+            ? {
+                olderWindowsAskingToSave: stillOpen,
+                note: "These older windows are showing Studio's save prompt. Ask the user to answer it; close with force=true only if they agree to lose unsaved changes.",
+              }
+            : {}),
+          ...(fresh === undefined
+            ? {}
+            : { instance_id: fresh.instanceId, place_name: fresh.placeName }),
+          ...(closed.length > 0 ? { askedOlderWindowsToClose: closed } : {}),
+          ...(connected
+            ? {}
+            : {
+                message:
+                  "Studio started but did not connect within 150 s. It may be waiting on a login, an update or a dialog; check manage_studio status.",
+              }),
+        });
+      }
+      return errorResult("invalid_arguments", "action must be status, open or close.");
+    }).pipe(
+      Effect.catch((error) => Effect.succeed(errorResult("studio_process_failed", String(error)))),
+    );
+
+  const blenderExecutable = serverSettings.getSettings.pipe(
+    Effect.map((settings) => blenderExecutableFor(settings.robloxStudio, robloxConfig.environment)),
+  );
+
+  const blender = (args: Args): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      const script = typeof args.script === "string" ? args.script : "";
+      if (script.trim() === "") return errorResult("invalid_arguments", "script is required.");
+      const executable = yield* blenderExecutable.pipe(Effect.orElseSucceed(() => undefined));
+      if (executable === undefined) {
+        return errorResult(
+          "blender_not_found",
+          "Blender is not installed where SealCode looks. The user can set its path in Settings, Connections, Roblox Studio, Blender executable.",
+        );
+      }
+      const continueFrom = str(args.continueFrom);
+      const job = yield* runBlenderJob({
+        executable,
+        jobsRoot: robloxConfig.environment.blenderJobsRoot,
+        script,
+        preview: args.preview !== false,
+        exportObj: args.export !== false,
+        saveBlend: true,
+        timeoutMs: Math.min(Math.max(num(args.timeoutSeconds) ?? 180, 10), 900) * 1000,
+        openBlend: continueFrom === undefined ? undefined : `${continueFrom}/scene.blend`,
+      });
+      const summary = {
+        success: job.ok,
+        jobDir: job.jobDir,
+        exitCode: job.exitCode,
+        ...(job.timedOut ? { timedOut: true } : {}),
+        files: job.files,
+        result: job.report,
+        output: job.output,
+        next: job.ok
+          ? job.objPath
+            ? "Check the topology report and the preview. When both are right, import_mesh with this jobDir."
+            : "No mesh was exported."
+          : "The script failed: read scriptError in result, fix it and run again (continueFrom keeps the scene).",
+      };
+      return {
+        content: [
+          jsonText(summary),
+          ...(job.previewPng === undefined
+            ? []
+            : [
+                {
+                  type: "image" as const,
+                  data: job.previewPng.toString("base64"),
+                  mimeType: "image/png",
+                },
+              ]),
+        ],
+        ...(job.ok ? {} : { isError: true }),
+      } satisfies StudioToolResult;
+    }).pipe(Effect.catch((error) => Effect.succeed(errorResult("blender_failed", String(error)))));
+
+  const importMesh = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      const jobDir = str(args.jobDir);
+      const objPath =
+        str(args.objPath) ?? (jobDir === undefined ? undefined : `${jobDir}/model.obj`);
+      if (objPath === undefined) {
+        return errorResult("invalid_arguments", "jobDir or objPath is required.");
+      }
+      const read = (path: string) =>
+        fileSystem.readFileString(path).pipe(Effect.orElseSucceed(() => undefined));
+      const objText = yield* read(objPath);
+      if (objText === undefined) return errorResult("not_found", `No OBJ at ${objPath}.`);
+      const mtlName = /^mtllib\s+(.+)$/mu.exec(objText)?.[1]?.trim();
+      const mtlText =
+        mtlName === undefined ? undefined : yield* read(objPath.replace(/[^/\\]+$/u, mtlName));
+      const groups = parseObj(objText, mtlText, num(args.studsPerMetre) ?? 3.57);
+      if (groups.length === 0) return errorResult("empty_mesh", "The OBJ has no faces.");
+      const { payload } = yield* call({
+        tool: "import_mesh",
+        args,
+        context,
+        endpoint: StudioEndpoints.importMesh,
+        data: {
+          groups,
+          name: str(args.name),
+          position: args.position,
+          parentPath: str(args.parentPath),
+        },
+        timeoutMs: 120_000,
+        summary: str(args.name) ?? "mesh",
+      });
+      return outdatedPlugin(payload) ?? jsonResult(payload);
+    }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
 
   const list: ReadonlyArray<StudioToolDefinition> = [
     {
@@ -2092,6 +2442,164 @@ const make = Effect.gen(function* () {
       risk: "read",
       run: screenshot,
     },
+    {
+      name: "camera",
+      title: "Camera",
+      description:
+        "Moves Studio's viewport camera so you see your work from the right angle. action get reads it; set places it (position, lookAt, fieldOfView); frame fits instances (paths, or the user's selection when omitted) from an angle: iso (default), front, back, left, right, top, low, current, or custom with yaw/pitch in degrees. screenshot=true returns the view as an image in the same call. Frame the subject before every screenshot that checks a build.",
+      inputSchema: object({
+        action: { type: "string", enum: ["get", "set", "frame"] },
+        paths: {
+          type: "array",
+          items: { type: "string" },
+          description: "Instances to frame; defaults to the Studio selection.",
+        },
+        angle: {
+          type: "string",
+          enum: ["iso", "front", "back", "left", "right", "top", "low", "current", "custom"],
+        },
+        yaw: {
+          type: "number",
+          description: "Degrees around the target for angle custom (0 = front).",
+        },
+        pitch: { type: "number", description: "Degrees above the horizon for angle custom." },
+        padding: {
+          type: "number",
+          description: "Distance multiplier when framing (default 1; larger leaves more room).",
+        },
+        position: { type: "object", description: "{x,y,z} for set." },
+        lookAt: { type: "object", description: "{x,y,z} the camera faces, for set." },
+        fieldOfView: { type: "number" },
+        screenshot: { type: "boolean", description: "Return a screenshot after moving." },
+        maxSize: {
+          type: "number",
+          description: "Screenshot longest side in pixels (default 1280).",
+        },
+        ...instanceIdProperty,
+        ...targetProperty,
+      }),
+      risk: "read",
+      run: camera,
+    },
+    {
+      name: "search_assets",
+      title: "Search the Creator Store",
+      description:
+        "Searches Roblox's Creator Store. type: Model (default), VFX or Particle for effects, Audio, Decal, MeshPart, Video, FontFamily. Only free items unless includePaid. Prefer verified creators, high upvote percentages and few or no scripts; check the best candidates with get_asset_details (it shows the thumbnail) before insert_asset.",
+      inputSchema: object(
+        {
+          query: { type: "string" },
+          type: { type: "string" },
+          maxResults: { type: "number", description: "1-50, default 12." },
+          sortBy: {
+            type: "string",
+            enum: ["Relevance", "Trending", "Top", "Ratings", "UpdatedTime"],
+          },
+          includePaid: { type: "boolean" },
+        },
+        ["query"],
+      ),
+      risk: "read",
+      run: searchAssets,
+    },
+    {
+      name: "get_asset_details",
+      title: "Asset details",
+      description:
+        "One Creator Store asset's creator, price, votes, scripts, triangles and instance counts, with its thumbnail image, to judge it before inserting.",
+      inputSchema: object({ assetId: { type: "number" } }, ["assetId"]),
+      risk: "read",
+      run: assetDetailsTool,
+    },
+    {
+      name: "insert_asset",
+      title: "Insert asset",
+      description:
+        "Inserts a free Creator Store asset into the place (parent Workspace by default, at position or at the camera focus) in one undo step and selects it. Scripts inside arrive DISABLED and package links are removed: read each script with get_script_source and enable only what you reviewed. Then frame it with camera and check it with a screenshot.",
+      inputSchema: object(
+        {
+          assetId: { type: "number" },
+          parentPath: { type: "string" },
+          position: { type: "object", description: "{x,y,z} in studs." },
+          name: { type: "string" },
+          ...instanceIdProperty,
+        },
+        ["assetId"],
+      ),
+      risk: "mutation",
+      run: forward("insert_asset", StudioEndpoints.insertAsset, (args) => args, {
+        timeoutMs: 60_000,
+        summary: (args) => `asset ${String(args.assetId)}`,
+      }),
+    },
+    {
+      name: "manage_studio",
+      title: "Manage Studio",
+      description:
+        "Roblox Studio windows on this computer. status lists them (pid, place from the title, connected to SealCode or not). open starts Studio on a place file (placeFile) or a published place (placeId), or an empty Studio, and waits for it to connect; closeOthers=true then closes older windows of the same place so Studio windows do not pile up. close asks a window (pid) to close like the user would; Studio may show its save prompt, and force=true ends it without saving. The plugin updates itself in place, so reopening Studio is rarely needed.",
+      inputSchema: object(
+        {
+          action: { type: "string", enum: ["status", "open", "close"] },
+          placeFile: { type: "string", description: "Absolute .rbxl/.rbxlx path for open." },
+          placeId: { type: "number", description: "Published place to open." },
+          universeId: { type: "number" },
+          pid: { type: "number", description: "Window to close (from status)." },
+          force: { type: "boolean" },
+          closeOthers: { type: "boolean" },
+          waitForConnection: {
+            type: "boolean",
+            description: "Wait for the new window to connect (default true).",
+          },
+        },
+        ["action"],
+      ),
+      risk: "irreversible",
+      run: manageStudio,
+    },
+    {
+      name: "blender",
+      title: "Blender job",
+      description:
+        "Runs a Python (bpy) script in headless Blender on this computer, in a fresh scene unless continueFrom names an earlier job's jobDir. JOB_DIR and job_path(name) point at the job folder. Afterwards SealCode measures every mesh (triangles, quads, ngons, non-manifold and open edges, loose geometry, dimensions, materials), renders a preview image and exports model.obj for import_mesh. Model in metres (1 unit = 1 m), keep clean quads, no ngons, apply scale, and fix every topology problem the report lists before importing.",
+      inputSchema: object(
+        {
+          script: {
+            type: "string",
+            description: "Python run with bpy, bmesh, math and Vector already imported.",
+          },
+          preview: { type: "boolean", description: "Render a preview image (default true)." },
+          export: {
+            type: "boolean",
+            description: "Export model.obj for import_mesh (default true).",
+          },
+          continueFrom: {
+            type: "string",
+            description: "jobDir of an earlier job whose scene to continue.",
+          },
+          timeoutSeconds: { type: "number", description: "Default 180, max 900." },
+        },
+        ["script"],
+      ),
+      risk: "mutation",
+      run: blender,
+    },
+    {
+      name: "import_mesh",
+      title: "Import mesh",
+      description:
+        "Brings a Blender job's model.obj (jobDir from the blender tool, or objPath) into Studio as MeshParts, one per material colour, inside a Model. studsPerMetre defaults to 3.57 (Roblox character scale; 1 keeps units). The geometry lives in this Studio session only: Roblox does not save EditableMesh data with the place, so tell the user to publish the mesh as an asset before relying on it.",
+      inputSchema: object({
+        jobDir: { type: "string" },
+        objPath: { type: "string" },
+        name: { type: "string" },
+        position: { type: "object", description: "{x,y,z} where the model's base sits." },
+        parentPath: { type: "string" },
+        studsPerMetre: { type: "number" },
+        ...instanceIdProperty,
+      }),
+      risk: "mutation",
+      run: importMesh,
+    },
   ];
 
   const byName = new Map(list.map((tool) => [tool.name, tool]));
@@ -2103,20 +2611,31 @@ const make = Effect.gen(function* () {
       if (tool === undefined) {
         return Effect.succeed(errorResult("unknown_tool", `No Studio tool is named ${name}.`));
       }
-      return tool
-        .run(args, context)
-        .pipe(
-          Effect.catchDefect((defect) =>
-            Effect.logError("Studio tool failed", { tool: name, defect }).pipe(
-              Effect.as(
-                errorResult(
-                  "tool_failed",
-                  String(defect instanceof Error ? defect.message : defect).slice(0, 500),
-                ),
+      return Effect.gen(function* () {
+        // The Studio panel's per-tool switches cover tools that never reach the plugin too.
+        const peers = yield* bridge.peers;
+        if (
+          name !== "get_bridge_status" &&
+          peers.some((peer) => peer.toggles.disabledTools.includes(name))
+        ) {
+          return errorResult(
+            "tool_disabled",
+            `The user turned off ${name} in Studio's SealCode panel. Work without it, or ask them to switch it back on.`,
+          );
+        }
+        return yield* tool.run(args, context);
+      }).pipe(
+        Effect.catchDefect((defect) =>
+          Effect.logError("Studio tool failed", { tool: name, defect }).pipe(
+            Effect.as(
+              errorResult(
+                "tool_failed",
+                String(defect instanceof Error ? defect.message : defect).slice(0, 500),
               ),
             ),
           ),
-        );
+        ),
+      );
     },
   });
 });

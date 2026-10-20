@@ -23,6 +23,7 @@ export const StudioRoutes = {
   events: "/studio/v1/events",
   bye: "/studio/v1/bye",
   client: "/studio/v1/client",
+  bundle: "/studio/v1/bundle",
   mcp: "/mcp",
 } as const;
 
@@ -110,11 +111,16 @@ export const StudioEndpoints = {
   keyboardInput: "simulate-keyboard-input",
   deviceGet: "device-get",
   deviceSet: "device-set",
+  camera: "camera",
+  insertAsset: "insert-asset",
+  importMesh: "import-mesh",
 } as const;
 export type StudioEndpoint = (typeof StudioEndpoints)[keyof typeof StudioEndpoints];
 
 /** Endpoints that change the place; the plugin's read-only toggle refuses them. */
 export const MUTATING_ENDPOINTS: ReadonlySet<string> = new Set([
+  StudioEndpoints.insertAsset,
+  StudioEndpoints.importMesh,
   StudioEndpoints.setProperties,
   StudioEndpoints.createInstances,
   StudioEndpoints.deleteInstances,

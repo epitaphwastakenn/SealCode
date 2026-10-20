@@ -54,6 +54,7 @@ import { resolveWorkGroupScrollAnchor } from "@t3tools/client-runtime/work-log/s
 import {
   turnItemHasDetail,
   turnItemNeedsDetailFetch,
+  turnItemOutputImages,
 } from "@t3tools/client-runtime/work-log/item-detail";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import {
@@ -5545,6 +5546,9 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
       ? getQuestionAnswerPreview(workEntry.questionAnswer)
       : null;
   const viewedImagePath = workEntryViewedImagePath(workEntry);
+  const outputImages = workEntry.projectedItem
+    ? turnItemOutputImages(workEntry.projectedItem.item)
+    : [];
   const payload = workEntry.structuredPayload;
   const skill =
     payload?.type === "dynamic_tool"
@@ -5758,6 +5762,24 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
         </>
       }
     >
+      {outputImages.length > 0 ? (
+        // Screenshots an agent takes (Studio captures, browser shots) stay in view without
+        // expanding the row, so the user can follow what the agent sees.
+        <WorkLogDetails kind="media">
+          <div className="flex flex-wrap gap-2" onClick={stopRowToggle}>
+            {outputImages.map((resource) => (
+              <ChatMarkdownAssetImage
+                key={resource.index}
+                environmentId={ctx.activeThreadEnvironmentId}
+                resource={resource}
+                alt="Screenshot from the agent's tool"
+                maxHeightRem={outputImages.length === 1 ? 18 : 10}
+                onImageExpand={onImageExpand}
+              />
+            ))}
+          </div>
+        </WorkLogDetails>
+      ) : null}
       {expanded && viewedImage && threadRef ? (
         <WorkLogDetails kind="media">
           <ChatMarkdownAssetImage

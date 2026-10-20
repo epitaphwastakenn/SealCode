@@ -7,6 +7,7 @@ local HttpService = game:GetService("HttpService")
 local Config = require(script.Parent.Config)
 local State = require(script.Parent.State)
 local Router = require(script.Parent.Router)
+local Lifetime = require(script.Parent.Lifetime)
 
 local Transport = {}
 
@@ -18,6 +19,7 @@ local identity = nil -- function returning the hello fields
 local wakeRetry = nil
 local onNotify = nil
 local onSession = nil
+local onOutdated = nil
 
 local function post(route: string, body, timeoutHint: number?)
 	local encoded
@@ -119,6 +121,9 @@ local function handle(message)
 		State.server.pluginOutdated = status.pluginOutdated == true
 		State.peers = if type(status.peers) == "table" then status.peers else {}
 		State.changed()
+		if State.server.pluginOutdated and onOutdated then
+			task.spawn(onOutdated)
+		end
 	elseif message.kind == "notify" then
 		if onNotify then
 			onNotify(message)
@@ -160,6 +165,9 @@ local function loop(myGeneration: number)
 			if status == 426 or status == 401 then
 				setPhase("refused", explain(reason, status))
 				delay = 5
+				if status == 426 and onOutdated then
+					task.spawn(onOutdated)
+				end
 			elseif status == 409 then
 				setPhase("duplicate", explain(reason, status))
 				delay = 1
@@ -215,6 +223,7 @@ function Transport.configure(options)
 	identity = options.identity
 	onNotify = options.onNotify
 	onSession = options.onSession
+	onOutdated = options.onOutdated
 end
 
 -- The play server registers each player's client as a logical session it relays for.
@@ -292,9 +301,7 @@ function Transport.emit(event)
 	table.insert(eventQueue, event)
 end
 
-task.spawn(function()
-	while true do
-		task.wait(1)
+Lifetime.loop(1, function()
 		if #eventQueue > 0 and sessionToken then
 			local batch = eventQueue
 			eventQueue = {}
@@ -305,8 +312,18 @@ task.spawn(function()
 			end
 			post("/studio/v1/events", { sessionToken = sessionToken, events = batch })
 		end
-	end
+		return true
 end)
+
+-- SealCode's current plugin code, for a hot reload: { pluginHash, files = { { path, source } } }.
+function Transport.fetchBundle()
+	-- Only the install key is needed: a plugin too old for the bridge's protocol can still update.
+	local ok, status, body, err = post("/studio/v1/bundle", {})
+	if ok and type(body) == "table" and type(body.files) == "table" then
+		return body
+	end
+	return nil, if type(body) == "table" and body.message then body.message else (err or ("HTTP " .. tostring(status)))
+end
 
 function Transport.byeSync()
 	if sessionToken then

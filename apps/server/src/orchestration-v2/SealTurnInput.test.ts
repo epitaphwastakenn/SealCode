@@ -240,7 +240,7 @@ describe("SealTurnInput", () => {
     }),
   );
 
-  it.effect("gives a provider conversation Roqer's instructions once, when it starts", () =>
+  it.effect("gives a provider conversation the Studio instructions once, when it starts", () =>
     Effect.gen(function* () {
       const layer = SealTurnInput.layer.pipe(
         Layer.provide(
@@ -285,14 +285,14 @@ describe("SealTurnInput", () => {
             .pipe(Effect.map((prepared) => prepared.frame(prepared.text)));
 
         expect(yield* turn("conversation-1", true)).toBe(
-          "<sealcode_harness_instructions>\nSeals rule.\n\n<roqer_instructions>\nUse the Studio tools.\n</roqer_instructions>\n</sealcode_harness_instructions>\n\nbuild a tower",
+          "<sealcode_harness_instructions>\nSeals rule.\n\n<studio_instructions>\nUse the Studio tools.\n</studio_instructions>\n</sealcode_harness_instructions>\n\nbuild a tower",
         );
-        expect(yield* turn("conversation-1", false)).not.toContain("roqer_instructions");
+        expect(yield* turn("conversation-1", false)).not.toContain("studio_instructions");
         // A conversation SealCode has not given them to in this process gets them once.
-        expect(yield* turn("conversation-2", false)).toContain("<roqer_instructions>");
-        expect(yield* turn("conversation-2", false)).not.toContain("roqer_instructions");
+        expect(yield* turn("conversation-2", false)).toContain("<studio_instructions>");
+        expect(yield* turn("conversation-2", false)).not.toContain("studio_instructions");
         expect(yield* turn("conversation-3", true, "/elsewhere")).not.toContain(
-          "roqer_instructions",
+          "studio_instructions",
         );
       }).pipe(Effect.provide(layer));
     }),

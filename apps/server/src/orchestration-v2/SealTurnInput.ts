@@ -56,8 +56,8 @@ export const frameWithSealsInstructions = (instructions: string, text: string): 
     : `<sealcode_harness_instructions>\n${rules}\n</sealcode_harness_instructions>\n\n${text}`;
 };
 
-export const withRoqerInstructions = (instructions: string): string =>
-  `<roqer_instructions>\n${instructions.trim()}\n</roqer_instructions>`;
+export const withStudioInstructions = (instructions: string): string =>
+  `<studio_instructions>\n${instructions.trim()}\n</studio_instructions>`;
 
 export const withImageDescription = (text: string, description: string): string =>
   `<image-viewer-description>\n${description.trim()}\n</image-viewer-description>\n\n<user-request>\n${text}\n</user-request>`;
@@ -74,9 +74,9 @@ export const layer = Layer.effect(
     const textGeneration = yield* TextGeneration.TextGeneration;
     const roblox = yield* RobloxStudioConfig.RobloxStudioConfig;
     const studioBridge = yield* Effect.serviceOption(StudioBridge.StudioBridge);
-    // Roqer's instructions are long, so a provider conversation gets them once rather than on
+    // The Studio instructions are long, so a provider conversation gets them once rather than on
     // every turn: when it starts, and once more after a server restart or a settings change.
-    const roqerDelivered = new Map<string, string>();
+    const studioDelivered = new Map<string, string>();
 
     const lookupModel = (selection: ModelSelection) =>
       Effect.gen(function* () {
@@ -153,20 +153,20 @@ export const layer = Layer.effect(
           text = withImageDescription(input.text, description);
           attachments = attachments.filter((attachment) => attachment.type !== "image");
         }
-        const roqer = yield* roblox.instructions(current, {
+        const studio = yield* roblox.instructions(current, {
           workspaceRoot: input.workspaceRoot,
           cwd: input.cwd,
         });
         const conversation = input.providerThreadId;
-        const sendRoqer =
-          roqer !== undefined &&
+        const sendStudio =
+          studio !== undefined &&
           (input.freshConversation === true ||
             conversation === undefined ||
-            roqerDelivered.get(conversation) !== roqer);
-        if (roqer !== undefined && conversation !== undefined) {
-          roqerDelivered.set(conversation, roqer);
-          if (roqerDelivered.size > 512) {
-            roqerDelivered.delete(roqerDelivered.keys().next().value ?? conversation);
+            studioDelivered.get(conversation) !== studio);
+        if (studio !== undefined && conversation !== undefined) {
+          studioDelivered.set(conversation, studio);
+          if (studioDelivered.size > 512) {
+            studioDelivered.delete(studioDelivered.keys().next().value ?? conversation);
           }
         }
         // Unlike the instructions, the Studio selection changes between turns, so it rides on each.
@@ -179,7 +179,7 @@ export const layer = Layer.effect(
             : undefined;
         const harness = [
           current.sealsInstructions.trim(),
-          sendRoqer && roqer !== undefined ? withRoqerInstructions(roqer) : "",
+          sendStudio && studio !== undefined ? withStudioInstructions(studio) : "",
           studioContext ?? "",
         ]
           .filter((part) => part.length > 0)

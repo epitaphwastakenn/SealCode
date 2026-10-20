@@ -931,29 +931,42 @@ export const SourceControlWritingStyleSettings = Schema.Struct({
 export type SourceControlWritingStyleSettings = typeof SourceControlWritingStyleSettings.Type;
 
 /**
- * How SealCode connects agents to Roblox Studio. `roqer` runs Roqer's harness (its Studio bridge
- * and auto-installed plugin, its checks, skills and instructions); `sealcode` runs SealCode's own
- * bridge inside the server with its own plugin; `official` connects only the MCP server Roblox
- * Studio ships (`%LOCALAPPDATA%\Roblox\mcp.bat`).
+ * How SealCode connects agents to Roblox Studio. `sealcode` runs SealCode's own bridge inside the
+ * server with its own plugin; `official` connects only the MCP server Roblox Studio ships
+ * (`%LOCALAPPDATA%\Roblox\mcp.bat`).
  */
-export const RobloxStudioMode = Schema.Literals(["off", "roqer", "sealcode", "official"]);
+export const RobloxStudioMode = Schema.Literals(["off", "sealcode", "official"]);
 export type RobloxStudioMode = typeof RobloxStudioMode.Type;
+
+// SealCode's own bridge replaced the third-party harness that used to be called "roqer", so a
+// saved "roqer" mode reads back as "sealcode".
+const LegacyRoqerMode = Schema.Literal("roqer").pipe(
+  Schema.decodeTo(
+    RobloxStudioMode,
+    SchemaTransformation.transform({
+      decode: (): RobloxStudioMode => "sealcode",
+      encode: () => "roqer" as const,
+    }),
+  ),
+);
+
+const RobloxStudioModeSetting = Schema.Union([RobloxStudioMode, LegacyRoqerMode]);
 
 /** Which projects' threads see the Roblox tools and instructions. */
 export const RobloxStudioScope = Schema.Literals(["roblox-projects", "all-projects"]);
 export type RobloxStudioScope = typeof RobloxStudioScope.Type;
 
 export const RobloxStudioSettings = Schema.Struct({
-  mode: RobloxStudioMode.pipe(Schema.withDecodingDefault(Effect.succeed("off" as const))),
+  mode: RobloxStudioModeSetting.pipe(Schema.withDecodingDefault(Effect.succeed("off" as const))),
   scope: RobloxStudioScope.pipe(
     Schema.withDecodingDefault(Effect.succeed("roblox-projects" as const)),
   ),
-  /** Roqer's agent instructions and skill catalog on every turn of a Roblox thread. */
+  /** The Studio instructions and skill catalog, given to each new conversation of a Roblox thread. */
   instructions: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   autoPlaytest: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   /** In `sealcode` mode, each turn tells the agent what the user has selected in Studio. */
   studioContext: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
-  /** In `roqer` mode, also connect Roblox's own MCP for its mesh, texture and material generation. */
+  /** In `sealcode` mode, also connect Roblox's own MCP for its mesh, texture and material generation. */
   officialMcpAlongside: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   openCloudApiKey: TrimmedString.pipe(
     Schema.withDecodingDefault(Effect.succeed("")),
@@ -961,7 +974,7 @@ export const RobloxStudioSettings = Schema.Struct({
   ),
   creatorUserId: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
   creatorGroupId: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
-  /** Roqer's own Blender worker: headless jobs whose exports are re-imported and measured. */
+  /** Unused since the bridge's `blender` tool became always available; kept so old settings decode. */
   blenderWorker: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   /** Empty means the Blender found in the usual install folders. */
   blenderExecutable: TrimmedString.pipe(Schema.withDecodingDefault(Effect.succeed(""))),
@@ -1760,7 +1773,7 @@ export const ServerSettingsPatch = Schema.Struct({
   mcpServers: Schema.optionalKey(GlobalMcpServerMap),
   robloxStudio: Schema.optionalKey(
     Schema.Struct({
-      mode: Schema.optionalKey(RobloxStudioMode),
+      mode: Schema.optionalKey(RobloxStudioModeSetting),
       scope: Schema.optionalKey(RobloxStudioScope),
       instructions: Schema.optionalKey(Schema.Boolean),
       autoPlaytest: Schema.optionalKey(Schema.Boolean),
@@ -1769,7 +1782,6 @@ export const ServerSettingsPatch = Schema.Struct({
       openCloudApiKey: Schema.optionalKey(TrimmedString),
       creatorUserId: Schema.optionalKey(TrimmedString),
       creatorGroupId: Schema.optionalKey(TrimmedString),
-      blenderWorker: Schema.optionalKey(Schema.Boolean),
       blenderExecutable: Schema.optionalKey(TrimmedString),
       blenderMcp: Schema.optionalKey(Schema.Boolean),
       blenderMcpCommand: Schema.optionalKey(TrimmedString),

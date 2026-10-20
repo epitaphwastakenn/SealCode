@@ -10,6 +10,26 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.15.0 · 2026-10-20
+
+> SealCode now has its own Roblox Studio plugin: agents see their work, use the Creator Store and Blender, and you control every tool from Studio.
+
+### New
+
+- **SealCode's own Studio plugin** — A new plugin and connector built for agents replace the old third-party harness. Choose **SealCode** in Settings → Connections → Roblox Studio; the plugin installs itself, and settings from before switch over automatically.
+- **Screenshots in the chat** — When an agent takes a screenshot of Studio, it appears right in the conversation, so you see what the agent sees without opening anything.
+- **Camera control** — Agents move Studio's camera and frame what they built from any angle (overview, front, top, eye level) before taking a screenshot, and check their work from more than one side.
+- **Studio panel** — A panel in Studio's own look shows the connection and every action the agent takes. Pause the agent, make the place read-only, turn off running Luau, or switch off any single tool, with a search box to find it.
+- **Updates without reopening Studio** — The plugin updates itself in place when SealCode updates. When an agent does need to reopen a place, it closes the older window first instead of piling up Studio windows.
+- **Creator Store assets** — Agents search free assets, check their details and thumbnails, and insert them. Scripts inside arrive disabled until the agent has read them, and assets load even in places that are not published.
+- **Blender to Studio** — Agents model in Blender headless, get a topology report and a preview render for every job, and bring the model straight into Studio, no upload needed.
+- **UI design skill** — A new skill teaches agents to build screens that look designed: cartoon, simulator, modern, sci-fi and fantasy styles, buttons with depth and readable text, layouts, motion, and a visual review on phones, tablets and PCs.
+
+### Improved
+
+- **More forgiving tools** — Studio tools accept the argument spellings agents commonly use, the device simulator skips settings a device does not support instead of failing, and closed Studio windows disappear from the connection list right away.
+- **Agent instructions** — Agents follow a clear work loop: read, load the right skills, build in steps, look at the result, fix, and finish with a final screenshot.
+
 ## 2.14.0 · 2026-10-20
 
 > See what changed after every update.
@@ -28,7 +48,7 @@ each version's section as that release's notes. Newest version first:
 
 ### Improved
 
-- **Clean Blender topology** — When Roqer models in Blender, it now checks the mesh for ngons, loose geometry, flipped normals and other topology problems before exporting to Roblox, and follows clean-topology rules while modeling.
+- **Clean Blender topology** — When an agent models in Blender, SealCode now checks the mesh for ngons, loose geometry, flipped normals and other topology problems before exporting to Roblox, and follows clean-topology rules while modeling.
 - **Roblox UI that fits every device** — The roblox-gui skill now sizes interfaces with Scale and constraints, keeps text from being cut off or overflowing, keeps touch targets large enough, and checks each screen on phones, tablets, laptops, desktops and TV before calling it done.
 
 ## 2.12.0 · 2026-10-19

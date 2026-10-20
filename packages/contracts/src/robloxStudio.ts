@@ -3,7 +3,7 @@ import * as Schema from "effect/Schema";
 import { GlobalMcpStatus } from "./mcp.ts";
 import { RobloxStudioMode } from "./settings.ts";
 
-/** One place the Studio plugin connected, as Roqer's bridge reports it. */
+/** One place the Studio plugin connected, as the bridge reports it. */
 export const RobloxStudioPlace = Schema.Struct({
   instanceId: Schema.String,
   role: Schema.optionalKey(Schema.String),
@@ -45,14 +45,6 @@ export type RobloxStudioAlert = typeof RobloxStudioAlert.Type;
 
 export const RobloxStudioStatus = Schema.Struct({
   mode: RobloxStudioMode,
-  /** Roqer's bundled bridge, plugin and skill pack, as this server build found them. */
-  roqer: Schema.Struct({
-    available: Schema.Boolean,
-    version: Schema.optionalKey(Schema.String),
-    commit: Schema.optionalKey(Schema.String),
-    skills: Schema.optionalKey(Schema.Number),
-    problem: Schema.optionalKey(Schema.String),
-  }),
   studioInstalled: Schema.Boolean,
   officialMcpAvailable: Schema.Boolean,
   /** Status of every MCP server these settings run, by the ids SealCode gave them. */

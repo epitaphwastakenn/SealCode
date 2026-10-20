@@ -11,7 +11,7 @@
 /** Bumped only for wire-incompatible changes; a cosmetic plugin fix keeps it. */
 export const STUDIO_PROTOCOL_VERSION = 1;
 
-/** Avoids Roqer's 58741 so both bridges can run side by side. */
+/** A fixed port, away from other Studio bridges a user may run, so the plugin always knows where to call. */
 export const DEFAULT_STUDIO_BRIDGE_PORT = 58760;
 
 export const PLUGIN_KEY_HEADER = "x-sealcode-studio-key";

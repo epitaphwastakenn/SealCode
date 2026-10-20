@@ -1065,7 +1065,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Roblox Studio",
     to: "/settings/connections",
     searchTerms: [
-      "roqer roblox studio plugin mcp bridge blender skills rojo open cloud playtest luau",
+      "roblox studio sealcode plugin mcp bridge blender skills rojo open cloud playtest luau screenshot camera creator store",
     ],
   },
   {

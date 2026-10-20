@@ -48,7 +48,7 @@ const RECONNECT_BACKOFF = [
 
 const KEPT_STDERR_LINES = 20;
 
-/** Lets a server tell which SealCode thread a call belongs to, as Roqer scopes its skills and jobs. */
+/** Lets a server tell which SealCode thread a call belongs to, so it can scope its skills and jobs. */
 export const THREAD_SCOPE_META_KEY = "sealcode/threadId";
 
 type UpstreamTool = {
@@ -644,7 +644,7 @@ const make = Effect.gen(function* () {
 
   /**
    * A server whose process exited, or whose remote connection dropped, leaves the catalog at once
-   * and comes back with backoff, as Roqer restarts its Studio bridge. Reconnect still works at any
+   * and comes back with backoff, as when a Studio bridge restarts. Reconnect still works at any
    * point, and a configuration that changed meanwhile wins.
    */
   const recoverClosed = (closed: { readonly id: string; readonly client: Client }) =>

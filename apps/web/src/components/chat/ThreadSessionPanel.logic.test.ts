@@ -16,7 +16,7 @@ describe("threadMcpServers", () => {
       [
         status({ id: "blender", displayName: "Blender", state: "error", errorMessage: "exited" }),
         status({ id: "github", displayName: "GitHub" }),
-        status({ id: "robloxstudio", displayName: "Roblox Studio (Roqer)" }),
+        status({ id: "studio", displayName: "Roblox Studio (SealCode)" }),
       ],
     );
     expect(servers.map((server) => [server.id, server.state])).toEqual([

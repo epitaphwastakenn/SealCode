@@ -21,8 +21,7 @@ import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 
 const MODES: ReadonlyArray<{ value: RobloxStudioMode; label: string }> = [
-  { value: "roqer", label: "Roqer (full toolset)" },
-  { value: "sealcode", label: "SealCode bridge (preview)" },
+  { value: "sealcode", label: "SealCode" },
   { value: "official", label: "Roblox's own Studio MCP" },
   { value: "off", label: "Off" },
 ];
@@ -76,9 +75,7 @@ function BridgeSummary({ status }: { readonly status: RobloxStudioStatus }) {
   if (bridge === undefined) return null;
   const notices = [
     bridge.pluginUpdated
-      ? status.mode === "sealcode"
-        ? "The SealCode Studio plugin was just installed or updated. Places opened from now on load it; reopen places that were already open, or restart Roblox Studio."
-        : "The Studio plugin was just installed or updated: fully close and reopen Roblox Studio to load it."
+      ? "The SealCode Studio plugin was just installed or updated. Open places update themselves in a few seconds; a Studio that was open before SealCode first installed the plugin loads it when its next place opens."
       : undefined,
     bridge.pluginRejected
       ? `A Studio is still running an older plugin (${bridge.pluginRejected}); restart Roblox Studio.`
@@ -174,26 +171,23 @@ export function RobloxStudioSettings() {
       statusQuery.refresh();
     });
   };
-  const serverStatus = (id: string) => status?.servers.find((server) => server.id === id);
 
   return (
     <SettingsSection {...searchableSetting("roblox-studio")}>
       <p className="px-3 text-xs leading-relaxed text-muted-foreground sm:px-4">
-        Drive Roblox Studio from any agent. Roqer runs its Studio bridge, installs its Studio plugin
-        on every start, and gives agents its checks, Roblox skills and instructions. The SealCode
-        bridge runs inside SealCode with its own plugin, panel and safety switches in Studio; it
-        covers the core tools so far. Open or restart Roblox Studio after a plugin is installed.
+        Drive Roblox Studio from any agent. SealCode installs its own Studio plugin and keeps it up
+        to date in place. The plugin adds a Studio panel with a switch for every tool, plus safety
+        switches to pause the agent, make the place read-only or stop Luau. Agents can move the
+        camera and send screenshots to the chat, use Creator Store assets and model in Blender.
       </p>
       <SettingsRow
         title="Studio connection"
         description={
-          status?.roqer.problem && roblox.mode === "roqer"
-            ? status.roqer.problem
-            : roblox.mode === "sealcode"
-              ? `SealCode Studio bridge${status?.bridge?.version ? ` ${status.bridge.version}` : ""}: core Studio tools, a Studio panel showing agent activity, and pause or read-only switches.`
-              : status?.roqer.version
-                ? `Roqer ${status.roqer.version}${status.roqer.skills ? ` · ${String(status.roqer.skills)} skills` : ""}`
-                : "Choose how agents reach Roblox Studio."
+          roblox.mode === "sealcode"
+            ? `SealCode Studio connection${status?.bridge?.version ? ` v${status.bridge.version}` : ""}: the plugin, the Studio panel and the tool switches.`
+            : roblox.mode === "official"
+              ? "Only the MCP server Roblox Studio ships."
+              : "Choose how agents reach Roblox Studio."
         }
         control={
           <Select
@@ -219,7 +213,7 @@ export function RobloxStudioSettings() {
         <>
           <SettingsRow
             title="Projects"
-            description="Threads outside these projects do not get the Studio tools or instructions. A Roblox project has a Rojo project, place or model file, Roblox tooling such as wally.toml, or a .roqer file in its root."
+            description="Threads outside these projects do not get the Studio tools or instructions. A Roblox project has a Rojo project, place or model file, Roblox tooling such as wally.toml, or a .sealcode-roblox file in its root."
             control={
               <Select
                 value={roblox.scope}
@@ -242,17 +236,11 @@ export function RobloxStudioSettings() {
               </Select>
             }
           />
-          {roblox.mode === "roqer" || roblox.mode === "sealcode" ? (
+          {roblox.mode === "sealcode" ? (
             <>
               <SettingsRow
-                title={
-                  roblox.mode === "roqer" ? "Roqer instructions and skills" : "Studio instructions"
-                }
-                description={
-                  roblox.mode === "roqer"
-                    ? "Gives each new conversation Roqer's working rules and its Roblox skill catalog. The skills stay loadable with load_skill either way."
-                    : "Gives each new conversation SealCode's rules for working safely in Studio."
-                }
+                title="Studio instructions"
+                description="Gives each new conversation SealCode's rules and Roblox skills for working in Studio."
                 control={
                   <Switch
                     checked={roblox.instructions}
@@ -272,25 +260,23 @@ export function RobloxStudioSettings() {
                   />
                 }
               />
-              {roblox.mode === "sealcode" ? (
-                <SettingsRow
-                  title="Studio selection as context"
-                  description="Each message tells the agent what you have selected in Studio and which script is open, so you can say “this part” or “the open script”."
-                  control={
-                    <Switch
-                      checked={roblox.studioContext}
-                      onCheckedChange={(studioContext) => update({ studioContext })}
-                      aria-label="Studio selection as context"
-                    />
-                  }
-                />
-              ) : null}
+              <SettingsRow
+                title="Studio selection as context"
+                description="Each message tells the agent what you have selected in Studio and which script is open, so you can say “this part” or “the open script”."
+                control={
+                  <Switch
+                    checked={roblox.studioContext}
+                    onCheckedChange={(studioContext) => update({ studioContext })}
+                    aria-label="Studio selection as context"
+                  />
+                }
+              />
               <SettingsRow
                 title="Also connect Roblox's own MCP"
                 description={
                   status?.officialMcpAvailable === false
                     ? "Roblox Studio's mcp.bat was not found on this machine."
-                    : "Adds Roblox's mesh, texture and material generation beside the bridge's tools."
+                    : "Adds Roblox's mesh, texture and material generation beside SealCode's tools."
                 }
                 control={
                   <Switch
@@ -300,13 +286,9 @@ export function RobloxStudioSettings() {
                   />
                 }
               />
-            </>
-          ) : null}
-          {roblox.mode === "roqer" ? (
-            <>
               <SettingsRow
                 title="Open Cloud API key"
-                description="Needed to upload models, decals and animations. Stored in the server's secret store and passed only to the Studio bridge."
+                description="Needed to upload models, decals and animations. Kept in the server's secret store."
                 control={
                   <TextSetting
                     value={roblox.openCloudApiKey}
@@ -353,35 +335,22 @@ export function RobloxStudioSettings() {
                 }
               />
               <SettingsRow
-                title="Blender modeling (Roqer)"
+                title="Blender executable"
                 description={
                   status?.blender.problem ??
                   (status?.blender.version
                     ? `${status.blender.version} · ${status.blender.executable ?? ""}`
-                    : "Runs Blender jobs in the background, measures every export and renders a preview the agent checks.")
+                    : "Leave empty to use the Blender found in the usual install folders and Steam libraries.")
                 }
                 control={
-                  <Switch
-                    checked={roblox.blenderWorker}
-                    onCheckedChange={(blenderWorker) => update({ blenderWorker })}
-                    aria-label="Blender modeling with Roqer"
+                  <TextSetting
+                    value={roblox.blenderExecutable}
+                    placeholder={status?.blender.executable ?? "C:\\...\\blender.exe"}
+                    label="Blender executable"
+                    onCommit={(blenderExecutable) => update({ blenderExecutable })}
                   />
                 }
               />
-              {roblox.blenderWorker ? (
-                <SettingsRow
-                  title="Blender executable"
-                  description="Leave empty to use the Blender found in the usual install folders and Steam libraries."
-                  control={
-                    <TextSetting
-                      value={roblox.blenderExecutable}
-                      placeholder={status?.blender.executable ?? "C:\\...\\blender.exe"}
-                      label="Blender executable"
-                      onCommit={(blenderExecutable) => update({ blenderExecutable })}
-                    />
-                  }
-                />
-              ) : null}
             </>
           ) : null}
           <SettingsRow
@@ -427,7 +396,7 @@ export function RobloxStudioSettings() {
               {status.servers.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   {roblox.mode === "official" && !status.officialMcpAvailable
-                    ? "Roblox Studio's mcp.bat was not found. Install Roblox Studio, or choose Roqer."
+                    ? "Roblox Studio's mcp.bat was not found. Install Roblox Studio, or choose SealCode."
                     : "No Roblox server is running for these settings."}
                 </p>
               ) : (
@@ -441,9 +410,7 @@ export function RobloxStudioSettings() {
                   />
                 ))
               )}
-              {serverStatus("robloxstudio")?.state === "ready" || roblox.mode === "sealcode" ? (
-                <BridgeSummary status={status} />
-              ) : null}
+              {roblox.mode === "sealcode" ? <BridgeSummary status={status} /> : null}
             </div>
           ) : null}
         </>

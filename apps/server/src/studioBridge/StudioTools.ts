@@ -2638,7 +2638,7 @@ const make = Effect.gen(function* () {
       name: "blender",
       title: "Blender job",
       description:
-        "Runs a Python (bpy) script in headless Blender on this computer, in a fresh scene unless continueFrom names an earlier job's jobDir. JOB_DIR and job_path(name) point at the job folder. Afterwards SealCode measures every mesh (triangles, quads, ngons, non-manifold and open edges, loose geometry, dimensions, materials), renders a preview image and exports model.obj for import_mesh. Model in metres (1 unit = 1 m), keep clean quads, no ngons, apply scale, and fix every topology problem the report lists before importing.",
+        "Runs a Python (bpy) script in headless Blender on this computer, in a fresh scene unless continueFrom names an earlier job's jobDir. JOB_DIR and job_path(name) point at the job folder. Afterwards SealCode measures every mesh (triangles, quads, ngons, non-manifold and open edges, loose geometry, dimensions, materials), renders a preview sheet (front, right, top and three-quarter views in the model's colours) and exports model.obj for import_mesh. Model in metres (1 unit = 1 m), keep clean quads, no ngons, apply scale, and fix every topology problem the report lists before importing.",
       inputSchema: object(
         {
           script: {

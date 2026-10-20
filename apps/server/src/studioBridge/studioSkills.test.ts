@@ -35,7 +35,7 @@ describe("studio skills", () => {
     expect(first.ok).toBe(true);
     expect(first.loaded).toEqual(["roblox-gui/SKILL.md"]);
     expect(first.text).toContain('<skill name="roblox-gui" resource="SKILL.md">');
-    expect(first.text).toContain("MIT, TabooHarmony");
+    expect(first.text).toContain("built on roblox-brain, MIT");
     const again = renderSkillResources({
       library,
       name: "roblox-gui",

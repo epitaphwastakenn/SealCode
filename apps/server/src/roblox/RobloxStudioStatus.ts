@@ -1,13 +1,8 @@
-import type {
-  RobloxStudioBridgeStatus,
-  RobloxStudioPlace,
-  RobloxStudioStatus,
-} from "@t3tools/contracts";
+import type { RobloxStudioBridgeStatus, RobloxStudioStatus } from "@t3tools/contracts";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
 
 import * as GlobalMcpManager from "../mcp/GlobalMcpManager.ts";
 import * as ProcessRunner from "../processRunner.ts";
@@ -18,21 +13,12 @@ import {
   blenderMcpLaunchFor,
   MANAGED_SERVER_IDS,
   RobloxStudioConfig,
-  ROQER_SERVER_ID,
 } from "./RobloxStudioConfig.ts";
 
 const VERSION_TIMEOUT = "10 seconds";
 const VERSION_CACHE_MS = 5 * 60_000;
 
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value);
-
-const text = (value: unknown): string | undefined =>
-  typeof value === "string" && value.length > 0 ? value : undefined;
-
-const decodeJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown));
-
-/** SealCode's own bridge, in the shape Settings shows for either bridge. */
+/** The bridge, in the shape Settings shows. */
 export const studioBridgeStatus = (
   snapshot: StudioBridge.StudioBridgeSnapshot,
 ): RobloxStudioBridgeStatus => ({
@@ -56,49 +42,6 @@ export const studioBridgeStatus = (
   })),
 });
 
-/** The host's `get_bridge_status` answer, read into the shape Settings shows. */
-export const parseBridgeStatus = (payload: unknown): RobloxStudioBridgeStatus | undefined => {
-  if (!isRecord(payload) || !isRecord(payload.bridge)) return undefined;
-  const bridge = payload.bridge;
-  const http = isRecord(payload.http) ? payload.http : {};
-  const places: RobloxStudioPlace[] = (Array.isArray(http.instances) ? http.instances : [])
-    .filter(isRecord)
-    .flatMap((instance) => {
-      const instanceId = text(instance.instanceId);
-      if (instanceId === undefined) return [];
-      return [
-        {
-          instanceId,
-          ...(text(instance.role) === undefined ? {} : { role: text(instance.role) as string }),
-          ...(typeof instance.placeId === "number" ? { placeId: instance.placeId } : {}),
-          ...(text(instance.placeName) === undefined
-            ? {}
-            : { placeName: text(instance.placeName) as string }),
-          ...(typeof instance.isRunning === "boolean" ? { isRunning: instance.isRunning } : {}),
-          ...(text(instance.pluginVersion) === undefined
-            ? {}
-            : { pluginVersion: text(instance.pluginVersion) as string }),
-        } satisfies RobloxStudioPlace,
-      ];
-    });
-  return {
-    state: text(bridge.state) ?? "unknown",
-    ...(text(bridge.version) === undefined ? {} : { version: text(bridge.version) as string }),
-    ...(text(bridge.error) === undefined ? {} : { error: text(bridge.error) as string }),
-    restarts: typeof bridge.restarts === "number" ? bridge.restarts : 0,
-    pluginUpdated: bridge.pluginUpdated === true,
-    ...(text(bridge.pluginProblem) === undefined
-      ? {}
-      : { pluginProblem: text(bridge.pluginProblem) as string }),
-    ...(text(bridge.pluginRejected) === undefined
-      ? {}
-      : { pluginRejected: text(bridge.pluginRejected) as string }),
-    pluginConnected: http.pluginConnected === true,
-    places,
-    ...(text(payload.warning) === undefined ? {} : { warning: text(payload.warning) as string }),
-  };
-};
-
 export class RobloxStudioStatusService extends Context.Service<
   RobloxStudioStatusService,
   { readonly get: Effect.Effect<RobloxStudioStatus> }
@@ -112,7 +55,7 @@ const make = Effect.gen(function* () {
   const studioBridge = yield* StudioBridge.StudioBridge;
   const versions = new Map<string, { readonly version: string | undefined; readonly at: number }>();
 
-  /** Roqer's `blenderVersion`: an executable counts as Blender only when it answers as one. */
+  /** An executable counts as Blender only when it answers as one. */
   const blenderVersion = (executable: string) =>
     runner
       .run({
@@ -151,49 +94,27 @@ const make = Effect.gen(function* () {
       (status) => MANAGED_SERVER_IDS.has(status.id) && managedIds.has(status.id),
     );
 
-    let bridge: RobloxStudioBridgeStatus | undefined;
-    if (roblox.mode === "sealcode") {
-      bridge = studioBridgeStatus(yield* studioBridge.snapshot);
-    } else if (
-      servers.some((status) => status.id === ROQER_SERVER_ID && status.state === "ready")
-    ) {
-      const result = yield* manager.callServerTool({
-        serverId: ROQER_SERVER_ID,
-        toolName: "get_bridge_status",
-        arguments: {},
-      });
-      const first = result.content[0];
-      if (result.isError !== true && isRecord(first) && typeof first.text === "string") {
-        bridge = yield* decodeJson(first.text).pipe(
-          Effect.map(parseBridgeStatus),
-          Effect.orElseSucceed(() => undefined),
-        );
-      }
-    }
+    const bridge: RobloxStudioBridgeStatus | undefined =
+      roblox.mode === "sealcode" ? studioBridgeStatus(yield* studioBridge.snapshot) : undefined;
 
+    // The bridge's `blender` tool exists whenever SealCode mode is on.
     const executable = blenderExecutableFor(roblox, environment);
     const version =
-      roblox.blenderWorker && executable !== undefined
+      roblox.mode === "sealcode" && executable !== undefined
         ? yield* cachedVersion(executable)
         : undefined;
-    const blenderProblem = !roblox.blenderWorker
-      ? undefined
-      : executable === undefined
-        ? "Blender was not found. Choose blender.exe in Settings."
-        : version === undefined
-          ? `${executable} did not answer --version as Blender.`
-          : undefined;
+    const blenderProblem =
+      roblox.mode !== "sealcode"
+        ? undefined
+        : executable === undefined
+          ? "Blender was not found. Choose blender.exe in Settings."
+          : version === undefined
+            ? `${executable} did not answer --version as Blender.`
+            : undefined;
     const launch = blenderMcpLaunchFor(roblox, environment);
 
     return {
       mode: roblox.mode,
-      roqer: {
-        available: environment.roqer !== undefined && environment.nodeCommand !== undefined,
-        ...(environment.roqer?.version === undefined ? {} : { version: environment.roqer.version }),
-        ...(environment.roqer?.commit === undefined ? {} : { commit: environment.roqer.commit }),
-        ...(environment.roqer?.skills === undefined ? {} : { skills: environment.roqer.skills }),
-        ...(environment.roqerProblem === undefined ? {} : { problem: environment.roqerProblem }),
-      },
       studioInstalled: environment.studioInstalled,
       officialMcpAvailable: environment.officialMcpPath !== undefined,
       servers,

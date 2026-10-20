@@ -70,6 +70,16 @@ def _sealcode_preview(path):
     objs = [o for o in bpy.context.scene.objects if o.type == "MESH"]
     if not objs:
         return False
+    # Workbench shows a material's viewport colour; mirror each node Base Color into it so the
+    # preview shows the colours the model really has.
+    for mat in bpy.data.materials:
+        try:
+            if mat.use_nodes:
+                bsdf = next((n for n in mat.node_tree.nodes if n.type == "BSDF_PRINCIPLED"), None)
+                if bsdf is not None:
+                    mat.diffuse_color = tuple(bsdf.inputs["Base Color"].default_value)
+        except Exception:
+            pass
     lo = Vector((math.inf,) * 3); hi = Vector((-math.inf,) * 3)
     for o in objs:
         for c in o.bound_box:
@@ -77,15 +87,7 @@ def _sealcode_preview(path):
             lo = Vector(map(min, lo, w)); hi = Vector(map(max, hi, w))
     center = (lo + hi) / 2
     radius = max((hi - lo).length / 2, 0.01)
-    cam_data = bpy.data.cameras.new("SealCodePreviewCam")
-    cam = bpy.data.objects.new("SealCodePreviewCam", cam_data)
-    bpy.context.scene.collection.objects.link(cam)
-    direction = Vector((1.0, -1.2, 0.8)).normalized()
-    cam.location = center + direction * radius * 3.2
-    cam.rotation_euler = (center - cam.location).to_track_quat("-Z", "Y").to_euler()
-    cam_data.clip_end = radius * 20
     scene = bpy.context.scene
-    scene.camera = cam
     try:
         scene.render.engine = "BLENDER_WORKBENCH"
     except TypeError:
@@ -94,15 +96,62 @@ def _sealcode_preview(path):
         scene.display.shading.light = "STUDIO"
         scene.display.shading.color_type = "MATERIAL"
         scene.display.shading.show_cavity = True
+        scene.display.shading.show_object_outline = True
     except Exception:
         pass
-    scene.render.resolution_x = 960
-    scene.render.resolution_y = 720
+    try:
+        scene.world.color = (0.82, 0.84, 0.87)
+    except Exception:
+        pass
+    cell_w, cell_h = 480, 360
+    scene.render.resolution_x = cell_w
+    scene.render.resolution_y = cell_h
     scene.render.film_transparent = False
     scene.render.image_settings.file_format = "PNG"
-    scene.render.filepath = path
-    bpy.ops.render.render(write_still=True)
+    cam_data = bpy.data.cameras.new("SealCodePreviewCam")
+    cam_data.type = "ORTHO"
+    cam_data.ortho_scale = radius * 2.3
+    cam_data.clip_end = radius * 40
+    cam = bpy.data.objects.new("SealCodePreviewCam", cam_data)
+    scene.collection.objects.link(cam)
+    scene.camera = cam
+    # Four views on one sheet: front, right side, top, and a perspective three-quarter view.
+    views = [
+        ("front", Vector((0, -1, 0.0001)), "ORTHO"),
+        ("right", Vector((1, 0, 0.0001)), "ORTHO"),
+        ("top", Vector((0, -0.0001, 1)), "ORTHO"),
+        ("iso", Vector((1.0, -1.2, 0.8)), "PERSP"),
+    ]
+    files = []
+    for name, direction, kind in views:
+        cam_data.type = kind
+        direction = direction.normalized()
+        cam.location = center + direction * radius * (3.2 if kind == "PERSP" else 6)
+        cam.rotation_euler = (center - cam.location).to_track_quat("-Z", "Y").to_euler()
+        out = job_path("preview-" + name + ".png")
+        scene.render.filepath = out
+        bpy.ops.render.render(write_still=True)
+        files.append(out)
     bpy.data.objects.remove(cam, do_unlink=True)
+    try:
+        import numpy as np
+        sheet = np.ones((cell_h * 2, cell_w * 2, 4), dtype=np.float32)
+        for index, file in enumerate(files):
+            img = bpy.data.images.load(file)
+            px = np.array(img.pixels[:], dtype=np.float32).reshape(img.size[1], img.size[0], 4)
+            row, col = divmod(index, 2)
+            # Blender images start at the bottom row: the first view goes to the top-left.
+            y0 = (1 - row) * cell_h
+            sheet[y0:y0 + cell_h, col * cell_w:(col + 1) * cell_w] = px[:cell_h, :cell_w]
+            bpy.data.images.remove(img)
+        out_img = bpy.data.images.new("SealCodePreviewSheet", cell_w * 2, cell_h * 2, alpha=True)
+        out_img.pixels = sheet.ravel()
+        out_img.filepath_raw = path
+        out_img.file_format = "PNG"
+        out_img.save()
+    except Exception:
+        import shutil
+        shutil.copyfile(files[-1], path)
     return True
 
 def _sealcode_export(path):

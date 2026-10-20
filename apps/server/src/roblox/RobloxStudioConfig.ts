@@ -1,6 +1,5 @@
 import type { GlobalMcpServer, RobloxStudioSettings, ServerSettings } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import { resolveNodeExecutable } from "@t3tools/shared/nodeRuntime";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Crypto from "effect/Crypto";
@@ -8,36 +7,20 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
 
 import * as ServerConfig from "../config.ts";
 import { studioBridgeInstructions } from "../studioBridge/instructions.ts";
 import { loadStudioSkills, skillCatalog } from "../studioBridge/studioSkills.ts";
 import { DEFAULT_STUDIO_BRIDGE_PORT } from "../studioBridge/protocol.ts";
-import { unpackFiles } from "./roqerPack.ts";
 
-export const ROQER_SERVER_ID = "robloxstudio";
 export const STUDIO_BRIDGE_SERVER_ID = "studio";
 export const OFFICIAL_SERVER_ID = "roblox-studio-official";
 export const BLENDER_MCP_SERVER_ID = "blender";
 export const MANAGED_SERVER_IDS: ReadonlySet<string> = new Set([
-  ROQER_SERVER_ID,
   STUDIO_BRIDGE_SERVER_ID,
   OFFICIAL_SERVER_ID,
   BLENDER_MCP_SERVER_ID,
 ]);
-
-/** Roqer's bridge, plugin and agent bundle as `vendor/roqer-host/sync.ts` laid them out. */
-export interface RoqerResources {
-  readonly root: string;
-  readonly hostEntry: string;
-  readonly bridgeEntry: string;
-  readonly pluginPath: string;
-  readonly agentRoot: string;
-  readonly version: string | undefined;
-  readonly commit: string | undefined;
-  readonly skills: number | undefined;
-}
 
 /** Where SealCode's own Studio bridge listens, and the token its MCP endpoint wants. */
 export interface StudioBridgeEndpoint {
@@ -46,11 +29,7 @@ export interface StudioBridgeEndpoint {
 }
 
 export interface RobloxStudioEnvironment {
-  readonly roqer: RoqerResources | undefined;
   readonly studioBridge: StudioBridgeEndpoint | undefined;
-  readonly roqerProblem: string | undefined;
-  /** Runs the host: this server's own runtime unless it is a single executable. */
-  readonly nodeCommand: string | undefined;
   readonly officialMcpPath: string | undefined;
   readonly studioInstalled: boolean;
   readonly blenderJobsRoot: string;
@@ -106,45 +85,6 @@ export const managedServersFor = (
   if (roblox.mode === "off") return {};
   const servers: Record<string, GlobalMcpServer> = {};
 
-  if (roblox.mode === "roqer" && environment.roqer !== undefined && environment.nodeCommand) {
-    const roqer = environment.roqer;
-    const blender = roblox.blenderWorker ? blenderExecutableFor(roblox, environment) : undefined;
-    servers[ROQER_SERVER_ID] = {
-      id: ROQER_SERVER_ID,
-      displayName: "Roblox Studio (Roqer)",
-      enabled: true,
-      transport: "stdio",
-      command: environment.nodeCommand,
-      args: [
-        roqer.hostEntry,
-        "--bridge",
-        roqer.bridgeEntry,
-        "--plugin",
-        roqer.pluginPath,
-        "--agent",
-        roqer.agentRoot,
-        ...(blender === undefined
-          ? []
-          : ["--blender", blender, "--blender-jobs", environment.blenderJobsRoot]),
-      ],
-      // Saved values override what SealCode inherited, as Roqer passes them to its bridge;
-      // with nothing saved, inherited values pass through.
-      env: [
-        setting({ name: "ELECTRON_RUN_AS_NODE", value: "1" }),
-        ...(roblox.openCloudApiKey.length > 0
-          ? [setting({ name: "ROBLOX_OPEN_CLOUD_API_KEY", value: roblox.openCloudApiKey }, true)]
-          : []),
-        ...(roblox.creatorUserId.length > 0
-          ? [setting({ name: "ROBLOX_CREATOR_USER_ID", value: roblox.creatorUserId })]
-          : []),
-        ...(roblox.creatorGroupId.length > 0
-          ? [setting({ name: "ROBLOX_CREATOR_GROUP_ID", value: roblox.creatorGroupId })]
-          : []),
-      ],
-      headers: [],
-    };
-  }
-
   if (roblox.mode === "sealcode" && environment.studioBridge !== undefined) {
     const bridge = environment.studioBridge;
     servers[STUDIO_BRIDGE_SERVER_ID] = {
@@ -160,8 +100,7 @@ export const managedServersFor = (
   }
 
   const official =
-    roblox.mode === "official" ||
-    ((roblox.mode === "roqer" || roblox.mode === "sealcode") && roblox.officialMcpAlongside);
+    roblox.mode === "official" || (roblox.mode === "sealcode" && roblox.officialMcpAlongside);
   if (official && environment.officialMcpPath !== undefined) {
     servers[OFFICIAL_SERVER_ID] = {
       id: OFFICIAL_SERVER_ID,
@@ -195,49 +134,16 @@ export const managedServersFor = (
 };
 
 const ROBLOX_PROJECT_FILE =
-  /^(?:.+\.project\.json|.+\.rbxlx?|.+\.rbxmx?|wally\.toml|aftman\.toml|rokit\.toml|foreman\.toml|selene\.toml|\.roqer)$/i;
+  /^(?:.+\.project\.json|.+\.rbxlx?|.+\.rbxmx?|wally\.toml|aftman\.toml|rokit\.toml|foreman\.toml|selene\.toml|\.sealcode-roblox|\.roqer)$/i;
 
-/** A workspace whose root holds a Rojo project, a place or model file, Roblox tooling, or `.roqer`. */
+/**
+ * A workspace whose root holds a Rojo project, a place or model file, Roblox tooling, or the
+ * `.sealcode-roblox` marker (`.roqer`, from before SealCode had its own Studio connection, still counts).
+ */
 export const isRobloxProjectListing = (entries: ReadonlyArray<string>): boolean =>
   entries.some((entry) => ROBLOX_PROJECT_FILE.test(entry));
 
 const PROJECT_DETECTION_TTL_MS = 30_000;
-
-export const autoPlaytestInstruction = (enabled: boolean): string =>
-  enabled
-    ? "Automatic playtesting is enabled. After a change that benefits from runtime verification, run the smallest useful playtest, inspect observable evidence, and stop it before replying."
-    : "Automatic playtesting is disabled. Do not start a playtest merely for automatic verification; start one only when the user explicitly asks for testing or the request cannot be completed truthfully without runtime evidence.";
-
-/** The run settings Roqer appends to its developer instructions, for this thread's workspace. */
-export const runSettingsFor = (input: {
-  readonly roblox: RobloxStudioSettings;
-  readonly environment: Pick<RobloxStudioEnvironment, "detectedBlender" | "officialMcpPath">;
-  readonly rojoProjects: ReadonlyArray<string>;
-}): string => {
-  const { roblox } = input;
-  const lines = [autoPlaytestInstruction(roblox.autoPlaytest)];
-  if (input.rojoProjects.length > 0) {
-    lines.push(
-      `This workspace has Rojo project files: ${input.rojoProjects.map((file) => `\`${file}\``).join(", ")}. When the user's place syncs from one, link it with manage_instance link_project before editing scripts.`,
-    );
-  }
-  const blenderWorker =
-    roblox.blenderWorker && blenderExecutableFor(roblox, input.environment) !== undefined;
-  if (blenderWorker) {
-    lines.push("Roqer's Blender worker is on: the `blender` tool runs headless Blender jobs.");
-  }
-  if (roblox.blenderMcp) {
-    lines.push(
-      "A Blender MCP server is connected (its tools are named like `mcp__blender__execute_blender_code`): it drives the user's live Blender. Model there, export a GLB or FBX into a folder, then upload it with upload_asset and insert it.",
-    );
-  }
-  if (roblox.officialMcpAlongside && input.environment.officialMcpPath !== undefined) {
-    lines.push(
-      "Roblox's own Studio MCP is also connected (`roblox-studio-official`). Use it only for what Roqer's tools lack: generate_mesh, generate_texture, generate_material, generate_procedural_model, segment_mesh.",
-    );
-  }
-  return `## This SealCode run\n\n${lines.map((line) => `- ${line}`).join("\n")}`;
-};
 
 export interface RobloxStudioConfigShape {
   readonly environment: RobloxStudioEnvironment;
@@ -257,7 +163,7 @@ export interface RobloxStudioConfigShape {
     settings: Pick<ServerSettings, "robloxStudio" | "mcpServers">,
     workspaceRoot: string | undefined,
   ) => Effect.Effect<ReadonlySet<string>>;
-  /** Roqer's instructions for a turn in this workspace, or undefined when they do not apply. */
+  /** The Studio instructions for a turn in this workspace, or undefined when they do not apply. */
   readonly instructions: (
     settings: Pick<ServerSettings, "robloxStudio">,
     input: { readonly workspaceRoot: string | undefined; readonly cwd: string },
@@ -265,10 +171,7 @@ export interface RobloxStudioConfigShape {
 }
 
 const disabledEnvironment: RobloxStudioEnvironment = {
-  roqer: undefined,
   studioBridge: undefined,
-  roqerProblem: undefined,
-  nodeCommand: undefined,
   officialMcpPath: undefined,
   studioInstalled: false,
   blenderJobsRoot: "",
@@ -293,93 +196,7 @@ export const RobloxStudioConfig = Context.Reference<RobloxStudioConfigShape>(
   },
 );
 
-const RoqerManifest = Schema.Struct({
-  version: Schema.optional(Schema.String),
-  commit: Schema.optional(Schema.String),
-  skills: Schema.optional(Schema.Number),
-});
-const decodeRoqerManifest = Schema.decodeUnknownEffect(Schema.fromJsonString(RoqerManifest));
-
-/**
- * The server build carries Roqer as `roqer.pack.gz` beside its chunks; it is unpacked once per
- * build into the state directory, and older unpacked builds are removed.
- */
-const unpackBundledRoqer = Effect.fn("RobloxStudioConfig.unpackBundledRoqer")(function* (
-  stateDir: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const packPath = path.resolve(import.meta.dirname, "roqer.pack.gz");
-  if (!(yield* fs.exists(packPath).pipe(Effect.orElseSucceed(() => false)))) return undefined;
-  const packed = yield* fs.readFile(packPath);
-  const crypto = yield* Crypto.Crypto;
-  const digest = Buffer.from(yield* crypto.digest("SHA-256", packed))
-    .toString("hex")
-    .slice(0, 16);
-  const parent = path.join(stateDir, "roqer");
-  const target = path.join(parent, `bundle-${digest}`);
-  if (!(yield* fs.exists(path.join(target, "manifest.json")))) {
-    const staging = `${target}.partial-${process.pid}`;
-    yield* fs.remove(staging, { recursive: true, force: true }).pipe(Effect.ignore);
-    for (const file of unpackFiles(packed)) {
-      const destination = path.join(staging, ...file.path.split("/"));
-      yield* fs.makeDirectory(path.dirname(destination), { recursive: true });
-      yield* fs.writeFile(destination, file.data);
-    }
-    // Another server unpacking the same build may have won the race; its copy is identical.
-    yield* fs
-      .rename(staging, target)
-      .pipe(Effect.catch(() => fs.remove(staging, { recursive: true, force: true })));
-  }
-  for (const entry of yield* fs.readDirectory(parent).pipe(Effect.orElseSucceed(() => []))) {
-    if (entry.startsWith("bundle-") && entry !== `bundle-${digest}`) {
-      yield* fs
-        .remove(path.join(parent, entry), { recursive: true, force: true })
-        .pipe(Effect.ignore);
-    }
-  }
-  return target;
-});
-
-const resolveRoqerResources = Effect.fn("RobloxStudioConfig.resolveRoqerResources")(function* (
-  stateDir: string,
-) {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const environment = yield* HostProcess.Environment;
-  const bundled = yield* unpackBundledRoqer(stateDir).pipe(
-    Effect.catchCause((cause) =>
-      Effect.logWarning("could not unpack the bundled Roqer", { cause }).pipe(Effect.as(undefined)),
-    ),
-  );
-  const candidates = [
-    environment.SEALCODE_ROQER_DIR,
-    bundled,
-    // Source checkout: apps/server/src/roblox.
-    path.resolve(import.meta.dirname, "../../resources/roqer"),
-  ].filter((candidate): candidate is string => typeof candidate === "string" && candidate !== "");
-  for (const root of candidates) {
-    const hostEntry = path.join(root, "host", "main.mjs");
-    if (!(yield* fs.exists(hostEntry).pipe(Effect.orElseSucceed(() => false)))) continue;
-    const manifest = yield* fs.readFileString(path.join(root, "manifest.json")).pipe(
-      Effect.flatMap(decodeRoqerManifest),
-      Effect.orElseSucceed(() => ({}) as typeof RoqerManifest.Type),
-    );
-    return {
-      root,
-      hostEntry,
-      bridgeEntry: path.join(root, "bridge", "dist", "index.mjs"),
-      pluginPath: path.join(root, "plugin", "MCPPlugin.rbxmx"),
-      agentRoot: path.join(root, "agent"),
-      version: manifest.version,
-      commit: manifest.commit,
-      skills: manifest.skills,
-    } satisfies RoqerResources;
-  }
-  return undefined;
-});
-
-/** Roqer's `detectBlender`, plus Steam libraries on other drives. */
+/** Blender in its usual install folders, plus Steam libraries on other drives. */
 export const detectBlender = Effect.fn("RobloxStudioConfig.detectBlender")(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
@@ -451,11 +268,6 @@ const make = Effect.gen(function* () {
   const env = yield* HostProcess.Environment;
   const home = yield* HostProcess.HomeDirectory;
 
-  const roqer = yield* resolveRoqerResources(config.stateDir);
-  const nodeCommand = yield* resolveNodeExecutable("Roblox Studio").pipe(
-    Effect.map((command): string | undefined => command),
-    Effect.orElseSucceed(() => undefined),
-  );
   const localAppData = platform === "win32" ? env.LOCALAPPDATA?.trim() : undefined;
   const officialMcpPath =
     localAppData === undefined || localAppData === ""
@@ -499,18 +311,10 @@ const make = Effect.gen(function* () {
   const studioSkillCatalog = skillCatalog(yield* loadStudioSkills);
 
   const environment: RobloxStudioEnvironment = {
-    roqer,
     studioBridge,
-    roqerProblem:
-      roqer === undefined
-        ? "This SealCode build has no Roqer bundle (apps/server/resources/roqer)."
-        : nodeCommand === undefined
-          ? "Roqer needs Node.js: install it and make sure node is on PATH."
-          : undefined,
-    nodeCommand,
     officialMcpPath: officialAvailable ? officialMcpPath : undefined,
     studioInstalled,
-    blenderJobsRoot: path.join(config.stateDir, "roqer", "blender-jobs"),
+    blenderJobsRoot: path.join(config.stateDir, "blender-jobs"),
     detectedBlender: yield* detectBlender().pipe(Effect.orElseSucceed(() => undefined)),
     detectedBlenderMcp,
   };
@@ -544,39 +348,17 @@ const make = Effect.gen(function* () {
       return (yield* appliesTo(settings, workspaceRoot)) ? new Set<string>() : new Set(managed);
     });
 
-  let instructionsTemplate: string | undefined;
-  const loadInstructions = Effect.gen(function* () {
-    if (instructionsTemplate !== undefined) return instructionsTemplate;
-    if (roqer === undefined) return undefined;
-    const text = yield* fs
-      .readFileString(path.join(roqer.agentRoot, "sealcode-instructions.md"))
-      .pipe(Effect.orElseSucceed(() => ""));
-    if (text.trim() === "") return undefined;
-    instructionsTemplate = text.trim();
-    return instructionsTemplate;
-  });
-
   const instructions: RobloxStudioConfigShape["instructions"] = (settings, input) =>
     Effect.gen(function* () {
       const roblox = settings.robloxStudio;
-      if (roblox.mode === "sealcode" && roblox.instructions) {
-        if (!(yield* appliesTo(settings, input.workspaceRoot ?? input.cwd))) return undefined;
-        return studioBridgeInstructions({
-          skillCatalog: studioSkillCatalog,
-          autoPlaytest: roblox.autoPlaytest,
-          officialMcp: roblox.officialMcpAlongside && environment.officialMcpPath !== undefined,
-          blenderMcp: roblox.blenderMcp,
-        });
-      }
-      if (roblox.mode !== "roqer" || !roblox.instructions) return undefined;
+      if (roblox.mode !== "sealcode" || !roblox.instructions) return undefined;
       if (!(yield* appliesTo(settings, input.workspaceRoot ?? input.cwd))) return undefined;
-      const base = yield* loadInstructions;
-      if (base === undefined) return undefined;
-      const rojoProjects = (yield* fs.readDirectory(input.cwd).pipe(Effect.orElseSucceed(() => [])))
-        .filter((entry) => entry.toLowerCase().endsWith(".project.json"))
-        .sort()
-        .map((entry) => path.join(input.cwd, entry));
-      return `${base}\n\n${runSettingsFor({ roblox, environment, rojoProjects })}`;
+      return studioBridgeInstructions({
+        skillCatalog: studioSkillCatalog,
+        autoPlaytest: roblox.autoPlaytest,
+        officialMcp: roblox.officialMcpAlongside && environment.officialMcpPath !== undefined,
+        blenderMcp: roblox.blenderMcp,
+      });
     });
 
   return {

@@ -175,22 +175,27 @@ describe("GlobalMcpManager", () => {
       NodeOS.tmpdir(),
       `sealcode-mcp-managed-${NodeCrypto.randomUUID()}.log`,
     );
-    const managed = { ...fakeServer("robloxstudio", markerPath), displayName: "Roqer" };
+    const managed = {
+      ...fakeServer("studio", markerPath),
+      displayName: "Roblox Studio (SealCode)",
+    };
     const layer = GlobalMcpManager.layer.pipe(
       Layer.provideMerge(ServerSettingsService.layerTest({ mcpServers: {} })),
-      Layer.provide(withManagedServers({ robloxstudio: managed })),
+      Layer.provide(withManagedServers({ studio: managed })),
     );
     return Effect.gen(function* () {
       const manager = yield* GlobalMcpManager.GlobalMcpManager;
       yield* manager.reload;
       expect(yield* manager.getStatuses).toMatchObject([
-        { id: "robloxstudio", displayName: "Roqer", state: "ready", toolCount: 1 },
+        { id: "studio", displayName: "Roblox Studio (SealCode)", state: "ready", toolCount: 1 },
       ]);
-      expect((yield* manager.getCatalog).tools[0]?.serverDisplayName).toBe("Roqer");
+      expect((yield* manager.getCatalog).tools[0]?.serverDisplayName).toBe(
+        "Roblox Studio (SealCode)",
+      );
 
       const serverSettings = yield* ServerSettingsService;
       yield* serverSettings.updateSettings({
-        mcpServers: { robloxstudio: { ...managed, displayName: "Mine" } },
+        mcpServers: { studio: { ...managed, displayName: "Mine" } },
       });
       yield* manager.reload;
       expect((yield* manager.getCatalog).tools[0]?.serverDisplayName).toBe("Mine");
@@ -206,7 +211,7 @@ describe("GlobalMcpManager", () => {
       NodeOS.tmpdir(),
       `sealcode-mcp-recover-${NodeCrypto.randomUUID()}.log`,
     );
-    const server = fakeServer("robloxstudio", markerPath, [
+    const server = fakeServer("studio", markerPath, [
       { name: "MCP_TEST_EXIT_AFTER_CALL", value: "1", sensitive: false },
     ]);
     const layer = GlobalMcpManager.layer.pipe(
@@ -222,7 +227,7 @@ describe("GlobalMcpManager", () => {
       yield* manager.reload;
       yield* manager.callTool({
         scope,
-        canonicalToolName: "mcp__robloxstudio__get_state",
+        canonicalToolName: "mcp__studio__get_state",
         arguments: {},
       });
       yield* awaitState(manager, "error");
@@ -230,7 +235,7 @@ describe("GlobalMcpManager", () => {
 
       yield* awaitState(manager, "ready");
       expect((yield* manager.getCatalog).tools.map((entry) => entry.canonicalName)).toEqual([
-        "mcp__robloxstudio__get_state",
+        "mcp__studio__get_state",
       ]);
       expect(NodeFS.readFileSync(markerPath, "utf8").trim().split(/\r?\n/u)).toHaveLength(2);
     }).pipe(

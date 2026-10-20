@@ -7,7 +7,8 @@
  *   node vendor/roqer-host/sync.ts --roqer <checkout> [--skip-build]
  *
  * The checkout needs `npm ci` once; without `--skip-build` this runs Roqer's own bridge and
- * plugin builds (the plugin build fetches LibMP from Roblox's GitHub releases).
+ * plugin builds (the plugin build fetches LibMP from Roblox's GitHub releases). The patches in
+ * `vendor/roqer-host/patches` are applied to the checkout first.
  */
 import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
@@ -51,6 +52,28 @@ const esbuild = NodePath.join(roqer, "node_modules/esbuild/bin/esbuild");
 if (!NodeFS.existsSync(esbuild)) {
   console.error(`[sync-roqer] ${esbuild} is missing: run npm ci in the Roqer checkout first.`);
   process.exit(1);
+}
+
+// SealCode's own changes to Roqer's sources, applied in the checkout so the next sync from a
+// fresh checkout keeps them. A patch already applied (it reverses cleanly) is left as it is.
+const patchesRoot = NodePath.join(hostSource, "patches");
+const patches = NodeFS.readdirSync(patchesRoot)
+  .filter((file) => file.endsWith(".patch"))
+  .sort();
+for (const name of patches) {
+  const patch = NodePath.join(patchesRoot, name);
+  const git = (...args: string[]) =>
+    NodeChildProcess.spawnSync("git", ["apply", ...args, patch], { cwd: roqer, encoding: "utf8" });
+  if (git("--check", "--reverse").status === 0) {
+    console.log(`[sync-roqer] patch ${name} already applied`);
+    continue;
+  }
+  const applied = git();
+  if (applied.status !== 0) {
+    console.error(`[sync-roqer] patch ${name} does not apply to this checkout:\n${applied.stderr}`);
+    process.exit(1);
+  }
+  console.log(`[sync-roqer] applied patch ${name}`);
 }
 
 if (!skipBuild) {
@@ -248,6 +271,7 @@ NodeFS.writeFileSync(
     {
       source: "https://github.com/S4US/Roqer",
       commit,
+      patches,
       version: rootPackage.version,
       bridgeTools: tools.length,
       skills: catalog.length,

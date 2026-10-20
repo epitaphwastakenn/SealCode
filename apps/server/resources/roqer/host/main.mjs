@@ -19140,6 +19140,14 @@ def scene_contents():
                 mesh.calc_loop_triangles()
                 entry["triangles"] = len(mesh.loop_triangles)
                 triangles += entry["triangles"]
+                # The faces as modeled, which an exported GLB no longer has:
+                # it arrives as triangles only.
+                sides = numpy.empty(len(mesh.polygons), dtype=numpy.int32)
+                mesh.polygons.foreach_get("loop_total", sides)
+                entry["verts"] = len(mesh.vertices)
+                entry["faces"] = len(sides)
+                entry["quads"] = int((sides == 4).sum())
+                entry["ngons"] = int((sides > 4).sum())
                 evaluated.to_mesh_clear()
             except Exception:
                 pass
@@ -19175,6 +19183,8 @@ from mathutils.bvhtree import BVHTree
 args = sys.argv[sys.argv.index("--") + 1:]
 model_path, preview_path = args[0], args[1]
 model_preview_path = args[2] if len(args) > 2 else None
+# The wireframe sheet sits beside the preview: preview-x.png, preview-x-wire.png.
+wire_path = os.path.splitext(preview_path)[0] + "-wire.png"
 extension = os.path.splitext(model_path)[1].lower()
 if extension == ".blend":
     # A job's own saved scene, measured as it would export: what is hidden is
@@ -19537,10 +19547,240 @@ def layout_facts():
     }
 
 
+# Topology: each object's faces as modeled and the triangles Roblox receives,
+# and the triangles a generated mesh gives itself away by: fans out of one
+# vertex, slivers, and coplanar faces over each other. Half of a thin quad (a
+# strip down a curve, a plank's side) is thin by design and is not counted.
+TOPOLOGY_SECONDS = 8.0
+FLAT_HEIGHT = 0.001
+THIN_ANGLE = math.radians(4.0)
+LONG_RATIO = 15.0
+FAN_EDGES = 12
+MAX_SPOTS = 3
+game_points, game_tris, game_owner = [], [], []
+
+
+def welded_triangles(item):
+    """The object's triangles in Blender coordinates as the export makes them,
+    welding the vertices the exporter split for flat shading."""
+    evaluated = item.evaluated_get(depsgraph)
+    mesh = evaluated.to_mesh()
+    mesh.calc_loop_triangles()
+    matrix = item.matrix_world
+    index, points, remap = {}, [], []
+    for vertex in mesh.vertices:
+        co = matrix @ vertex.co
+        key = (round(co.x, 4), round(co.y, 4), round(co.z, 4))
+        if key not in index:
+            index[key] = len(points)
+            points.append(co)
+        remap.append(index[key])
+    tris = [tuple(remap[i] for i in tri.vertices) for tri in mesh.loop_triangles]
+    sides = [poly.loop_total for poly in mesh.polygons]
+    evaluated.to_mesh_clear()
+    return points, tris, sides
+
+
+def spot(point):
+    return [r2(point.x), r2(point.y), r2(point.z)]
+
+
+def strip_half(points, tri, edge, faces_of, normal):
+    """Whether the triangle and its neighbour across its longest edge make one
+    flat, convex quad whose opposite sides pair up: a strip, not a sliver."""
+    u, v = edge
+    w = next(i for i in tri if i not in edge)
+    others = [t for t in faces_of.get((min(u, v), max(u, v)), ()) if t is not tri]
+    for other in others:
+        x = next((i for i in other if i not in edge), None)
+        if x is None:
+            continue
+        pu, pv, pw, px = points[u], points[v], points[w], points[x]
+        other_normal = (pv - pu).cross(px - pu)
+        if other_normal.length < 1e-12 or abs(other_normal.normalized().dot(normal)) < 0.999:
+            continue
+        side = lambda p: (px - pw).cross(p - pw).dot(normal)
+        if side(pu) * side(pv) >= 0:
+            continue
+        pairs = (((pw - pu).length, (px - pv).length), ((pv - pw).length, (pu - px).length))
+        if all(min(a, b) > 0 and max(a, b) / min(a, b) <= 6.0 for a, b in pairs):
+            return True
+    return False
+
+
+def topology_facts():
+    started = time.monotonic()
+    report, complete = [], True
+    for item in meshes:
+        if time.monotonic() - started > TOPOLOGY_SECONDS:
+            complete = False
+            break
+        points, tris, sides = welded_triangles(item)
+        base = len(game_points)
+        game_points.extend(points)
+        game_tris.extend(tuple(base + i for i in tri) for tri in tris)
+        game_owner.extend(item.name for _ in tris)
+        entry = {"object": item.name, "verts": len(points), "faces": len(sides),
+                 "quads": sum(1 for n in sides if n == 4), "tris": sum(1 for n in sides if n == 3),
+                 "ngons": sum(1 for n in sides if n > 4), "gameTris": len(tris)}
+        faces_of, edges_at, area_of = {}, {}, {}
+        for tri in tris:
+            for k in range(3):
+                a, b = tri[k], tri[(k + 1) % 3]
+                if a == b:
+                    continue
+                faces_of.setdefault((min(a, b), max(a, b)), []).append(tri)
+                edges_at.setdefault(a, set()).add(b)
+                edges_at.setdefault(b, set()).add(a)
+        flat, thin, long = [], [], []
+        for tri in tris:
+            a, b, c = (points[i] for i in tri)
+            cross = (b - a).cross(c - a)
+            area = cross.length / 2
+            for i in tri:
+                area_of.setdefault(i, []).append(area)
+            lengths = [((b - a).length, (tri[0], tri[1])), ((c - b).length, (tri[1], tri[2])), ((a - c).length, (tri[2], tri[0]))]
+            longest, edge = max(lengths, key=lambda pair: pair[0])
+            if longest <= 1e-9:
+                continue
+            centre = (a + b + c) / 3
+            if 2 * area / longest <= FLAT_HEIGHT * longest or area < 1e-8:
+                flat.append(centre)
+                continue
+            angles = []
+            for p, q, r in ((a, b, c), (b, c, a), (c, a, b)):
+                if (q - p).length > 1e-9 and (r - p).length > 1e-9:
+                    angles.append((q - p).angle(r - p))
+            ratio = longest * longest / (2 * area)
+            if (angles and min(angles) < THIN_ANGLE) or ratio > LONG_RATIO:
+                if strip_half(points, tri, edge, faces_of, cross.normalized()):
+                    continue
+                (thin if angles and min(angles) < THIN_ANGLE else long).append(centre)
+        fans = []
+        for i, linked in edges_at.items():
+            if len(linked) <= FAN_EDGES:
+                continue
+            areas = [value for value in area_of.get(i, []) if value > 0]
+            # A cap's even fan around its centre is ordinary; a fan whose
+            # triangles differ widely is an ngon filled from one corner.
+            if areas and max(areas) <= 2.5 * min(areas):
+                continue
+            fans.append((len(linked), points[i]))
+        fans.sort(key=lambda pair: -pair[0])
+        for key, found in (("flat", flat), ("thin", thin), ("long", long)):
+            if found:
+                entry[key] = {"count": len(found), "at": [spot(p) for p in found[:MAX_SPOTS]]}
+        if fans:
+            entry["fans"] = {"count": len(fans), "most": fans[0][0], "at": [spot(p) for _, p in fans[:MAX_SPOTS]]}
+        report.append(entry)
+    return report, complete
+
+
+def coplanar_overlaps(deadline):
+    """Faces in the same plane, facing the same way, that overlap: z-fighting."""
+    planes = {}
+    shapes = []
+    for t, tri in enumerate(game_tris):
+        a, b, c = (game_points[i] for i in tri)
+        normal = (b - a).cross(c - a)
+        if normal.length < 1e-10:
+            shapes.append(None)
+            continue
+        normal.normalize()
+        centre = (a + b + c) / 3
+        shapes.append((normal, centre, max((p - centre).length for p in (a, b, c))))
+        key = (round(normal.x, 2), round(normal.y, 2), round(normal.z, 2))
+        planes.setdefault(key, {}).setdefault(math.floor(normal.dot(a) / 0.01), []).append(t)
+    found, complete = {}, True
+    for buckets in planes.values():
+        for slot, members in buckets.items():
+            if time.monotonic() > deadline:
+                return found, False
+            near = members + buckets.get(slot + 1, [])
+            for i, first in enumerate(members):
+                n1, c1, r1 = shapes[first]
+                for second in near[i + 1:]:
+                    n2, c2, r2_ = shapes[second]
+                    if (c1 - c2).length >= r1 + r2_ or n1.dot(n2) < 0.9999 or abs(n1.dot(game_points[game_tris[second][0]]) - n1.dot(game_points[game_tris[first][0]])) > 1e-3:
+                        continue
+                    if overlap_2d(first, second, n1):
+                        pair = tuple(sorted((game_owner[first], game_owner[second])))
+                        if pair not in found:
+                            found[pair] = [0, (c1 + c2) / 2]
+                        found[pair][0] += 1
+    return found, complete
+
+
+def overlap_2d(first, second, normal):
+    axis_u = normal.orthogonal().normalized()
+    axis_v = normal.cross(axis_u)
+    one = [(p.dot(axis_u), p.dot(axis_v)) for p in (game_points[i] for i in game_tris[first])]
+    two = [(p.dot(axis_u), p.dot(axis_v)) for p in (game_points[i] for i in game_tris[second])]
+    for shape in (one, two):
+        for k in range(3):
+            (x1, y1), (x2, y2) = shape[k], shape[(k + 1) % 3]
+            ax, ay = y2 - y1, x1 - x2
+            length = math.hypot(ax, ay)
+            if length < 1e-12:
+                return False
+            p1 = [(x * ax + y * ay) / length for x, y in one]
+            p2 = [(x * ax + y * ay) / length for x, y in two]
+            # Touching along an edge is no overlap: they must pass into each other.
+            if min(max(p1), max(p2)) - max(min(p1), min(p2)) <= 1e-4:
+                return False
+    return True
+
+
 # Four views in one image, so a mistake one angle hides shows in another and no
 # view depends on which way the model faces: side and top (orthographic), then
 # two opposite three-quarter views.
 PANEL_W, PANEL_H = 512, 384
+WIRE_SECONDS = 10.0
+
+
+def draw_wire(panel, camera, distance, deadline):
+    """The game triangles' edges over the panel, each piece of an edge drawn
+    where the camera sees it: a ray to it hits nothing nearer first."""
+    from bpy_extras.object_utils import world_to_camera_view
+    if not game_tris or time.monotonic() > deadline:
+        return False
+    tree = BVHTree.FromPolygons(game_points, game_tris)
+    edges = {(min(a, b), max(a, b)) for tri in game_tris for a, b in ((tri[0], tri[1]), (tri[1], tri[2]), (tri[2], tri[0]))}
+    eye = camera.matrix_world.translation
+    forward = (camera.matrix_world.to_3x3() @ Vector((0, 0, -1))).normalized()
+    ortho = camera.data.type == "ORTHO"
+    tolerance = max(distance * 2e-3, 1e-4)
+    project = lambda p: world_to_camera_view(scene, camera, p)
+    pixels = []
+    pieces_per_edge = 1 if len(edges) > 6000 else None
+    for a, b in edges:
+        if time.monotonic() > deadline:
+            return False
+        pa, pb = game_points[a], game_points[b]
+        sa, sb = project(pa), project(pb)
+        span = math.hypot((sb.x - sa.x) * PANEL_W, (sb.y - sa.y) * PANEL_H)
+        pieces = pieces_per_edge or max(1, min(12, int(span / 6)))
+        for k in range(pieces):
+            mid = pa.lerp(pb, (k + 0.5) / pieces)
+            origin = mid - forward * distance * 2 if ortho else eye
+            ray = mid - origin
+            reach = ray.length
+            hit = tree.ray_cast(origin, ray / reach, reach + tolerance)[0]
+            if hit is not None and (hit - origin).length < reach - tolerance:
+                continue
+            s0, s1 = project(pa.lerp(pb, k / pieces)), project(pa.lerp(pb, (k + 1) / pieces))
+            pixels.append((s0.x * PANEL_W, s0.y * PANEL_H, s1.x * PANEL_W, s1.y * PANEL_H))
+    import numpy
+    if pixels:
+        lines = numpy.array(pixels, dtype=numpy.float32)
+        steps = numpy.maximum(numpy.ceil(numpy.hypot(lines[:, 2] - lines[:, 0], lines[:, 3] - lines[:, 1])).astype(numpy.int32), 1) + 1
+        which = numpy.repeat(numpy.arange(len(lines)), steps)
+        t = numpy.concatenate([numpy.linspace(0.0, 1.0, n, dtype=numpy.float32) for n in steps])
+        x = numpy.round(lines[which, 0] + (lines[which, 2] - lines[which, 0]) * t).astype(numpy.int32)
+        y = numpy.round(lines[which, 1] + (lines[which, 3] - lines[which, 1]) * t).astype(numpy.int32)
+        keep = (x >= 0) & (x < PANEL_W) & (y >= 0) & (y < PANEL_H)
+        panel[y[keep], x[keep], :3] = (0.05, 0.05, 0.05)
+    return True
 VIEWS = [("ORTHO", (1.0, 0.0, 0.0)), ("ORTHO", (0.0, 0.0, 1.0)), ("PERSP", (1.0, -1.2, 0.8)), ("PERSP", (-1.0, 1.2, 0.8))]
 
 
@@ -19565,6 +19805,10 @@ def render_views(size, center):
     scene.camera = camera
     radius = max(size.length / 2, 0.01)
     sheet = numpy.ones((PANEL_H * 2, PANEL_W * 2, 4), dtype=numpy.float32)
+    # The same views with the game triangles drawn over a lighter solid.
+    wire = numpy.ones((PANEL_H * 2, PANEL_W * 2, 4), dtype=numpy.float32)
+    wired = True
+    deadline = time.monotonic() + WIRE_SECONDS
     for index, (kind, toward) in enumerate(VIEWS):
         direction = Vector(toward).normalized()
         camera.data.type = kind
@@ -19589,14 +19833,24 @@ def render_views(size, center):
         row = PANEL_H if index < 2 else 0
         column = PANEL_W * (index % 2)
         sheet[row:row + PANEL_H, column:column + PANEL_W] = pixels.reshape(PANEL_H, PANEL_W, 4)
-    sheet[PANEL_H - 1:PANEL_H + 1, :, :3] = 0.55
-    sheet[:, PANEL_W - 1:PANEL_W + 1, :3] = 0.55
-    sheet[:, :, 3] = 1.0
-    output = bpy.data.images.new("RoqerPreview", PANEL_W * 2, PANEL_H * 2, alpha=True)
-    output.pixels.foreach_set(sheet.ravel())
-    output.filepath_raw = preview_path
-    output.file_format = "PNG"
-    output.save()
+        if wired:
+            bpy.context.view_layer.update()
+            panel = pixels.reshape(PANEL_H, PANEL_W, 4).copy()
+            panel[:, :, :3] = panel[:, :, :3] * 0.45 + 0.55
+            wired = draw_wire(panel, camera, distance, deadline)
+            wire[row:row + PANEL_H, column:column + PANEL_W] = panel
+    for image, path in ((sheet, preview_path), (wire, wire_path) if wired else (None, None)):
+        if image is None:
+            continue
+        image[PANEL_H - 1:PANEL_H + 1, :, :3] = 0.55
+        image[:, PANEL_W - 1:PANEL_W + 1, :3] = 0.55
+        image[:, :, 3] = 1.0
+        output = bpy.data.images.new("RoqerPreview", PANEL_W * 2, PANEL_H * 2, alpha=True)
+        output.pixels.foreach_set(image.ravel())
+        output.filepath_raw = path
+        output.file_format = "PNG"
+        output.save()
+        bpy.data.images.remove(output)
 
 
 if meshes:
@@ -19607,6 +19861,14 @@ if meshes:
         stats["layout"] = layout_facts()
     except Exception as error:
         stats["layout"] = {"skipped": str(error)[:200]}
+    try:
+        stats["topology"], topology_complete = topology_facts()
+        overlaps, overlaps_complete = coplanar_overlaps(time.monotonic() + TOPOLOGY_SECONDS)
+        ordered = sorted(overlaps.items(), key=lambda entry: -entry[1][0])
+        stats["zFighting"] = {"count": len(ordered), "complete": topology_complete and overlaps_complete,
+                              "pairs": [{"objects": list(pair), "faces": found[0], "at": spot(found[1])} for pair, found in ordered[:8]]}
+    except Exception as error:
+        stats["topologyError"] = str(error)[:200]
     # Workbench draws a material's viewport colour, which importers leave grey;
     # copy each principled base colour across so the preview shows real colours.
     for material in bpy.data.materials:
@@ -19618,6 +19880,7 @@ if meshes:
     try:
         render_views(size, (low + high) / 2)
         stats["preview"] = os.path.exists(preview_path)
+        stats["wire"] = os.path.exists(wire_path)
     except Exception as error:
         stats["previewError"] = str(error)[:200]
     # The model as measured, as one self-contained GLB for the 3D view in
@@ -19883,6 +20146,7 @@ ${log2}`,
     }
     const files = [];
     const images = [];
+    const wireImages = [];
     let pictured;
     const rendered = [];
     const readable = [];
@@ -19957,11 +20221,17 @@ ${log2}`,
         bottom: Array.isArray(stats.min) && typeof stats.min[2] === "number" ? stats.min[2] : void 0,
         layout: parseLayout(stats.layout),
         smoothShaded: Array.isArray(stats.smoothShaded) ? stats.smoothShaded.slice(0, MAX_LAYOUT_ENTRIES).flatMap((entry) => isRecord5(entry) && typeof entry.object === "string" && isNumber4(entry.share) ? [{ object: entry.object, share: entry.share }] : []) : void 0,
-        uv: parseUv(stats.uv)
+        uv: parseUv(stats.uv),
+        topology: modeledTopology(parseTopology(stats.topology), inspectScene ? void 0 : contents),
+        zFighting: parseZFighting(stats.zFighting)
       });
       if (stats.preview === true) {
         const png = await fs3.readFile(preview).catch(() => void 0);
         if (png !== void 0 && png.length <= MAX_PREVIEW_BYTES) images.push({ data: png.toString("base64"), mediaType: "image/png" });
+      }
+      if (stats.wire === true) {
+        const png = await fs3.readFile(wirePreviewPath(preview)).catch(() => void 0);
+        if (png !== void 0 && png.length <= MAX_PREVIEW_BYTES) wireImages.push({ data: png.toString("base64"), mediaType: "image/png" });
       }
       if (modelPreview !== void 0) {
         const shown = images.length === 1;
@@ -19971,7 +20241,8 @@ ${log2}`,
       }
     }
     const previews = images.length;
-    images.push(...renderImages, ...flipbookImages);
+    const wires = wireImages.length;
+    images.push(...wireImages, ...renderImages, ...flipbookImages);
     const durationMs = this.now() - started;
     const lines = [`Blender job ${jobId} finished in ${(durationMs / 1e3).toFixed(1)} s.`, ...notContinued === void 0 ? [] : [notContinued]];
     if (inspectScene) {
@@ -19979,6 +20250,7 @@ ${log2}`,
         "Nothing was exported, so Roqer checked the scene this job saved, measured as it would export (modifiers applied, curves as the meshes they become, hidden objects left out):",
         ...files.map(describeFile),
         previews > 0 ? "A preview is attached: four views in one image. Top left, the side seen from +X (+Y to the right); top right, the top seen from above (+Y up the image); bottom left and right, three-quarter views from the +X -Y and -X +Y corners. Check it against the request before building on it." : "No preview could be rendered; judge the scene by the numbers above.",
+        ...describeWires(wires),
         "In Studio a point at Blender (x, y, z) arrives at (-x, z, y): Blender -Y becomes Roblox's forward (-Z, the LookVector), so a front modeled toward +Y arrives facing backwards."
       );
     } else if (files.length > 0) {
@@ -19987,6 +20259,7 @@ ${log2}`,
         ...files.map(describeFile),
         ...models.length > MAX_INSPECTED_MODELS ? [`${models.length - MAX_INSPECTED_MODELS} more model files were not inspected.`] : [],
         previews > 0 ? "A preview of each model is attached: four views in one image. Top left, the side seen from +X (+Y to the right); top right, the top seen from above (+Y up the image); bottom left and right, three-quarter views from the +X -Y and -X +Y corners. Check its shape and colours in every view against the request, and close any gap or overlap listed above that the design does not intend, before uploading." : "No preview could be rendered; judge the model by the numbers above.",
+        ...describeWires(wires),
         "In Studio a point at Blender (x, y, z) arrives at (-x, z, y): Blender -Y becomes Roblox's forward (-Z, the LookVector), so a front modeled toward +Y arrives facing backwards.",
         "To use a model in Studio: upload_asset {action: 'upload', filePath: <its path>, assetType: 'Model', displayName}, then insert_asset with the returned asset id, then read the inserted model's size back and scale it in Studio if needed."
       );
@@ -20246,7 +20519,86 @@ function describeFile(file) {
   const shading = file.smoothShaded !== void 0 && file.smoothShaded.length > 0 ? `
   shading: smooth across hard edges on ${file.smoothShaded.map((entry) => `${entry.object} (${Math.round(entry.share * 100)}% of corners)`).join(", ")}, which makes boxes and panels look puffy in Roblox. Unless the object is meant to look rounded, remove shade_smooth; roqer.join keeps what it joins flat.` : "";
   const uv = file.inspectionError === void 0 ? describeUv(file.uv) : "";
-  return `- ${file.path} (${Math.max(1, Math.round(file.bytes / 1024))} KB): ${facts}${file.colorSource === void 0 ? "" : `; ${COLOR_SOURCE_NOTES[file.colorSource]}`}${pieces}${layout}${shading}${uv}${articulated}`;
+  const topology = file.inspectionError === void 0 ? describeTopology(file.topology, file.zFighting) : "";
+  return `- ${file.path} (${Math.max(1, Math.round(file.bytes / 1024))} KB): ${facts}${file.colorSource === void 0 ? "" : `; ${COLOR_SOURCE_NOTES[file.colorSource]}`}${pieces}${layout}${topology}${shading}${uv}${articulated}`;
+}
+function wirePreviewPath(preview) {
+  return `${preview.replace(/\.png$/i, "")}-wire.png`;
+}
+function describeWires(wires) {
+  return wires === 0 ? [] : [`${wires === 1 ? "A wireframe sheet follows the preview" : "A wireframe sheet of each model follows the previews, in the same order"}: the same four views, with the triangles Roblox receives drawn over the solid where the camera sees them. Look at it as well as the preview: fans out of one vertex, slivers and stray cuts show there, and the topology line names them.`];
+}
+var spots = (found) => found.at.map((point) => `(${point.map(studs).join(", ")})`).join(", ");
+var MAX_TOPOLOGY_OBJECTS = 12;
+function describeTopology(topology, zFighting) {
+  if (topology === void 0 || topology.length === 0) return "";
+  const listed = topology.slice(0, MAX_TOPOLOGY_OBJECTS);
+  const counts = listed.map((entry) => entry.modeled ? `${entry.object} ${entry.verts} verts, ${entry.faces} faces (${entry.quads} quads, ${entry.tris} tris, ${entry.ngons} ngons), ${entry.gameTris} triangles in the game` : `${entry.object} ${entry.verts} verts, ${entry.gameTris} triangles in the game (faces as modeled unknown: only the export was seen)`);
+  const problems = listed.flatMap((entry) => {
+    const found = [
+      ...entry.flat === void 0 ? [] : [`${entry.flat.count} triangles of almost no area at ${spots(entry.flat)}`],
+      ...entry.thin === void 0 ? [] : [`${entry.thin.count} thin triangles (an angle under 4\xB0) at ${spots(entry.thin)}`],
+      ...entry.long === void 0 ? [] : [`${entry.long.count} long triangles (over 15:1) at ${spots(entry.long)}`],
+      ...entry.fans === void 0 ? [] : [`${entry.fans.count} fan vert${entry.fans.count === 1 ? "ex" : "ices"} (up to ${entry.fans.most} edges) at ${spots(entry.fans)}`]
+    ];
+    return found.length === 0 ? [] : [`${entry.object}: ${found.join("; ")}`];
+  });
+  const overlapping = zFighting !== void 0 && zFighting.count > 0 ? [`coplanar faces over each other (z-fighting, they flicker in Studio): ${zFighting.pairs.map((pair) => `${pair.objects[0] === pair.objects[1] ? `${pair.objects[0]} with itself` : `${pair.objects[0]} and ${pair.objects[1]}`} (${pair.faces} triangle pair${pair.faces === 1 ? "" : "s"}) at (${pair.at.map(studs).join(", ")})`).join("; ")}${more(zFighting.pairs.length, zFighting.count)}`] : [];
+  const lines = [`
+  topology: ${counts.join("; ")}${more(listed.length, topology.length)}.`];
+  if (problems.length > 0 || overlapping.length > 0) {
+    lines.push(`
+  topology findings, in the script's Blender coordinates: ${[...problems, ...overlapping].join(". ")}. Booleans, ngon fills, bisect cuts and holes_fill leave these: rebuild that region from placed vertices (quad columns, a tight frame around a detail, chips by bmesh.ops.bevel) unless the wireframe shows it is meant.`);
+  } else {
+    lines.push("\n  topology findings: none (no near-zero-area, thin or long triangles outside quad strips, no fan vertices, no coplanar overlaps).");
+  }
+  if (zFighting !== void 0 && !zFighting.complete) lines.push("\n  the topology check stopped at its time limit, so findings may be missing.");
+  return lines.join("");
+}
+function parseSpots(value) {
+  if (!isRecord5(value) || !isNumber4(value.count) || value.count < 1 || !Array.isArray(value.at)) return void 0;
+  return { count: count(value.count, 1), at: value.at.filter(isVector3).slice(0, 3) };
+}
+function parseTopology(value) {
+  if (!Array.isArray(value)) return void 0;
+  return value.slice(0, 48).filter(isRecord5).flatMap((entry) => {
+    if (typeof entry.object !== "string" || !isNumber4(entry.gameTris)) return [];
+    const flat = parseSpots(entry.flat);
+    const thin = parseSpots(entry.thin);
+    const long = parseSpots(entry.long);
+    const fans = parseSpots(entry.fans);
+    return [{
+      object: entry.object,
+      verts: count(entry.verts, 0),
+      faces: count(entry.faces, 0),
+      quads: count(entry.quads, 0),
+      tris: count(entry.tris, 0),
+      ngons: count(entry.ngons, 0),
+      gameTris: count(entry.gameTris, 0),
+      modeled: true,
+      ...flat === void 0 ? {} : { flat },
+      ...thin === void 0 ? {} : { thin },
+      ...long === void 0 ? {} : { long },
+      ...fans === void 0 || !isRecord5(entry.fans) ? {} : { fans: { ...fans, most: count(entry.fans.most, 0) } }
+    }];
+  });
+}
+function modeledTopology(topology, contents) {
+  if (topology === void 0 || contents === void 0) return topology;
+  const byName = new Map(contents.objects.map((object3) => [object3.name, object3]));
+  return topology.map((entry) => {
+    const faces = byName.get(entry.object)?.faces;
+    if (faces !== void 0) return { ...entry, ...faces, tris: Math.max(0, faces.faces - faces.quads - faces.ngons), modeled: true };
+    return entry.quads === 0 && entry.ngons === 0 ? { ...entry, modeled: false } : entry;
+  });
+}
+function parseZFighting(value) {
+  if (!isRecord5(value) || !isNumber4(value.count)) return void 0;
+  const pairs = (Array.isArray(value.pairs) ? value.pairs : []).slice(0, MAX_LAYOUT_ENTRIES).filter(isRecord5).flatMap((entry) => {
+    const objects = entry.objects;
+    return Array.isArray(objects) && objects.length === 2 && typeof objects[0] === "string" && typeof objects[1] === "string" && isVector3(entry.at) ? [{ objects: [objects[0], objects[1]], faces: count(entry.faces, 1), at: entry.at }] : [];
+  });
+  return { count: Math.max(count(value.count, pairs.length), pairs.length), complete: value.complete !== false, pairs };
 }
 var MAX_LAYOUT_ENTRIES = 8;
 var isRecord5 = (value) => typeof value === "object" && value !== null && !Array.isArray(value);
@@ -20339,6 +20691,9 @@ async function readSceneContents(file) {
       ...isNumber4(entry.triangles) ? { triangles: Math.floor(entry.triangles) } : {},
       ...materials !== void 0 && materials.length > 0 ? { materials } : {},
       ...modifiers !== void 0 && modifiers.length > 0 ? { modifiers } : {},
+      ...isNumber4(entry.verts) && isNumber4(entry.faces) && isNumber4(entry.quads) && isNumber4(entry.ngons) ? {
+        faces: { verts: count(entry.verts, 0), faces: count(entry.faces, 0), quads: count(entry.quads, 0), ngons: count(entry.ngons, 0) }
+      } : {},
       ...isNumber4(entry.invalid) && entry.invalid >= 1 ? {
         invalid: Math.floor(entry.invalid),
         invalidFrom: entry.invalidFrom === "modifiers" ? "modifiers" : "geometry"

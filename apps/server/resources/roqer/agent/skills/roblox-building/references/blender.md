@@ -53,7 +53,12 @@ The script must:
   front built toward +Y arrives backwards;
 - colour the model in Blender, with vertex colours or a packed image texture
   (see [Modeling a mesh](modeling.md), "Colour and material"). Both survive the
-  upload; a flat material base colour does not, and arrives white;
+  upload; a flat material base colour does not, and arrives white. Where the
+  place's props are flat colours set in Studio, split each colour into its own
+  object instead and paint the MeshParts after insert;
+- build its topology as [Modeling a mesh](modeling.md), "Topology", says: quad
+  columns and strips from placed vertices, a tight frame around lettering, and
+  chips by `bmesh.ops.bevel`, never booleans or `bisect_plane` on a visible face;
 - when the model is ready, export into `OUTPUT_DIR` and nowhere else, normally
   one GLB, with modifiers applied (without `export_apply=True` a bevel or
   mirror never reaches Roblox) and only visible objects:
@@ -117,9 +122,27 @@ what is failing instead of escalating.
 ## Reading the result
 
 Roqer does not trust the script. It re-imports each exported model and returns
-its triangles, meshes, materials and size, its layout, and a preview of four
-views in one image: the side from +X, the top, and three-quarter views from two
-opposite corners.
+its triangles, meshes, materials and size, its layout, its topology, and a
+preview of four views in one image: the side from +X, the top, and
+three-quarter views from two opposite corners. A wireframe sheet follows it:
+the same four views with the triangles Roblox receives drawn over the solid.
+
+A model is ready only after you have looked at the wireframe and the topology
+numbers as well as the solid preview:
+
+- The topology line gives, per object, vertices, faces, quads, triangles and
+  ngons as modeled, and the triangles it has in the game.
+- Topology findings name the object and a position in your script's Blender
+  coordinates, like the layout: near-zero-area triangles, thin triangles (an
+  angle under 4°), long triangles (over 15:1), coplanar faces that overlap
+  (z-fighting), and fan vertices (more than 12 edges). Half of a thin quad
+  strip is not counted. They come from booleans, ngon fills and
+  `bisect_plane` cuts: rebuild that region as "Topology" in
+  [Modeling a mesh](modeling.md) says, then run the job again.
+- The numbers judge the mesh, not the shape: lettering or a silhouette can be
+  wrong with no finding. Read the solid preview for that.
+- When you hand the model over, show the user the wireframe sheet and the
+  counts, not only the solid preview.
 
 - The preview is how you check the model, but it is not evidence of the
   place: Roqer's completion check counts only what Studio shows. In a task

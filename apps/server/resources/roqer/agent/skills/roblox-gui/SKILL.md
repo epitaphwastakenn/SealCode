@@ -1,7 +1,7 @@
 ---
 name: roblox-gui
 description: "Use when a Roblox UI task materially needs engine behavior: container choice, responsive containment, layout objects and constraints, gamepad/touch input, safe areas, lifecycle, scrolling, state ownership, or game wiring. roblox-ui-design owns visual composition and geometry."
-last_reviewed: 2026-10-08
+last_reviewed: 2026-10-20
 sources:
   - https://create.roblox.com/docs/ui
   - https://create.roblox.com/docs/ui/position-and-size
@@ -51,6 +51,10 @@ Building or editing the visual composition of a screen is `roblox-ui-design`'s j
 - Reactive UI: own per-screen cleanup separately from session state; when a leak is suspected, repeat open/close in a playtest to test for it (full.md).
 - In Server Authority projects, durable inventory/currency/ownership displays stay tied to confirmed state; route gameplay input through Input Actions.
 - Make scrolling, text growth, clipping, and safe-area behavior explicit before adding polish.
+- Size from the viewport, not from your monitor: outer regions in Scale (anchored with `AnchorPoint`), fixed details in Offset, and a `UISizeConstraint` on every panel so it neither shrinks below readable on a phone nor sprawls on a 4K screen. Shapes that must keep proportions get a `UIAspectRatioConstraint`. Pure-Offset outer frames are the usual cause of UI that only fits one device.
+- Text is never cut off, never spills out of its box, and never shrinks below readable. Every label picks a policy (full.md §4): fixed `TextSize` in a box that fits it, `TextScaled` only with a `UITextSizeConstraint` (MinTextSize readable on a phone), or `AutomaticSize` inside a layout that can grow. `TextWrapped` for anything longer than a word; `TextTruncate` only where an ellipsis is a deliberate design choice. Check `TextFits`, not just the look on one screen.
+- Touch targets stay at least about 44 px on the smallest supported phone, with room between them.
+- A screen is not done until it was checked on the device matrix (full.md §11): phone landscape and portrait, tablet, laptop, desktop and TV/console. In Roqer: `capture_device_matrix` for the side-by-side look, then a playtest with `inspect_ui {mode: 'audit'}` on each device and no `text_obscured`, `text_straddles_edge`, `text_overflow` or `content_beyond_scroll` findings left.
 - Loading UI belongs in `ReplicatedFirst`; client character teleports are not readiness gates.
 - In a project that already uses `StyleSheet`/`StyleLink`, extend its rules instead of overriding them per instance. Flex lives in `UIListLayout` plus `UIFlexItem`; there is no `UIFlexLayout`.
 

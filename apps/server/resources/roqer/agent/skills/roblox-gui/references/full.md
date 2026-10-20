@@ -59,6 +59,16 @@ sizeLimit.Parent = card
 
 Use `UIAspectRatioConstraint` for shapes that must remain square or maintain a fixed ratio. Keep text containers bounded so a translated or long string cannot expand the entire screen unexpectedly.
 
+### Scaling rules that survive every device
+
+- Roblox screens run from about 360 px wide (phone portrait) to 3840 px (4K), and the same Scale is a different number of pixels on each. Scale alone makes things tiny on a phone and huge on a TV; Offset alone makes them overflow a phone and float lost on a TV. Combine them: Scale for where a region sits and how much of the screen it takes, a `UISizeConstraint` for its minimum and maximum, Offset for padding and gaps.
+- Anchor before positioning. A panel at `Position = UDim2.fromScale(0.5, 0.5)` with `AnchorPoint = Vector2.new(0.5, 0.5)` stays centred on every aspect ratio; without the anchor its corner is centred.
+- Size squares and icons with `UIAspectRatioConstraint` (`DominantAxis` chosen deliberately), never by giving both axes the same Scale: the screen is not square, so the same Scale is a rectangle.
+- Size from the smaller screen dimension when something must stay comfortable in both orientations. A common pattern sizes a button row's height from the viewport height in landscape and caps it with the constraint.
+- Use `UIPadding` and the layout's `Padding` in Offset (or small Scale with a minimum), so spacing does not collapse on a phone.
+- Keep a root `UIScale` for an explicit pixel-authored composition only (see the Quick Reference); it scales everything uniformly, including text that was already readable.
+- Never compute positions every frame from `AbsoluteSize`. If a size must react to the viewport, listen to `workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize")` once and update.
+
 ## 4. Text and images
 
 Choose one sizing policy for each text region:
@@ -68,6 +78,19 @@ Choose one sizing policy for each text region:
 - `AutomaticSize` when the parent has room to grow and the layout can respond.
 
 Test long strings, empty strings, and missing images. A missing asset should produce a useful placeholder, not a layout collapse. Avoid putting essential game state only in color or iconography.
+
+### Text must always fit
+
+Treat clipped or overflowing text as a bug, on every supported device:
+
+- **Wrap by default.** `TextWrapped = true` for anything that can be longer than one short word. A label that does not wrap either overflows its box or is cut at the edge.
+- **`TextScaled` needs a floor and a ceiling.** Without a `UITextSizeConstraint`, `TextScaled` shrinks long strings until they are unreadable on a phone and grows short ones to billboard size on a TV. Set `MinTextSize` to what stays readable on the smallest phone (about 12 to 14) and `MaxTextSize` to the design size. If the text cannot fit at `MinTextSize`, the box is too small: grow it or shorten the copy, do not lower the floor.
+- **Keep sizes consistent.** Labels of the same role (all button captions, all list rows) use one `TextSize` or one shared constraint, not each `TextScaled` on its own, which gives every button a different font size.
+- **`AutomaticSize` grows the box, not the screen.** Use it inside a layout and with a `UISizeConstraint` (or a `ScrollingFrame` parent) so a long translation grows the row, not the whole panel off the screen. Add `UIPadding` so text does not touch the border.
+- **Truncate on purpose only.** `TextTruncate = AtEnd` is for one-line lists where an ellipsis is acceptable (a long player name), with the full text available elsewhere (tooltip, detail view). Never truncate prices, amounts, timers, or instructions.
+- **Measure, do not eyeball.** `TextLabel.TextFits` is false when the text does not fit its box; `TextBounds` against `AbsoluteSize` tells by how much. `TextService:GetTextBoundsAsync` measures a string before it is shown, for example to size a tooltip.
+- **Plan for longer text.** Translations commonly run 30 to 40 % longer than English and German more. Test the longest real string, a long player name, large numbers (`999,999,999`), and an empty string. Rich text tags change the measured width; measure the rendered result.
+- **Mind the corners.** Rounded corners (`UICorner`) and strokes (`UIStroke`) eat into the box; padding must cover them so the first and last characters are not under the curve.
 
 ## 5. Scrolling content
 
@@ -338,6 +361,29 @@ Test at minimum:
 
 A layout that looks correct at one Studio viewport size is not finished. Capture the intended states and compare them after changing the viewport and preferred input.
 
+### Device matrix
+
+Check every new or restyled screen on at least these, both in edit and in a playtest client:
+
+| Device | Viewport (approx.) | What usually breaks |
+|---|---|---|
+| Small phone, landscape | 667 x 375 | text clipped, buttons too small, panels cover the thumbsticks |
+| Large phone, landscape (notch) | 852 x 393 | content under the notch or the top bar |
+| Phone, portrait (when the game allows it) | 393 x 852 | wide rows overflow, side panels have no room |
+| Tablet (iPad) | 1024 x 768 and 1366 x 1024 | panels stretched or lost in empty space, 4:3 aspect |
+| Laptop | 1366 x 768 | short height: bottom bars and modals cut off |
+| Desktop | 1920 x 1080 | the baseline most screens are designed at |
+| TV / console | 1920 x 1080 at 10 ft, gamepad only | text too small to read from a sofa, no focus path |
+
+Use the device presets the place already uses where it has them (`get_device_simulator_state` lists them).
+
+In Roqer:
+
+1. `capture_device_matrix` with up to six of these settings captures the screen on each, side by side. Read every capture for clipping, overlap, text outside its box, and controls off the screen.
+2. Start a playtest and, for each device, `set_device_simulator` on the client and run `inspect_ui {mode: 'audit'}` on the screen. Fix every `text_obscured`, `text_straddles_edge`, `text_overflow` and `content_beyond_scroll` finding, then audit again until none remain.
+3. Check that each button is reachable: touch targets of at least about 44 px on the small phone, and a gamepad focus path on the TV.
+4. Report the devices checked and what changed. A screen checked on one device is reported as such, not as done.
+
 ## Custom loading flow
 
 1. Create the replacement UI from a `LocalScript` in `ReplicatedFirst` before calling `RemoveDefaultLoadingScreen()`.
@@ -350,6 +396,9 @@ A layout that looks correct at one Studio viewport size is not finished. Capture
 
 - [ ] Containers use layout objects and constraints instead of scattered pixel positions.
 - [ ] Text growth, clipping, and scrolling have an explicit policy.
+- [ ] No text is clipped, overflows its box, or falls below a readable size on any device in the matrix (`TextFits` and the audit agree).
+- [ ] Panels have a `UISizeConstraint`; squares and icons keep their shape with `UIAspectRatioConstraint`.
+- [ ] Checked on the device matrix (section 11): small and large phone, tablet, laptop, desktop and TV.
 - [ ] Buttons expose disabled and busy states.
 - [ ] UI actions are safe to repeat or are debounced.
 - [ ] Server responses, not local optimism, determine durable state.

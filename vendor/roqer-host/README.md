@@ -15,6 +15,11 @@ The source here imports Roqer's desktop runtime modules from a Roqer checkout, s
 of SealCode's workspace, lint or typecheck. `sync.ts` (`vp run sync:roqer -- --roqer <checkout>`) builds it, together with the
 bridge, the Studio plugin and the agent bundle, into `apps/server/resources/roqer`.
 
+SealCode's own changes to Roqer's sources (for example the Blender topology inspection and the
+`roblox-building` topology rules) live in `patches/` as `git diff` output against the commit in
+`manifest.json`. `sync.ts` applies them to the checkout before building; to change one, edit the
+patched checkout and regenerate the patch with `git diff` there.
+
 Roqer is © S4US and contributors, licensed under the GNU Affero General Public License v3 or
 later. This host and the files built from Roqer are distributed under the same licence; see
 `apps/server/resources/roqer/LICENSE` and `NOTICE.md`.

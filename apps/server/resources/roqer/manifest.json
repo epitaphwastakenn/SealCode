@@ -1,6 +1,10 @@
 {
   "source": "https://github.com/S4US/Roqer",
   "commit": "4e29b9b90a6cd202f141bc8906e9ad80d2cd9b01",
+  "patches": [
+    "0001-blender-topology-inspection.patch",
+    "0002-roblox-gui-device-fit.patch"
+  ],
   "version": "3.0.3",
   "bridgeTools": 52,
   "skills": 30,

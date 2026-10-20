@@ -187,6 +187,27 @@ const routesFor = (input: { readonly pluginKey: string; readonly mcpToken: strin
           );
       }),
     ),
+    plugin(StudioRoutes.client, (body) =>
+      Effect.gen(function* () {
+        const bridge = yield* StudioBridge.StudioBridge;
+        const sessionToken = text(body.sessionToken);
+        const logicalId = text(body.logicalId);
+        if (body.action === "unregister") {
+          yield* bridge.unregisterClient({ sessionToken, logicalId });
+          return json(200, { success: true });
+        }
+        return yield* bridge
+          .registerClient({ sessionToken, logicalId, playerName: text(body.playerName) })
+          .pipe(
+            Effect.map((registered) => json(200, { success: true, ...registered })),
+            Effect.catchTags({
+              StudioSessionUnknown: () => Effect.succeed(json(404, { error: "unknown_session" })),
+              StudioHelloRejected: (error) =>
+                Effect.succeed(json(error.status, { success: false, error: error.code })),
+            }),
+          );
+      }),
+    ),
     plugin(StudioRoutes.bye, (body) =>
       Effect.gen(function* () {
         const bridge = yield* StudioBridge.StudioBridge;

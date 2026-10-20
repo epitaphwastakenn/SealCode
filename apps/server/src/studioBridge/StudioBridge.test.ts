@@ -216,6 +216,71 @@ describe("StudioBridge", () => {
     }).pipe(Effect.provide(layer)),
   );
 
+  it.effect("relays requests for playtest clients through the play server", () =>
+    Effect.gen(function* () {
+      const bridge = yield* StudioBridge.StudioBridge;
+      yield* bridge.hello(hello());
+      const server = yield* bridge.hello(
+        hello({ pluginSessionId: "server", role: "server", isRunning: true }),
+      );
+      const first = yield* bridge.registerClient({
+        sessionToken: server.sessionToken,
+        logicalId: "player-a",
+        playerName: "A",
+      });
+      const second = yield* bridge.registerClient({
+        sessionToken: server.sessionToken,
+        logicalId: "player-b",
+        playerName: "B",
+      });
+      expect([first.assignedRole, second.assignedRole]).toEqual(["client-1", "client-2"]);
+      // Registering again keeps the number.
+      expect(
+        (yield* bridge.registerClient({
+          sessionToken: server.sessionToken,
+          logicalId: "player-a",
+          playerName: "A",
+        })).assignedRole,
+      ).toBe("client-1");
+      expect((yield* bridge.peersOf("anon:abc")).map((peer) => peer.role).toSorted()).toEqual([
+        "client-1",
+        "client-2",
+        "edit",
+        "server",
+      ]);
+
+      const call = yield* bridge
+        .request({
+          target: "client-2",
+          endpoint: "inspect-ui",
+          data: {},
+          meta: { tool: "inspect_ui" },
+        })
+        .pipe(Effect.forkChild);
+      yield* Effect.yieldNow;
+      const [message] = requestsIn(
+        yield* bridge.poll({ sessionToken: server.sessionToken, inFlight: [], waitSeconds: 0 }),
+      );
+      expect(message).toMatchObject({ endpoint: "inspect-ui", logicalId: "player-b" });
+      yield* bridge.respond({ requestId: message!.requestId, payload: { success: true } });
+      expect((yield* Fiber.join(call)).peer.role).toBe("client-2");
+
+      // A client that leaves fails what it held; the play server leaving takes its clients.
+      const held = yield* bridge
+        .request({ target: "client-1", endpoint: "get-logs", data: {}, meta: { tool: "logs" } })
+        .pipe(Effect.flip, Effect.forkChild);
+      yield* Effect.yieldNow;
+      yield* bridge.poll({ sessionToken: server.sessionToken, inFlight: [], waitSeconds: 0 });
+      yield* bridge.unregisterClient({ sessionToken: server.sessionToken, logicalId: "player-a" });
+      expect(yield* Fiber.join(held)).toMatchObject({
+        _tag: "StudioPeerDisconnected",
+        delivered: true,
+      });
+      yield* bridge.bye(server.sessionToken);
+      expect((yield* bridge.peers).map((peer) => peer.role)).toEqual(["edit"]);
+    }).pipe(Effect.provide(layer)),
+  );
+
   it.effect("drops a peer that stops polling", () =>
     Effect.gen(function* () {
       const bridge = yield* StudioBridge.StudioBridge;

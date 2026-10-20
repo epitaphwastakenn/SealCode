@@ -163,6 +163,8 @@ export type DownstreamMessage =
       readonly endpoint: string;
       readonly data: unknown;
       readonly meta: StudioRequestMeta;
+      /** Set when the play server should relay the request to one of its clients. */
+      readonly logicalId?: string;
     }
   | { readonly kind: "status"; readonly status: unknown }
   | {
@@ -220,6 +222,8 @@ export interface StudioBridgeSnapshot {
 
 interface Session {
   peer: StudioPeer;
+  /** Playtest clients this play server relays for, by logical id. */
+  readonly clients: Map<string, StudioPeer>;
   readonly token: string;
   waiter: Deferred.Deferred<void> | undefined;
   pollGeneration: number;
@@ -301,6 +305,19 @@ export class StudioBridge extends Context.Service<
       readonly events: ReadonlyArray<unknown>;
     }) => Effect.Effect<number, StudioSessionUnknown>;
     readonly bye: (sessionToken: string) => Effect.Effect<void>;
+    /** The play server registers a player's client, which it relays requests to. */
+    readonly registerClient: (input: {
+      readonly sessionToken: string;
+      readonly logicalId: string;
+      readonly playerName: string;
+    }) => Effect.Effect<
+      { readonly assignedRole: StudioRole },
+      StudioSessionUnknown | StudioHelloRejected
+    >;
+    readonly unregisterClient: (input: {
+      readonly sessionToken: string;
+      readonly logicalId: string;
+    }) => Effect.Effect<void>;
     /** Sends one endpoint call to the peer the routing picks and waits for its answer. */
     readonly request: (input: {
       readonly instanceId?: string | undefined;
@@ -372,11 +389,51 @@ const make = Effect.gen(function* () {
     return current;
   };
 
-  const allPeers = (): StudioPeer[] => [...sessions.values()].map((session) => session.peer);
+  const allPeers = (): StudioPeer[] =>
+    [...sessions.values()].flatMap((session) => [
+      session.peer,
+      ...[...session.clients.values()].map((client) => ({
+        ...client,
+        lastSeenAt: session.peer.lastSeenAt,
+      })),
+    ]);
+
+  /** The peer of this session (itself or a relayed client) that a request targets. */
+  const servingPeer = (session: Session, request: Pending): StudioPeer | undefined => {
+    const candidates = [session.peer, ...session.clients.values()];
+    return candidates.find(
+      (peer) =>
+        peer.role === request.role &&
+        peersOfPlace([peer], request.instanceId, resolveAlias).length > 0,
+    );
+  };
 
   const servesPending = (session: Session, request: Pending): boolean =>
-    session.peer.role === request.role &&
-    peersOfPlace([session.peer], request.instanceId, resolveAlias).length > 0;
+    servingPeer(session, request) !== undefined;
+
+  /** Fails requests that nobody left can serve, as when a peer or client goes away. */
+  const failUnservable = (heldBy: Session | undefined, role?: string) =>
+    Effect.gen(function* () {
+      const remaining = [...sessions.values()];
+      for (const request of [...pending.values()]) {
+        const heldHere =
+          heldBy !== undefined &&
+          request.claimedBy === heldBy.peer.pluginSessionId &&
+          (role === undefined || request.role === role);
+        const servable = remaining.some((other) => servesPending(other, request));
+        if (heldHere || !servable) {
+          pending.delete(request.id);
+          yield* Deferred.fail(
+            request.deferred,
+            new StudioPeerDisconnected({
+              endpoint: request.endpoint,
+              delivered: request.delivered && heldHere,
+              role: request.role,
+            }),
+          );
+        }
+      }
+    });
 
   const wake = (session: Session) =>
     session.waiter === undefined
@@ -409,23 +466,9 @@ const make = Effect.gen(function* () {
       });
       sessions.delete(session.peer.pluginSessionId);
       byToken.delete(session.token);
+      session.clients.clear();
       if (session.waiter !== undefined) yield* Deferred.succeed(session.waiter, undefined);
-      const remaining = [...sessions.values()];
-      for (const request of [...pending.values()]) {
-        const heldHere = request.claimedBy === session.peer.pluginSessionId;
-        const servable = remaining.some((other) => servesPending(other, request));
-        if (heldHere || !servable) {
-          pending.delete(request.id);
-          yield* Deferred.fail(
-            request.deferred,
-            new StudioPeerDisconnected({
-              endpoint: request.endpoint,
-              delivered: request.delivered && heldHere,
-              role: request.role,
-            }),
-          );
-        }
-      }
+      yield* failUnservable(session);
       yield* refreshStatuses;
       yield* changed;
     });
@@ -560,6 +603,7 @@ const make = Effect.gen(function* () {
         outbox: [],
         lastStatus: "",
         claimed: new Set(),
+        clients: new Map(),
       };
       sessions.set(peer.pluginSessionId, session);
       byToken.set(session.token, session);
@@ -585,6 +629,7 @@ const make = Effect.gen(function* () {
     for (const request of pending.values()) {
       if (messages.length >= StudioLimits.maxRequestsPerPoll) break;
       if (request.claimedBy !== undefined || !servesPending(session, request)) continue;
+      const target = servingPeer(session, request);
       request.claimedBy = session.peer.pluginSessionId;
       request.delivered = true;
       session.claimed.add(request.id);
@@ -594,6 +639,9 @@ const make = Effect.gen(function* () {
         endpoint: request.endpoint,
         data: request.data,
         meta: request.meta,
+        ...(target !== undefined && target !== session.peer
+          ? { logicalId: target.pluginSessionId }
+          : {}),
       });
     }
     return messages;
@@ -696,6 +744,62 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const session = byToken.get(token);
       if (session !== undefined) yield* dropSession(session);
+    });
+
+  const clientNumber = (role: string): number => Number(/^client-(\d+)$/.exec(role)?.[1] ?? 0);
+
+  const registerClient: StudioBridge["Service"]["registerClient"] = (input) =>
+    Effect.gen(function* () {
+      const session = byToken.get(input.sessionToken);
+      if (session === undefined) return yield* new StudioSessionUnknown();
+      if (session.peer.role !== "server" || input.logicalId.trim() === "") {
+        return yield* new StudioHelloRejected({ status: 400, code: "invalid_role" });
+      }
+      const now = yield* Clock.currentTimeMillis;
+      touch(session, now);
+      const existing = session.clients.get(input.logicalId);
+      if (existing !== undefined) return { assignedRole: existing.role };
+      // The lowest client number not already used in this place.
+      const taken = new Set(
+        peersOfPlace(allPeers(), session.peer.instanceId, resolveAlias)
+          .map((peer) => clientNumber(peer.role))
+          .filter((n) => n > 0),
+      );
+      let n = 1;
+      while (taken.has(n)) n += 1;
+      const role: StudioRole = `client-${n}`;
+      session.clients.set(input.logicalId, {
+        ...session.peer,
+        pluginSessionId: input.logicalId,
+        role,
+        placeName: session.peer.placeName,
+        dataModelName: input.playerName.slice(0, 100),
+        isRunning: true,
+        connectedAt: now,
+        lastSeenAt: now,
+      });
+      yield* Effect.logInfo("Studio playtest client connected", {
+        role,
+        instanceId: session.peer.instanceId,
+      });
+      yield* refreshStatuses;
+      yield* changed;
+      return { assignedRole: role };
+    });
+
+  const unregisterClient: StudioBridge["Service"]["unregisterClient"] = (input) =>
+    Effect.gen(function* () {
+      const session = byToken.get(input.sessionToken);
+      const client = session?.clients.get(input.logicalId);
+      if (session === undefined || client === undefined) return;
+      session.clients.delete(input.logicalId);
+      yield* Effect.logInfo("Studio playtest client disconnected", {
+        role: client.role,
+        instanceId: client.instanceId,
+      });
+      yield* failUnservable(session, client.role);
+      yield* refreshStatuses;
+      yield* changed;
     });
 
   const resolve: StudioBridge["Service"]["resolve"] = (input) =>
@@ -838,6 +942,8 @@ const make = Effect.gen(function* () {
     respond,
     postEvents,
     bye,
+    registerClient,
+    unregisterClient,
     request,
     resolve,
     peers: Effect.sync(allPeers),

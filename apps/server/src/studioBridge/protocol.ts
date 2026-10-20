@@ -22,6 +22,7 @@ export const StudioRoutes = {
   response: "/studio/v1/response",
   events: "/studio/v1/events",
   bye: "/studio/v1/bye",
+  client: "/studio/v1/client",
   mcp: "/mcp",
 } as const;
 
@@ -95,6 +96,20 @@ export const StudioEndpoints = {
   playtestState: "playtest-state",
   getLogs: "get-logs",
   captureScreenshot: "capture-screenshot",
+  captureBegin: "capture-begin",
+  captureRead: "capture-read",
+  buildInstances: "build-instances",
+  evalRuntime: "eval-runtime",
+  multiplayerStart: "multiplayer-start",
+  multiplayerState: "multiplayer-state",
+  addPlayers: "add-players",
+  leaveTest: "leave-test",
+  inspectUi: "inspect-ui",
+  interactUi: "interact-ui",
+  mouseInput: "simulate-mouse-input",
+  keyboardInput: "simulate-keyboard-input",
+  deviceGet: "device-get",
+  deviceSet: "device-set",
 } as const;
 export type StudioEndpoint = (typeof StudioEndpoints)[keyof typeof StudioEndpoints];
 
@@ -109,4 +124,13 @@ export const MUTATING_ENDPOINTS: ReadonlySet<string> = new Set([
   StudioEndpoints.startPlaytest,
   StudioEndpoints.stopPlaytest,
   StudioEndpoints.endTest,
+  StudioEndpoints.buildInstances,
+  StudioEndpoints.evalRuntime,
+  StudioEndpoints.multiplayerStart,
+  StudioEndpoints.addPlayers,
+  StudioEndpoints.leaveTest,
+  StudioEndpoints.interactUi,
+  StudioEndpoints.mouseInput,
+  StudioEndpoints.keyboardInput,
+  StudioEndpoints.deviceSet,
 ]);

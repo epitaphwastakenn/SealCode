@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off globalErrorInEffectCatch:off globalErrorInEffectFailure:off globalDateInEffect:off globalRandomInEffect:off globalTimers:off preferSchemaOverJson:off globalFetchInEffect:off -Blender runs as a headless child process on job folders.
 import * as NodeChildProcess from "node:child_process";
-import * as NodeFs from "node:fs";
+import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
 import * as Effect from "effect/Effect";
@@ -227,11 +227,11 @@ export const runBlenderJob = (input: {
     try: async (): Promise<BlenderJobResult> => {
       const id = `job-${new Date().toISOString().replace(/[:.]/gu, "-")}-${Math.random().toString(36).slice(2, 7)}`;
       const jobDir = NodePath.join(input.jobsRoot, id);
-      NodeFs.mkdirSync(jobDir, { recursive: true });
+      NodeFS.mkdirSync(jobDir, { recursive: true });
       const agentPath = NodePath.join(jobDir, "agent.py");
-      NodeFs.writeFileSync(agentPath, input.script);
+      NodeFS.writeFileSync(agentPath, input.script);
       const scriptPath = NodePath.join(jobDir, "job.py");
-      NodeFs.writeFileSync(scriptPath, buildJobScript(agentPath));
+      NodeFS.writeFileSync(scriptPath, buildJobScript(agentPath));
       const args = [
         ...(input.openBlend ? [input.openBlend] : []),
         "-b",
@@ -279,7 +279,7 @@ export const runBlenderJob = (input: {
       let status: Record<string, unknown> = {};
       try {
         status = JSON.parse(
-          NodeFs.readFileSync(NodePath.join(jobDir, "sealcode-status.json"), "utf8"),
+          NodeFS.readFileSync(NodePath.join(jobDir, "sealcode-status.json"), "utf8"),
         );
       } catch {
         status = { statusMissing: true };
@@ -299,11 +299,11 @@ export const runBlenderJob = (input: {
         jobDir,
         output: text.length > 12_000 ? `…${text.slice(-12_000)}` : text,
         report: status,
-        files: NodeFs.readdirSync(jobDir).filter(
+        files: NodeFS.readdirSync(jobDir).filter(
           (name) => name !== "job.py" && name !== "sealcode-status.json",
         ),
-        previewPng: NodeFs.existsSync(previewPath) ? NodeFs.readFileSync(previewPath) : undefined,
-        objPath: NodeFs.existsSync(objPath) ? objPath : undefined,
+        previewPng: NodeFS.existsSync(previewPath) ? NodeFS.readFileSync(previewPath) : undefined,
+        objPath: NodeFS.existsSync(objPath) ? objPath : undefined,
       };
     },
     catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),

@@ -1,6 +1,7 @@
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -196,6 +197,8 @@ const make = Effect.gen(function* () {
   const robloxConfig = yield* RobloxStudioConfig;
   const serverSettings = yield* ServerSettings.ServerSettingsService;
   const fileSystem = yield* FileSystem.FileSystem;
+  const platform = yield* HostProcess.Platform;
+  const hostEnv = yield* HostProcess.Environment;
   const skills = yield* loadStudioSkills;
   // Skill files each thread already received, so a repeat request costs a line, not the file.
   const loadedSkills = new Map<string, Set<string>>();
@@ -1632,7 +1635,7 @@ const make = Effect.gen(function* () {
     Effect.gen(function* () {
       const action = str(args.action) ?? "status";
       if (action === "status") {
-        const windows = yield* listStudioWindows;
+        const windows = yield* listStudioWindows(platform);
         const peers = (yield* bridge.peers).filter((peer) => peer.role === "edit");
         return jsonResult({
           success: true,
@@ -1652,7 +1655,7 @@ const make = Effect.gen(function* () {
         if (pid === undefined) {
           return errorResult("invalid_arguments", "close needs pid (see status).");
         }
-        const windows = yield* listStudioWindows;
+        const windows = yield* listStudioWindows(platform);
         if (!windows.some((window) => window.pid === pid)) {
           return errorResult("not_found", `No Roblox Studio process has pid ${String(pid)}.`);
         }
@@ -1660,7 +1663,7 @@ const make = Effect.gen(function* () {
         yield* closeStudio(pid, force);
         const closing = windows.find((window) => window.pid === pid);
         const gone = yield* waitUntil(
-          listStudioWindows.pipe(
+          listStudioWindows(platform).pipe(
             Effect.map((list) => !list.some((window) => window.pid === pid)),
             Effect.orElseSucceed(() => false),
           ),
@@ -1680,7 +1683,7 @@ const make = Effect.gen(function* () {
         });
       }
       if (action === "open") {
-        const executable = yield* findStudioExecutable;
+        const executable = yield* findStudioExecutable(platform, hostEnv.LOCALAPPDATA);
         if (executable === undefined) {
           return errorResult("studio_not_found", "Roblox Studio is not installed for this user.");
         }
@@ -1695,12 +1698,14 @@ const make = Effect.gen(function* () {
         // so with closeOthers the older windows of that file close first.
         if (placeFile !== undefined && args.closeOthers === true) {
           const fileName = normalizePlaceName(placeFile.split(/[\\/]/u).at(-1) ?? "");
-          const holders = (yield* listStudioWindows).filter((window) => window.place === fileName);
+          const holders = (yield* listStudioWindows(platform)).filter(
+            (window) => window.place === fileName,
+          );
           for (const window of holders) yield* closeStudio(window.pid, false);
           const released =
             holders.length === 0 ||
             (yield* waitUntil(
-              listStudioWindows.pipe(
+              listStudioWindows(platform).pipe(
                 Effect.map(
                   (list) => !list.some((window) => holders.some((h) => h.pid === window.pid)),
                 ),
@@ -1716,7 +1721,7 @@ const make = Effect.gen(function* () {
           }
         }
         const before = new Set((yield* bridge.peers).map((peer) => peer.pluginSessionId));
-        const olderWindows = yield* listStudioWindows;
+        const olderWindows = yield* listStudioWindows(platform);
         const pid = yield* launchStudio({
           executable,
           placeFile,
@@ -1749,7 +1754,7 @@ const make = Effect.gen(function* () {
           closed.length === 0
             ? []
             : yield* Effect.sleep(Duration.seconds(6)).pipe(
-                Effect.andThen(listStudioWindows),
+                Effect.andThen(listStudioWindows(platform)),
                 Effect.map((list) =>
                   closed.filter((closedPid) => list.some((window) => window.pid === closedPid)),
                 ),

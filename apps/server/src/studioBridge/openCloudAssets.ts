@@ -1,5 +1,5 @@
 // @effect-diagnostics nodeBuiltinImport:off globalErrorInEffectCatch:off globalErrorInEffectFailure:off globalTimers:off globalDateInEffect:off globalFetchInEffect:off preferSchemaOverJson:off - Open Cloud's Assets API takes a multipart upload of a local file.
-import * as NodeFs from "node:fs/promises";
+import * as NodeFSP from "node:fs/promises";
 import * as NodePath from "node:path";
 
 import * as Effect from "effect/Effect";
@@ -73,7 +73,7 @@ export const uploadAsset = (input: UploadInput) =>
           `Open Cloud does not take ${extension || "this"} files. Use .glb or .fbx for models, .png or .jpg for images, .mp3 or .ogg for audio.`,
         );
       }
-      const bytes = await NodeFs.readFile(input.filePath);
+      const bytes = await NodeFSP.readFile(input.filePath);
       const request = {
         assetType: input.assetType,
         displayName: input.displayName.slice(0, 50),

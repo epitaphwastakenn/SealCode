@@ -1,6 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off globalErrorInEffectCatch:off globalErrorInEffectFailure:off globalDateInEffect:off globalRandomInEffect:off globalTimers:off preferSchemaOverJson:off globalFetchInEffect:off -Studio is a native Windows process found and started with OS tools.
 import * as NodeChildProcess from "node:child_process";
-import * as NodeFs from "node:fs";
+import * as NodeFS from "node:fs";
 import * as NodePath from "node:path";
 
 import * as Effect from "effect/Effect";
@@ -66,56 +66,58 @@ export const placeFromTitle = (title: string): string | undefined => {
 /** Window titles and plugin hellos name a place file with or without its extension. */
 export const normalizePlaceName = (name: string): string => name.trim().replace(/\.rbxlx?$/iu, "");
 
-export const listStudioWindows = Effect.gen(function* () {
-  if (process.platform !== "win32") return [] as ReadonlyArray<StudioWindow>;
-  const output = yield* run("tasklist", [
-    "/FI",
-    "IMAGENAME eq RobloxStudioBeta.exe",
-    "/V",
-    "/FO",
-    "CSV",
-    "/NH",
-  ]);
-  const windows: StudioWindow[] = [];
-  for (const line of output.split(/\r?\n/u)) {
-    if (!line.startsWith('"')) continue;
-    const cells = parseCsvLine(line);
-    const pid = Number(cells[1]);
-    if (!Number.isInteger(pid)) continue;
-    const title = cells[8] ?? "";
-    windows.push({
-      pid,
-      title: title === "N/A" ? "" : title,
-      place: placeFromTitle(title),
-      memoryKb: Number((cells[4] ?? "").replace(/[^\d]/gu, "")) || 0,
-    });
-  }
-  return windows as ReadonlyArray<StudioWindow>;
-});
+export const listStudioWindows = (platform: string) =>
+  Effect.gen(function* () {
+    if (platform !== "win32") return [] as ReadonlyArray<StudioWindow>;
+    const output = yield* run("tasklist", [
+      "/FI",
+      "IMAGENAME eq RobloxStudioBeta.exe",
+      "/V",
+      "/FO",
+      "CSV",
+      "/NH",
+    ]);
+    const windows: StudioWindow[] = [];
+    for (const line of output.split(/\r?\n/u)) {
+      if (!line.startsWith('"')) continue;
+      const cells = parseCsvLine(line);
+      const pid = Number(cells[1]);
+      if (!Number.isInteger(pid)) continue;
+      const title = cells[8] ?? "";
+      windows.push({
+        pid,
+        title: title === "N/A" ? "" : title,
+        place: placeFromTitle(title),
+        memoryKb: Number((cells[4] ?? "").replace(/[^\d]/gu, "")) || 0,
+      });
+    }
+    return windows as ReadonlyArray<StudioWindow>;
+  });
 
 /** The newest installed RobloxStudioBeta.exe. */
-export const findStudioExecutable = Effect.sync(() => {
-  const local = process.env.LOCALAPPDATA;
-  if (process.platform !== "win32" || !local) return undefined;
-  const versions = NodePath.join(local, "Roblox", "Versions");
-  let best: { readonly path: string; readonly mtime: number } | undefined;
-  try {
-    for (const entry of NodeFs.readdirSync(versions)) {
-      const candidate = NodePath.join(versions, entry, "RobloxStudioBeta.exe");
-      try {
-        const stat = NodeFs.statSync(candidate);
-        if (best === undefined || stat.mtimeMs > best.mtime) {
-          best = { path: candidate, mtime: stat.mtimeMs };
+export const findStudioExecutable = (platform: string, localAppData: string | undefined) =>
+  Effect.sync(() => {
+    const local = localAppData;
+    if (platform !== "win32" || !local) return undefined;
+    const versions = NodePath.join(local, "Roblox", "Versions");
+    let best: { readonly path: string; readonly mtime: number } | undefined;
+    try {
+      for (const entry of NodeFS.readdirSync(versions)) {
+        const candidate = NodePath.join(versions, entry, "RobloxStudioBeta.exe");
+        try {
+          const stat = NodeFS.statSync(candidate);
+          if (best === undefined || stat.mtimeMs > best.mtime) {
+            best = { path: candidate, mtime: stat.mtimeMs };
+          }
+        } catch {
+          // Not a Studio version folder.
         }
-      } catch {
-        // Not a Studio version folder.
       }
+    } catch {
+      return undefined;
     }
-  } catch {
-    return undefined;
-  }
-  return best?.path;
-});
+    return best?.path;
+  });
 
 export const launchStudio = (input: {
   readonly executable: string;

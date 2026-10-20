@@ -18,3 +18,5 @@ upstream text):
   target size and the device matrix (and `last_reviewed`).
 - `roblox-gui/references/full.md`: "Scaling rules that survive every device" (§3), "Text must always
   fit" (§4), "11.9 Device matrix", and the last three UI checklist items.
+- `roblox-ui-design/` (all files): SealCode's own visual design skill for Roblox screens (style
+  families, component construction, layouts, polish and visual review), written by SealCode.

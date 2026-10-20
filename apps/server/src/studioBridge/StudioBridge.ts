@@ -328,6 +328,8 @@ export class StudioBridge extends Context.Service<
       readonly events: ReadonlyArray<unknown>;
     }) => Effect.Effect<number, StudioSessionUnknown>;
     readonly bye: (sessionToken: string) => Effect.Effect<void>;
+    /** Drops every session of a place whose Studio window was closed (it never says bye). */
+    readonly forgetPlace: (placeName: string) => Effect.Effect<number>;
     /** The play server registers a player's client, which it relays requests to. */
     readonly registerClient: (input: {
       readonly sessionToken: string;
@@ -845,6 +847,26 @@ const make = Effect.gen(function* () {
       if (session !== undefined) yield* dropSession(session);
     });
 
+  const forgetPlace: StudioBridge["Service"]["forgetPlace"] = (placeName) =>
+    Effect.gen(function* () {
+      const wanted = placeName
+        .trim()
+        .replace(/\.rbxlx?$/iu, "")
+        .toLowerCase();
+      let dropped = 0;
+      for (const session of [...sessions.values()]) {
+        const name = session.peer.placeName
+          .trim()
+          .replace(/\.rbxlx?$/iu, "")
+          .toLowerCase();
+        if (name === wanted) {
+          yield* dropSession(session, "lost");
+          dropped += 1;
+        }
+      }
+      return dropped;
+    });
+
   const clientNumber = (role: string): number => Number(/^client-(\d+)$/.exec(role)?.[1] ?? 0);
 
   const registerClient: StudioBridge["Service"]["registerClient"] = (input) =>
@@ -1041,6 +1063,7 @@ const make = Effect.gen(function* () {
     respond,
     postEvents,
     bye,
+    forgetPlace,
     registerClient,
     unregisterClient,
     request,

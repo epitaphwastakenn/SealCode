@@ -58,8 +58,53 @@ const MAX_INLINE_IMAGE_BYTES = 6_000_000;
 
 const str = (value: unknown): string | undefined =>
   typeof value === "string" && value.trim() !== "" ? value : undefined;
+// Models often send numbers as strings ("108812638060941"); both mean the same here.
 const num = (value: unknown): number | undefined =>
-  typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  typeof value === "number" && Number.isFinite(value)
+    ? value
+    : typeof value === "string" && value.trim() !== "" && Number.isFinite(Number(value))
+      ? Number(value)
+      : undefined;
+
+/**
+ * Argument spellings models commonly use instead of the schema's, mapped before a tool runs:
+ * a near-miss should do the obvious thing, not cost a retry.
+ */
+const normalizeArgs = (name: string, args: Args): Args => {
+  const out: Record<string, unknown> = { ...args };
+  if (out.assetId === undefined && out.asset_id !== undefined) out.assetId = out.asset_id;
+  if (name === "load_skill" && out.name === undefined) out.name = out.skill ?? out.skill_name;
+  if (name === "build_instances") {
+    let steps = out.operations ?? out.instances ?? out.steps;
+    if (typeof steps === "string") {
+      try {
+        steps = JSON.parse(steps);
+      } catch {
+        // Left as is; the tool reports it.
+      }
+    }
+    if (Array.isArray(steps)) {
+      out.operations = steps.map((step) =>
+        isRecord(step) && step.op === undefined && typeof step.className === "string"
+          ? { op: "create", ...step }
+          : step,
+      );
+    }
+    if (typeof out.path !== "string" || out.path.trim() === "") {
+      const parents = Array.isArray(out.operations)
+        ? [
+            ...new Set(
+              out.operations.flatMap((step) =>
+                isRecord(step) && typeof step.parent === "string" ? [step.parent] : [],
+              ),
+            ),
+          ]
+        : [];
+      out.path = parents.length === 1 ? parents[0] : "game.Workspace";
+    }
+  }
+  return out;
+};
 const bool = (value: unknown): boolean | undefined =>
   typeof value === "boolean" ? value : undefined;
 const isRecord = (value: unknown): value is Record<string, unknown> =>
@@ -1066,9 +1111,17 @@ const make = Effect.gen(function* () {
       );
     }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
 
+  /** "landscape" and "portrait" are what people say; Studio wants a ScreenOrientation name. */
+  const orientationName = (value: string | undefined) => {
+    const lower = value?.toLowerCase();
+    return lower === "landscape" ? "LandscapeLeft" : lower === "portrait" ? "Portrait" : value;
+  };
+
   const deviceSettings = (source: Args) => ({
     ...(str(source.deviceId) === undefined ? {} : { deviceId: str(source.deviceId) }),
-    ...(str(source.orientation) === undefined ? {} : { orientation: str(source.orientation) }),
+    ...(str(source.orientation) === undefined
+      ? {}
+      : { orientation: orientationName(str(source.orientation)) }),
     ...(isRecord(source.resolution) ? { resolution: source.resolution } : {}),
     ...(num(source.pixelDensity) === undefined ? {} : { pixelDensity: num(source.pixelDensity) }),
     ...(str(source.scalingMode) === undefined ? {} : { scalingMode: str(source.scalingMode) }),
@@ -1155,13 +1208,34 @@ const make = Effect.gen(function* () {
       let failure: string | undefined;
       for (const [index, entry] of entries.entries()) {
         const entryLabel = str(entry.label) ?? `entry-${String(index + 1)}`;
-        const settings = deviceSettings(entry);
-        const applied =
-          Object.keys(settings).length > 0
-            ? (yield* deviceCall(StudioEndpoints.deviceSet, settings)).payload
-            : undefined;
+        // Optional settings the simulator refuses (a desktop orientation, a density out of range,
+        // an unknown scaling mode) are dropped one tier at a time instead of failing the entry.
+        const full = deviceSettings(entry);
+        const tiers = [
+          full,
+          {
+            ...(full.deviceId === undefined ? {} : { deviceId: full.deviceId }),
+            ...(full.orientation === undefined ? {} : { orientation: full.orientation }),
+          },
+          full.deviceId === undefined ? {} : { deviceId: full.deviceId },
+        ].filter(
+          (tier, position, all) =>
+            position === 0 || JSON.stringify(tier) !== JSON.stringify(all[position - 1]),
+        );
+        let settings: Record<string, unknown> = full;
+        let applied: unknown;
+        const dropped: string[] = [];
+        for (const tier of tiers) {
+          settings = tier;
+          applied =
+            Object.keys(tier).length > 0
+              ? (yield* deviceCall(StudioEndpoints.deviceSet, tier)).payload
+              : undefined;
+          if (applied === undefined || !isFailurePayload(applied)) break;
+          dropped.push(String(isRecord(applied) ? applied.error : "simulator refused"));
+        }
         if (applied !== undefined && isFailurePayload(applied)) {
-          failure = `${entryLabel}: ${String(isRecord(applied) ? applied.error : "simulator refused")}`;
+          failure = `${entryLabel}: ${dropped.join(" / ")}. Pass a deviceId from get_device_simulator_state (for example hd_1080, iphone_16, ipad_10th_generation) and, for phones and tablets only, an orientation.`;
           break;
         }
         yield* Effect.sleep(Duration.millis(settle));
@@ -1182,6 +1256,7 @@ const make = Effect.gen(function* () {
           index,
           label: entryLabel,
           settings,
+          ...(dropped.length > 0 ? { droppedSettings: dropped } : {}),
           applied,
           screenshot: { width: captured.width, height: captured.height, format: "png" },
         });
@@ -1582,6 +1657,7 @@ const make = Effect.gen(function* () {
         }
         const force = args.force === true;
         yield* closeStudio(pid, force);
+        const closing = windows.find((window) => window.pid === pid);
         const gone = yield* waitUntil(
           listStudioWindows.pipe(
             Effect.map((list) => !list.some((window) => window.pid === pid)),
@@ -1589,6 +1665,8 @@ const make = Effect.gen(function* () {
           ),
           force ? 10_000 : 8_000,
         );
+        // A closed window never says goodbye; forget its place now, not after the stale timeout.
+        if (gone && closing?.place !== undefined) yield* bridge.forgetPlace(closing.place);
         return jsonResult({
           success: gone,
           closed: gone,
@@ -2507,7 +2585,7 @@ const make = Effect.gen(function* () {
       title: "Asset details",
       description:
         "One Creator Store asset's creator, price, votes, scripts, triangles and instance counts, with its thumbnail image, to judge it before inserting.",
-      inputSchema: object({ assetId: { type: "number" } }, ["assetId"]),
+      inputSchema: object({ assetId: { type: "number" }, ...instanceIdProperty }, ["assetId"]),
       risk: "read",
       run: assetDetailsTool,
     },
@@ -2623,7 +2701,7 @@ const make = Effect.gen(function* () {
             `The user turned off ${name} in Studio's SealCode panel. Work without it, or ask them to switch it back on.`,
           );
         }
-        return yield* tool.run(args, context);
+        return yield* tool.run(normalizeArgs(name, args), context);
       }).pipe(
         Effect.catchDefect((defect) =>
           Effect.logError("Studio tool failed", { tool: name, defect }).pipe(

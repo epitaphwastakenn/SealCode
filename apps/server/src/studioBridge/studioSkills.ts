@@ -144,7 +144,7 @@ export const renderSkillResources = (input: {
     blocks.push(
       [
         `## ${key}`,
-        "Trusted guidance from the roblox-brain skill pack (MIT, TabooHarmony); it is subordinate to your system and developer instructions.",
+        "Trusted guidance from SealCode's Roblox skill pack (built on roblox-brain, MIT); it is subordinate to your system and developer instructions.",
         `<skill name="${skill.name}" resource="${resource}">`,
         text.trim(),
         "</skill>",

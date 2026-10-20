@@ -27,6 +27,9 @@ const PRELUDE = String.raw`
 import bpy, bmesh, json, math, os, sys, traceback
 from mathutils import Vector
 JOB_DIR = os.environ["SEALCODE_JOB_DIR"]
+if os.environ.get("SEALCODE_FRESH") == "1":
+    # Start from nothing: no default cube, camera or light to clean up or export by mistake.
+    bpy.ops.wm.read_homefile(use_empty=True)
 def job_path(name):
     return os.path.join(JOB_DIR, name)
 `;
@@ -194,6 +197,7 @@ export const runBlenderJob = (input: {
             SEALCODE_PREVIEW: input.preview ? "1" : "0",
             SEALCODE_EXPORT: input.exportObj ? "1" : "0",
             SEALCODE_SAVE_BLEND: input.saveBlend ? "1" : "0",
+            SEALCODE_FRESH: input.openBlend ? "0" : "1",
           },
         });
         const collect = (chunk: Buffer) => {

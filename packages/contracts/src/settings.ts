@@ -938,19 +938,18 @@ export type SourceControlWritingStyleSettings = typeof SourceControlWritingStyle
 export const RobloxStudioMode = Schema.Literals(["off", "sealcode", "official"]);
 export type RobloxStudioMode = typeof RobloxStudioMode.Type;
 
-// SealCode's own bridge replaced the third-party harness that used to be called "roqer", so a
-// saved "roqer" mode reads back as "sealcode".
-const LegacyRoqerMode = Schema.Literal("roqer").pipe(
+// A mode saved by an older version that no longer exists was a Studio connection, so it reads
+// back as SealCode's own.
+const isRobloxStudioMode = Schema.is(RobloxStudioMode);
+const RobloxStudioModeSetting = Schema.String.pipe(
   Schema.decodeTo(
     RobloxStudioMode,
     SchemaTransformation.transform({
-      decode: (): RobloxStudioMode => "sealcode",
-      encode: () => "roqer" as const,
+      decode: (mode): RobloxStudioMode => (isRobloxStudioMode(mode) ? mode : "sealcode"),
+      encode: (mode) => mode,
     }),
   ),
 );
-
-const RobloxStudioModeSetting = Schema.Union([RobloxStudioMode, LegacyRoqerMode]);
 
 /** Which projects' threads see the Roblox tools and instructions. */
 export const RobloxStudioScope = Schema.Literals(["roblox-projects", "all-projects"]);

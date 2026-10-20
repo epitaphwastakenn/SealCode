@@ -115,8 +115,4 @@ describe("isRobloxProjectListing", () => {
     }
     expect(isRobloxProjectListing(["package.json", "tsconfig.json", "src"])).toBe(false);
   });
-
-  it("still honors the legacy .roqer marker", () => {
-    expect(isRobloxProjectListing(["README.md", ".roqer"])).toBe(true);
-  });
 });

@@ -1246,24 +1246,20 @@ describe("server model preferences", () => {
 });
 
 describe("ServerSettings.robloxStudio mode", () => {
-  it("reads the retired roqer mode as sealcode, in saved settings and in patches", () => {
+  it("reads a retired mode as sealcode, in saved settings and in patches", () => {
     expect(
-      decodeServerSettings({ robloxStudio: { mode: "roqer", blenderWorker: true } }),
+      decodeServerSettings({ robloxStudio: { mode: "legacy-bridge", blenderWorker: true } }),
     ).toMatchObject({
       robloxStudio: { mode: "sealcode", blenderWorker: true },
     });
-    expect(decodeServerSettingsPatch({ robloxStudio: { mode: "roqer" } }).robloxStudio?.mode).toBe(
-      "sealcode",
-    );
+    expect(
+      decodeServerSettingsPatch({ robloxStudio: { mode: "legacy-bridge" } }).robloxStudio?.mode,
+    ).toBe("sealcode");
   });
 
   it.each(["off", "sealcode", "official"])("keeps %s and saves it as itself", (mode) => {
     const settings = decodeServerSettings({ robloxStudio: { mode } });
     expect(settings.robloxStudio.mode).toBe(mode);
     expect(encodeServerSettings(settings).robloxStudio?.mode).toBe(mode);
-  });
-
-  it("still rejects a mode it never had", () => {
-    expect(() => decodeServerSettings({ robloxStudio: { mode: "other" } })).toThrow();
   });
 });

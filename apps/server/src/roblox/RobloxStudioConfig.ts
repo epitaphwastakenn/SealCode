@@ -134,11 +134,11 @@ export const managedServersFor = (
 };
 
 const ROBLOX_PROJECT_FILE =
-  /^(?:.+\.project\.json|.+\.rbxlx?|.+\.rbxmx?|wally\.toml|aftman\.toml|rokit\.toml|foreman\.toml|selene\.toml|\.sealcode-roblox|\.roqer)$/i;
+  /^(?:.+\.project\.json|.+\.rbxlx?|.+\.rbxmx?|wally\.toml|aftman\.toml|rokit\.toml|foreman\.toml|selene\.toml|\.sealcode-roblox)$/i;
 
 /**
  * A workspace whose root holds a Rojo project, a place or model file, Roblox tooling, or the
- * `.sealcode-roblox` marker (`.roqer`, from before SealCode had its own Studio connection, still counts).
+ * `.sealcode-roblox` marker.
  */
 export const isRobloxProjectListing = (entries: ReadonlyArray<string>): boolean =>
   entries.some((entry) => ROBLOX_PROJECT_FILE.test(entry));

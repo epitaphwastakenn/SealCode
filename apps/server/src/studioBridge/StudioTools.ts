@@ -10,6 +10,13 @@ import { StudioEndpoints, type StudioRole } from "./protocol.ts";
 import * as StudioBridge from "./StudioBridge.ts";
 import { placeKey, preferRuntimeClient } from "./StudioRouter.ts";
 import {
+  auditUi,
+  normalizeUi,
+  presentElement,
+  type RawUiElement,
+  type RawUiViewport,
+} from "./uiAudit.ts";
+import {
   errorResult,
   isFailurePayload,
   jsonResult,
@@ -827,6 +834,389 @@ const make = Effect.gen(function* () {
       );
     }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
 
+  /** The playtest client a UI or input call goes to: target client-N, else the first client. */
+  const runtimeClient = (args: Args, tool: string) =>
+    Effect.gen(function* () {
+      const edit = yield* placeOf(args);
+      const clients = (yield* runtimePeers(placeKey(edit))).filter((peer) =>
+        peer.role.startsWith("client-"),
+      );
+      const requested = str(args.target);
+      if (requested !== undefined && !requested.startsWith("client-")) {
+        return {
+          ok: false,
+          result: errorResult(
+            "runtime_client_required",
+            `${tool} target must be a live client-N role. Start a playtest first.`,
+          ),
+        } as const;
+      }
+      const client =
+        requested === undefined
+          ? preferRuntimeClient(clients)
+          : clients.find((peer) => peer.role === requested);
+      if (client === undefined || !client.role.startsWith("client-")) {
+        return {
+          ok: false,
+          result: errorResult(
+            "runtime_client_required",
+            `${tool} requires an active playtest client. Start a Play or multiplayer test, wait for client-N, and retry.`,
+            { connected: clients.map((peer) => peer.role) },
+          ),
+        } as const;
+      }
+      return { ok: true, client } as const;
+    });
+
+  const inspectUi = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      const mode = str(args.mode) ?? "inspect";
+      if (mode !== "inspect" && mode !== "audit" && mode !== "snapshot") {
+        return errorResult(
+          "invalid_arguments",
+          'inspect_ui mode must be "inspect", "audit", or "snapshot".',
+        );
+      }
+      const resolved = yield* runtimeClient(args, "inspect_ui");
+      if (!resolved.ok) return resolved.result;
+      const { payload } = yield* call({
+        tool: "inspect_ui",
+        args,
+        context,
+        endpoint: StudioEndpoints.inspectUi,
+        data: {
+          root: isRecord(args.root) ? args.root : undefined,
+          max_depth: args.max_depth,
+          max_nodes: args.max_nodes,
+          include_text: args.include_text,
+          include_styles: args.include_styles,
+        },
+        target: resolved.client.role,
+        instanceId: resolved.client.instanceId,
+        timeoutMs: 30_000,
+      });
+      if (isFailurePayload(payload) || !isRecord(payload) || !Array.isArray(payload.elements)) {
+        const failure =
+          outdatedPlugin(payload) ??
+          (isRecord(payload)
+            ? jsonResult({ ...payload, target: resolved.client.role })
+            : errorResult("ui_inspection_failed", "The client returned no UI data."));
+        return failure;
+      }
+      const viewport = payload.viewport as RawUiViewport;
+      const normalized = normalizeUi({
+        elements: payload.elements as RawUiElement[],
+        context: Array.isArray(payload.context) ? (payload.context as RawUiElement[]) : [],
+        viewport,
+      });
+      const visibleOnly = args.visible_only === true;
+      const shown = visibleOnly
+        ? normalized.filter(
+            (element) => element.effectiveVisible && element.visibleRect !== undefined,
+          )
+        : normalized;
+      const elements = shown
+        .map((element) => presentElement(element, mode === "snapshot" ? "snapshot" : "inspect"))
+        .toSorted(
+          (a, b) =>
+            String(a.path ?? "").localeCompare(String(b.path ?? "")) ||
+            String(a.ref).localeCompare(String(b.ref)),
+        );
+      const base = {
+        success: true,
+        mode,
+        target: resolved.client.role,
+        source: payload.source,
+        root: payload.root,
+        viewport,
+        limits: payload.limits,
+        truncation: payload.truncation,
+      };
+      if (mode === "audit") {
+        const issues = auditUi(normalized);
+        return jsonResult({
+          ...base,
+          audit: {
+            success: true,
+            summary: {
+              total: issues.length,
+              errors: issues.filter((issue) => issue.severity === "error").length,
+              warnings: issues.filter((issue) => issue.severity === "warning").length,
+            },
+            issues,
+          },
+          elements,
+        });
+      }
+      return jsonResult({ ...base, elements });
+    }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
+
+  /** Forwards to the chosen playtest client (UI interaction) or the client-or-edit view (input). */
+  const clientCall =
+    (tool: string, endpoint: string, data: (args: Args) => unknown, allowEdit: boolean) =>
+    (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
+      Effect.gen(function* () {
+        let role = "edit";
+        let instanceId: string | undefined;
+        const edit = yield* placeOf(args);
+        const clients = (yield* runtimePeers(placeKey(edit))).filter((peer) =>
+          peer.role.startsWith("client-"),
+        );
+        if (
+          !allowEdit ||
+          str(args.target)?.startsWith("client-") ||
+          (str(args.target) === undefined && clients.length > 0)
+        ) {
+          const resolved = yield* runtimeClient(args, tool);
+          if (!resolved.ok) return resolved.result;
+          role = resolved.client.role;
+          instanceId = resolved.client.instanceId;
+        } else {
+          instanceId = edit.instanceId;
+        }
+        const { payload } = yield* call({
+          tool,
+          args,
+          context,
+          endpoint,
+          data: data(args),
+          target: role,
+          instanceId,
+          timeoutMs: 30_000,
+          summary: str(args.action),
+        });
+        return (
+          outdatedPlugin(payload) ??
+          jsonResult(isRecord(payload) ? { ...payload, target: role } : payload)
+        );
+      }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
+
+  /** The simulator target: edit (default) or a client; several clients for set. */
+  const deviceTargets = (args: Args, tool: string, allowAll: boolean) =>
+    Effect.gen(function* () {
+      const edit = yield* placeOf(args);
+      const clients = (yield* runtimePeers(placeKey(edit))).filter((peer) =>
+        peer.role.startsWith("client-"),
+      );
+      const target = str(args.target) ?? "edit";
+      if (target === "edit") return { ok: true, peers: [edit] } as const;
+      if (target === "all-clients" && allowAll) {
+        return clients.length > 0
+          ? ({ ok: true, peers: clients } as const)
+          : ({
+              ok: false,
+              result: errorResult(
+                "runtime_client_required",
+                "No playtest client is connected. Start a playtest first.",
+              ),
+            } as const);
+      }
+      const client = clients.find((peer) => peer.role === target);
+      if (!target.startsWith("client-") || client === undefined) {
+        return {
+          ok: false,
+          result: errorResult(
+            "invalid_target",
+            `${tool} target must be "edit"${allowAll ? ', "all-clients"' : ""} or a connected client-N (got ${target}).`,
+          ),
+        } as const;
+      }
+      return { ok: true, peers: [client] } as const;
+    });
+
+  const deviceGet = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      const resolved = yield* deviceTargets(args, "get_device_simulator_state", false);
+      if (!resolved.ok) return resolved.result;
+      const peer = resolved.peers[0]!;
+      const { payload } = yield* call({
+        tool: "get_device_simulator_state",
+        args,
+        context,
+        endpoint: StudioEndpoints.deviceGet,
+        data: { deviceId: str(args.deviceId), includeDeviceList: args.includeDeviceList !== false },
+        target: peer.role,
+        instanceId: peer.instanceId,
+      });
+      return (
+        outdatedPlugin(payload) ??
+        jsonResult(isRecord(payload) ? { ...payload, target: peer.role } : payload)
+      );
+    }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
+
+  const deviceSettings = (source: Args) => ({
+    ...(str(source.deviceId) === undefined ? {} : { deviceId: str(source.deviceId) }),
+    ...(str(source.orientation) === undefined ? {} : { orientation: str(source.orientation) }),
+    ...(isRecord(source.resolution) ? { resolution: source.resolution } : {}),
+    ...(num(source.pixelDensity) === undefined ? {} : { pixelDensity: num(source.pixelDensity) }),
+    ...(str(source.scalingMode) === undefined ? {} : { scalingMode: str(source.scalingMode) }),
+  });
+
+  const deviceSet = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      const settings = deviceSettings(args);
+      const stop = args.stopSimulation === true;
+      if (stop && Object.keys(settings).length > 0) {
+        return errorResult(
+          "invalid_arguments",
+          "stopSimulation cannot be combined with other settings.",
+        );
+      }
+      if (!stop && Object.keys(settings).length === 0) {
+        return errorResult(
+          "invalid_arguments",
+          "set_device_simulator requires stopSimulation=true or at least one simulator setting.",
+        );
+      }
+      const resolved = yield* deviceTargets(args, "set_device_simulator", true);
+      if (!resolved.ok) return resolved.result;
+      const targets: Record<string, unknown> = {};
+      let failed = false;
+      for (const peer of resolved.peers) {
+        const { payload } = yield* call({
+          tool: "set_device_simulator",
+          args,
+          context,
+          endpoint: StudioEndpoints.deviceSet,
+          data: stop ? { stopSimulation: true } : settings,
+          target: peer.role,
+          instanceId: peer.instanceId,
+        });
+        if (outdatedPlugin(payload) !== undefined) return outdatedPlugin(payload)!;
+        if (isFailurePayload(payload)) failed = true;
+        targets[peer.role] = payload;
+      }
+      return jsonResult(
+        { success: !failed, target: str(args.target) ?? "edit", targets },
+        { isError: failed },
+      );
+    }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
+
+  const MATRIX_BUDGET_BYTES = 8_000_000;
+
+  /** Screenshots under up to six simulator settings, restoring the simulator afterwards. */
+  const deviceMatrix = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      const entries = Array.isArray(args.entries) ? args.entries.filter(isRecord) : [];
+      if (entries.length === 0 || entries.length > 6) {
+        return errorResult("invalid_arguments", "entries must hold 1 to 6 objects.");
+      }
+      const resolved = yield* deviceTargets(args, "capture_device_matrix", false);
+      if (!resolved.ok) return resolved.result;
+      const peer = resolved.peers[0]!;
+      const clientCount = (yield* runtimePeers(placeKey(yield* placeOf(args)))).filter((p) =>
+        p.role.startsWith("client-"),
+      ).length;
+      if (peer.role !== "edit" && clientCount > 1) {
+        return errorResult(
+          "unsupported_target",
+          "Multiplayer test clients run in their own Studio processes, so their screenshots cannot be read; use edit or a Play test.",
+        );
+      }
+      const settle = Math.max(0, Math.floor((num(args.settleSeconds) ?? 0.5) * 1000));
+      const restoreAfter = args.restoreAfter !== false;
+      const deviceCall = (endpoint: string, data: unknown) =>
+        call({
+          tool: "capture_device_matrix",
+          args,
+          context,
+          endpoint,
+          data,
+          target: peer.role,
+          instanceId: peer.instanceId,
+        });
+      const before = (yield* deviceCall(StudioEndpoints.deviceGet, { includeDeviceList: false }))
+        .payload;
+      const blocks: StudioToolResult["content"][number][] = [];
+      const summaries: Record<string, unknown>[] = [];
+      let budget = MATRIX_BUDGET_BYTES;
+      let failure: string | undefined;
+      for (const [index, entry] of entries.entries()) {
+        const entryLabel = str(entry.label) ?? `entry-${String(index + 1)}`;
+        const settings = deviceSettings(entry);
+        const applied =
+          Object.keys(settings).length > 0
+            ? (yield* deviceCall(StudioEndpoints.deviceSet, settings)).payload
+            : undefined;
+        if (applied !== undefined && isFailurePayload(applied)) {
+          failure = `${entryLabel}: ${String(isRecord(applied) ? applied.error : "simulator refused")}`;
+          break;
+        }
+        yield* Effect.sleep(Duration.millis(settle));
+        const captured = yield* captureImage({
+          args,
+          context,
+          tool: "capture_device_matrix",
+          maxSize: Math.min(Math.max(Math.floor(num(args.maxSize) ?? 1280), 256), 4096),
+          budgetBytes: Math.floor(budget / (entries.length - index)),
+          target: peer.role,
+        });
+        if (!captured.ok) {
+          failure = `${entryLabel}: ${captured.result.content[0]?.type === "text" ? captured.result.content[0].text.slice(0, 300) : "capture failed"}`;
+          break;
+        }
+        budget -= captured.png.byteLength;
+        summaries.push({
+          index,
+          label: entryLabel,
+          settings,
+          applied,
+          screenshot: { width: captured.width, height: captured.height, format: "png" },
+        });
+        blocks.push({
+          type: "text",
+          text: `capture_device_matrix ${String(index + 1)}/${String(entries.length)} ${entryLabel}: ${captured.message}`,
+        });
+        blocks.push({
+          type: "image",
+          data: captured.png.toString("base64"),
+          mimeType: "image/png",
+        });
+      }
+      let restore: unknown;
+      if (restoreAfter) {
+        const previous = isRecord(before) ? before : {};
+        const wasSimulating =
+          previous.isSimulating === true &&
+          typeof previous.activeDeviceId === "string" &&
+          previous.activeDeviceId !== "default";
+        restore = (yield* deviceCall(
+          StudioEndpoints.deviceSet,
+          wasSimulating
+            ? {
+                deviceId: previous.activeDeviceId,
+                ...(typeof previous.orientation === "string"
+                  ? { orientation: previous.orientation }
+                  : {}),
+                ...(isRecord(previous.resolution) ? { resolution: previous.resolution } : {}),
+                ...(num(previous.pixelDensity) === undefined
+                  ? {}
+                  : { pixelDensity: previous.pixelDensity }),
+                ...(typeof previous.scalingMode === "string"
+                  ? { scalingMode: previous.scalingMode }
+                  : {}),
+              }
+            : { stopSimulation: true },
+        ).pipe(
+          Effect.map(({ payload }) => payload),
+          Effect.orElseSucceed(() => ({ error: "restore failed" })),
+        )) as unknown;
+      }
+      const summary = {
+        target: peer.role,
+        restoreAfter,
+        before,
+        entries: summaries,
+        ...(restore === undefined ? {} : { restore }),
+        ...(failure === undefined ? {} : { error: failure }),
+      };
+      // Images already taken are kept even when a later entry fails.
+      return {
+        content: [jsonText(summary), ...blocks],
+        ...(failure === undefined ? {} : { isError: true }),
+      } satisfies StudioToolResult;
+    }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
+
   interface LogEntry {
     readonly seq: number;
     readonly ts: number;
@@ -1462,6 +1852,162 @@ const make = Effect.gen(function* () {
       ),
       risk: "mutation",
       run: multiplayer,
+    },
+    {
+      name: "inspect_ui",
+      title: "Inspect live UI",
+      description:
+        'Live PlayerGui of a playtest client (target client-N, default the first client): every ScreenGui and GuiObject with role, on-screen rectangle, effective visibility, clipping, scrolling, text facts and whether it can take input. mode "audit" adds findings to fix: text_overflow, text_obscured, text_straddles_edge, content_beyond_scroll, element_outside_viewport, fully_clipped_interactive, zero_size_interactive. mode "snapshot" is compact. root {path|ref} limits it to a subtree.',
+      inputSchema: object({
+        mode: { type: "string", enum: ["inspect", "audit", "snapshot"] },
+        root: { type: "object", properties: { path: { type: "string" }, ref: { type: "string" } } },
+        visible_only: { type: "boolean" },
+        max_depth: { type: "number" },
+        max_nodes: { type: "number" },
+        include_text: { type: "boolean" },
+        include_styles: { type: "boolean" },
+        target: { type: "string" },
+        ...instanceIdProperty,
+      }),
+      risk: "read",
+      run: inspectUi,
+    },
+    {
+      name: "interact_ui",
+      title: "Use live UI",
+      description:
+        "Acts on one element of a playtest client's UI with real input after checking it can take input: click, focus, type (text), scroll_into_view, set_scroll (canvas_position {x,y}). selector fields must all match exactly: ref, path, name, class, role, text, ancestor, visible_only. Matching several elements is an error listing them.",
+      inputSchema: object(
+        {
+          action: {
+            type: "string",
+            enum: ["click", "focus", "type", "scroll_into_view", "set_scroll"],
+          },
+          selector: { type: "object" },
+          text: { type: "string" },
+          canvas_position: {
+            type: "object",
+            properties: { x: { type: "number" }, y: { type: "number" } },
+          },
+          target: { type: "string" },
+          ...instanceIdProperty,
+        },
+        ["action", "selector"],
+      ),
+      risk: "mutation",
+      run: clientCall(
+        "interact_ui",
+        StudioEndpoints.interactUi,
+        (args) => ({
+          action: args.action,
+          selector: args.selector,
+          text: args.text,
+          canvas_position: args.canvas_position,
+        }),
+        false,
+      ),
+    },
+    {
+      name: "simulate_mouse_input",
+      title: "Mouse input",
+      description:
+        "Real mouse input in the Studio viewport (a playtest client when one runs, else edit): click, mouseDown, mouseUp or move at x/y in screenshot pixels, button Left/Right/Middle. The Studio window must be visible.",
+      inputSchema: object(
+        {
+          action: { type: "string", enum: ["click", "mouseDown", "mouseUp", "move"] },
+          x: { type: "number" },
+          y: { type: "number" },
+          button: { type: "string", enum: ["Left", "Right", "Middle"] },
+          target: { type: "string" },
+          ...instanceIdProperty,
+        },
+        ["action", "x", "y"],
+      ),
+      risk: "mutation",
+      run: clientCall(
+        "simulate_mouse_input",
+        StudioEndpoints.mouseInput,
+        (args) => ({ action: args.action, x: args.x, y: args.y, button: args.button }),
+        true,
+      ),
+    },
+    {
+      name: "simulate_keyboard_input",
+      title: "Keyboard input",
+      description:
+        "Real keyboard input (a playtest client when one runs, else edit): keyCode (Enum.KeyCode name such as W, Space, E) with action tap (default), press or release and duration (tap hold, up to 5 s); or text, typed into the focused TextBox.",
+      inputSchema: object({
+        keyCode: { type: "string" },
+        action: { type: "string", enum: ["tap", "press", "release"] },
+        duration: { type: "number" },
+        text: { type: "string" },
+        target: { type: "string" },
+        ...instanceIdProperty,
+      }),
+      risk: "mutation",
+      run: (args, context) =>
+        str(args.keyCode) === undefined && typeof args.text !== "string"
+          ? Effect.succeed(errorResult("invalid_arguments", "keyCode or text is required."))
+          : clientCall(
+              "simulate_keyboard_input",
+              StudioEndpoints.keyboardInput,
+              (a) => ({ keyCode: a.keyCode, action: a.action, duration: a.duration, text: a.text }),
+              true,
+            )(args, context),
+    },
+    {
+      name: "get_device_simulator_state",
+      title: "Device simulator state",
+      description:
+        "Studio's device simulator for edit (default) or a client-N: active device (\"default\" means not simulating), resolution, pixel density, orientation, scaling mode, and the device id list. deviceId adds that device's details.",
+      inputSchema: object({
+        target: { type: "string" },
+        deviceId: { type: "string" },
+        includeDeviceList: { type: "boolean" },
+        ...instanceIdProperty,
+      }),
+      risk: "read",
+      run: deviceGet,
+    },
+    {
+      name: "set_device_simulator",
+      title: "Set device simulator",
+      description:
+        "Simulates a device in Studio for edit (default), a client-N or all-clients: deviceId (from get_device_simulator_state), then orientation (ScreenOrientation name), resolution {width,height}, pixelDensity, scalingMode (DeviceSimulatorScalingMode name). stopSimulation: true goes back to the plain viewport.",
+      inputSchema: object({
+        target: { type: "string" },
+        deviceId: { type: "string" },
+        orientation: { type: "string" },
+        resolution: {
+          type: "object",
+          properties: { width: { type: "number" }, height: { type: "number" } },
+        },
+        pixelDensity: { type: "number" },
+        scalingMode: { type: "string" },
+        stopSimulation: { type: "boolean" },
+        ...instanceIdProperty,
+      }),
+      risk: "mutation",
+      run: deviceSet,
+    },
+    {
+      name: "capture_device_matrix",
+      title: "Device matrix",
+      description:
+        "Screenshots the viewport under 1-6 simulator settings in one call (entries [{label, deviceId, orientation, resolution, pixelDensity, scalingMode}]) for edit or a Play client, then restores the simulator (restoreAfter, default true). settleSeconds waits before each capture.",
+      inputSchema: object(
+        {
+          entries: { type: "array", items: { type: "object" } },
+          target: { type: "string" },
+          settleSeconds: { type: "number" },
+          restoreAfter: { type: "boolean" },
+          maxSize: { type: "number" },
+          ...instanceIdProperty,
+        },
+        ["entries"],
+      ),
+      risk: "mutation",
+      run: deviceMatrix,
     },
     {
       name: "get_output_logs",

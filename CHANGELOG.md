@@ -22,7 +22,8 @@ each version's section as that release's notes. Newest version first:
 - **Studio panel** — A panel in Studio's own look shows the connection and every action the agent takes. Pause the agent, make the place read-only, turn off running Luau, or switch off any single tool, with a search box to find it.
 - **Updates without reopening Studio** — The plugin updates itself in place when SealCode updates. When an agent does need to reopen a place, it closes the older window first instead of piling up Studio windows.
 - **Creator Store assets** — Agents search free assets, check their details and thumbnails, and insert them. Scripts inside arrive disabled until the agent has read them, and assets load even in places that are not published.
-- **Blender to Studio** — Agents model in Blender headless, get a topology report and a preview render for every job, and bring the model straight into Studio, no upload needed.
+- **Blender to Studio** — Agents model in Blender headless, get a topology report and a four-view preview in the model's colours for every job, and bring the model straight into Studio, no upload needed.
+- **Publish to Roblox** — With an Open Cloud key in settings, agents publish Blender models, images and sounds as Roblox assets and insert them, so they stay with the place.
 - **UI design skill** — A new skill teaches agents to build screens that look designed: cartoon, simulator, modern, sci-fi and fantasy styles, buttons with depth and readable text, layouts, motion, and a visual review on phones, tablets and PCs.
 
 ### Improved

@@ -93,6 +93,11 @@ jobs:
             exit $code
           }
 
+      # The server reports its package version to the Studio plugin and in diagnostics.
+      - name: Stamp the server version
+        shell: bash
+        run: node -e "const f='apps/server/package.json';const fs=require('fs');const p=JSON.parse(fs.readFileSync(f,'utf8'));p.version=process.env.VERSION;fs.writeFileSync(f,JSON.stringify(p,null,2)+'\n')"
+
       - name: Build app
         env:
           # The web bundle shows this as the app version in Settings.

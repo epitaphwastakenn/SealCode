@@ -15,14 +15,8 @@ name: Desktop macOS Preview Publish
 # label is applied again.
 
 on:
-  workflow_run:
-    workflows: [Desktop macOS Preview]
-    types: [completed]
-  # The way out: closing the PR deletes its download, and removing the label
-  # before it is consumed cancels the preview. pull_request_target gives this a
-  # write token for fork PRs; it never checks out PR code.
-  pull_request_target:
-    types: [closed, unlabeled]
+  # SealCode: upstream T3 Code automation, run by hand only on this fork.
+  workflow_dispatch:
 
 permissions:
   contents: read

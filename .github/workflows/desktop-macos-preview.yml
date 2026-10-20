@@ -15,8 +15,8 @@ name: Desktop macOS Preview
 # download needs a write token.
 
 on:
-  pull_request:
-    types: [labeled]
+  # SealCode: upstream T3 Code automation, run by hand only on this fork.
+  workflow_dispatch:
 
 permissions:
   contents: read

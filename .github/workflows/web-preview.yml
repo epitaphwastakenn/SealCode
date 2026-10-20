@@ -16,8 +16,8 @@ name: Web Preview
 # self-identify as the hosted app.
 
 on:
-  pull_request:
-    types: [labeled, synchronize, reopened]
+  # SealCode: upstream T3 Code automation, run by hand only on this fork.
+  workflow_dispatch:
 
 permissions:
   contents: read

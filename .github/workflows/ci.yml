@@ -1,10 +1,8 @@
 name: CI
 
 on:
-  pull_request:
-  push:
-    branches:
-      - main
+  # SealCode: upstream T3 Code automation, run by hand only on this fork.
+  workflow_dispatch:
 
 permissions:
   contents: read

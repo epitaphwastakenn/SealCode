@@ -3,9 +3,7 @@ name: Mobile Android APK
 # Checks closed testing hourly. Each new beta gets one versioned prerelease.
 # Unchanged checks publish nothing.
 on:
-  schedule:
-    # Avoid minute zero, when GitHub scheduled jobs are busiest.
-    - cron: "23 * * * *"
+  # SealCode: upstream T3 Code automation, run by hand only on this fork.
   workflow_dispatch:
 
 concurrency:

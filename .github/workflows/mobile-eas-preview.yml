@@ -1,8 +1,8 @@
 name: Mobile EAS Preview
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize, labeled]
+  # SealCode: upstream T3 Code automation, run by hand only on this fork.
+  workflow_dispatch:
 
 jobs:
   preview:

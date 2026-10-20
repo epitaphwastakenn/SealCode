@@ -1,9 +1,8 @@
 name: Thread Transfer Report
 
 on:
-  workflow_run:
-    workflows: [CI]
-    types: [completed]
+  # SealCode: upstream T3 Code automation, run by hand only on this fork.
+  workflow_dispatch:
 
 permissions:
   actions: read

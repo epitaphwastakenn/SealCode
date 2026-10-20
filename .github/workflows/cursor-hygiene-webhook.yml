@@ -1,14 +1,8 @@
 name: Forward to Cursor hygiene
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    types: [opened, reopened, ready_for_review]
-  issues:
-    types: [opened, closed, reopened]
-  discussion:
-    types: [created, closed, reopened]
+  # SealCode: upstream T3 Code automation, run by hand only on this fork.
+  workflow_dispatch:
 
 permissions:
   contents: read

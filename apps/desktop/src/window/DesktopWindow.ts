@@ -37,8 +37,8 @@ import { makeQuitShortcutHandler } from "./QuitHold.ts";
 import { copyContextMenuImage } from "./ContextMenuImage.ts";
 import {
   applyWindowsBackdrop,
-  roundWindowsCorners,
   setWindowsFloatingPanels,
+  trackWindowsDisplayFill,
 } from "./WindowsBackdrop.ts";
 import { drawsAppCaptionButtons, enableAppCaptionButtons } from "./WindowsCaptionButtons.ts";
 
@@ -463,12 +463,7 @@ export const make = Effect.gen(function* () {
     if (environment.platform === "win32") {
       if (floatingPanels) enableAppCaptionButtons(window);
       setWindowsFloatingPanels(window, floatingPanels);
-      roundWindowsCorners(window);
-      const refreshBackdrop = () => applyWindowsBackdrop(window);
-      window.on("maximize", refreshBackdrop);
-      window.on("unmaximize", refreshBackdrop);
-      window.on("enter-full-screen", refreshBackdrop);
-      window.on("leave-full-screen", refreshBackdrop);
+      trackWindowsDisplayFill(window);
     }
     if (environment.platform === "darwin") {
       window.setAutoHideCursor(false);

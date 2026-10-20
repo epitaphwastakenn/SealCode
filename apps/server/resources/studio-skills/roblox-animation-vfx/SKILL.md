@@ -38,3 +38,19 @@ Load when implementing character animation, particle or beam effects, tweens, ca
 - Profile particle counts, lights, post-processing, and per-frame camera work on the target device class.
 
 **Need the details?** Load `references/full.md` for animation and effect recipes.
+
+## SealCode playbooks
+
+Two practical playbooks written by SealCode from live Studio research (verified in Studio on
+2026-10-20). Load them in addition to `references/full.md` when the task matches:
+
+- `references/vfx-sealcode.md`: building, adapting, triggering and reviewing visual effects:
+  explosion, fire, aura, hit, slash, lightning, portal, heal and shockwave recipes with numbers, the
+  Emit and attribute trigger pattern, client versus server, adapting toolbox packs (recolour and
+  scale helpers), performance budgets, a from-scratch effect with verified texture ids, and a
+  playtest screenshot checklist. Load it for any effect that must look good.
+- `references/animation-sealcode.md`: using toolbox animations (and why most third-party ids will
+  not play), publishing (ask the user: Roblox Assistant or user publishes), R15 joint axes and
+  ranges, building KeyframeSequences by code or with the bridge `animation` tool, a hand-made
+  animation recipe, and procedural tween recipes for doors and pickups. Load it before playing,
+  making, publishing or reviewing an animation.

@@ -66,6 +66,7 @@ import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
 import { randomUUID } from "../../lib/utils";
 import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
+import { openWhatsNew } from "../WhatsNewDialog";
 import { CliCommandSettingsRow } from "./CliCommandSettingsRow";
 import { MobileAppSettingsRow } from "./MobileAppSettingsRow";
 import {
@@ -687,6 +688,15 @@ function AboutVersionSection() {
             />
             {buttonTooltip ? <TooltipPopup>{buttonTooltip}</TooltipPopup> : null}
           </Tooltip>
+        }
+      />
+      <SettingsRow
+        {...searchableSetting("whats-new")}
+        description="See what changed in each SealCode release."
+        control={
+          <Button size="sm" variant="outline" onClick={() => openWhatsNew()}>
+            Show
+          </Button>
         }
       />
       {hasDesktopBridge ? (

@@ -540,6 +540,10 @@ export const ClientSettingsSchema = Schema.Struct({
     .check(Schema.isMaxLength(MAX_BACKDROP_STYLES))
     .pipe(Schema.withDecodingDefault(Effect.succeed([]))),
   appearancePresets: AppearancePresets.pipe(Schema.withDecodingDefault(Effect.succeed([]))),
+  // The newest version whose What's New this device has shown; null until the first launch.
+  lastSeenChangelogVersion: Schema.NullOr(TrimmedNonEmptyString).pipe(
+    Schema.withDecodingDefault(Effect.succeed(null)),
+  ),
   contextWindowMeterEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   composerCollapseOnScroll: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   composerRichTextEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
@@ -1900,6 +1904,7 @@ export const ClientSettingsPatch = Schema.Struct({
     Schema.Array(BackdropStyle).check(Schema.isMaxLength(MAX_BACKDROP_STYLES)),
   ),
   appearancePresets: Schema.optionalKey(AppearancePresets),
+  lastSeenChangelogVersion: Schema.optionalKey(Schema.NullOr(TrimmedNonEmptyString)),
   contextWindowMeterEnabled: Schema.optionalKey(Schema.Boolean),
   composerCollapseOnScroll: Schema.optionalKey(Schema.Boolean),
   composerRichTextEnabled: Schema.optionalKey(Schema.Boolean),

@@ -76,11 +76,13 @@ import {
   SwatchBookIcon,
   RotateCcwIcon,
   SettingsIcon,
+  SparklesIcon,
   SquarePenIcon,
   SunIcon,
   TextSearchIcon,
 } from "lucide-react";
 import { requestThreadFindOpen } from "./chat/threadFindActionBus";
+import { openWhatsNew } from "./WhatsNewDialog";
 import {
   useDeferredValue,
   useEffect,
@@ -2082,6 +2084,17 @@ function OpenCommandPaletteDialog(props: {
     shortcutCommand: "usage.open",
     run: async () => {
       await navigate({ to: "/usage" });
+    },
+  });
+
+  actionItems.push({
+    kind: "action",
+    value: "action:whats-new",
+    searchTerms: ["what's new", "whats new", "changelog", "release notes", "changes", "updates"],
+    title: "What's new",
+    icon: <SparklesIcon className={ITEM_ICON_CLASS} />,
+    run: async () => {
+      openWhatsNew();
     },
   });
 

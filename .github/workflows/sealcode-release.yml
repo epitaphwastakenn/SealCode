@@ -94,6 +94,9 @@ jobs:
           }
 
       - name: Build app
+        env:
+          # The web bundle shows this as the app version in Settings.
+          APP_VERSION: ${{ env.VERSION }}
         run: vp run build:desktop
 
       - name: Build installer
@@ -116,8 +119,16 @@ jobs:
         run: |
           set -euo pipefail
           assets=("release/SealCode-$VERSION-x64.exe" "release/SealCode-$VERSION-x64.exe.blockmap" release/latest.yml)
+          # The version's CHANGELOG.md section is the release body, the same notes What's New shows.
+          awk -v v="$VERSION" '$0 ~ "^## " { if (found) exit; found = ($2 == v); next } found'             CHANGELOG.md > release-notes.md
+          if [ -s release-notes.md ]; then
+            notes=(--notes-file release-notes.md)
+          else
+            echo "::warning::CHANGELOG.md has no section for $VERSION; using generated notes."
+            notes=(--generate-notes)
+          fi
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "${assets[@]}" --clobber
           else
-            gh release create "$TAG" "${assets[@]}" --title "SealCode $VERSION" --generate-notes --latest
+            gh release create "$TAG" "${assets[@]}" --title "SealCode $VERSION" "${notes[@]}" --latest
           fi

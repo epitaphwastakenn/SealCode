@@ -1283,6 +1283,11 @@ export function createServerEnvironmentAtoms<R, E>(
       tag: WS_METHODS.subscribeMcpStatus,
       idleTtlMs: 0,
     }),
+    robloxStudioAlerts: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
+      label: "environment-data:server:roblox-studio-alerts",
+      tag: WS_METHODS.subscribeRobloxStudioAlerts,
+      idleTtlMs: 0,
+    }),
     robloxStudioStatus: createEnvironmentRpcQueryAtomFamily(runtime, {
       label: "environment-data:server:roblox-studio-status",
       tag: WS_METHODS.serverGetRobloxStudioStatus,

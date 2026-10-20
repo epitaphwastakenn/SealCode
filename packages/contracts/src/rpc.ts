@@ -23,7 +23,7 @@ import {
 } from "./providerSetup.ts";
 import * as Schema from "effect/Schema";
 import { GlobalMcpStatus, GlobalMcpStatusUpdatedEvent, McpServerId } from "./mcp.ts";
-import { RobloxStudioStatus } from "./robloxStudio.ts";
+import { RobloxStudioAlert, RobloxStudioStatus } from "./robloxStudio.ts";
 import {
   ServerVoiceTranscriptionInput,
   ServerVoiceTranscriptionResult,
@@ -583,6 +583,7 @@ export const WS_METHODS = {
   subscribeDeviceState: "subscribeDeviceState",
   subscribeServerConfig: "subscribeServerConfig",
   subscribeMcpStatus: "subscribeMcpStatus",
+  subscribeRobloxStudioAlerts: "subscribeRobloxStudioAlerts",
   subscribeServerLifecycle: "subscribeServerLifecycle",
   subscribeAuthAccess: "subscribeAuthAccess",
   subscribeBackgroundPolicy: "subscribeBackgroundPolicy",
@@ -1320,6 +1321,13 @@ export const WsSubscribeMcpStatusRpc = Rpc.make(WS_METHODS.subscribeMcpStatus, {
   stream: true,
 });
 
+export const WsSubscribeRobloxStudioAlertsRpc = Rpc.make(WS_METHODS.subscribeRobloxStudioAlerts, {
+  payload: Schema.Struct({}),
+  success: RobloxStudioAlert,
+  error: EnvironmentAuthorizationError,
+  stream: true,
+});
+
 const WsAssetsCreateUrlRpc = Rpc.make(WS_METHODS.assetsCreateUrl, {
   payload: AssetCreateUrlInput,
   success: AssetCreateUrlResult,
@@ -1916,6 +1924,7 @@ export const WsRpcGroup = RpcGroup.make(
   WsServerReconnectMcpRpc,
   WsServerGetRobloxStudioStatusRpc,
   WsSubscribeMcpStatusRpc,
+  WsSubscribeRobloxStudioAlertsRpc,
   WsServerProbeRpc,
   WsServerGetConfigRpc,
   WsServerRefreshProvidersRpc,

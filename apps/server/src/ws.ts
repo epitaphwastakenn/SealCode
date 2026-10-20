@@ -121,6 +121,7 @@ import * as McpAppRequests from "./mcpApps/McpAppRequests.ts";
 import * as GlobalMcpManager from "./mcp/GlobalMcpManager.ts";
 import { McpToolVisibility } from "./mcp/McpToolVisibility.ts";
 import * as RobloxStudioStatus from "./roblox/RobloxStudioStatus.ts";
+import * as StudioBridge from "./studioBridge/StudioBridge.ts";
 import * as VoiceTranscription from "./voiceTranscription.ts";
 import * as ProviderSessionManager from "./orchestration-v2/ProviderSessionManager.ts";
 import * as ThreadLaunchService from "./orchestration-v2/ThreadLaunchService.ts";
@@ -1271,6 +1272,7 @@ const layerWsRpc = (
       const globalMcpManager = yield* GlobalMcpManager.GlobalMcpManager;
       const mcpToolVisibility = yield* McpToolVisibility;
       const robloxStudioStatus = yield* RobloxStudioStatus.RobloxStudioStatusService;
+      const studioBridge = yield* StudioBridge.StudioBridge;
       const voiceTranscription = yield* VoiceTranscription.VoiceTranscription;
       const startup = yield* ServerRuntimeStartup.ServerRuntimeStartup;
       const workspaceEntries = yield* WorkspaceEntries.WorkspaceEntries;
@@ -3050,6 +3052,7 @@ const layerWsRpc = (
               );
             }),
           ),
+        [WS_METHODS.subscribeRobloxStudioAlerts]: (_input) => studioBridge.alerts,
         [WS_METHODS.subscribeMcpStatus]: (_input) =>
           globalMcpManager.streamStatusChanges.pipe(
             Stream.map((statuses) => ({ type: "mcp.status.updated" as const, statuses })),

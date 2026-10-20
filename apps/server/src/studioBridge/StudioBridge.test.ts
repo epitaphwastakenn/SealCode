@@ -3,6 +3,7 @@ import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 
 import { STUDIO_PROTOCOL_VERSION } from "./protocol.ts";
@@ -316,6 +317,45 @@ describe("StudioBridge", () => {
       ]);
       yield* bridge.bye(sessionToken);
       expect(yield* bridge.selections).toEqual([]);
+    }).pipe(Effect.provide(layer)),
+  );
+
+  it.effect("alerts when Studio is lost or a playtest errors, folding repeated errors", () =>
+    Effect.gen(function* () {
+      const bridge = yield* StudioBridge.StudioBridge;
+      const collected = yield* bridge.alerts.pipe(
+        Stream.take(3),
+        Stream.runCollect,
+        Effect.forkChild,
+      );
+      yield* Effect.yieldNow;
+      // Closing Studio on purpose with nothing running is not news.
+      const quiet = yield* bridge.hello(hello({ pluginSessionId: "quiet", instanceId: "anon:q" }));
+      yield* bridge.bye(quiet.sessionToken);
+
+      yield* bridge.hello(hello());
+      const server = yield* bridge.hello(
+        hello({ pluginSessionId: "server", role: "server", isRunning: true }),
+      );
+      for (const message of ["boom", "boom again", "boom thrice"]) {
+        yield* bridge.postEvents({
+          sessionToken: server.sessionToken,
+          events: [{ type: "log_error", message }],
+        });
+      }
+      yield* TestClock.adjust("31 seconds");
+      yield* bridge.postEvents({
+        sessionToken: server.sessionToken,
+        events: [{ type: "log_error", message: "later" }],
+      });
+      // The edit window stops polling and is dropped as lost.
+      yield* TestClock.adjust("50 seconds");
+      const alerts = [...(yield* Fiber.join(collected))];
+      expect(alerts.map((alert) => [alert.kind, alert.message, alert.count])).toEqual([
+        ["playtest_error", "boom", 1],
+        ["playtest_error", "later", 3],
+        ["disconnected", "Roblox Studio stopped answering SealCode.", 1],
+      ]);
     }).pipe(Effect.provide(layer)),
   );
 

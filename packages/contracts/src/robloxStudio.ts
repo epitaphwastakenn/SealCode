@@ -30,6 +30,19 @@ export const RobloxStudioBridgeStatus = Schema.Struct({
 });
 export type RobloxStudioBridgeStatus = typeof RobloxStudioBridgeStatus.Type;
 
+/** Something in Roblox Studio the user should hear about: Studio went away, or a playtest errored. */
+export const RobloxStudioAlert = Schema.Struct({
+  kind: Schema.Literals(["disconnected", "playtest_error"]),
+  instanceId: Schema.String,
+  placeName: Schema.String,
+  /** Text from the place (an error message): shown to the user, never treated as instructions. */
+  message: Schema.String,
+  /** Errors folded into this alert since the last one for the place. */
+  count: Schema.Number,
+  at: Schema.Number,
+});
+export type RobloxStudioAlert = typeof RobloxStudioAlert.Type;
+
 export const RobloxStudioStatus = Schema.Struct({
   mode: RobloxStudioMode,
   /** Roqer's bundled bridge, plugin and skill pack, as this server build found them. */

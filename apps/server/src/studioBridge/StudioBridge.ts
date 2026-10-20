@@ -11,6 +11,8 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 
+import type { RobloxStudioAlert } from "@t3tools/contracts";
+
 import packageJson from "../../package.json" with { type: "json" };
 import {
   KNOWN_CAPABILITIES,
@@ -254,6 +256,7 @@ interface Pending {
 }
 
 const MAX_ACTIVITY = 50;
+const ERROR_ALERT_WINDOW_MS = 30_000;
 const AGENT_ACTIVE_MS = 90_000;
 
 const sanitizeToggles = (value: unknown): StudioToggles => {
@@ -363,6 +366,8 @@ export class StudioBridge extends Context.Service<
     /** What the user last had selected in the edit window of each connected place. */
     readonly selections: Effect.Effect<ReadonlyArray<StudioSelection>>;
     readonly events: Stream.Stream<StudioEvent>;
+    /** Studio went away unexpectedly or mid-task, or a playtest printed an error. */
+    readonly alerts: Stream.Stream<RobloxStudioAlert>;
     /** Emits whenever peers, lifecycle or activity change. */
     readonly changes: Stream.Stream<void>;
   }
@@ -382,6 +387,9 @@ const make = Effect.gen(function* () {
   let lastToolAt = 0;
   let lastRejection: string | undefined;
   const eventsHub = yield* PubSub.sliding<StudioEvent>(256);
+  const alertsHub = yield* PubSub.sliding<RobloxStudioAlert>(64);
+  // Playtest errors are folded per place so a script erroring every frame sends one alert.
+  const errorWindows = new Map<string, { at: number; folded: number }>();
   const changesHub = yield* PubSub.sliding<void>(16);
 
   const randomId = crypto.randomUUIDv4().pipe(Effect.orDie);
@@ -470,8 +478,25 @@ const make = Effect.gen(function* () {
   };
 
   /** Removes a session; requests it held or that nobody else can serve fail. */
-  const dropSession = (session: Session) =>
+  const dropSession = (session: Session, reason: "bye" | "lost" | "replaced" = "bye") =>
     Effect.gen(function* () {
+      const now = yield* Clock.currentTimeMillis;
+      const midTask = [...pending.values()].some(
+        (request) => request.claimedBy === session.peer.pluginSessionId,
+      );
+      // Closing Studio on purpose is not news; losing it, or losing it while the agent works, is.
+      if (session.peer.role === "edit" && (reason === "lost" || (reason === "bye" && midTask))) {
+        yield* PubSub.publish(alertsHub, {
+          kind: "disconnected" as const,
+          instanceId: session.peer.instanceId,
+          placeName: session.peer.placeName,
+          message: midTask
+            ? "Roblox Studio disconnected while the agent was using it."
+            : "Roblox Studio stopped answering SealCode.",
+          count: 1,
+          at: now,
+        });
+      }
       yield* Effect.logInfo("Studio peer disconnected", {
         role: session.peer.role,
         instanceId: session.peer.instanceId,
@@ -562,7 +587,7 @@ const make = Effect.gen(function* () {
         if (!idle) {
           return yield* new StudioHelloRejected({ status: 409, code: "duplicate_instance_role" });
         }
-        yield* dropSession(other);
+        yield* dropSession(other, "replaced");
       }
 
       const capabilities = input.capabilities.filter((capability): capability is StudioCapability =>
@@ -769,6 +794,27 @@ const make = Effect.gen(function* () {
               : {}),
           });
         }
+        if (
+          type === "log_error" &&
+          session.peer.role !== "edit" &&
+          typeof rest.message === "string"
+        ) {
+          const key = session.peer.instanceId;
+          const window = errorWindows.get(key);
+          if (window !== undefined && now - window.at < ERROR_ALERT_WINDOW_MS) {
+            window.folded += 1;
+          } else {
+            yield* PubSub.publish(alertsHub, {
+              kind: "playtest_error" as const,
+              instanceId: session.peer.instanceId,
+              placeName: session.peer.placeName,
+              message: rest.message.slice(0, 500),
+              count: 1 + (window?.folded ?? 0),
+              at: now,
+            });
+            errorWindows.set(key, { at: now, folded: 0 });
+          }
+        }
         yield* PubSub.publish(eventsHub, {
           type: type as StudioEventType,
           instanceId: session.peer.instanceId,
@@ -958,7 +1004,7 @@ const make = Effect.gen(function* () {
         session.waiter === undefined &&
         now - session.peer.lastSeenAt > StudioLimits.staleAfterMs
       ) {
-        yield* dropSession(session);
+        yield* dropSession(session, "lost");
       }
     }
     for (const [id, at] of tombstones) {
@@ -1045,6 +1091,7 @@ const make = Effect.gen(function* () {
       }),
     ),
     events: Stream.fromPubSub(eventsHub),
+    alerts: Stream.fromPubSub(alertsHub),
     changes: Stream.fromPubSub(changesHub),
   });
 });

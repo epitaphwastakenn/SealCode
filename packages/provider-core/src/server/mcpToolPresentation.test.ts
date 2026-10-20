@@ -128,4 +128,25 @@ describe("mcpToolPresentation", () => {
       },
     );
   });
+
+  it("titles SealCode's Studio tools from their arguments, through the global gateway too", () => {
+    const studioSource = { key: "mcp:studio", name: "Roblox Studio", kind: "integration" };
+    expect(
+      mcpToolPresentation({
+        toolName: "mcp__sealcode-global__mcp__studio__get_script_source",
+        arguments: { path: 'game.ServerScriptService["Main Loop"]' },
+      }),
+    ).toEqual({ title: "Read script Main Loop", toolSource: studioSource });
+    expect(
+      mcpToolPresentation({
+        serverName: "studio",
+        toolName: "playtest",
+        arguments: { action: "start", mode: "run" },
+      }),
+    ).toEqual({ title: "Playtest start run", toolSource: studioSource });
+    expect(mcpToolPresentation({ toolName: "mcp__studio__get_place_info" })).toEqual({
+      title: "Read place info",
+      toolSource: studioSource,
+    });
+  });
 });

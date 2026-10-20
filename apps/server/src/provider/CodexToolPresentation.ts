@@ -226,6 +226,7 @@ export const mcpToolPresentation = Effect.fn("CodexToolPresentation.mcpToolPrese
     return integrationToolPresentation({
       serverName: appContext?.connectorId ?? item.server,
       toolName: item.tool,
+      arguments: item.arguments,
       title: appContext?.actionName,
       serverDisplayName: appContext?.appName,
       source: sourceMetadata,

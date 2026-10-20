@@ -2560,6 +2560,16 @@ function claudeToolUseBlocksFromAssistantMessage(
 
 type ClaudeToolPresentation = ReturnType<typeof mcpToolPresentation>;
 
+/** SealCode's Studio tools are titled from their arguments ("Read script Greeter"). */
+const studioPresentation = (
+  toolName: string,
+  input: unknown,
+): ClaudeToolPresentation | undefined => {
+  if (!/(?:^|__)studio__/u.test(toolName)) return undefined;
+  const presentation = mcpToolPresentation({ toolName, arguments: input });
+  return presentation.toolSource?.key === "mcp:studio" ? presentation : undefined;
+};
+
 function claudeToolPresentationsFromAssistantMessage(
   message: SDKMessage,
 ): ReadonlyMap<string, ClaudeToolPresentation> {
@@ -5936,6 +5946,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               toolName: toolUse.name,
               toolInput: claudeNativeToolInputFromUnknown(toolUse.input),
               presentation:
+                studioPresentation(toolUse.name, toolUse.input) ??
                 presentations.get(toolUse.id) ??
                 mcpToolPresentation({
                   toolName: toolUse.name.replace(/^mcp__claude_ai_/u, "mcp__"),
@@ -7847,6 +7858,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
               toolInput: nativeToolInput,
               parentToolUseId: parentToolUseIdFromSdkMessage(message),
               presentation:
+                studioPresentation(toolUse.name, toolUse.input) ??
                 toolPresentations.get(toolUse.id) ??
                 mcpToolPresentation({
                   toolName: toolUse.name.replace(/^mcp__claude_ai_/u, "mcp__"),
@@ -8490,7 +8502,9 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           }
 
           const requestKind = providerRequestKindFromClaudeTool(toolName);
+          const studio = studioPresentation(toolName, toolInput);
           const prompt =
+            (studio?.title === undefined ? undefined : `Roblox Studio: ${studio.title}`) ??
             callbackOptions.title ??
             callbackOptions.description ??
             callbackOptions.decisionReason ??

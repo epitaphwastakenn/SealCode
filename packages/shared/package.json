@@ -395,6 +395,10 @@
       "types": "./src/orchestrationV2Timeline.ts",
       "import": "./src/orchestrationV2Timeline.ts"
     },
+    "./studioToolPresentation": {
+      "types": "./src/studioToolPresentation.ts",
+      "import": "./src/studioToolPresentation.ts"
+    },
     "./t3McpToolPresentation": {
       "types": "./src/t3McpToolPresentation.ts",
       "import": "./src/t3McpToolPresentation.ts"

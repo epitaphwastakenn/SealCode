@@ -3,6 +3,11 @@ import {
   type ToolActivityIcon,
   type ToolActivitySource,
 } from "@t3tools/contracts";
+import {
+  STUDIO_MCP_SERVER,
+  STUDIO_TOOL_SOURCE_NAME,
+  studioToolTitle,
+} from "@t3tools/shared/studioToolPresentation";
 import { resolveT3McpToolDefinition } from "@t3tools/shared/t3McpToolPresentation";
 import { COMPUTER_USE_TOOL_SOURCE } from "@t3tools/shared/toolActivity";
 
@@ -35,6 +40,8 @@ export function mcpToolPresentation(input: {
   readonly iconUrl?: unknown;
   readonly iconUrlDark?: unknown;
   readonly source?: unknown;
+  /** The call's arguments, when the caller has them: some tools name their target in the title. */
+  readonly arguments?: unknown;
 }): {
   readonly title?: string;
   readonly toolIcon?: ToolActivityIcon;
@@ -62,6 +69,19 @@ export function mcpToolPresentation(input: {
     }
   }
   if (server && tool && resolveT3McpToolDefinition(`${server}.${tool}`)) return {};
+  if (server?.toLowerCase() === STUDIO_MCP_SERVER && tool) {
+    const studioTitle = studioToolTitle(tool, input.arguments);
+    if (studioTitle !== undefined) {
+      return {
+        title: normalizeMcpText(studioTitle) ?? studioTitle.slice(0, 160),
+        toolSource: {
+          key: `mcp:${STUDIO_MCP_SERVER}`,
+          name: STUDIO_TOOL_SOURCE_NAME,
+          kind: "integration",
+        },
+      };
+    }
+  }
   if (server?.toLowerCase() === COMPUTER_USE_MCP_SERVER_NAME && tool) {
     return {
       title: normalizeMcpText(input.title) ?? tool.replace(/[_-]+/gu, " "),

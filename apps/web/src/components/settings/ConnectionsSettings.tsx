@@ -61,7 +61,8 @@ import * as DateTime from "effect/DateTime";
 import * as Option from "effect/Option";
 
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
-import { cn } from "../../lib/utils";
+import { cn, isWindowsPlatform } from "../../lib/utils";
+import { isElectron } from "../../env";
 import { isLocalEnvironmentDisabled } from "../../localEnvironment";
 import { formatElapsedDurationLabel, formatExpiresInLabel } from "../../timestampFormat";
 import { resolveDesktopPairingUrl, resolveHostedPairingUrl } from "./pairingUrls";
@@ -210,6 +211,7 @@ import {
 } from "../../keybindings";
 import { GlobalMcpSettings } from "./GlobalMcpSettings";
 import { RobloxStudioSettings } from "./RobloxStudioSettings";
+import { ComputerUseSettings } from "./ComputerUseSettings";
 
 const DEFAULT_TAILSCALE_SERVE_PORT = 443;
 const EMPTY_ADVERTISED_ENDPOINTS: ReadonlyArray<AdvertisedEndpoint> = [];
@@ -3842,6 +3844,9 @@ export function ConnectionsSettings() {
   return (
     <SettingsPageContainer>
       {canManageLocalBackend ? <RobloxStudioSettings /> : null}
+      {canManageLocalBackend && isElectron && isWindowsPlatform(navigator.platform) ? (
+        <ComputerUseSettings />
+      ) : null}
       {canManageLocalBackend ? <GlobalMcpSettings /> : null}
       {primarySettings}
       <SettingsSection

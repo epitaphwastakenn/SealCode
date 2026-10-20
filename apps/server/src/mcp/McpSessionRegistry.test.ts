@@ -103,6 +103,24 @@ it.effect("always grants pull-requests and gates browser and device access indep
   }),
 );
 
+it.effect("offers the computer-use endpoint only to sessions granted computer use", () =>
+  Effect.gen(function* () {
+    const registry = yield* makeRegistry(() => 1_000);
+    const granted = yield* registry.issue({
+      threadId: ThreadId.make("thread-computer"),
+      providerInstanceId: ProviderInstanceId.make("claudeAgent"),
+      capabilities: new Set(["computer-use"]),
+    });
+    expect(granted.config.computerUseEndpoint).toBe("http://127.0.0.1:43123/mcp/computer-use");
+    const plain = yield* registry.issue({
+      threadId: ThreadId.make("thread-plain"),
+      providerInstanceId: ProviderInstanceId.make("claudeAgent"),
+      capabilities: new Set(["preview"]),
+    });
+    expect(plain.config.computerUseEndpoint).toBeUndefined();
+  }),
+);
+
 it.effect("builds MCP endpoints from the bound server host", () =>
   Effect.gen(function* () {
     const cases = [

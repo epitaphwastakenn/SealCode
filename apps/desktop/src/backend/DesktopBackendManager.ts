@@ -29,6 +29,7 @@ import { waitForHttpReady as waitForHttpReadyShared } from "@t3tools/shared/http
 import * as DesktopObservability from "../app/DesktopObservability.ts";
 import * as DesktopTelemetryPublisher from "../telemetry/DesktopTelemetryPublisher.ts";
 import * as DesktopBrowserHost from "../preview/DesktopBrowserHost.ts";
+import * as ComputerUseHost from "../computerUse/ComputerUseHost.ts";
 import * as DesktopWslEnvironment from "../wsl/DesktopWslEnvironment.ts";
 
 const INITIAL_RESTART_DELAY = Duration.millis(500);
@@ -189,6 +190,8 @@ interface RunBackendProcessOptions extends DesktopBackendStartConfig {
   readonly desktopTelemetryStream: Stream.Stream<Uint8Array>;
   readonly desktopBrowserStream?: Stream.Stream<Uint8Array>;
   readonly onDesktopBrowserCommand?: (line: string) => Effect.Effect<void>;
+  readonly desktopComputerUseStream?: Stream.Stream<Uint8Array>;
+  readonly onDesktopComputerUseCommand?: (line: string) => Effect.Effect<void>;
   readonly onDesktopTelemetryControl?: (
     message: DesktopTelemetryControlMessageValue,
   ) => Effect.Effect<void>;
@@ -426,6 +429,18 @@ export const runBackendProcess = Effect.fn("runBackendProcess")(function* (
     if (options.bootstrap.desktopBrowserControlFd !== undefined) {
       additionalFds[`fd${options.bootstrap.desktopBrowserControlFd}`] = { type: "output" };
     }
+    if (
+      options.bootstrap.desktopComputerUseFd !== undefined &&
+      options.desktopComputerUseStream !== undefined
+    ) {
+      additionalFds[`fd${options.bootstrap.desktopComputerUseFd}`] = {
+        type: "input",
+        stream: options.desktopComputerUseStream,
+      };
+    }
+    if (options.bootstrap.desktopComputerUseControlFd !== undefined) {
+      additionalFds[`fd${options.bootstrap.desktopComputerUseControlFd}`] = { type: "output" };
+    }
   }
   const command = ChildProcess.make(options.executablePath, options.args, {
     cwd: options.cwd,
@@ -510,6 +525,26 @@ export const runBackendProcess = Effect.fn("runBackendProcess")(function* (
       Effect.catchCause((cause) =>
         logBackendProcessWarning("desktop browser command stream stopped", {
           fd: browserFd,
+          cause: Cause.pretty(cause),
+        }),
+      ),
+      Effect.forkScoped,
+    );
+  }
+  if (
+    options.bootstrap.desktopComputerUseControlFd !== undefined &&
+    options.onDesktopComputerUseCommand !== undefined
+  ) {
+    const computerUseFd = options.bootstrap.desktopComputerUseControlFd;
+    const handleCommand = options.onDesktopComputerUseCommand;
+    yield* handle.getOutputFd(computerUseFd).pipe(
+      Stream.decodeText(),
+      Stream.splitLines,
+      Stream.filter((line) => line.length > 0),
+      Stream.runForEach(handleCommand),
+      Effect.catchCause((cause) =>
+        logBackendProcessWarning("desktop computer use command stream stopped", {
+          fd: computerUseFd,
           cause: Cause.pretty(cause),
         }),
       ),
@@ -630,6 +665,7 @@ export const makeBackendInstance = Effect.fn("makeBackendInstance")(function* (
   const backendOutputLog = yield* backendOutputLogFactory.forInstance(spec.id);
   const desktopTelemetryPublisher = yield* DesktopTelemetryPublisher.DesktopTelemetryPublisher;
   const desktopBrowserHost = yield* DesktopBrowserHost.DesktopBrowserHost;
+  const computerUseHost = yield* Effect.serviceOption(ComputerUseHost.ComputerUseHost);
   const wslEnvironment = yield* DesktopWslEnvironment.DesktopWslEnvironment;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const httpClient = yield* HttpClient.HttpClient;
@@ -884,6 +920,13 @@ export const makeBackendInstance = Effect.fn("makeBackendInstance")(function* (
           desktopTelemetryStream: desktopTelemetryPublisher.encoded,
           desktopBrowserStream: desktopBrowserHost.events,
           onDesktopBrowserCommand: desktopBrowserHost.handleCommandLine,
+          ...Option.match(computerUseHost, {
+            onNone: () => ({}),
+            onSome: (host) => ({
+              desktopComputerUseStream: host.events,
+              onDesktopComputerUseCommand: host.handleCommandLine,
+            }),
+          }),
           onDesktopTelemetryControl: (message) =>
             desktopTelemetryPublisher.handleControlForSource(spec.id, message),
           onStarted: Effect.fn("desktop.backendInstance.onStarted")(function* (pid) {

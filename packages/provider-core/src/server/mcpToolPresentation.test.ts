@@ -72,6 +72,13 @@ describe("mcpToolPresentation", () => {
     ).toEqual(expected);
   });
 
+  it("presents computer-use tools as computer use", () => {
+    expect(mcpToolPresentation({ toolName: "mcp__computer-use__left_click" })).toEqual({
+      title: "left click",
+      toolSource: { key: "computer-use", name: "Computer Use", kind: "computer" },
+    });
+  });
+
   it("uses readable fallback names without a guessed logo", () => {
     expect(mcpToolPresentation({ toolName: "mcp__my_server__get_weather" })).toEqual({
       title: "get weather",

@@ -1,5 +1,10 @@
-import type { ToolActivityIcon, ToolActivitySource } from "@t3tools/contracts";
+import {
+  COMPUTER_USE_MCP_SERVER_NAME,
+  type ToolActivityIcon,
+  type ToolActivitySource,
+} from "@t3tools/contracts";
 import { resolveT3McpToolDefinition } from "@t3tools/shared/t3McpToolPresentation";
+import { COMPUTER_USE_TOOL_SOURCE } from "@t3tools/shared/toolActivity";
 
 export function normalizeMcpText(value: unknown, maxLength = 160): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -57,6 +62,12 @@ export function mcpToolPresentation(input: {
     }
   }
   if (server && tool && resolveT3McpToolDefinition(`${server}.${tool}`)) return {};
+  if (server?.toLowerCase() === COMPUTER_USE_MCP_SERVER_NAME && tool) {
+    return {
+      title: normalizeMcpText(input.title) ?? tool.replace(/[_-]+/gu, " "),
+      toolSource: COMPUTER_USE_TOOL_SOURCE,
+    };
+  }
   const title =
     normalizeMcpText(input.title) ??
     (server && tool ? normalizeMcpText(tool.replace(/[_-]+/gu, " ")) : undefined);

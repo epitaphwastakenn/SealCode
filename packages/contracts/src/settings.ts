@@ -986,6 +986,14 @@ const SourceControlWritingStyleSetting = Schema.Union([
   ),
 );
 
+/** Lets agents see and drive this computer's desktop through the desktop app. */
+export const ComputerUseSettings = Schema.Struct({
+  enabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /** Brings back the windows minimized to keep ungranted apps out of the agent's way. */
+  restoreHiddenApps: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+});
+export type ComputerUseSettings = typeof ComputerUseSettings.Type;
+
 export const BranchNamingMode = Schema.Literals(["static", "semantic", "custom"]);
 export type BranchNamingMode = typeof BranchNamingMode.Type;
 
@@ -1454,6 +1462,7 @@ export const ServerSettings = Schema.Struct({
   ),
   mcpServers: GlobalMcpServerMap.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   robloxStudio: RobloxStudioSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
+  computerUse: ComputerUseSettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   observability: ObservabilitySettings.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   sourceControlHosts: Schema.Record(Schema.String, SourceControlHostSettings).pipe(
     Schema.withDecodingDefault(Effect.succeed({})),
@@ -1759,6 +1768,12 @@ export const ServerSettingsPatch = Schema.Struct({
       blenderMcpArgs: Schema.optionalKey(Schema.Array(Schema.String)),
     }),
   ),
+  computerUse: Schema.optionalKey(
+    Schema.Struct({
+      enabled: Schema.optionalKey(Schema.Boolean),
+      restoreHiddenApps: Schema.optionalKey(Schema.Boolean),
+    }),
+  ),
   // Per-entry, unlike `providerInstances`: a client only ever adds or removes
   // one source, and sending the whole map races another edit that has not
   // echoed back yet. `null` removes; the server merges into its current map.
@@ -1791,7 +1806,9 @@ export function requiredScopesForServerSettingsPatch(
       key === "usageLimitSources" ||
       key === "mcpServers" ||
       // Starts the Studio bridge and Blender processes on the host.
-      key === "robloxStudio"
+      key === "robloxStudio" ||
+      // Hands agents the host's mouse, keyboard and screen.
+      key === "computerUse"
     ) {
       changesProviders = true;
     } else {

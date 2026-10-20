@@ -11,6 +11,11 @@ export interface McpProviderSessionConfig {
    * a second server named `sealcode-global` beside `t3-code`.
    */
   readonly globalEndpoint?: string;
+  /**
+   * Present only when the user turned computer use on and this server runs
+   * beside the desktop app; adapters attach it as a server named `computer-use`.
+   */
+  readonly computerUseEndpoint?: string;
   readonly authorizationHeader: string;
   /**
    * Adapters read it to keep developer instructions truthful: when the user

@@ -16,7 +16,15 @@ export interface ProcessedBackdrop {
   edges: EdgeColors;
 }
 
+/**
+ * "live" is what the window shows and "prefetch" an image about to be shown;
+ * a request only replaces older ones in its own lane, so warming the next
+ * image never cancels the one on screen.
+ */
+export type BackdropLane = "live" | "prefetch";
+
 interface Pending {
+  lane: BackdropLane;
   resolve: (result: ProcessedBackdrop) => void;
   reject: (error: Error) => void;
 }
@@ -33,10 +41,12 @@ function abortError() {
   return new DOMException("A newer backdrop request replaced this one", "AbortError");
 }
 
-function failAll(error: Error) {
-  const waiting = [...pending.values()];
-  pending.clear();
-  for (const request of waiting) request.reject(error);
+function failAll(error: Error, lane?: BackdropLane) {
+  for (const [id, request] of pending) {
+    if (lane !== undefined && request.lane !== lane) continue;
+    pending.delete(id);
+    request.reject(error);
+  }
 }
 
 function sharedWorker(): Worker {
@@ -71,18 +81,19 @@ function sharedWorker(): Worker {
 
 /**
  * The image styled with the look's pixel effects and shrunk to `BACKDROP_MAX_EDGE`,
- * done off the main thread. Only the latest request wins: starting another rejects
- * the one in flight with an `AbortError`, which callers can ignore.
+ * done off the main thread. Only the latest request of a lane wins: starting another
+ * rejects the one in flight with an `AbortError`, which callers can ignore.
  */
 export function processBackdropImage(
   image: Blob,
   look: BackdropLook,
   palette: BackdropPalette,
+  lane: BackdropLane = "live",
 ): Promise<ProcessedBackdrop> {
   const id = ++lastId;
-  failAll(abortError());
+  failAll(abortError(), lane);
   return new Promise((resolve, reject) => {
-    pending.set(id, { resolve, reject });
+    pending.set(id, { lane, resolve, reject });
     try {
       const request: BackdropWorkerRequest = {
         id,

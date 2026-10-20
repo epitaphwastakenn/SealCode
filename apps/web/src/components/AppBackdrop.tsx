@@ -10,13 +10,12 @@ import { type CSSProperties, useEffect, useRef, useState } from "react";
 import { isElectron } from "~/env";
 import { useClientSettings } from "~/hooks/useSettings";
 import { useTheme } from "~/hooks/useTheme";
-import { loadBackdropImage } from "~/lib/backdrop/backdropStore";
 import {
-  type BackdropPalette,
-  type EdgeColors,
-  processBackdropImage,
-  revokeBackdropUrl,
-} from "~/lib/backdrop/processBackdrop";
+  pixelLookKey,
+  type PreparedBackdrop,
+  prepareBackdrop,
+} from "~/lib/backdrop/preparedBackdrop";
+import { type EdgeColors, revokeBackdropUrl } from "~/lib/backdrop/processBackdrop";
 import { observeResize } from "~/lib/observeResize";
 import { panelClipPath } from "~/lib/backdrop/panelClipPath";
 import { isWindowsPlatform } from "~/lib/utils";
@@ -25,53 +24,12 @@ import { isWindowsPlatform } from "~/lib/utils";
 // the window (SealScreen's PARALLAX_MAX).
 const PARALLAX_MAX = 0.06;
 
-interface ShownImage {
-  readonly imageId: string;
-  readonly key: string;
-  readonly url: string;
-  readonly edges: EdgeColors;
-}
-
-/** Resolves any CSS color (hex, rgb, oklch…) to RGB through a 1×1 canvas. */
-function cssColorToRgb(color: string): [number, number, number] {
-  const canvas = document.createElement("canvas");
-  canvas.width = 1;
-  canvas.height = 1;
-  const context = canvas.getContext("2d", { willReadFrequently: true });
-  if (!context) return [0, 0, 0];
-  context.fillStyle = color;
-  context.fillRect(0, 0, 1, 1);
-  const [r = 0, g = 0, b = 0] = context.getImageData(0, 0, 1, 1).data;
-  return [r, g, b];
-}
-
-function readThemePalette(): BackdropPalette {
-  const style = getComputedStyle(document.documentElement);
-  return {
-    base: cssColorToRgb(style.getPropertyValue("--background").trim() || "#000"),
-    accent: cssColorToRgb(style.getPropertyValue("--primary").trim() || "#7c3aed"),
-  };
+interface ShownImage extends PreparedBackdrop {
+  /** The settings this image was prepared for. */
+  readonly backdrop: AppBackdropSettings;
 }
 
 const rgbCss = ([r, g, b]: readonly [number, number, number]) => `rgb(${r} ${g} ${b})`;
-
-function pixelLookKey(look: BackdropLook): string {
-  // Strength, blur, the fade, the vignette and the drift are drawn in CSS, so
-  // changing them must not send the image back through the effects worker.
-  const {
-    strength: _strength,
-    blur: _blur,
-    vignette: _vignette,
-    fade: _fade,
-    fadeAngle: _fadeAngle,
-    fadeSize: _fadeSize,
-    fadeColor: _fadeColor,
-    parallax: _parallax,
-    parallaxAmount: _parallaxAmount,
-    ...pixel
-  } = look;
-  return JSON.stringify(pixel);
-}
 
 /**
  * The effects a CSS filter can draw: all an animated image takes on every
@@ -173,42 +131,21 @@ export function AppBackdrop() {
   const floatingPanels = useClientSettings((settings) => settings.floatingPanels);
   const { resolvedTheme } = useTheme();
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
-  const [source, setSource] = useState<{ imageId: string; blob: Blob } | null>(null);
   const [shown, setShown] = useState<ShownImage | null>(null);
   const imageRef = useRef<HTMLImageElement>(null);
 
-  const imageId = glassAppEnabled ? (backdrop?.imageId ?? null) : null;
-
-  useEffect(() => {
-    if (imageId === null) {
-      setSource(null);
-      return;
-    }
-    let cancelled = false;
-    void loadBackdropImage(imageId).then(
-      (blob) => {
-        if (!cancelled) setSource(blob ? { imageId, blob } : null);
-      },
-      () => {
-        if (!cancelled) setSource(null);
-      },
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [imageId]);
-
-  const look = backdrop ? backdropLook(backdrop) : DEFAULT_BACKDROP_LOOK;
-  const animated = backdrop?.animated ?? false;
+  const wanted = glassAppEnabled ? backdrop : null;
   const processKey =
-    source === null
+    wanted === null
       ? null
-      : `${source.imageId}:${animated ? "animated" : pixelLookKey(look)}:${resolvedTheme}`;
+      : `${wanted.imageId}:${wanted.animated ? "animated" : pixelLookKey(backdropLook(wanted))}:${resolvedTheme}`;
 
   const shownUrlRef = useRef<string | null>(null);
+  const shownImageIdRef = useRef<string | null>(null);
   const showImage = (next: ShownImage | null) => {
     const previous = shownUrlRef.current;
     shownUrlRef.current = next?.url ?? null;
+    shownImageIdRef.current = next?.imageId ?? null;
     setShown(next);
     // The old image stays painted until the new one has decoded.
     if (previous !== null && previous !== next?.url) {
@@ -223,33 +160,25 @@ export function AppBackdrop() {
   );
 
   useEffect(() => {
-    if (source === null || processKey === null) {
+    if (wanted === null) {
       showImage(null);
       return;
     }
     let cancelled = false;
     // Slider drags restyle the same image many times a second; the worker
-    // only needs the value the pointer rests on.
-    const delay = shownUrlRef.current !== null ? 120 : 0;
+    // only needs the value the pointer rests on. A different image goes at once.
+    const delay = shownImageIdRef.current === wanted.imageId ? 120 : 0;
     const timer = window.setTimeout(() => {
-      // Animated images play as they are; the worker still reads their first
-      // frame for the edge colors the automatic fade melts into.
-      void processBackdropImage(
-        source.blob,
-        animated ? DEFAULT_BACKDROP_LOOK : look,
-        readThemePalette(),
-      ).then(
-        (result) => {
+      // Until the new picture is decoded the old one stays up, so switching
+      // looks never leaves the window without a background; if it fails, the
+      // old one simply stays.
+      void prepareBackdrop(wanted).then(
+        (prepared) => {
           if (cancelled) {
-            revokeBackdropUrl(result.url);
+            revokeBackdropUrl(prepared.url);
             return;
           }
-          let url = result.url;
-          if (animated) {
-            revokeBackdropUrl(result.url);
-            url = URL.createObjectURL(source.blob);
-          }
-          showImage({ imageId: source.imageId, key: processKey, url, edges: result.edges });
+          showImage({ ...prepared, backdrop: wanted });
         },
         () => undefined,
       );
@@ -258,12 +187,22 @@ export function AppBackdrop() {
       cancelled = true;
       window.clearTimeout(timer);
     };
-    // `look` reaches the worker through processKey, which changes exactly when
-    // the pixel effects do.
-  }, [processKey, source]);
+    // `wanted` reaches the worker through processKey, which changes exactly
+    // when the image or its pixel effects do.
+  }, [processKey]);
 
-  const parallax = backdrop?.parallax === true && glassAppEnabled;
-  const parallaxAmount = backdrop?.parallaxAmount ?? 0;
+  // While a new image is being prepared, the old one is drawn the way it was set up.
+  const drawn =
+    !glassAppEnabled || backdrop === null || shown === null
+      ? null
+      : shown.imageId === backdrop.imageId
+        ? backdrop
+        : shown.backdrop;
+  const look = drawn ? backdropLook(drawn) : DEFAULT_BACKDROP_LOOK;
+  const animated = drawn?.animated ?? false;
+
+  const parallax = drawn?.parallax === true;
+  const parallaxAmount = drawn?.parallaxAmount ?? 0;
   useEffect(() => {
     const image = imageRef.current;
     if (!parallax || !image) return;
@@ -287,8 +226,7 @@ export function AppBackdrop() {
     };
   }, [parallax, shown?.url]);
 
-  const visible =
-    glassAppEnabled && backdrop !== null && shown !== null && shown.imageId === backdrop.imageId;
+  const visible = drawn !== null && shown !== null;
 
   useEffect(() => {
     document.documentElement.dataset.backdrop = visible ? "true" : "false";
@@ -302,14 +240,14 @@ export function AppBackdrop() {
   if (!glassAppEnabled) return null;
 
   const drift = parallax ? (PARALLAX_MAX * Math.min(parallaxAmount, 100)) / 100 : 0;
-  const strength = (backdrop?.strength ?? 100) / 100;
-  const blur = backdrop?.blur ?? 0;
+  const strength = (drawn?.strength ?? 100) / 100;
+  const blur = drawn?.blur ?? 0;
   // Blur pulls transparent pixels in from outside the image; a little extra
   // scale keeps its edges under the window frame.
-  const scale = ((backdrop?.zoom ?? 100) / 100) * (1 + drift * 2) * (1 + blur / 300);
+  const scale = ((drawn?.zoom ?? 100) / 100) * (1 + drift * 2) * (1 + blur / 300);
   const imageStyle = {
-    objectPosition: `${backdrop?.x ?? 50}% ${backdrop?.y ?? 50}%`,
-    transformOrigin: `${backdrop?.x ?? 50}% ${backdrop?.y ?? 50}%`,
+    objectPosition: `${drawn?.x ?? 50}% ${drawn?.y ?? 50}%`,
+    transformOrigin: `${drawn?.x ?? 50}% ${drawn?.y ?? 50}%`,
     transform: `translate(calc(var(--backdrop-drift-x, 0) * ${-drift * 100}vw), calc(var(--backdrop-drift-y, 0) * ${-drift * 100}vh)) scale(${scale})`,
     opacity: strength,
     filter:
@@ -319,8 +257,8 @@ export function AppBackdrop() {
     imageRendering: !animated && look.pixel > 1 ? "pixelated" : undefined,
   } satisfies CSSProperties;
 
-  const degrees = backdrop ? backdropFadeDegrees(look) : null;
-  const fade = backdrop && visible ? fadeColor(backdrop, shown.edges) : null;
+  const degrees = drawn ? backdropFadeDegrees(look) : null;
+  const fade = drawn && visible ? fadeColor(drawn, shown.edges) : null;
 
   return (
     <div

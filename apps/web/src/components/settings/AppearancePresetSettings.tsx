@@ -9,9 +9,14 @@ import {
   saveCurrentAppearance,
 } from "~/appearancePresetActions";
 import { appearanceFontStack, DEFAULT_SANS_FONT_STACK } from "~/appearanceFonts";
-import { appearanceMatchesPreset, presetPreviewLook } from "~/appearancePresets";
+import {
+  appearanceMatchesPreset,
+  type PresetPreviewLook,
+  presetPreviewLook,
+} from "~/appearancePresets";
 import { useClientSettings } from "~/hooks/useSettings";
 import { readThemeState, useTheme } from "~/hooks/useTheme";
+import { prefetchBackdrop } from "~/lib/backdrop/preparedBackdrop";
 import { ensureLocalApi } from "~/localApi";
 import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
@@ -45,6 +50,13 @@ export function AppearancePresetsSection() {
       saveCurrentAppearance({ name: trimmed || `Look ${presets.length + 1}` });
     }
     setNaming(null);
+  };
+
+  // Getting the background ready while the pointer rests on a card makes the
+  // switch instant on click.
+  const warmBackdrop = (look: PresetPreviewLook) => {
+    const next = look.settings.glassAppEnabled ? look.settings.backdrop : null;
+    if (next) prefetchBackdrop(next, settings.glassAppEnabled ? settings.backdrop : null);
   };
 
   const confirmDelete = async (id: string, presetName: string) => {
@@ -84,6 +96,9 @@ export function AppearancePresetsSection() {
                     aria-label={`Apply ${preset.name}`}
                     aria-pressed={active}
                     className="cursor-pointer rounded-lg outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
+                    onPointerEnter={() => warmBackdrop(look)}
+                    onFocus={() => warmBackdrop(look)}
+                    onPointerDown={() => warmBackdrop(look)}
                     onClick={() => applyAppearancePreset(preset)}
                   >
                     <AppearancePresetPreview look={look} />

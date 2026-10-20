@@ -63,7 +63,7 @@ only to the Studio bridge. **Upload as** sets the user or group that uploads pub
 SealCode instead of Roqer. It covers the core tools so far (`mcp__studio__…`): the game tree,
 search, typed properties, atomic property changes, creating and deleting instances, script reads
 and edits checked against the revision the agent read and read back afterwards, Luau, playtests,
-output logs, the Studio selection and screenshots. Assets, uploads, builds, UI inspection and
+output logs, the Studio selection and screenshots of the edit viewport (not during playtests). Assets, uploads, builds, UI inspection and
 Blender jobs still need Roqer.
 
 - SealCode installs the **SealCode** plugin when the mode is on. Studio loads plugins when a place

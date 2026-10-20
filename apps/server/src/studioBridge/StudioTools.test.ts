@@ -132,6 +132,76 @@ describe("StudioTools", () => {
     }).pipe(Effect.provide(layer)),
   );
 
+  it.effect(
+    "refuses a screenshot during a playtest instead of waiting for one that never comes",
+    () =>
+      Effect.gen(function* () {
+        const tools = yield* StudioTools.StudioTools;
+        const bridge = yield* StudioBridge.StudioBridge;
+        const plugin = yield* fakePlugin(() => ({
+          success: true,
+          width: 1,
+          height: 1,
+          data: "AAAAAA==",
+        }));
+        yield* bridge.hello({
+          protocol: STUDIO_PROTOCOL_VERSION,
+          build: "test",
+          pluginSessionId: "server",
+          instanceId: "anon:place",
+          role: "server",
+          placeId: 0,
+          gameId: 0,
+          placeName: "Place",
+          dataModelName: "Place",
+          isRunning: true,
+          studioVersion: "",
+          pluginHash: "h",
+          capabilities: [],
+          toggles: { paused: false, readOnly: false, allowLuau: true },
+        });
+        const result = yield* tools.call("capture_screenshot", {}, {});
+        expect(result.isError).toBe(true);
+        expect(textOf(result)).toContain("playtest_running");
+        expect(plugin.calls).toHaveLength(0);
+        yield* Fiber.interrupt(plugin.fiber);
+      }).pipe(Effect.provide(layer)),
+  );
+
+  it.effect("counts the play server leaving during a stop as the playtest stopping", () =>
+    Effect.gen(function* () {
+      const tools = yield* StudioTools.StudioTools;
+      const bridge = yield* StudioBridge.StudioBridge;
+      const plugin = yield* fakePlugin(() => ({}));
+      const { sessionToken } = yield* bridge.hello({
+        protocol: STUDIO_PROTOCOL_VERSION,
+        build: "test",
+        pluginSessionId: "server",
+        instanceId: "anon:place",
+        role: "server",
+        placeId: 0,
+        gameId: 0,
+        placeName: "Place",
+        dataModelName: "Place",
+        isRunning: true,
+        studioVersion: "",
+        pluginHash: "h",
+        capabilities: [],
+        toggles: { paused: false, readOnly: false, allowLuau: true },
+      });
+      // The play server takes the stop request and its DataModel closes before it answers.
+      const server = yield* Effect.gen(function* () {
+        const messages = yield* bridge.poll({ sessionToken, inFlight: [], waitSeconds: 20 });
+        if (messages.some((message) => message.kind === "request")) yield* bridge.bye(sessionToken);
+      }).pipe(Effect.repeat({ while: () => true }), Effect.forkChild);
+      const result = yield* tools.call("playtest", { action: "stop" }, {});
+      expect(result.isError).toBeUndefined();
+      expect(textOf(result)).toContain("Playtest stopped.");
+      yield* Fiber.interrupt(server);
+      yield* Fiber.interrupt(plugin.fiber);
+    }).pipe(Effect.provide(layer)),
+  );
+
   it.effect("reports a plugin that predates an endpoint as outdated", () =>
     Effect.gen(function* () {
       const tools = yield* StudioTools.StudioTools;

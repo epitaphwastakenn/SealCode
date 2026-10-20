@@ -8,6 +8,10 @@ local Base64 = require(script.Parent.Parent.Base64)
 
 local Runtime = {}
 
+-- Set by the main script: leaves the bridge once the test is ending, so SealCode sees the
+-- play server go at once instead of waiting for it to time out.
+Runtime.afterEndTest = nil
+
 local test = { running = false, mode = nil, startedAt = nil, lastError = nil, endedAt = nil }
 
 local function studioTest()
@@ -83,6 +87,10 @@ function Runtime.endTest()
 	end)
 	if not ok then
 		return { error = "Studio refused to end the test: " .. tostring(err) }
+	end
+	if Runtime.afterEndTest then
+		-- Late enough for this answer to reach the bridge first.
+		task.delay(1, Runtime.afterEndTest)
 	end
 	return { success = true }
 end

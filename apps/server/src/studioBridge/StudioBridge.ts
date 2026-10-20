@@ -212,6 +212,8 @@ export interface StudioBridgeSnapshot {
   readonly peers: ReadonlyArray<StudioPeer>;
   readonly pendingRequests: number;
   readonly agentLinked: boolean;
+  /** The plugin changed this run and some Studio has not loaded the new copy yet. */
+  readonly pluginReloadNeeded: boolean;
   readonly lastRejection?: string;
   readonly recentActivity: ReadonlyArray<StudioActivity>;
 }
@@ -878,6 +880,13 @@ const make = Effect.gen(function* () {
       peers: allPeers(),
       pendingRequests: pending.size,
       agentLinked,
+      pluginReloadNeeded:
+        lifecycle.pluginUpdated &&
+        (sessions.size === 0 ||
+          allPeers().some(
+            (peer) =>
+              lifecycle.pluginHash !== undefined && peer.pluginHash !== lifecycle.pluginHash,
+          )),
       ...(lastRejection === undefined ? {} : { lastRejection }),
       recentActivity: [...activity],
     })),

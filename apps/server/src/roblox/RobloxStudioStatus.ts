@@ -40,7 +40,7 @@ export const studioBridgeStatus = (
   version: snapshot.build,
   ...(snapshot.lifecycle.error === undefined ? {} : { error: snapshot.lifecycle.error }),
   restarts: 0,
-  pluginUpdated: snapshot.lifecycle.pluginUpdated,
+  pluginUpdated: snapshot.pluginReloadNeeded,
   ...(snapshot.lifecycle.pluginProblem === undefined
     ? {}
     : { pluginProblem: snapshot.lifecycle.pluginProblem }),

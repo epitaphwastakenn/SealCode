@@ -128,6 +128,7 @@ plugin.Unloading:Connect(function()
 end)
 
 if role == "server" then
+	require(root.Handlers.Runtime).afterEndTest = Transport.stop
 	-- No UI in a play DataModel: connect at once so the playtest's peer shows up.
 	Transport.start()
 	return

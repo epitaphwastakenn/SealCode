@@ -349,7 +349,7 @@ const make = Effect.gen(function* () {
             message: "No playtest is running.",
           });
         }
-        const { payload } = yield* call({
+        const ended = yield* call({
           tool: "playtest",
           args,
           context,
@@ -358,9 +358,16 @@ const make = Effect.gen(function* () {
           target: "server",
           instanceId: server.instanceId,
           summary: "stop",
-        });
-        if (isFailurePayload(payload)) return outdatedPlugin(payload) ?? jsonResult(payload);
-        const timeoutMs = Math.min(Math.max((num(args.timeout) ?? 15) * 1000, 3000), 60_000);
+        }).pipe(
+          // The play server leaving while it handles the stop is the stop working.
+          Effect.catchTags({
+            StudioPeerDisconnected: () => Effect.succeed({ payload: { success: true } }),
+          }),
+        );
+        if (isFailurePayload(ended.payload)) {
+          return outdatedPlugin(ended.payload) ?? jsonResult(ended.payload);
+        }
+        const timeoutMs = Math.min(Math.max((num(args.timeout) ?? 30) * 1000, 3000), 60_000);
         const gone = yield* waitUntil(
           runtimePeers(place).pipe(Effect.map((peers) => peers.length === 0)),
           timeoutMs,
@@ -384,13 +391,23 @@ const make = Effect.gen(function* () {
   const screenshot = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
     Effect.gen(function* () {
       const maxSize = Math.min(Math.max(Math.floor(num(args.maxSize) ?? 1600), 256), 4096);
+      // Studio captures only on a client: during a playtest the viewport belongs to the play
+      // DataModel, the play server refuses, and the edit DataModel's capture never fires.
+      const edit = yield* placeOf(args);
+      if ((yield* runtimePeers(placeKey(edit))).length > 0) {
+        return errorResult(
+          "playtest_running",
+          "Screenshots are not available while a playtest runs: Studio only captures from a playtest client, which this version of the bridge does not reach. Stop the playtest and capture the edit viewport, and use the output logs for runtime evidence.",
+        );
+      }
       const { payload } = yield* call({
         tool: "capture_screenshot",
         args,
         context,
         endpoint: StudioEndpoints.captureScreenshot,
         data: { maxSize },
-        defaultRole: "edit",
+        target: "edit",
+        instanceId: edit.instanceId,
         timeoutMs: 60_000,
       });
       if (isFailurePayload(payload) || !isRecord(payload)) {
@@ -595,7 +612,7 @@ const make = Effect.gen(function* () {
           build: snapshot.build,
           protocol: snapshot.protocol,
           port: snapshot.lifecycle.port,
-          pluginUpdated: snapshot.lifecycle.pluginUpdated,
+          pluginUpdated: snapshot.pluginReloadNeeded,
           ...(snapshot.lifecycle.pluginProblem === undefined
             ? {}
             : { pluginProblem: snapshot.lifecycle.pluginProblem }),
@@ -612,7 +629,7 @@ const make = Effect.gen(function* () {
           toggles: peer.toggles,
         })),
         pendingRequests: snapshot.pendingRequests,
-        hint: snapshot.lifecycle.pluginUpdated
+        hint: snapshot.pluginReloadNeeded
           ? "SealCode just updated the Studio plugin. Studio loads plugins when a place opens: reopen the place, or restart Studio, to pick up the new one."
           : snapshot.peers.length === 0
             ? "No Studio is connected: ask the user to open the place in Roblox Studio and check the SealCode panel (Plugins tab)."
@@ -974,7 +991,7 @@ const make = Effect.gen(function* () {
         {
           action: { type: "string", enum: ["start", "stop", "status"] },
           mode: { type: "string", enum: ["play", "run"] },
-          timeout: { type: "number", description: "Seconds to wait (start 60, stop 15)." },
+          timeout: { type: "number", description: "Seconds to wait (start 60, stop 30)." },
           ...instanceIdProperty,
         },
         ["action"],
@@ -1002,7 +1019,7 @@ const make = Effect.gen(function* () {
       name: "capture_screenshot",
       title: "Screenshot",
       description:
-        "PNG of the Studio viewport. The Studio window must be visible (not minimized). x/y read off the image map to viewport pixels as the message says.",
+        "PNG of the Studio edit viewport, outside playtests. The Studio window must be visible (not minimized). x/y read off the image map to viewport pixels as the message says.",
       inputSchema: object({
         maxSize: { type: "number", description: "Longest side in pixels (default 1600)." },
         ...instanceIdProperty,

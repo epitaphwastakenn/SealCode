@@ -1,6 +1,7 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 
@@ -268,6 +269,122 @@ describe("StudioTools", () => {
       expect(parsed.next).toEqual({ edit: 4, server: 1 });
       yield* Fiber.interrupt(plugin.fiber);
       yield* Fiber.interrupt(server);
+    }).pipe(Effect.provide(layer)),
+  );
+
+  it.effect(
+    "saves an export to disk without handing the bytes to the model, and never overwrites",
+    () =>
+      Effect.gen(function* () {
+        const tools = yield* StudioTools.StudioTools;
+        const fs = yield* FileSystem.FileSystem;
+        const dir = yield* fs.makeTempDirectoryScoped();
+        const bytes = Buffer.from("rbxm-bytes");
+        const plugin = yield* fakePlugin(() => ({
+          success: true,
+          base64: bytes.toString("base64"),
+          instances: [{ path: "game.Workspace.A", className: "Model" }],
+        }));
+        const target = `${dir}/nested/model.rbxm`;
+        const saved = yield* tools.call(
+          "export_rbxm",
+          { paths: ["game.Workspace.A"], outputPath: target },
+          {},
+        );
+        expect(saved.isError).toBeUndefined();
+        expect(textOf(saved)).not.toContain(bytes.toString("base64"));
+        expect(Buffer.from(yield* fs.readFile(target)).equals(bytes)).toBe(true);
+        const again = yield* tools.call(
+          "export_rbxm",
+          { paths: ["game.Workspace.A"], outputPath: target },
+          {},
+        );
+        expect(textOf(again)).toContain("file_exists");
+        const xml = yield* tools.call(
+          "export_rbxm",
+          { paths: ["game.Workspace.A"], outputPath: `${dir}/model.rbxmx` },
+          {},
+        );
+        expect(textOf(xml)).toContain("invalid_arguments");
+        expect(plugin.calls).toHaveLength(1);
+        yield* Fiber.interrupt(plugin.fiber);
+      }).pipe(Effect.scoped, Effect.provide(Layer.merge(layer, NodeServices.layer))),
+  );
+
+  it.effect("sends a file's bytes and parent to the plugin when importing", () =>
+    Effect.gen(function* () {
+      const tools = yield* StudioTools.StudioTools;
+      const fs = yield* FileSystem.FileSystem;
+      const dir = yield* fs.makeTempDirectoryScoped();
+      const bytes = Buffer.from("rbxm-bytes");
+      yield* fs.writeFile(`${dir}/in.rbxm`, bytes);
+      const plugin = yield* fakePlugin(() => ({ success: true, imported: [] }));
+      const result = yield* tools.call(
+        "import_rbxm",
+        { filePath: `${dir}/in.rbxm`, parentPath: "game.ServerStorage" },
+        {},
+      );
+      expect(result.isError).toBeUndefined();
+      expect(plugin.calls[0]).toMatchObject({
+        endpoint: "import-rbxm",
+        data: { base64: bytes.toString("base64"), parentPath: "game.ServerStorage" },
+      });
+      const missing = yield* tools.call("import_rbxm", { filePath: `${dir}/none.rbxm` }, {});
+      expect(textOf(missing)).toContain("not_found");
+      yield* Fiber.interrupt(plugin.fiber);
+    }).pipe(Effect.scoped, Effect.provide(Layer.merge(layer, NodeServices.layer))),
+  );
+
+  it.effect("checks network profile values before touching any peer", () =>
+    Effect.gen(function* () {
+      const tools = yield* StudioTools.StudioTools;
+      const loss = yield* tools.call(
+        "set_network_profile",
+        { profile: "custom", overrides: { InboundNetworkLossPercent: 2 } },
+        {},
+      );
+      expect(loss.isError).toBe(true);
+      expect(textOf(loss)).toContain("invalid_arguments");
+      const plugin = yield* fakePlugin(() => ({ success: true }));
+      const noClients = yield* tools.call("set_network_profile", { profile: "poor" }, {});
+      expect(textOf(noClients)).toContain("runtime_client_required");
+      expect(plugin.calls).toHaveLength(0);
+      yield* Fiber.interrupt(plugin.fiber);
+    }).pipe(Effect.provide(layer)),
+  );
+
+  it.effect("sends an animation description to the edit peer after checking its shape", () =>
+    Effect.gen(function* () {
+      const tools = yield* StudioTools.StudioTools;
+      const plugin = yield* fakePlugin(() => ({ success: true, temporaryId: "abc" }));
+      const empty = yield* tools.call(
+        "animation",
+        { action: "create", rig: "game.Workspace.Rig", keyframes: [] },
+        {},
+      );
+      expect(textOf(empty)).toContain("invalid_arguments");
+      const noSource = yield* tools.call(
+        "animation",
+        { action: "play", rig: "game.Workspace.Rig" },
+        {},
+      );
+      expect(textOf(noSource)).toContain("sequence");
+      const keyframes = [
+        { time: 0, poses: {} },
+        { time: 1, poses: { Neck: { rotation: [0, 10, 0] } } },
+      ];
+      const created = yield* tools.call(
+        "animation",
+        { action: "create", rig: "game.Workspace.Rig", name: "Nod", keyframes },
+        {},
+      );
+      expect(created.isError).toBeUndefined();
+      expect(plugin.calls).toHaveLength(1);
+      expect(plugin.calls[0]).toMatchObject({
+        endpoint: "animation-create",
+        data: { rig: "game.Workspace.Rig", name: "Nod", keyframes },
+      });
+      yield* Fiber.interrupt(plugin.fiber);
     }).pipe(Effect.provide(layer)),
   );
 

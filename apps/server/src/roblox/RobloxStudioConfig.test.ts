@@ -32,7 +32,10 @@ describe("managedServersFor", () => {
   });
 
   it("points the SealCode mode at the in-server bridge's MCP endpoint, with its token as a secret", () => {
-    const servers = managedServersFor(withRoblox({ mode: "sealcode" }), environment);
+    const servers = managedServersFor(
+      withRoblox({ mode: "sealcode", officialMcpAlongside: false }),
+      environment,
+    );
     expect(Object.keys(servers)).toEqual([STUDIO_BRIDGE_SERVER_ID]);
     expect(servers[STUDIO_BRIDGE_SERVER_ID]).toMatchObject({
       transport: "streamable-http",

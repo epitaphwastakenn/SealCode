@@ -19,6 +19,10 @@ local Device = require(script.Parent.Handlers.Device)
 local Camera = require(script.Parent.Handlers.Camera)
 local Assets = require(script.Parent.Handlers.Assets)
 local Mesh = require(script.Parent.Handlers.Mesh)
+local Animation = require(script.Parent.Handlers.Animation)
+local Perf = require(script.Parent.Handlers.Perf)
+local Files = require(script.Parent.Handlers.Files)
+local Debug = require(script.Parent.Handlers.Debug)
 
 local Router = {}
 
@@ -59,6 +63,16 @@ local ROUTES = {
 	["camera"] = Camera.run,
 	["insert-asset"] = Assets.insert,
 	["import-mesh"] = Mesh.import,
+	["animation-inspect"] = Animation.inspect,
+	["animation-play"] = Animation.play,
+	["animation-create"] = Animation.create,
+	["script-profiler"] = Perf.profile,
+	["memory-breakdown"] = Perf.memory,
+	["scene-analysis"] = Perf.scene,
+	["export-rbxm"] = Files.export,
+	["import-rbxm"] = Files.import,
+	["network-profile"] = Debug.network,
+	["breakpoints"] = Debug.breakpoints,
 }
 
 local MUTATING = {}

@@ -28,6 +28,12 @@ Broker.CLIENT_ENDPOINTS = {
 	["device-get"] = true,
 	["device-set"] = true,
 	["leave-test"] = true,
+	["animation-inspect"] = true,
+	["animation-play"] = true,
+	["script-profiler"] = true,
+	["memory-breakdown"] = true,
+	["scene-analysis"] = true,
+	["network-profile"] = true,
 }
 
 -- Server side ---------------------------------------------------------------------------------

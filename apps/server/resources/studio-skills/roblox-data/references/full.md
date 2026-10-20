@@ -2,7 +2,7 @@
 
 > Code examples are illustrative. Adapt them to your project and verify in Studio before production use.
 
-This guide uses raw `DataStoreService` concepts and does not require a particular profile library. If the project already uses a session-locking wrapper, keep its lifecycle and failure semantics instead of mixing two ownership systems.
+This guide uses raw `DataStoreService` concepts and does not require a particular profile library. **For new player data in SealCode projects, use DataService (typed) and follow `dataservice-typed.md`; do not build the wrapper, session lock, or save lifecycle described below yourself.** Use this guide for non-player data, for the limits and budgets, and when the user asks for a different approach. If the project already uses a session-locking wrapper, keep its lifecycle and failure semantics instead of mixing two ownership systems.
 
 ## 1. Choose the storage primitive
 
@@ -138,7 +138,7 @@ end)
 
 ## 4. Session ownership
 
-Two live servers must not both believe they own the same mutable profile. A wrapper may implement locks, heartbeat, and release handling. If implementing the protocol yourself, define:
+Two live servers must not both believe they own the same mutable profile. A wrapper may implement locks, heartbeat, and release handling; for player data that wrapper is DataService (ProfileStore underneath), so do not implement the protocol yourself unless the user explicitly asks. If the user does ask, define:
 
 - an owner token that identifies the live server;
 - an expiry or heartbeat policy;
@@ -376,7 +376,7 @@ Treat the restart hop as any other teleport: opaque ticket, `pcall`, and the dur
 
 ## 8. ProfileStore integration (optional)
 
-ProfileStore is a player-oriented wrapper, not a replacement for OrderedDataStore, MemoryStoreService, or global state. If a project uses it, follow its current lifecycle instead of layering a second lock protocol around it:
+ProfileStore is a player-oriented wrapper, not a replacement for OrderedDataStore, MemoryStoreService, or global state. DataService (typed) already runs it for you, so call ProfileStore directly only when the user asks or the project already does. If a project uses it directly, follow its current lifecycle instead of layering a second lock protocol around it:
 
 ```luau
 local Players = game:GetService("Players")

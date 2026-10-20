@@ -966,8 +966,8 @@ export const RobloxStudioSettings = Schema.Struct({
   autoPlaytest: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   /** In `sealcode` mode, each turn tells the agent what the user has selected in Studio. */
   studioContext: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
-  /** In `sealcode` mode, also connect Roblox's own MCP for its mesh, texture and material generation. */
-  officialMcpAlongside: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  /** In `sealcode` mode, also connect Roblox's own MCP (the Assistant's tools): AI model generation and publishing. */
+  officialMcpAlongside: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   openCloudApiKey: TrimmedString.pipe(
     Schema.withDecodingDefault(Effect.succeed("")),
     secretSetting,

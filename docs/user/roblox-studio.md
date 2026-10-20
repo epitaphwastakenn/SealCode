@@ -67,12 +67,17 @@ Blender.
 
 ## Roblox's own MCP
 
-**Roblox's own Studio MCP** connects only the MCP server Roblox Studio ships. With the SealCode
-connection on, **Also connect Roblox's own MCP** adds it for its mesh, texture and material
-generation.
+**Roblox's own Studio MCP** as the Studio connection uses only the MCP server Roblox Studio ships.
 
-## Uploads
+## Publishing assets
 
-Publishing models, decals and animations needs a Roblox Open Cloud API key with the Assets API
-(write). Paste it in **Open Cloud API key**; it is kept in the server's secret store. **Upload as**
-sets the user or group that uploads publish as.
+Agents never publish on their own. When something needs publishing, such as a model from Blender, an
+image or an animation, the agent asks whether to publish it through the Roblox Assistant (it then
+shows on your profile as published by the Assistant) or whether you prefer to publish it yourself and
+name it your way.
+
+## AI model generation
+
+**Also connect Roblox's own MCP** (on by default) gives agents the Roblox Assistant's tools: AI model,
+mesh, texture and material generation, and publishing. Agents prefer Blender jobs and good Creator
+Store assets, and use AI generation when you ask for it or nothing better fits.

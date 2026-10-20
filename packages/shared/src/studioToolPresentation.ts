@@ -24,6 +24,9 @@ const leaf = (path: unknown): string | undefined => {
   return dotted === undefined || dotted === "game" ? value : dotted;
 };
 
+/** The last segment of a file path, either separator. */
+const fileName = (path: unknown): string | undefined => text(path)?.split(/[\\/]/u).at(-1);
+
 const firstLine = (code: unknown): string | undefined => {
   const line = text(code)?.split("\n")[0]?.trim();
   return line === undefined ? undefined : line.length > 60 ? `${line.slice(0, 57)}…` : line;
@@ -98,7 +101,34 @@ const STUDIO_TOOLS: Readonly<Record<string, readonly [title: string, detail?: De
   manage_studio: ["Studio windows", (args) => text(args.action)],
   blender: ["Blender job"],
   import_mesh: ["Import mesh", (args) => text(args.name)],
-  upload_asset: ["Publish asset", (args) => text(args.displayName)],
+  animation: [
+    "Animation",
+    (args) =>
+      [text(args.action), leaf(args.rig) ?? leaf(args.sequence) ?? text(args.animationId)]
+        .filter(Boolean)
+        .join(" ") || undefined,
+  ],
+  capture_script_profiler: ["Profile scripts", (args) => text(args.target) ?? "server"],
+  get_memory_breakdown: ["Memory breakdown", (args) => text(args.target)],
+  get_scene_analysis: ["Analyse the scene", (args) => leaf(args.path)],
+  export_rbxm: ["Export model to", (args) => fileName(args.outputPath)],
+  import_rbxm: ["Import model", (args) => fileName(args.filePath)],
+  set_network_profile: ["Simulate network", (args) => text(args.profile)],
+  breakpoints: [
+    "Logpoint",
+    (args) =>
+      [
+        text(args.action),
+        leaf(args.script),
+        typeof args.line === "number" ? `line ${String(args.line)}` : undefined,
+      ]
+        .filter(Boolean)
+        .join(" ") || undefined,
+  ],
+  get_roblox_docs: [
+    "Look up Roblox docs for",
+    (args) => [text(args.name), text(args.member)].filter(Boolean).join(".") || undefined,
+  ],
 };
 
 export const isStudioTool = (tool: string | undefined): boolean =>

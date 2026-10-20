@@ -25,13 +25,20 @@ sources:
 
 Load for player saves, migrations, retries, shutdowns, or session ownership. Leaderboards/messaging/world data: `roblox-server-data`; Open Cloud: `roblox-cloud`.
 
+## SealCode default: DataService (typed)
+
+For any player data or DataStore work, use **DataService (typed) by Leif** unless the user explicitly asks for another approach. Load [references/dataservice-typed.md](references/dataservice-typed.md) first: it covers install (Wally), the template, `Data.Service:init()`, reads/writes/listeners, client replication, migrations, and a coins + inventory example. Do not write your own DataStore wrapper or session-locking system for player data. When in doubt about how it works, read the docs at https://leifstout.github.io/dataServiceTyped/docs/intro/ instead of guessing or reading the library's code.
+
+The rest of this skill (and `references/full.md`) stays valid for non-player data, for reviewing or migrating existing save code, and for the DataStore limits, budgets, RTBF, and shutdown rules DataService does not remove.
+
 ## Quick Reference
 
+- Player data: DataService (typed), per the section above. The lines below are general DataStore knowledge, for non-player data and for existing code that does not use it.
 - Define a serializable template and a version field before storing player state. Deep-copy templates so nested defaults are not shared; migrate, then reconcile missing fields against the template. Scope store names by environment (`PlayerData_Studio`) so Studio writes stay out of production.
 - Use `UpdateAsync` for read-modify-write; handle throttling and transient errors.
-- Prevent concurrent profile mutation with a session-ownership protocol.
-- With ProfileStore: `StartSessionAsync`, `Profile.OnSessionEnd`, `EndSession` as documented; no `Steal` for normal loads; `ProfileStore.Mock` for ephemeral Studio writes.
-- Save on meaningful changes and lifecycle boundaries; `PlayerRemoving` alone is not sufficient; `BindToClose` finishes pending work.
+- Prevent concurrent profile mutation with a session-ownership protocol. For player data this is DataService (ProfileStore underneath); do not build your own.
+- Raw ProfileStore (only when the user asks for it or the project already uses it directly): `StartSessionAsync`, `Profile.OnSessionEnd`, `EndSession` as documented; no `Steal` for normal loads; `ProfileStore.Mock` for ephemeral Studio writes.
+- Save on meaningful changes and lifecycle boundaries; `PlayerRemoving` alone is not sufficient; `BindToClose` finishes pending work (DataService handles this for player data).
 - Store primitives/arrays/dictionaries; convert Instances/userdata/functions/cyclic tables first. Validate numbers (no NaN/inf), strings (`utf8.len`), nested tables: one bad value fails the write.
 - RTBF: keep the user ID as a static substring in keys (`player_<UserId>`) so `{UserId}` deletion templates match; hashed/random keys make erasure manual.
 - `GetAsync` serves a 4-second local cache (`DataStoreGetOptions.UseCache`, default `true`); verify writes with `UseCache = false`.

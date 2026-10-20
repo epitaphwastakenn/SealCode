@@ -97,7 +97,39 @@ return {
 		tools = {
 			{ "blender", "Run Blender jobs" },
 			{ "import_mesh", "Import meshes into Studio" },
-			{ "upload_asset", "Publish assets to Roblox" },
+		},
+	},
+	{
+		id = "animation",
+		title = "Animation",
+		tools = {
+			{ "animation", "Inspect, play and create animations" },
+		},
+	},
+	{
+		id = "performance",
+		title = "Performance and debugging",
+		tools = {
+			{ "capture_script_profiler", "Profile scripts in a playtest" },
+			{ "get_memory_breakdown", "Memory by category" },
+			{ "get_scene_analysis", "What makes the place heavy" },
+			{ "set_network_profile", "Simulate lag and packet loss" },
+			{ "breakpoints", "Logpoints in scripts" },
+		},
+	},
+	{
+		id = "files",
+		title = "Files",
+		tools = {
+			{ "export_rbxm", "Save instances to a file" },
+			{ "import_rbxm", "Load a file into the place" },
+		},
+	},
+	{
+		id = "docs",
+		title = "Docs",
+		tools = {
+			{ "get_roblox_docs", "Roblox engine API reference" },
 		},
 	},
 	{

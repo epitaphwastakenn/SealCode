@@ -11,8 +11,8 @@ import { blenderExecutableFor, RobloxStudioConfig } from "../roblox/RobloxStudio
 import * as ServerSettings from "../serverSettings.ts";
 import { parseObj, runBlenderJob } from "./blenderJobs.ts";
 import { assetDetails, assetThumbnail, searchStore } from "./creatorStore.ts";
-import { ASSET_TYPE_FOR_EXTENSION, uploadAsset } from "./openCloudAssets.ts";
 import { downscaleRgba, encodePng } from "./png.ts";
+import { lookupRobloxDocs } from "./robloxDocs.ts";
 import {
   closeStudio,
   findStudioExecutable,
@@ -167,6 +167,14 @@ const requestFailure = (error: StudioBridge.StudioRequestError): StudioToolResul
       );
   }
 };
+
+const isStudioRequestError = (error: unknown): error is StudioBridge.StudioRequestError =>
+  typeof error === "object" &&
+  error !== null &&
+  "_tag" in error &&
+  (error._tag === "StudioRoutingError" ||
+    error._tag === "StudioRequestTimeout" ||
+    error._tag === "StudioPeerDisconnected");
 
 const outdatedPlugin = (payload: unknown): StudioToolResult | undefined =>
   isRecord(payload) &&
@@ -1731,8 +1739,17 @@ const make = Effect.gen(function* () {
         if (args.waitForConnection === false) {
           return jsonResult({ success: true, pid, waited: false });
         }
+        // With a file, only the window showing that file counts: another place may open at
+        // the same moment.
+        const openedName =
+          placeFile === undefined
+            ? undefined
+            : normalizePlaceName(placeFile.split(/[\\/]/u).at(-1) ?? "").toLowerCase();
         const isFresh = (peer: StudioBridge.StudioPeer) =>
-          peer.role === "edit" && !before.has(peer.pluginSessionId);
+          peer.role === "edit" &&
+          !before.has(peer.pluginSessionId) &&
+          (openedName === undefined ||
+            normalizePlaceName(peer.placeName).toLowerCase() === openedName);
         const connected = yield* waitUntil(
           bridge.peers.pipe(Effect.map((peers) => peers.some(isFresh))),
           150_000,
@@ -1844,65 +1861,6 @@ const make = Effect.gen(function* () {
       } satisfies StudioToolResult;
     }).pipe(Effect.catch((error) => Effect.succeed(errorResult("blender_failed", String(error)))));
 
-  const uploadAssetTool = (args: Args): Effect.Effect<StudioToolResult> =>
-    Effect.gen(function* () {
-      const settings = (yield* serverSettings.getSettings).robloxStudio;
-      if (settings.openCloudApiKey.trim() === "") {
-        return errorResult(
-          "open_cloud_key_missing",
-          "Publishing needs a Roblox Open Cloud API key with the Assets API (write). Ask the user to add one in Settings, Connections, Roblox Studio, Open Cloud API key; until then use import_mesh for a session-only copy.",
-        );
-      }
-      const jobDir = str(args.jobDir);
-      const filePath =
-        str(args.filePath) ?? (jobDir === undefined ? undefined : `${jobDir}/model.glb`);
-      if (filePath === undefined)
-        return errorResult("invalid_arguments", "filePath or jobDir is required.");
-      const extension = (/\.[^./\\]+$/u.exec(filePath)?.[0] ?? "").toLowerCase();
-      const assetType =
-        (str(args.assetType) as "Model" | "Decal" | "Audio" | undefined) ??
-        ASSET_TYPE_FOR_EXTENSION[extension];
-      if (assetType === undefined) {
-        return errorResult(
-          "invalid_arguments",
-          "assetType is required for this file (Model, Decal or Audio).",
-        );
-      }
-      const creator =
-        settings.creatorGroupId.trim() !== ""
-          ? { groupId: settings.creatorGroupId.trim() }
-          : settings.creatorUserId.trim() !== ""
-            ? { userId: settings.creatorUserId.trim() }
-            : undefined;
-      if (creator === undefined) {
-        return errorResult(
-          "creator_missing",
-          "Set Upload as (a Roblox user id or group id) in Settings, Connections, Roblox Studio, so Roblox knows who owns the upload.",
-        );
-      }
-      const uploaded = yield* uploadAsset({
-        apiKey: settings.openCloudApiKey.trim(),
-        filePath,
-        assetType,
-        displayName: str(args.displayName) ?? "SealCode asset",
-        description: str(args.description) ?? "Uploaded by SealCode",
-        creator,
-        timeoutMs: 120_000,
-      });
-      return jsonResult({
-        success: uploaded.assetId !== undefined,
-        ...uploaded,
-        next:
-          uploaded.assetId === undefined
-            ? "Roblox is still processing the upload; check again later."
-            : assetType === "Model"
-              ? "Insert it with insert_asset and this assetId."
-              : assetType === "Decal"
-                ? "Use rbxassetid://<assetId> as an Image or Texture."
-                : "Use rbxassetid://<assetId> as a Sound's SoundId.",
-      });
-    }).pipe(Effect.catch((error) => Effect.succeed(errorResult("upload_failed", String(error)))));
-
   const importMesh = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
     Effect.gen(function* () {
       const jobDir = str(args.jobDir);
@@ -1936,6 +1894,486 @@ const make = Effect.gen(function* () {
       });
       return outdatedPlugin(payload) ?? jsonResult(payload);
     }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
+
+  type OnPeer =
+    | {
+        readonly ok: true;
+        readonly payload: unknown;
+        readonly role: string;
+      }
+    | { readonly ok: false; readonly result: StudioToolResult };
+
+  /**
+   * Calls one endpoint on a named peer of the place: edit, the play server or a client. Without
+   * a role, the play server while a test runs and `preferServer` allows it, else edit.
+   */
+  const onPeer = (input: {
+    readonly tool: string;
+    readonly args: Args;
+    readonly context: StudioToolContext;
+    readonly endpoint: string;
+    readonly data: unknown;
+    readonly role?: string | undefined;
+    readonly preferServer?: boolean;
+    readonly timeoutMs?: number;
+    readonly summary?: string | undefined;
+  }): Effect.Effect<OnPeer, StudioBridge.StudioRequestError> =>
+    Effect.gen(function* () {
+      const edit = yield* placeOf(input.args);
+      const peers = yield* bridge.peersOf(placeKey(edit));
+      const running = peers.some((peer) => peer.role === "server");
+      const role =
+        input.role ?? str(input.args.target) ?? (input.preferServer && running ? "server" : "edit");
+      const peer = peers.find((candidate) => candidate.role === role);
+      if (peer === undefined) {
+        return {
+          ok: false,
+          result: errorResult(
+            role === "edit" ? "edit_peer_missing" : "playtest_required",
+            `${input.tool} needs a ${role} peer${role === "edit" ? "" : ", which exists only while a playtest runs (start one with playtest)"}. Connected: ${peers.map((candidate) => candidate.role).join(", ") || "none"}.`,
+          ),
+        } as const;
+      }
+      const { payload } = yield* call({
+        tool: input.tool,
+        args: input.args,
+        context: input.context,
+        endpoint: input.endpoint,
+        data: input.data,
+        target: role,
+        instanceId: peer.instanceId,
+        ...(input.timeoutMs === undefined ? {} : { timeoutMs: input.timeoutMs }),
+        summary: input.summary,
+      });
+      return { ok: true, payload, role } as const;
+    });
+
+  /** The answer of `onPeer`, or the tool result that explains why there is none. */
+  const onPeerResult = (
+    request: Effect.Effect<OnPeer, StudioBridge.StudioRequestError>,
+    shape: (payload: Record<string, unknown>, role: string) => unknown = (payload) => payload,
+  ): Effect.Effect<StudioToolResult> =>
+    request.pipe(
+      Effect.map((outcome) => {
+        if (!outcome.ok) return outcome.result;
+        const failure = outdatedPlugin(outcome.payload);
+        if (failure !== undefined) return failure;
+        if (!isRecord(outcome.payload)) return jsonResult(outcome.payload);
+        return isFailurePayload(outcome.payload)
+          ? jsonResult(outcome.payload)
+          : jsonResult(shape(outcome.payload, outcome.role));
+      }),
+      Effect.catch((error) => Effect.succeed(requestFailure(error))),
+    );
+
+  const animation = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> => {
+    const action = str(args.action);
+    if (
+      action !== "inspect" &&
+      action !== "list" &&
+      action !== "play" &&
+      action !== "stop" &&
+      action !== "create"
+    ) {
+      return Effect.succeed(
+        errorResult("invalid_arguments", "action must be inspect, list, play, stop or create."),
+      );
+    }
+    const sequence = str(args.sequence);
+    const animationId =
+      typeof args.animationId === "number" ? String(args.animationId) : str(args.animationId);
+    const rig = str(args.rig);
+    if (
+      (action === "inspect" || action === "play") &&
+      sequence === undefined &&
+      animationId === undefined
+    ) {
+      return Effect.succeed(
+        errorResult(
+          "invalid_arguments",
+          `animation ${action} needs sequence (a KeyframeSequence path) or animationId.`,
+        ),
+      );
+    }
+    if (action !== "inspect" && rig === undefined) {
+      return Effect.succeed(
+        errorResult("invalid_arguments", `animation ${action} needs rig (the model's path).`),
+      );
+    }
+    if (action === "create" && (!Array.isArray(args.keyframes) || args.keyframes.length === 0)) {
+      return Effect.succeed(
+        errorResult("invalid_arguments", "animation create needs keyframes: [{ time, poses }]."),
+      );
+    }
+    const endpoint =
+      action === "create"
+        ? StudioEndpoints.animationCreate
+        : action === "play" || action === "stop"
+          ? StudioEndpoints.animationPlay
+          : StudioEndpoints.animationInspect;
+    return onPeerResult(
+      onPeer({
+        tool: "animation",
+        args,
+        context,
+        endpoint,
+        preferServer: action === "play" || action === "stop" || action === "list",
+        data: {
+          action,
+          rig,
+          sequence,
+          animationId,
+          name: str(args.name),
+          looped: bool(args.looped),
+          priority: str(args.priority),
+          keyframes: args.keyframes,
+          easingStyle: str(args.easingStyle),
+          easingDirection: str(args.easingDirection),
+          parent: str(args.parent),
+          speed: num(args.speed),
+          weight: num(args.weight),
+          fadeTime: num(args.fadeTime),
+          time: num(args.time),
+          all: bool(args.all),
+        },
+        timeoutMs: 30_000,
+        summary: [action, rig ?? sequence ?? animationId].filter(Boolean).join(" "),
+      }),
+    );
+  };
+
+  const scriptProfiler = (
+    args: Args,
+    context: StudioToolContext,
+  ): Effect.Effect<StudioToolResult> => {
+    const seconds = Math.min(Math.max(num(args.seconds) ?? 1, 0.1), 15);
+    const role = str(args.target) ?? "server";
+    if (role !== "server" && !role.startsWith("client-")) {
+      return Effect.succeed(
+        errorResult(
+          "invalid_arguments",
+          "target must be server or client-N: the profiler needs a running playtest.",
+        ),
+      );
+    }
+    return onPeerResult(
+      onPeer({
+        tool: "capture_script_profiler",
+        args,
+        context,
+        role,
+        endpoint: StudioEndpoints.scriptProfiler,
+        data: {
+          seconds,
+          frequency: num(args.frequency),
+          maxFunctions: num(args.maxFunctions),
+          filter: str(args.filter),
+          includeNative: bool(args.includeNative),
+          includePlugins: bool(args.includePlugins),
+          // How long the play server waits on a client it relays this request to.
+          __timeout: seconds + 25,
+        },
+        timeoutMs: (seconds + 35) * 1000,
+        summary: `${role}, ${String(seconds)} s`,
+      }),
+      (payload, peerRole) => ({
+        ...payload,
+        target: peerRole,
+        next: "totalMicroseconds is the time spent in a function (callees included) during the capture. Open the script at the line shown, fix the hot loop or event handler, then profile again to compare.",
+      }),
+    );
+  };
+
+  /** Runs one endpoint on one peer (edit by default), or on every peer of the place (target all). */
+  const acrossPeers = (
+    tool: string,
+    endpoint: string,
+    data: unknown,
+    args: Args,
+    context: StudioToolContext,
+    timeoutMs: number,
+  ): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      if (str(args.target) !== "all") {
+        return yield* onPeerResult(onPeer({ tool, args, context, endpoint, data, timeoutMs }));
+      }
+      const edit = yield* placeOf(args);
+      const peers = yield* bridge.peersOf(placeKey(edit));
+      const answers: Record<string, unknown> = {};
+      for (const peer of peers) {
+        const outcome = yield* call({
+          tool,
+          args,
+          context,
+          endpoint,
+          data,
+          target: peer.role,
+          instanceId: peer.instanceId,
+          timeoutMs,
+        }).pipe(Effect.result);
+        answers[peer.role] =
+          outcome._tag === "Success" ? outcome.success.payload : { error: outcome.failure.message };
+      }
+      return jsonResult({ success: true, peers: answers });
+    }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
+
+  const NETWORK_PRESETS: Readonly<Record<string, Readonly<Record<string, number>>>> = {
+    great: {
+      InboundNetworkMinDelayMs: 15,
+      OutboundNetworkMinDelayMs: 15,
+      InboundNetworkJitterMs: 0,
+      OutboundNetworkJitterMs: 0,
+      InboundNetworkLossPercent: 0,
+      OutboundNetworkLossPercent: 0,
+    },
+    good: {
+      InboundNetworkMinDelayMs: 50,
+      OutboundNetworkMinDelayMs: 50,
+      InboundNetworkJitterMs: 10,
+      OutboundNetworkJitterMs: 10,
+      InboundNetworkLossPercent: 0,
+      OutboundNetworkLossPercent: 0,
+    },
+    poor: {
+      InboundNetworkMinDelayMs: 150,
+      OutboundNetworkMinDelayMs: 150,
+      InboundNetworkJitterMs: 100,
+      OutboundNetworkJitterMs: 100,
+      InboundNetworkLossPercent: 0.5,
+      OutboundNetworkLossPercent: 0.5,
+    },
+    off: {
+      InboundNetworkMinDelayMs: 0,
+      OutboundNetworkMinDelayMs: 0,
+      InboundNetworkJitterMs: 0,
+      OutboundNetworkJitterMs: 0,
+      InboundNetworkLossPercent: 0,
+      OutboundNetworkLossPercent: 0,
+    },
+  };
+  const NETWORK_KEYS = Object.keys(NETWORK_PRESETS.great!);
+
+  const networkProfile = (
+    args: Args,
+    context: StudioToolContext,
+  ): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      const profile = str(args.profile) ?? "custom";
+      const preset = NETWORK_PRESETS[profile];
+      if (preset === undefined && profile !== "custom") {
+        return errorResult(
+          "invalid_arguments",
+          "profile must be great, good, poor, off or custom (with overrides).",
+        );
+      }
+      const values: Record<string, number> = { ...preset };
+      const overrides = isRecord(args.overrides) ? args.overrides : {};
+      for (const [key, raw] of Object.entries(overrides)) {
+        const value = num(raw);
+        const limit = key.endsWith("LossPercent") ? 0.5 : Number.POSITIVE_INFINITY;
+        if (!NETWORK_KEYS.includes(key) || value === undefined || value < 0 || value > limit) {
+          return errorResult(
+            "invalid_arguments",
+            `overrides.${key} is not valid. Keys: ${NETWORK_KEYS.join(", ")}, each a number of 0 or more; loss is a percent from 0 to 0.5, the most Roblox simulates.`,
+          );
+        }
+        values[key] = value;
+      }
+      if (Object.keys(values).length === 0) {
+        return errorResult("invalid_arguments", "custom needs at least one override.");
+      }
+      const edit = yield* placeOf(args);
+      const peers = yield* bridge.peersOf(placeKey(edit));
+      const requested = str(args.target);
+      const wholeSet = requested === undefined || requested === "all-clients";
+      const targets = wholeSet
+        ? peers.filter((peer) => peer.role.startsWith("client-"))
+        : peers.filter((peer) => peer.role === requested);
+      if (targets.length === 0) {
+        return errorResult(
+          "runtime_client_required",
+          wholeSet
+            ? "No playtest client is connected. Start a Play or multiplayer test first, or pass target edit to set the profile before it starts."
+            : `No ${requested} peer is connected (connected: ${peers.map((peer) => peer.role).join(", ")}).`,
+        );
+      }
+      const results: Record<string, unknown> = {};
+      let failed = false;
+      for (const peer of targets) {
+        const outcome = yield* call({
+          tool: "set_network_profile",
+          args,
+          context,
+          endpoint: StudioEndpoints.networkProfile,
+          data: { values, __timeout: 20 },
+          target: peer.role,
+          instanceId: peer.instanceId,
+          timeoutMs: 30_000,
+          summary: `${profile} on ${peer.role}`,
+        }).pipe(Effect.result);
+        if (outcome._tag === "Failure") {
+          failed = true;
+          results[peer.role] = { error: outcome.failure.message };
+        } else {
+          failed ||= isFailurePayload(outcome.success.payload);
+          results[peer.role] = outcome.success.payload;
+        }
+      }
+      return jsonResult(
+        {
+          success: !failed,
+          profile,
+          applied: values,
+          targets: results,
+          next: "The delay and loss now apply to the clients above. Exercise the game and compare, then set profile off when done.",
+        },
+        { isError: failed },
+      );
+    }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
+
+  const ABSOLUTE_PATH = /^(?:[A-Za-z]:[\\/]|\/|\\\\)/u;
+  const MAX_RBXM_BYTES = 32 * 1024 * 1024;
+
+  const exportRbxm = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      const paths = Array.isArray(args.paths)
+        ? args.paths.filter(
+            (path): path is string => typeof path === "string" && path.trim() !== "",
+          )
+        : [];
+      const outputPath = str(args.outputPath);
+      if (paths.length === 0 || outputPath === undefined) {
+        return errorResult(
+          "invalid_arguments",
+          "paths (instance paths) and outputPath (an absolute .rbxm path) are required.",
+        );
+      }
+      if (!ABSOLUTE_PATH.test(outputPath) || !/\.rbxm$/iu.test(outputPath)) {
+        return errorResult(
+          "invalid_arguments",
+          "outputPath must be an absolute path ending in .rbxm. Studio saves the binary model format only; .rbxmx is not written.",
+        );
+      }
+      if (args.overwrite !== true && (yield* fileSystem.exists(outputPath))) {
+        return errorResult(
+          "file_exists",
+          `${outputPath} already exists. Pass overwrite true to replace it, or choose another name.`,
+        );
+      }
+      const outcome = yield* onPeer({
+        tool: "export_rbxm",
+        args,
+        context,
+        role: str(args.target) ?? "edit",
+        endpoint: StudioEndpoints.exportRbxm,
+        data: { paths },
+        timeoutMs: 120_000,
+        summary: outputPath,
+      });
+      if (!outcome.ok) return outcome.result;
+      const payload = outcome.payload;
+      if (!isRecord(payload) || isFailurePayload(payload)) {
+        return outdatedPlugin(payload) ?? jsonResult(payload);
+      }
+      if (typeof payload.base64 !== "string") {
+        return errorResult("export_failed", "Studio returned no file contents.");
+      }
+      const bytes = Buffer.from(payload.base64, "base64");
+      yield* fileSystem.makeDirectory(outputPath.replace(/[\\/][^\\/]*$/u, ""), {
+        recursive: true,
+      });
+      yield* fileSystem.writeFile(outputPath, bytes);
+      return jsonResult({
+        success: true,
+        path: outputPath,
+        bytes: bytes.length,
+        instances: payload.instances,
+        next: "Load it into a place with import_rbxm, or hand the file to the user.",
+      });
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.succeed(
+          isStudioRequestError(error)
+            ? requestFailure(error)
+            : errorResult("export_failed", String(error)),
+        ),
+      ),
+    );
+
+  const importRbxm = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      const filePath = str(args.filePath);
+      if (filePath === undefined || !ABSOLUTE_PATH.test(filePath)) {
+        return errorResult(
+          "invalid_arguments",
+          "filePath must be an absolute path to a .rbxm file.",
+        );
+      }
+      const info = yield* fileSystem.stat(filePath).pipe(Effect.option);
+      if (info._tag === "None") return errorResult("not_found", `No file at ${filePath}.`);
+      if (Number(info.value.size) > MAX_RBXM_BYTES) {
+        return errorResult(
+          "file_too_large",
+          `${filePath} is larger than ${String(MAX_RBXM_BYTES / 1024 / 1024)} MB; import it in parts.`,
+        );
+      }
+      const bytes = yield* fileSystem.readFile(filePath);
+      const outcome = yield* onPeer({
+        tool: "import_rbxm",
+        args,
+        context,
+        role: str(args.target) ?? "edit",
+        endpoint: StudioEndpoints.importRbxm,
+        data: {
+          base64: Buffer.from(bytes).toString("base64"),
+          parentPath: str(args.parentPath),
+        },
+        timeoutMs: 120_000,
+        summary: filePath,
+      });
+      if (!outcome.ok) return outcome.result;
+      const payload = outcome.payload;
+      if (isRecord(payload) && !isFailurePayload(payload)) {
+        return jsonResult({
+          ...payload,
+          next: "Frame it with camera and check it with a screenshot; Ctrl+Z in Studio undoes the whole import.",
+        });
+      }
+      return outdatedPlugin(payload) ?? jsonResult(payload);
+    }).pipe(
+      Effect.catch((error) =>
+        Effect.succeed(
+          isStudioRequestError(error)
+            ? requestFailure(error)
+            : errorResult("import_failed", String(error)),
+        ),
+      ),
+    );
+
+  const robloxDocs = (args: Args): Effect.Effect<StudioToolResult> => {
+    const name = str(args.name);
+    if (name === undefined) {
+      return Effect.succeed(errorResult("invalid_arguments", "name is required."));
+    }
+    const kind = str(args.kind);
+    if (
+      kind !== undefined &&
+      kind !== "class" &&
+      kind !== "enum" &&
+      kind !== "datatype" &&
+      kind !== "library" &&
+      kind !== "global"
+    ) {
+      return Effect.succeed(
+        errorResult("invalid_arguments", "kind must be class, enum, datatype, library or global."),
+      );
+    }
+    return Effect.promise(() => lookupRobloxDocs({ name, kind, member: str(args.member) })).pipe(
+      Effect.map((found) =>
+        found.ok ? jsonResult(found.value) : errorResult(found.error, found.message),
+      ),
+    );
+  };
 
   const list: ReadonlyArray<StudioToolDefinition> = [
     {
@@ -2727,21 +3165,6 @@ const make = Effect.gen(function* () {
       run: blender,
     },
     {
-      name: "upload_asset",
-      title: "Upload asset",
-      description:
-        "Publishes a local file to Roblox with the user's Open Cloud key, so it persists with the place: a Blender job's model (jobDir uploads its model.glb) or any .glb/.fbx model, a .png/.jpg image (Decal) or an .mp3/.ogg sound. Waits for Roblox to finish and returns the asset id; insert models with insert_asset. Needs the key and Upload as set in SealCode's Roblox Studio settings.",
-      inputSchema: object({
-        jobDir: { type: "string" },
-        filePath: { type: "string" },
-        assetType: { type: "string", enum: ["Model", "Decal", "Audio"] },
-        displayName: { type: "string" },
-        description: { type: "string" },
-      }),
-      risk: "irreversible",
-      run: uploadAssetTool,
-    },
-    {
       name: "import_mesh",
       title: "Import mesh",
       description:
@@ -2757,6 +3180,238 @@ const make = Effect.gen(function* () {
       }),
       risk: "mutation",
       run: importMesh,
+    },
+    {
+      name: "animation",
+      title: "Animation",
+      description:
+        'Works with animations on a rig (a Humanoid or AnimationController model). inspect: a KeyframeSequence (sequence path) or published animationId, reporting duration, looped, priority, keyframe count and the joints it moves. list: the tracks playing on rig. play / stop: starts or ends sequence or animationId on rig\'s Animator, in the playtest server by default while one runs (target client-N for a client), else as an edit-mode preview that poses the rig at time and holds it (frame it with camera, then capture_screenshot); stop restores the rest pose. create: builds a KeyframeSequence under rig (or parent "ServerStorage") from keyframes [{time, name?, markers?, poses: {[joint]: {position?: [x,y,z] studs, rotation?: [x,y,z] degrees}}}], where joint is a Motor6D name or the part it moves (Neck or Head, RightShoulder or RightUpperArm), rotation and position are offsets from the rest pose, and times rise from 0; also name, looped, priority, easingStyle, easingDirection. create returns a temporaryId that plays in this Studio session only; publishing it as a real animation asset needs the user. Then play it, look at it with a screenshot, and adjust.',
+      inputSchema: object(
+        {
+          action: { type: "string", enum: ["inspect", "list", "play", "stop", "create"] },
+          rig: { type: "string", description: "Path of the rig model (or its Humanoid)." },
+          sequence: {
+            type: "string",
+            description: "Path of a KeyframeSequence, for inspect and play.",
+          },
+          animationId: {
+            description:
+              "A published animation id (number or string), or the temporaryId from create.",
+          },
+          keyframes: { type: "array", items: { type: "object" }, description: "For create." },
+          name: { type: "string", description: "Name of the new KeyframeSequence." },
+          looped: { type: "boolean" },
+          priority: {
+            type: "string",
+            enum: ["Core", "Idle", "Movement", "Action", "Action2", "Action3", "Action4"],
+          },
+          easingStyle: {
+            type: "string",
+            description: "Enum.PoseEasingStyle name, default Linear.",
+          },
+          easingDirection: {
+            type: "string",
+            description: "Enum.PoseEasingDirection name, default In.",
+          },
+          parent: {
+            type: "string",
+            description: 'For create: a path, or "ServerStorage". Default: under the rig.',
+          },
+          time: { type: "number", description: "Seconds into the animation to start at or pose." },
+          speed: { type: "number" },
+          weight: { type: "number" },
+          fadeTime: { type: "number" },
+          all: { type: "boolean", description: "stop: end every track on the rig." },
+          target: {
+            type: "string",
+            description: "Peer: edit, server or client-N. Default: server during a playtest.",
+          },
+          ...instanceIdProperty,
+        },
+        ["action"],
+      ),
+      risk: "mutation",
+      run: animation,
+    },
+    {
+      name: "capture_script_profiler",
+      title: "Profile scripts",
+      description:
+        "Profiles Luau in a running playtest for seconds (0.1-15, default 1) and returns the functions that took the most time, with script, line and share of the capture. target server (default) or client-N. Make the slow thing happen during the capture (eval_server_runtime, interact_ui, a multiplayer test), then fix the hottest function and profile again. filter keeps names or scripts containing a substring.",
+      inputSchema: object({
+        seconds: { type: "number" },
+        target: { type: "string", description: "server (default) or client-N." },
+        frequency: { type: "number", description: "Samples per second, default 1000." },
+        maxFunctions: { type: "number", description: "1-100, default 20." },
+        filter: { type: "string" },
+        includeNative: { type: "boolean", description: "Include native and C functions." },
+        includePlugins: { type: "boolean", description: "Include Studio plugins' own scripts." },
+        ...instanceIdProperty,
+      }),
+      risk: "read",
+      run: scriptProfiler,
+    },
+    {
+      name: "get_memory_breakdown",
+      title: "Memory breakdown",
+      description:
+        "Memory in megabytes by developer tag (Instances, Script, GraphicsTexture, PhysicsParts, Sounds and the rest, largest first) and the total, from the Stats service. target edit (default), server, client-N, or all for every peer of the place (in a local Play test they share Studio's process, so they report the same totals). tags narrows it to the named DeveloperMemoryTag values. Use get_scene_analysis to see which instances cause it.",
+      inputSchema: object({
+        target: { type: "string", description: "edit (default), server, client-N or all." },
+        tags: { type: "array", items: { type: "string" } },
+        ...instanceIdProperty,
+      }),
+      risk: "read",
+      run: (args, context) =>
+        acrossPeers(
+          "get_memory_breakdown",
+          StudioEndpoints.memoryBreakdown,
+          { tags: Array.isArray(args.tags) ? args.tags : undefined },
+          args,
+          context,
+          30_000,
+        ),
+    },
+    {
+      name: "get_scene_analysis",
+      title: "Scene analysis",
+      description:
+        "What makes the place heavy: instance counts by class and service, parts (anchored, unanchored, mesh parts, unions), scripts and their size, lights and shadows, particle emitters with their total rate, the models holding the most instances, the models with the most unanchored parts, and the triangles and draw calls Studio is rendering now (frame the area first with camera). Plain hints name what looks costly. path limits it to one subtree; target edit (default), server, client-N or all; topN sizes the lists (default 8). Follow with get_memory_breakdown or capture_script_profiler to confirm.",
+      inputSchema: object({
+        path: { type: "string", description: "Subtree to analyse; default the whole place." },
+        topN: { type: "number" },
+        target: { type: "string", description: "edit (default), server, client-N or all." },
+        ...instanceIdProperty,
+      }),
+      risk: "read",
+      run: (args, context) =>
+        acrossPeers(
+          "get_scene_analysis",
+          StudioEndpoints.sceneAnalysis,
+          { path: str(args.path), topN: num(args.topN) },
+          args,
+          context,
+          120_000,
+        ),
+    },
+    {
+      name: "export_rbxm",
+      title: "Export to .rbxm",
+      description:
+        "Saves instances (paths) to a binary .rbxm model file at outputPath (absolute) on this computer, with their children, properties and scripts, so they can be kept, shared or loaded into another place with import_rbxm. Refuses to replace an existing file unless overwrite is true. target edit (default) or server.",
+      inputSchema: object(
+        {
+          paths: { type: "array", items: { type: "string" }, description: "Instance paths." },
+          outputPath: { type: "string", description: "Absolute path ending in .rbxm." },
+          overwrite: { type: "boolean" },
+          target: { type: "string", description: "edit (default) or server." },
+          ...instanceIdProperty,
+        },
+        ["paths", "outputPath"],
+      ),
+      risk: "mutation",
+      run: exportRbxm,
+    },
+    {
+      name: "import_rbxm",
+      title: "Import .rbxm",
+      description:
+        "Loads a .rbxm (or .rbxmx) model file from filePath (absolute) into the place under parentPath (default game.Workspace) in one undo step, and returns the paths it created. Scripts in the file stay enabled as saved: read them before a playtest. Frame the result with camera and check it with a screenshot.",
+      inputSchema: object(
+        {
+          filePath: { type: "string", description: "Absolute path of the file." },
+          parentPath: { type: "string", description: "Default game.Workspace." },
+          target: { type: "string", description: "edit (default) or server." },
+          ...instanceIdProperty,
+        },
+        ["filePath"],
+      ),
+      risk: "mutation",
+      run: importRbxm,
+    },
+    {
+      name: "set_network_profile",
+      title: "Simulate network",
+      description:
+        "Adds network delay, jitter and packet loss to playtest clients so lag-sensitive code can be tried. profile great (15 ms), good (50 ms, 10 ms jitter), poor (150 ms, 100 ms jitter, 0.5% loss), custom (with overrides: InboundNetworkMinDelayMs, OutboundNetworkMinDelayMs, InboundNetworkJitterMs, OutboundNetworkJitterMs, InboundNetworkLossPercent and OutboundNetworkLossPercent, loss at most 0.5) or off. Applies to every connected client, or to target client-N / edit. Needs a running Play test; turn it off when finished.",
+      inputSchema: object(
+        {
+          profile: { type: "string", enum: ["great", "good", "poor", "custom", "off"] },
+          overrides: { type: "object", description: "NetworkSettings values, for custom." },
+          target: {
+            type: "string",
+            description: "client-N, all-clients (default) or edit.",
+          },
+          ...instanceIdProperty,
+        },
+        ["profile"],
+      ),
+      risk: "mutation",
+      run: networkProfile,
+    },
+    {
+      name: "breakpoints",
+      title: "Logpoints",
+      description:
+        'Debugger logpoints that never pause the game: each time execution reaches script line, Studio prints "[breakpoint <script>:<line>]" and the values of logMessage to the Output; read them with get_output_logs (filter "[breakpoint"). action set (script path, line, optional condition as a Luau expression, logMessage as comma-separated Luau expressions such as "count, player.Name", enabled), remove (script, line), clear (removes the logpoints this tool set; all true removes every breakpoint in Studio, including ones the user set) or list (those this tool set). Set them in edit before a playtest or during one (target server). Needs the Luau debugger beta feature in Studio.',
+      inputSchema: object(
+        {
+          action: { type: "string", enum: ["set", "remove", "clear", "list"] },
+          script: { type: "string", description: "Path of the script." },
+          line: { type: "number", description: "1-based line." },
+          condition: { type: "string" },
+          logMessage: { type: "string" },
+          enabled: { type: "boolean" },
+          all: { type: "boolean", description: "clear: also remove the user's own breakpoints." },
+          target: { type: "string", description: "edit (default) or server." },
+          ...instanceIdProperty,
+        },
+        ["action"],
+      ),
+      risk: "mutation",
+      run: (args, context) =>
+        onPeerResult(
+          onPeer({
+            tool: "breakpoints",
+            args,
+            context,
+            endpoint: StudioEndpoints.breakpoints,
+            data: {
+              action: str(args.action),
+              script: str(args.script),
+              line: num(args.line),
+              condition: str(args.condition),
+              logMessage: str(args.logMessage),
+              enabled: bool(args.enabled),
+              all: bool(args.all),
+            },
+            timeoutMs: 30_000,
+            summary: [str(args.action), str(args.script), str(args.line)].filter(Boolean).join(" "),
+          }),
+          (payload) =>
+            payload.breakpoint === undefined
+              ? payload
+              : {
+                  ...payload,
+                  next: 'Start or continue the playtest, trigger the code, then read the hits with get_output_logs (filter "[breakpoint").',
+                },
+        ),
+    },
+    {
+      name: "get_roblox_docs",
+      title: "Roblox docs",
+      description:
+        "Looks up the Roblox engine API reference for a class (BasePart, Humanoid), enum (EasingStyle), datatype (CFrame), library (task, string) or global (print): its summary and one line per property, method, event or item. Pass member for one member in full, with parameters, returns and security (inherited members are found too). Case-sensitive names; kind is only needed when a name could be two things. Read it before using an API you are unsure of.",
+      inputSchema: object(
+        {
+          name: { type: "string", description: "Exact name, such as Animator or EasingStyle." },
+          member: { type: "string", description: "One property, method or event." },
+          kind: { type: "string", enum: ["class", "enum", "datatype", "library", "global"] },
+        },
+        ["name"],
+      ),
+      risk: "read",
+      run: robloxDocs,
     },
   ];
 

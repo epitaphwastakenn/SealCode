@@ -72,8 +72,7 @@ Panel = rounded frame (radius 20 to 24 Cartoon, 10 Modern) with stroke, a header
 
 ## Icons
 
-- Prefer real icon images: search the Creator Store (`search_assets` with type Decal or Image, e.g. "coin icon", "gear icon") and check the thumbnail before use. Use one icon set per screen.
-- Without assets, build simple icons from frames (a gear is not worth drawing; use a text label like "⚙" only if the font renders it, otherwise skip the icon). Never leave an empty square where an icon failed to load.
+Follow `icons.md`: one family per screen, matched to the style; when the user gave none, search the Creator Store for a matching set and check each candidate's thumbnail before use. Never leave an empty square where an icon failed to load: hide the icon and let the label centre.
 
 ## Backgrounds that are not flat
 

@@ -286,22 +286,11 @@ export function RobloxStudioSettings() {
                   />
                 }
               />
-              <SettingsRow
-                title="Open Cloud API key"
-                description="Needed to upload models, decals and animations. Kept in the server's secret store."
-                control={
-                  <TextSetting
-                    value={roblox.openCloudApiKey}
-                    placeholder="Open Cloud API key"
-                    label="Open Cloud API key"
-                    secret
-                    onCommit={(openCloudApiKey) => update({ openCloudApiKey })}
-                  />
-                }
-              />
+              {/* Uploads go through the Roblox Assistant now; a key saved before can still be cleared. */}
               {roblox.openCloudApiKey.length > 0 ? (
                 <SettingsRow
-                  title="Remove the Open Cloud key"
+                  title="Remove the saved Open Cloud key"
+                  description="SealCode no longer uploads with an Open Cloud key: agents ask whether to publish through the Roblox Assistant or let you publish."
                   control={
                     <Button
                       type="button"
@@ -314,26 +303,6 @@ export function RobloxStudioSettings() {
                   }
                 />
               ) : null}
-              <SettingsRow
-                title="Upload as"
-                description="The Roblox user or group id uploads publish as. A group wins when both are set."
-                control={
-                  <div className="flex flex-col gap-2 sm:flex-row">
-                    <TextSetting
-                      value={roblox.creatorUserId}
-                      placeholder="User id"
-                      label="Creator user id"
-                      onCommit={(creatorUserId) => update({ creatorUserId })}
-                    />
-                    <TextSetting
-                      value={roblox.creatorGroupId}
-                      placeholder="Group id"
-                      label="Creator group id"
-                      onCommit={(creatorGroupId) => update({ creatorGroupId })}
-                    />
-                  </div>
-                }
-              />
               <SettingsRow
                 title="Blender executable"
                 description={

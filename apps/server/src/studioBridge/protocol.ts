@@ -114,6 +114,16 @@ export const StudioEndpoints = {
   camera: "camera",
   insertAsset: "insert-asset",
   importMesh: "import-mesh",
+  animationInspect: "animation-inspect",
+  animationPlay: "animation-play",
+  animationCreate: "animation-create",
+  scriptProfiler: "script-profiler",
+  memoryBreakdown: "memory-breakdown",
+  sceneAnalysis: "scene-analysis",
+  exportRbxm: "export-rbxm",
+  importRbxm: "import-rbxm",
+  networkProfile: "network-profile",
+  breakpoints: "breakpoints",
 } as const;
 export type StudioEndpoint = (typeof StudioEndpoints)[keyof typeof StudioEndpoints];
 
@@ -139,4 +149,9 @@ export const MUTATING_ENDPOINTS: ReadonlySet<string> = new Set([
   StudioEndpoints.mouseInput,
   StudioEndpoints.keyboardInput,
   StudioEndpoints.deviceSet,
+  StudioEndpoints.animationPlay,
+  StudioEndpoints.animationCreate,
+  StudioEndpoints.importRbxm,
+  StudioEndpoints.networkProfile,
+  StudioEndpoints.breakpoints,
 ]);

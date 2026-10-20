@@ -149,9 +149,18 @@ function Build.run(args)
 			return nil, "a path or $id is required"
 		end
 		if string.sub(ref, 1, 1) == "$" then
-			local found = ids[string.sub(ref, 2)]
+			-- "$card.Face.Label" reaches a child of something made earlier in this batch.
+			local segments = string.split(string.sub(ref, 2), ".")
+			local found = ids[segments[1]]
 			if found == nil then
-				return nil, "unknown " .. ref .. " (an id must come from an earlier step)"
+				return nil, "unknown $" .. segments[1] .. " (an id must come from an earlier step)"
+			end
+			for i = 2, #segments do
+				local child = found:FindFirstChild(segments[i])
+				if child == nil then
+					return nil, "no child " .. segments[i] .. " under " .. table.concat(segments, ".", 1, i - 1)
+				end
+				found = child
 			end
 			return found, nil
 		end

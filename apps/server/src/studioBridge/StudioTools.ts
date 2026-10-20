@@ -1525,17 +1525,22 @@ const make = Effect.gen(function* () {
           )
         : [];
       const resources = requested.length > 0 ? requested : [str(args.resource) ?? "SKILL.md"];
-      const thread = context.threadId ?? "";
-      const seen = loadedSkills.get(thread) ?? new Set<string>();
+      // Without a thread id (a client calling the bridge directly) calls cannot be told apart,
+      // so every load returns the full text rather than a pointer to another conversation's.
+      const thread = context.threadId;
+      const seen =
+        thread === undefined ? new Set<string>() : (loadedSkills.get(thread) ?? new Set<string>());
       const rendered = renderSkillResources({
         library: skills,
         name,
         resources,
         alreadyLoaded: seen,
       });
-      for (const key of rendered.loaded) seen.add(key);
-      loadedSkills.delete(thread);
-      loadedSkills.set(thread, seen);
+      if (thread !== undefined) {
+        for (const key of rendered.loaded) seen.add(key);
+        loadedSkills.delete(thread);
+        loadedSkills.set(thread, seen);
+      }
       if (loadedSkills.size > SKILL_CACHE_THREADS) {
         const oldest = loadedSkills.keys().next().value;
         if (oldest !== undefined) loadedSkills.delete(oldest);
@@ -2757,7 +2762,7 @@ const make = Effect.gen(function* () {
       name: "build_instances",
       title: "Build",
       description:
-        'Creates, clones, edits and removes instances under one root in a single all-or-nothing step (one Ctrl+Z). path is the root: an existing instance, a service (add only), or a new Model under an existing parent. operations: {op:"create", className, parent?, name?, properties?, attributes?, tags?, position?, rotation?, id?} | {op:"clone", source, parent?, transforms?:[{position?, rotation?, scale?}], id?} | {op:"set", target, properties?, attributes?, tags?, position?, rotation?} | {op:"remove", target}. Paths see the tree as it was before the batch; refer to things made earlier in the batch with "$<id>". position is world [x,y,z], rotation absolute degrees. Up to 500 operations.',
+        'Creates, clones, edits and removes instances under one root in a single all-or-nothing step (one Ctrl+Z). path is the root: an existing instance, a service (add only), or a new Model under an existing parent. operations: {op:"create", className, parent?, name?, properties?, attributes?, tags?, position?, rotation?, id?} | {op:"clone", source, parent?, transforms?:[{position?, rotation?, scale?}], id?} | {op:"set", target, properties?, attributes?, tags?, position?, rotation?} | {op:"remove", target}. Paths see the tree as it was before the batch; refer to things made earlier in the batch with "$<id>", and to their children with "$<id>.Child.Grandchild" (a clone keeps its children), so a whole screen fits in one call. position is world [x,y,z], rotation absolute degrees. Up to 500 operations.',
       inputSchema: object(
         {
           path: { type: "string" },

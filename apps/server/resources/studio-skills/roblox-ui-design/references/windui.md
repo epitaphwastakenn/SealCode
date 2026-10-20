@@ -36,13 +36,31 @@ It saves a lot of work there: a hand-built version needs the window, drag, tabs,
    - Not the release asset (`releases/download/<tag>/main.lua`, about 270 KB): that build asks the server for icons through a `GetIcons` RemoteFunction fed by `HttpService` and `loadstring`, which a published game cannot do.
    - Do not use the Rojo source tree (`src/` mapped to `ReplicatedStorage.WindUI`) for the same reason: its icon loader and its server scripts need `loadstring` on the server.
      Read the first lines (version, licence). Keep that header comment: MIT requires the notice to stay with the code.
-2. **Patch the parent (required).** The bundle parents its ScreenGuis to `gethui()` or `CoreGui`, and a game script cannot use `CoreGui`. Find the line `local <x>=gethui and gethui()or(<y> or <player>:WaitForChild"PlayerGui")` (search for `gethui and gethui()`) and replace the whole expression after `=` with `<player>:WaitForChild"PlayerGui"` using the variable names found in that line. Nothing else in the bundle needs changing.
-3. **Create the module.** A `ModuleScript` named `WindUI` in `ReplicatedStorage`, its `Source` set to the patched file (use the bridge's script tool; if the source is refused for size, tell the user and ask them to paste the file into the ModuleScript, rather than trimming the library). In a Play test, `require` it from a LocalScript and confirm the output has no errors and `WindUI.ScreenGui.Parent` is the `PlayerGui`.
-4. **Use it from one `LocalScript`** in `StarterPlayerScripts` (or `StarterGui`), created when the screen should exist:
+2. **Patch the parent (required).** The bundle parents its ScreenGuis to `gethui()` or `CoreGui`, and a game script cannot use `CoreGui`. Search for `gethui and gethui()`: there is exactly one match, a line of the form `local <x>=gethui and gethui()or(<y> or <player>:WaitForChild"PlayerGui")` (`<y>` is `CoreGui`, `<player>` is `Players.LocalPlayer`). Replace the whole expression after `=` with `<player>:WaitForChild"PlayerGui"`, using the names found in that line. In the pinned commit above the line is `local aw=gethui and gethui()or(al or ap:WaitForChild"PlayerGui")` and becomes `local aw=ap:WaitForChild"PlayerGui"`; the minified names change between releases, so search, do not paste. Nothing else in the bundle needs changing: the other `loadstring` and `HttpGet` references are on paths a game does not reach (key systems, video and image URLs).
+3. **Create the module.** A `ModuleScript` named `WindUI` in `ReplicatedStorage` holding the patched file. The bridge accepts a source this size (`set_script_source` took the 1.35 MB file in one call and verified the read-back), but the whole text has to travel as the tool argument, which a model cannot produce. Load it from disk instead:
+   - Wrap the patched file in a model file with a shell one-liner and import it: write `<roblox version="4"><Item class="ModuleScript" referent="RBX0"><Properties><string name="Name">WindUI</string><ProtectedString name="Source"><![CDATA[` + the file + `]]></ProtectedString></Properties></Item></roblox>` to `<scratch>/WindUI.rbxmx` (the file contains no `]]>`; check with `grep -c`, and split any occurrence as `]]]]><![CDATA[>`), then call `import_rbxm` with that absolute path and `parentPath` `game.ReplicatedStorage`. This was tested: it imports one ModuleScript with the identical source.
+   - Do not trim the library to make it fit. If neither route is possible, tell the user and ask them to paste the file into the ModuleScript.
+     In a Play test, `require` it from a LocalScript and confirm the output has no errors and `WindUI.ScreenGui.Parent` is the `PlayerGui`. The saved place file grows by about the same 1.4 MB.
+4. **Use it from one `LocalScript`** in `StarterPlayerScripts` (or `StarterGui`), created when the screen should exist. Two things in v1.6.66 need handling in that script, both seen in a Play test:
+   - **Wait for the camera viewport before `CreateWindow`.** With the default `AutoScale`, the window scale is computed once, at creation, from `workspace.CurrentCamera.ViewportSize`. At script start the viewport can still be `1, 1`, which clamps the scale to 0.3 and leaves a tiny window for the rest of the session. A first test run was fine and the next ones were tiny, so it is a race, not a constant.
+   - **Select the first tab yourself.** No tab is selected on creation: the window opens with an empty content pane. Call `Window:SelectTab(1)` after the tabs and elements exist, after a `task.wait()` (`Tab:Select()` also exists in the source; only `Window:SelectTab(1)` after the build was tested).
 
 ```lua
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local WindUI = require(ReplicatedStorage:WaitForChild("WindUI"))
+
+local camera = workspace.CurrentCamera
+while camera.ViewportSize.X < 100 do
+    camera:GetPropertyChangedSignal("ViewportSize"):Wait()
+end
+
+local Window = WindUI:CreateWindow({ Title = "Control Panel", Icon = "layout-dashboard", Theme = "Dark" })
+Window:DisableTopbarButtons({ "Close" })
+local MainTab = Window:Tab({ Title = "Main", Icon = "house" })
+MainTab:Toggle({ Title = "Invincible", Value = false, Callback = function(state) end })
+
+task.wait()
+Window:SelectTab(1)
 ```
 
 Things that do not work in a published game, because they need an exploit environment (`writefile`, `isfile`, `getcustomasset`, `request`, `setclipboard`): saving and loading configs (`Window.ConfigManager`, `Flag` persistence), `KeySystem`, image or video URLs (use `rbxassetid://` ids), the `Folder` option's file storage, and clipboard buttons. Save player or admin settings with a RemoteEvent to the server and a DataStore instead. Do not use `KeySystem`: gate admin tools on the server by user id.

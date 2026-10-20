@@ -8,13 +8,15 @@ import {
   renameAppearancePreset,
   saveCurrentAppearance,
 } from "~/appearancePresetActions";
-import { appearanceMatchesPreset } from "~/appearancePresets";
+import { appearanceFontStack, DEFAULT_SANS_FONT_STACK } from "~/appearanceFonts";
+import { appearanceMatchesPreset, presetPreviewLook } from "~/appearancePresets";
 import { useClientSettings } from "~/hooks/useSettings";
 import { readThemeState, useTheme } from "~/hooks/useTheme";
 import { ensureLocalApi } from "~/localApi";
+import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
-import { Toggle } from "../ui/toggle";
+import { AppearancePresetPreview } from "./AppearancePresetPreview";
 import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 
@@ -59,55 +61,87 @@ export function AppearancePresetsSection() {
         description="Save the whole look (theme, glass, background image and its effects, corners, fonts and motion) and switch between looks in one click."
       >
         <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-2">
+          <div
+            className="grid gap-3 empty:hidden"
+            style={{ gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 11rem), 1fr))" }}
+          >
             {presets.map((preset) => {
               const active = appearanceMatchesPreset(preset, settings, themeState);
+              const look = presetPreviewLook(preset, settings, themeState);
               return (
-                <span key={preset.id} className="inline-flex items-center">
-                  <Toggle
-                    variant="outline"
-                    size="sm"
-                    pressed={active}
-                    onPressedChange={() => applyAppearancePreset(preset)}
+                <div
+                  key={preset.id}
+                  className={cn(
+                    "flex min-w-0 flex-col gap-1.5 rounded-xl border p-2 transition-colors",
+                    active
+                      ? "border-transparent bg-accent/30"
+                      : "border-border/70 bg-card/60 hover:bg-accent/10",
+                  )}
+                  style={active ? { boxShadow: "inset 0 0 0 1px var(--ring)" } : undefined}
+                >
+                  <button
+                    type="button"
+                    aria-label={`Apply ${preset.name}`}
+                    aria-pressed={active}
+                    className="cursor-pointer rounded-lg outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:outline-ring"
+                    onClick={() => applyAppearancePreset(preset)}
                   >
-                    {preset.name}
-                  </Toggle>
-                  <Button
-                    variant="ghost-muted"
-                    size="icon-xs"
-                    aria-label={`Save the current look into ${preset.name}`}
-                    title="Save the current look into this preset"
-                    disabled={active}
-                    onClick={() => saveCurrentAppearance({ id: preset.id, name: preset.name })}
-                  >
-                    <SaveIcon />
-                  </Button>
-                  <Button
-                    variant="ghost-muted"
-                    size="icon-xs"
-                    aria-label={`Rename ${preset.name}`}
-                    onClick={() => startNaming({ mode: "rename", id: preset.id }, preset.name)}
-                  >
-                    <PencilIcon />
-                  </Button>
-                  <Button
-                    variant="ghost-muted"
-                    size="icon-xs"
-                    aria-label={`Delete ${preset.name}`}
-                    onClick={() => void confirmDelete(preset.id, preset.name)}
-                  >
-                    <XIcon />
-                  </Button>
-                </span>
+                    <AppearancePresetPreview look={look} />
+                  </button>
+                  <div className="flex min-w-0 items-center gap-0.5">
+                    <span
+                      className={cn(
+                        "min-w-0 flex-1 truncate px-1 text-xs font-medium",
+                        active ? "text-foreground" : "text-muted-foreground",
+                      )}
+                      style={{
+                        fontFamily: appearanceFontStack(
+                          look.settings.fontFamilySans,
+                          DEFAULT_SANS_FONT_STACK,
+                        ),
+                      }}
+                    >
+                      {preset.name}
+                    </span>
+                    <Button
+                      variant="ghost-muted"
+                      size="icon-xs"
+                      aria-label={`Save the current look into ${preset.name}`}
+                      title="Save the current look into this preset"
+                      disabled={active}
+                      onClick={() => saveCurrentAppearance({ id: preset.id, name: preset.name })}
+                    >
+                      <SaveIcon />
+                    </Button>
+                    <Button
+                      variant="ghost-muted"
+                      size="icon-xs"
+                      aria-label={`Rename ${preset.name}`}
+                      onClick={() => startNaming({ mode: "rename", id: preset.id }, preset.name)}
+                    >
+                      <PencilIcon />
+                    </Button>
+                    <Button
+                      variant="ghost-muted"
+                      size="icon-xs"
+                      aria-label={`Delete ${preset.name}`}
+                      onClick={() => void confirmDelete(preset.id, preset.name)}
+                    >
+                      <XIcon />
+                    </Button>
+                  </div>
+                </div>
               );
             })}
-            {naming === null && presets.length < MAX_APPEARANCE_PRESETS ? (
+          </div>
+          {naming === null && presets.length < MAX_APPEARANCE_PRESETS ? (
+            <div>
               <Button variant="ghost" size="sm" onClick={() => startNaming({ mode: "new" }, "")}>
                 <PlusIcon />
                 Save current look
               </Button>
-            ) : null}
-          </div>
+            </div>
+          ) : null}
           {naming !== null ? (
             <form
               className="flex items-center gap-2"

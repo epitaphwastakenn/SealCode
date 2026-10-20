@@ -72,8 +72,11 @@ function pixelLookKey(look: BackdropLook): string {
   return JSON.stringify(pixel);
 }
 
-/** Effects an animated image can still take, as a CSS filter on every frame. */
-function animatedFilter(look: BackdropLook): string {
+/**
+ * The effects a CSS filter can draw: all an animated image takes on every
+ * frame, and what a look's miniature shows without the effects worker.
+ */
+export function cssLevelFilter(look: BackdropLook): string {
   const parts: string[] = [];
   if (look.saturation !== 100) parts.push(`saturate(${look.saturation / 100})`);
   if (look.brightness !== 100) parts.push(`brightness(${look.brightness / 100})`);
@@ -308,7 +311,7 @@ export function AppBackdrop() {
     transform: `translate(calc(var(--backdrop-drift-x, 0) * ${-drift * 100}vw), calc(var(--backdrop-drift-y, 0) * ${-drift * 100}vh)) scale(${scale})`,
     opacity: strength,
     filter:
-      [blur > 0 ? `blur(${blur}px)` : "", animated ? animatedFilter(look) : ""]
+      [blur > 0 ? `blur(${blur}px)` : "", animated ? cssLevelFilter(look) : ""]
         .filter(Boolean)
         .join(" ") || undefined,
     imageRendering: !animated && look.pixel > 1 ? "pixelated" : undefined,

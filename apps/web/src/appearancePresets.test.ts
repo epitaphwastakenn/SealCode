@@ -11,6 +11,7 @@ import {
   appearanceMatchesPreset,
   backdropImageInUse,
   captureAppearanceSettings,
+  presetPreviewLook,
   presetTheme,
   savePreset,
 } from "./appearancePresets";
@@ -89,5 +90,28 @@ describe("appearance presets", () => {
       backdropImageInUse("image-a", { backdrop: glassy.backdrop, appearancePresets: [] }),
     ).toBe(true);
     expect(backdropImageInUse("image-a", { backdrop: null, appearancePresets: [] })).toBe(false);
+  });
+
+  it("previews a preset over the current look without applying it", () => {
+    const { cornerRadius: _dropped, ...settings } = captureAppearanceSettings(glassy);
+    const older: AppearancePreset = { id: "older", name: "Older", settings };
+    const current = { ...DEFAULT_CLIENT_SETTINGS, cornerRadius: 4 };
+    const look = presetPreviewLook(older, current, theme);
+    expect(look.settings.cornerRadius).toBe(4);
+    expect(look.settings.backdrop?.imageId).toBe("image-a");
+    expect(look.theme).toEqual(theme);
+    expect(look).toMatchObject({ sidebarOpacity: 45, panelOpacity: 45 });
+  });
+
+  it("only lets the sidebar through when just the sidebar is glass", () => {
+    const sidebarGlass: AppearancePreset = {
+      id: "sidebar",
+      name: "Sidebar glass",
+      settings: { glassAppEnabled: false, glassSidebarEnabled: true, glassOpacity: 60 },
+    };
+    expect(presetPreviewLook(sidebarGlass, DEFAULT_CLIENT_SETTINGS, theme)).toMatchObject({
+      sidebarOpacity: 60,
+      panelOpacity: 100,
+    });
   });
 });

@@ -97,3 +97,36 @@ export function backdropImageInUse(
     state.appearancePresets.some((preset) => preset.settings.backdrop?.imageId === imageId)
   );
 }
+
+export interface PresetPreviewLook {
+  readonly settings: Pick<ClientSettings, keyof AppearancePresetSettings>;
+  readonly theme: AppearancePresetTheme;
+  /** How much the sidebar and the main panel cover what is behind them, in percent. */
+  readonly sidebarOpacity: number;
+  readonly panelOpacity: number;
+}
+
+/**
+ * The look a preset would give the app, without applying it. A preset is a
+ * patch, so whatever it does not carry stays as the app is now.
+ */
+export function presetPreviewLook(
+  preset: AppearancePreset,
+  settings: ClientSettings,
+  theme: ThemeState,
+): PresetPreviewLook {
+  const resolved = {
+    ...Struct.pick(settings, APPEARANCE_PRESET_SETTING_KEYS),
+    ...preset.settings,
+  };
+  return {
+    settings: resolved,
+    theme: preset.theme ?? presetTheme(theme),
+    sidebarOpacity: resolved.glassAppEnabled
+      ? resolved.panelGlassOpacity
+      : resolved.glassSidebarEnabled
+        ? resolved.glassOpacity
+        : 100,
+    panelOpacity: resolved.glassAppEnabled ? resolved.panelGlassOpacity : 100,
+  };
+}

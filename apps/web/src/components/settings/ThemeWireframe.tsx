@@ -1,12 +1,31 @@
+import type { CSSProperties, ReactNode } from "react";
+
 import { cn } from "../../lib/utils";
 import type { ThemeCardPreviewColors } from "./ThemePreviewCircles";
+
+/** The parts of an appearance beyond its colors, for previewing a whole look. */
+export interface ThemeWireframeLook {
+  /** Drawn between the window and the panels, where the app's background image sits. */
+  readonly backdrop?: ReactNode;
+  /** How much the sidebar and the main panel cover the backdrop, in percent. */
+  readonly sidebarOpacity: number;
+  readonly panelOpacity: number;
+  readonly floating: boolean;
+}
+
+const OPAQUE_LOOK: ThemeWireframeLook = { sidebarOpacity: 100, panelOpacity: 100, floating: false };
+
+const tint = (color: string, opacity: number) =>
+  opacity >= 100 ? color : `color-mix(in srgb, ${color} ${opacity}%, transparent)`;
 
 function ThemeWireframePane({
   colors,
   clip,
+  look = OPAQUE_LOOK,
 }: {
   colors: ThemeCardPreviewColors;
   clip?: "left" | "right" | undefined;
+  look?: ThemeWireframeLook | undefined;
 }) {
   const line = "rgb(127 127 127 / 0.25)";
   return (
@@ -23,10 +42,36 @@ function ThemeWireframePane({
             }
       }
     >
-      <span className="absolute inset-0" style={{ backgroundColor: colors.canvas }} />
       <span
-        className="absolute inset-y-0 left-0 w-[22%]"
-        style={{ backgroundColor: colors.sidebar, boxShadow: `inset -1px 0 0 ${line}` }}
+        className="absolute inset-0"
+        style={{
+          backgroundColor: look.floating
+            ? `color-mix(in oklab, ${colors.canvas} 88%, black)`
+            : colors.canvas,
+        }}
+      />
+      {look.backdrop}
+      <span
+        className={cn(
+          "absolute",
+          look.floating
+            ? "inset-y-[4%] left-[24%] right-[2%] rounded-lg"
+            : "inset-y-0 left-[22%] right-0",
+        )}
+        style={{
+          backgroundColor: tint(colors.canvas, look.panelOpacity),
+          boxShadow: look.floating ? `inset 0 0 0 1px ${line}` : undefined,
+        }}
+      />
+      <span
+        className={cn(
+          "absolute",
+          look.floating ? "inset-y-[4%] left-[2%] w-[20%] rounded-lg" : "inset-y-0 left-0 w-[22%]",
+        )}
+        style={{
+          backgroundColor: tint(colors.sidebar, look.sidebarOpacity),
+          boxShadow: look.floating ? `inset 0 0 0 1px ${line}` : `inset -1px 0 0 ${line}`,
+        }}
       />
 
       <span
@@ -108,9 +153,16 @@ function ThemeWireframePane({
 export function ThemeWireframe({
   className,
   panes,
+  radius,
 }: {
   className?: string;
-  panes: ReadonlyArray<{ colors: ThemeCardPreviewColors; clip?: "left" | "right" }>;
+  panes: ReadonlyArray<{
+    colors: ThemeCardPreviewColors;
+    clip?: "left" | "right";
+    look?: ThemeWireframeLook;
+  }>;
+  /** The look's corner radius in app pixels; the miniature rounds in proportion. */
+  radius?: number;
 }) {
   return (
     <span
@@ -119,9 +171,19 @@ export function ThemeWireframe({
         "relative block w-full overflow-hidden rounded-lg border border-border/60",
         className,
       )}
+      style={
+        radius === undefined
+          ? undefined
+          : ({ "--radius": `${Math.max(2, radius * 0.5)}px` } as CSSProperties)
+      }
     >
       {panes.map((pane) => (
-        <ThemeWireframePane clip={pane.clip} colors={pane.colors} key={pane.clip ?? "pane"} />
+        <ThemeWireframePane
+          clip={pane.clip}
+          colors={pane.colors}
+          key={pane.clip ?? "pane"}
+          look={pane.look}
+        />
       ))}
     </span>
   );

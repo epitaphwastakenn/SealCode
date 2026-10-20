@@ -64,6 +64,7 @@ const APP_LAUNCH_TIMEOUT_MS = 10_000;
 /** Windows animates minimizing; a capture taken sooner shows windows mid-flight. */
 const SETTLE_AFTER_HIDING_MS = 350;
 const DRAG_STEPS = 12;
+const TYPE_INTERVAL_MS = 12;
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -424,7 +425,15 @@ export const make = Effect.gen(function* () {
         const target = await foregroundAppWindow();
         authorize(threadId, action, target);
         const input = await loadWindowsInputApi();
-        await withoutStopShortcut(async () => input.send(typeTextEvents(action.text)));
+        // WinUI apps such as the new Paint drop Unicode keystrokes sent in one burst,
+        // so each character goes as its own down/up pair with a short gap.
+        const events = typeTextEvents(action.text);
+        await withoutStopShortcut(async () => {
+          for (let index = 0; index < events.length; index += 2) {
+            input.send(events.slice(index, index + 2));
+            await sleep(TYPE_INTERVAL_MS);
+          }
+        });
         return { text: `Typed ${action.text.length} characters into ${appLabel(target)}.` };
       }
       case "key": {

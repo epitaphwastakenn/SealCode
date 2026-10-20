@@ -16,7 +16,7 @@ describe("buildPluginModel", () => {
         { path: "Handlers/Place.luau", source: "local t = a[b[1]]>0 return t" },
         { path: "Util.luau", source: "return {}" },
       ],
-      StudioPluginInstaller.configModule({ port: 1234, key: "k_ey-1" }),
+      StudioPluginInstaller.configModule({ port: 1234, key: "k_ey-1", pluginHash: "h" }),
     );
     expect(model).toContain('<Item class="Script" referent="RBX0">');
     expect(model).toContain('<string name="Name">Handlers</string>');
@@ -32,7 +32,7 @@ describe("buildPluginModel", () => {
           { path: "Handlers/Place.luau", source: "local t = a[b[1]]>0 return t" },
           { path: "Util.luau", source: "return {}" },
         ],
-        StudioPluginInstaller.configModule({ port: 1234, key: "k_ey-1" }),
+        StudioPluginInstaller.configModule({ port: 1234, key: "k_ey-1", pluginHash: "h" }),
       ),
     ).toBe(model);
   });
@@ -54,7 +54,8 @@ describe("StudioPluginInstaller", () => {
         ),
       );
       const first = yield* installer.install({ port: 58760, key: "abc" });
-      expect(first).toEqual({
+      expect(first.pluginHash).toMatch(/^[0-9a-f]{16}$/);
+      expect(first).toMatchObject({
         path: path.join(folder, StudioPluginInstaller.PLUGIN_FILE_NAME),
         changed: true,
       });
@@ -65,6 +66,9 @@ describe("StudioPluginInstaller", () => {
       expect((yield* installer.install({ port: 58760, key: "abc" })).changed).toBe(false);
       expect((yield* installer.install({ port: 58760, key: "rotated" })).changed).toBe(true);
       expect(yield* fs.readDirectory(folder)).toEqual([StudioPluginInstaller.PLUGIN_FILE_NAME]);
+      expect(yield* installer.uninstall).toBe(true);
+      expect(yield* fs.readDirectory(folder)).toEqual([]);
+      expect(yield* installer.uninstall).toBe(false);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 });

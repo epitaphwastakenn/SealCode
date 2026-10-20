@@ -488,8 +488,11 @@ const make = Effect.gen(function* () {
       Number.isInteger(configuredPort) && configuredPort > 0 && configuredPort < 65536
         ? configuredPort
         : DEFAULT_STUDIO_BRIDGE_PORT,
-    // A fresh token per run: only this process's tool gateway may call the bridge's tools.
-    mcpToken: Buffer.from(yield* crypto.randomBytes(24).pipe(Effect.orDie)).toString("base64url"),
+    // A fresh token per run: only this process's tool gateway may call the bridge's tools. A
+    // maintainer can pin one to attach another MCP client while debugging.
+    mcpToken:
+      env.SEALCODE_STUDIO_BRIDGE_MCP_TOKEN?.trim() ||
+      Buffer.from(yield* crypto.randomBytes(24).pipe(Effect.orDie)).toString("base64url"),
   };
 
   const environment: RobloxStudioEnvironment = {

@@ -613,7 +613,7 @@ const make = Effect.gen(function* () {
         })),
         pendingRequests: snapshot.pendingRequests,
         hint: snapshot.lifecycle.pluginUpdated
-          ? "The SealCode plugin was just updated: Studio windows opened before this must be restarted."
+          ? "SealCode just updated the Studio plugin. Studio loads plugins when a place opens: reopen the place, or restart Studio, to pick up the new one."
           : snapshot.peers.length === 0
             ? "No Studio is connected: ask the user to open the place in Roblox Studio and check the SealCode panel (Plugins tab)."
             : undefined,

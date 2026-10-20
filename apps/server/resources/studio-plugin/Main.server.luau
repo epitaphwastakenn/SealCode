@@ -97,6 +97,7 @@ local function identity()
 		dataModelName = game.Name,
 		isRunning = RunService:IsRunning(),
 		studioVersion = version(),
+		pluginHash = Config.pluginHash,
 		capabilities = CAPABILITIES,
 		toggles = State.currentToggles(),
 	}

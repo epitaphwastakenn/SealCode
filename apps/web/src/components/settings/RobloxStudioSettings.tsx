@@ -76,7 +76,9 @@ function BridgeSummary({ status }: { readonly status: RobloxStudioStatus }) {
   if (bridge === undefined) return null;
   const notices = [
     bridge.pluginUpdated
-      ? "The Studio plugin was just installed or updated: fully close and reopen Roblox Studio to load it."
+      ? status.mode === "sealcode"
+        ? "The SealCode Studio plugin was just installed or updated. Places opened from now on load it; reopen places that were already open, or restart Roblox Studio."
+        : "The Studio plugin was just installed or updated: fully close and reopen Roblox Studio to load it."
       : undefined,
     bridge.pluginRejected
       ? `A Studio is still running an older plugin (${bridge.pluginRejected}); restart Roblox Studio.`

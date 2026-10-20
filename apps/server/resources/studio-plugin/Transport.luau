@@ -115,6 +115,7 @@ local function handle(message)
 		State.server.agentLinked = status.agentLinked == true
 		State.server.agentActive = status.agentActive == true
 		State.server.pluginUpdated = status.pluginUpdated == true
+		State.server.pluginOutdated = status.pluginOutdated == true
 		State.peers = if type(status.peers) == "table" then status.peers else {}
 		State.changed()
 	elseif message.kind == "notify" then

@@ -137,11 +137,25 @@ end
 -- Opaque handles that survive renames and reparenting for the life of this plugin VM.
 local namespace = string.sub(string.gsub(HttpService:GenerateGUID(false), "-", ""), 1, 12)
 local counter = 0
-local refToInstance: { [string]: Instance } = setmetatable({}, { __mode = "v" }) :: any
-local instanceToRef: { [Instance]: string } = setmetatable({}, { __mode = "k" }) :: any
+-- Strong tables: Roblox may hand out a fresh proxy for the same Instance, so weak keys would
+-- forget handles that are still in use. Dead entries are pruned instead.
+local refToInstance: { [string]: Instance } = {}
+local instanceToRef: { [Instance]: string } = {}
+local refCount = 0
+local MAX_REFS = 20000
 
 local function isLive(instance: Instance): boolean
 	return instance == game or instance:IsDescendantOf(game)
+end
+
+local function prune()
+	for ref, instance in refToInstance do
+		if not isLive(instance) then
+			refToInstance[ref] = nil
+			instanceToRef[instance] = nil
+			refCount -= 1
+		end
+	end
 end
 
 function Util.refOf(instance: Instance): string
@@ -149,7 +163,16 @@ function Util.refOf(instance: Instance): string
 	if existing then
 		return existing
 	end
+	if refCount >= MAX_REFS then
+		prune()
+		if refCount >= MAX_REFS then
+			refToInstance = {}
+			instanceToRef = {}
+			refCount = 0
+		end
+	end
 	counter += 1
+	refCount += 1
 	local ref = "ir:" .. namespace .. ":" .. tostring(counter)
 	instanceToRef[instance] = ref
 	refToInstance[ref] = instance

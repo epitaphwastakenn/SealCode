@@ -111,15 +111,16 @@ local function readPixels(image, size: Vector2)
 	return out
 end
 
-local function shrink(pixels, width: number, height: number, factor: number)
-	local outWidth = math.max(1, width // factor)
-	local outHeight = math.max(1, height // factor)
+local function shrink(pixels, width: number, height: number, scale: number)
+	local outWidth = math.max(1, math.floor(width * scale))
+	local outHeight = math.max(1, math.floor(height * scale))
 	local out = buffer.create(outWidth * outHeight * 4)
 	for y = 0, outHeight - 1 do
-		local sourceRow = y * factor * width
+		local sourceRow = math.min(height - 1, math.floor(y / scale)) * width
 		local targetRow = y * outWidth
 		for x = 0, outWidth - 1 do
-			buffer.writeu32(out, (targetRow + x) * 4, buffer.readu32(pixels, (sourceRow + x * factor) * 4))
+			local sx = math.min(width - 1, math.floor(x / scale))
+			buffer.writeu32(out, (targetRow + x) * 4, buffer.readu32(pixels, (sourceRow + sx) * 4))
 		end
 		if y % 64 == 0 then
 			task.wait()
@@ -178,7 +179,7 @@ function Runtime.capture(args)
 	local maxSize = math.clamp(tonumber(args.maxSize) or 1600, 256, 4096)
 	local longest = math.max(width, height)
 	if longest > maxSize then
-		pixels, width, height = shrink(pixels, width, height, math.ceil(longest / maxSize))
+		pixels, width, height = shrink(pixels, width, height, maxSize / longest)
 	end
 	return {
 		success = true,

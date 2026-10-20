@@ -30,6 +30,7 @@ const fakePlugin = (answer: (endpoint: string, data: any) => unknown) =>
       dataModelName: "Place",
       isRunning: false,
       studioVersion: "",
+      pluginHash: "h",
       capabilities: [],
       toggles: { paused: false, readOnly: false, allowLuau: true },
     });
@@ -163,6 +164,7 @@ describe("StudioTools", () => {
         dataModelName: "Place",
         isRunning: true,
         studioVersion: "",
+        pluginHash: "h",
         capabilities: [],
         toggles: { paused: false, readOnly: false, allowLuau: true },
       });

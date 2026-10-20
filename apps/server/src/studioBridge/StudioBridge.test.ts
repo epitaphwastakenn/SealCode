@@ -24,6 +24,7 @@ const hello = (
   dataModelName: "Obby",
   isRunning: false,
   studioVersion: "0.700",
+  pluginHash: "h",
   capabilities: ["scriptEditor", "made-up"],
   toggles: { paused: false, readOnly: false, allowLuau: true },
   ...overrides,

@@ -106,6 +106,7 @@ const routesFor = (input: { readonly pluginKey: string; readonly mcpToken: strin
             dataModelName: text(body.dataModelName),
             isRunning: body.isRunning === true,
             studioVersion: text(body.studioVersion),
+            pluginHash: text(body.pluginHash),
             capabilities: Array.isArray(body.capabilities)
               ? body.capabilities.filter((entry): entry is string => typeof entry === "string")
               : [],
@@ -279,6 +280,7 @@ const make = Effect.gen(function* () {
             state: "running",
             port: studio.port,
             pluginPath: installed.success.path,
+            pluginHash: installed.success.pluginHash,
             pluginUpdated: installed.success.changed,
           }
         : {
@@ -303,8 +305,11 @@ const make = Effect.gen(function* () {
   });
 
   const lock = yield* Semaphore.make(1);
+  // Another mode turns the bridge off for good, so its plugin goes too; a server that merely
+  // exits keeps it, to reconnect on the next start.
+  const disable = stop.pipe(Effect.andThen(installer.uninstall), Effect.asVoid);
   const apply = (current: { readonly robloxStudio: { readonly mode: string } }) =>
-    lock.withPermits(1)(current.robloxStudio.mode === "sealcode" ? start : stop);
+    lock.withPermits(1)(current.robloxStudio.mode === "sealcode" ? start : disable);
 
   yield* settings.getSettings.pipe(
     Effect.flatMap(apply),

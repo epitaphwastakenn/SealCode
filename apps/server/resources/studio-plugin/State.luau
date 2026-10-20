@@ -15,7 +15,7 @@ State.connection = {
 	lastStatusCode = nil,
 	retryAt = nil,
 }
-State.server = { build = nil, protocol = nil, agentLinked = false, agentActive = false, pluginUpdated = false }
+State.server = { build = nil, protocol = nil, agentLinked = false, agentActive = false, pluginUpdated = false, pluginOutdated = false }
 State.peers = {}
 State.instanceId = nil
 State.placeName = nil

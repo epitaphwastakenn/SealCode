@@ -132,6 +132,7 @@ export interface StudioHelloInput {
   readonly dataModelName: string;
   readonly isRunning: boolean;
   readonly studioVersion: string;
+  readonly pluginHash: string;
   readonly capabilities: ReadonlyArray<string>;
   readonly toggles: StudioToggles;
 }
@@ -142,6 +143,7 @@ export interface StudioPeer extends RoutablePeer {
   readonly dataModelName: string;
   readonly build: string;
   readonly studioVersion: string;
+  readonly pluginHash: string;
   readonly capabilities: ReadonlyArray<StudioCapability>;
   readonly toggles: StudioToggles;
   readonly connectedAt: number;
@@ -196,6 +198,8 @@ export interface StudioLifecycle {
   readonly port?: number;
   readonly error?: string;
   readonly pluginPath?: string;
+  /** Hash of the plugin code SealCode installed this run. */
+  readonly pluginHash?: string;
   /** The installed plugin file was replaced this run: Studios already open run the old copy. */
   readonly pluginUpdated: boolean;
   readonly pluginProblem?: string;
@@ -254,12 +258,14 @@ const statusKey = (status: {
   readonly agentLinked: boolean;
   readonly agentActive: boolean;
   readonly pluginUpdated: boolean;
+  readonly pluginOutdated: boolean;
   readonly peers: ReadonlyArray<{ readonly role: string; readonly isRunning: boolean }>;
 }): string =>
   [
     status.agentLinked,
     status.agentActive,
     status.pluginUpdated,
+    status.pluginOutdated,
     ...status.peers.map((peer) => `${peer.role}:${String(peer.isRunning)}`),
   ].join("|");
 
@@ -395,6 +401,10 @@ const make = Effect.gen(function* () {
   /** Removes a session; requests it held or that nobody else can serve fail. */
   const dropSession = (session: Session) =>
     Effect.gen(function* () {
+      yield* Effect.logInfo("Studio peer disconnected", {
+        role: session.peer.role,
+        instanceId: session.peer.instanceId,
+      });
       sessions.delete(session.peer.pluginSessionId);
       byToken.delete(session.token);
       if (session.waiter !== undefined) yield* Deferred.succeed(session.waiter, undefined);
@@ -424,6 +434,9 @@ const make = Effect.gen(function* () {
     agentLinked,
     agentActive: now - lastToolAt < AGENT_ACTIVE_MS,
     pluginUpdated: lifecycle.pluginUpdated,
+    // The file on disk is newer than the copy this Studio loaded: reopening the place fixes it.
+    pluginOutdated:
+      lifecycle.pluginHash !== undefined && session.peer.pluginHash !== lifecycle.pluginHash,
     peers: peersOfPlace(allPeers(), session.peer.instanceId, resolveAlias).map((peer) => ({
       role: peer.role,
       isRunning: peer.isRunning,
@@ -509,6 +522,7 @@ const make = Effect.gen(function* () {
         isRunning: input.isRunning,
         build: input.build.slice(0, 64),
         studioVersion: input.studioVersion.slice(0, 64),
+        pluginHash: input.pluginHash.slice(0, 64),
         capabilities,
         toggles: sanitizeToggles(input.toggles),
         connectedAt: existing?.peer.connectedAt ?? now,
@@ -547,6 +561,12 @@ const make = Effect.gen(function* () {
       };
       sessions.set(peer.pluginSessionId, session);
       byToken.set(session.token, session);
+      yield* Effect.logInfo("Studio peer connected", {
+        role,
+        instanceId,
+        build: peer.build,
+        studioVersion: peer.studioVersion,
+      });
       yield* refreshStatuses;
       yield* changed;
       return {

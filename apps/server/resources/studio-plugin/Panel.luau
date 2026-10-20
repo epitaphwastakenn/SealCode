@@ -391,8 +391,8 @@ function Panel.create(plugin, actions)
 		local serverVersion = if State.server.build then " · SealCode " .. tostring(State.server.build) else ""
 		bridgeText.Text = "Bridge " .. string.gsub(Config.baseUrl, "^http://", "") .. serverVersion
 		local noticeMessage = State.notice
-		if State.server.pluginUpdated then
-			noticeMessage = "SealCode updated this plugin. Restart Studio windows opened earlier to load it."
+		if State.server.pluginOutdated then
+			noticeMessage = "SealCode installed a newer version of this plugin. Close and reopen this place to load it."
 		end
 		notice.Visible = noticeMessage ~= nil
 		noticeText.Text = noticeMessage or ""

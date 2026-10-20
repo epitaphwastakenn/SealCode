@@ -138,9 +138,17 @@ function Luau.execute(args)
 			result.returnValue = Util.jsonSafe(results[2])
 		end
 	else
-		local message = tostring(results[2])
-		message = string.gsub(message, "user_code:", "line ")
-		result.error = string.sub(message, 1, 4000)
+		-- Keep the message and the agent's own frames; the plugin's frames mean nothing to it.
+		local kept = {}
+		for _, line in string.split(tostring(results[2]), "\n") do
+			if line ~= "" and not string.find(line, "SealCodeStudio", 1, true) then
+				line = string.gsub(line, "user_code:", "line ")
+				if kept[#kept] ~= line then
+					table.insert(kept, line)
+				end
+			end
+		end
+		result.error = string.sub(table.concat(kept, "\n"), 1, 4000)
 	end
 	return result
 end

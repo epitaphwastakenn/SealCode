@@ -57,6 +57,26 @@ only to the Studio bridge. **Upload as** sets the user or group that uploads pub
   SealCode runs your MCP for Blender install when it finds one, otherwise `uvx blender-mcp`, or the
   command you set.
 
+## SealCode bridge (preview)
+
+**SealCode bridge (preview)** under **Studio connection** runs SealCode's own Studio bridge inside
+SealCode instead of Roqer. It covers the core tools so far (`mcp__studio__…`): the game tree,
+search, typed properties, atomic property changes, creating and deleting instances, script reads
+and edits checked against the revision the agent read and read back afterwards, Luau, playtests,
+output logs, the Studio selection and screenshots. Assets, uploads, builds, UI inspection and
+Blender jobs still need Roqer.
+
+- SealCode installs the **SealCode** plugin when the mode is on. Studio loads plugins when a place
+  opens, so reopen places that were already open. The first time it connects, Studio asks whether
+  the plugin may make HTTP requests: allow it.
+- The **SealCode** button on Studio's Plugins tab opens a panel with the connection, what the agent
+  is doing in that place, and switches to pause the agent, refuse changes, or refuse Luau. Studio
+  enforces them, whatever the agent asks.
+- The bridge listens on `127.0.0.1:58760`; set `SEALCODE_STUDIO_BRIDGE_PORT` before starting
+  SealCode to use another port. Choosing another mode removes the plugin again.
+- An unsaved place gets a `SealCodePlaceId` attribute on ServerStorage so SealCode recognizes it
+  across restarts.
+
 ## Roblox's own MCP
 
 **Roblox's own Studio MCP** connects only the MCP server Roblox Studio ships, without Roqer. With

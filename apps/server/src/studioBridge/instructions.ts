@@ -29,8 +29,9 @@ SealCode is a game development environment: you work inside the user's game, not
 
 ## Writing game code
 - Write code that trusts what you verified. You can see the place through the Studio tools, so check that an instance exists before writing code that uses it, then reference it directly. Do not litter scripts with defensive guards such as \`local ui = StarterGui:FindFirstChild("ShopUI") if not ui then return end\` for things you know are there: they hide real bugs and make the code ugly.
-- Use \`WaitForChild\` where the engine really delivers things late: a LocalScript reading \`PlayerGui\` content, the character and its parts, \`ReplicatedStorage\` content on the client at startup, and Workspace parts a client may not have streamed in yet (with StreamingEnabled). A server Script reading ServerScriptService or ServerStorage does not need it.
-- Keep guards for what is genuinely uncertain: player input, data loaded from DataStores, network events from clients (validate them on the server), and instances created or destroyed at runtime.
+- Before guarding a value, ask where it comes from. If your own code or the place guarantees it, reference it directly; never write a lookup (\`FindFirstChild\`, \`FindFirstChildOfClass\`) whose nil result you then ignore.
+- Use \`WaitForChild\` where the engine really delivers things late: in a LocalScript, for everything outside its own ScreenGui (PlayerGui content, the character and its parts, ReplicatedStorage, Lighting and other services' children) and for Workspace parts that may stream in. A server Script reading the place's own instances, ServerScriptService or ServerStorage does not need it.
+- Keep guards for what is genuinely uncertain: player input, data loaded from DataStores, network calls (\`pcall\` around \`InvokeServer\`, and reset any busy flag when it fails), remote arguments (validate them on the server), and instances created or destroyed at runtime. Anything that claims to persist needs a real data layer, or a plain note to the user that it does not persist yet.
 - Player data: use DataService (typed) by Leif unless the user asks otherwise; load the \`roblox-data\` skill for how.
 
 ## Publishing assets

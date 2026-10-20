@@ -10,6 +10,28 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.16.0 · 2026-10-20
+
+> Every Studio tool agents were missing, a UI library built from real references, and agents that ask before they style or publish.
+
+### New
+
+- **Animation tools** — Agents inspect, create, play and stop animations on rigs. They use Roblox's own animations from the toolbox when they fit, and animate by code when nothing fits.
+- **Performance and debugging** — Script profiler in playtests, memory by category, a scene analysis of what makes a place heavy, network lag simulation, and logpoints that print values without pausing the game.
+- **Import and export models** — Agents save instances to .rbxm files and load .rbxm/.rbxmx files into the place.
+- **Roblox docs lookup** — Agents read the official API reference for any class, enum or datatype instead of guessing.
+- **AI model generation** — Roblox's own Assistant tools are connected by default, so agents can generate models, meshes and textures with Roblox's AI when you want them.
+- **UI library** — 18 UI archetypes (AAA sleek, simulator cartoon, brainrot clickbait, studded, monochrome, fantasy, sci-fi, 3D UI and more), icon matching from the toolbox, and WindUI for sleek windowed interfaces.
+- **VFX and animation playbooks** — Learned from real toolbox packs: how good effects are layered and timed, how to adapt packs, and how to build effects from scratch.
+- **DataService (typed)** — Agents use Leif's DataService for player data unless you ask otherwise, with its documentation at hand.
+
+### Improved
+
+- **Agents ask about UI style** — With no UI in the game, agents ask which style you want; with existing UI, they ask whether to match it or start fresh, and remember your answer in the place.
+- **Publishing** — Agents never upload on their own: they ask whether to publish through the Roblox Assistant or let you publish and name the assets yourself. Open Cloud key uploads are gone.
+- **Cleaner game code** — Agents trust what they verified instead of filling scripts with defensive checks, and use WaitForChild only where Roblox really delivers things late.
+- **Whole screens in one step** — Builds can refer to children of things made in the same step, so a full UI is one undo.
+
 ## 2.15.0 · 2026-10-20
 
 > SealCode now has its own Roblox Studio plugin: agents see their work, use the Creator Store and Blender, and you control every tool from Studio.

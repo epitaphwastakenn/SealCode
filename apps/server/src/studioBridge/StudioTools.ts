@@ -303,7 +303,7 @@ const make = Effect.gen(function* () {
           args,
           context,
           endpoint: StudioEndpoints.startPlaytest,
-          data: { mode },
+          data: { mode, noRuntimePeers: true },
           target: "edit",
           instanceId: edit.instanceId,
           summary: `start ${mode}`,
@@ -683,6 +683,7 @@ const make = Effect.gen(function* () {
         const { payload } = yield* editCall(StudioEndpoints.multiplayerStart, {
           numPlayers: count,
           testArgs: args.testArgs,
+          noRuntimePeers: true,
         });
         if (isFailurePayload(payload)) return outdatedPlugin(payload) ?? jsonResult(payload);
         const ready = yield* waitUntil(

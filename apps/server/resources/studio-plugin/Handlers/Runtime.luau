@@ -29,7 +29,9 @@ function Runtime.start(args)
 	if mode ~= "play" and mode ~= "run" then
 		return { error = 'mode must be "play" or "run"' }
 	end
-	if test.running and not RunService:IsRunning() and test.startedAt and os.clock() - test.startedAt > 5 then
+	-- SealCode checks that no playtest peer is connected first; the previous test's call may
+	-- still be unwinding, which must not block the next one.
+	if args.noRuntimePeers == true or (test.running and not RunService:IsRunning() and test.startedAt and os.clock() - test.startedAt > 5) then
 		test.running = false
 	end
 	if test.running then
@@ -231,6 +233,10 @@ function Runtime.multiplayerStart(args)
 	if count < 1 or count > 8 then
 		return { error = "numPlayers must be 1 to 8" }
 	end
+	if args.noRuntimePeers == true then
+		test.running = false
+		multiplayer.phase = "idle"
+	end
 	if multiplayer.phase == "starting" or multiplayer.phase == "running" or test.running then
 		return { error = "A playtest is already running." }
 	end
@@ -244,7 +250,8 @@ function Runtime.multiplayerStart(args)
 	test.startedAt = os.clock()
 	task.spawn(function()
 		local ok, result = pcall(function()
-			return service:ExecuteMultiplayerTestAsync(count, args.testArgs)
+			-- Studio requires an argument value; an empty table stands for "none".
+			return service:ExecuteMultiplayerTestAsync(count, if args.testArgs == nil then {} else args.testArgs)
 		end)
 		test.running = false
 		if ok then

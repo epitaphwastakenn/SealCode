@@ -136,7 +136,11 @@ function Build.run(args)
 				instance:Destroy()
 			end)
 		end
-		return { error = string.format("step %d (%s): %s Nothing was changed.", index, tostring(op), message) }
+		local text = tostring(message)
+		if not string.match(text, "[%.!?]$") then
+			text ..= "."
+		end
+		return { error = string.format("step %d (%s): %s Nothing was changed.", index, tostring(op), text) }
 	end
 
 	-- Resolves a path or $id. Paths see the tree as it was before the batch.

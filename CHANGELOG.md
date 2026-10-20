@@ -10,7 +10,19 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
-## 2.16.0 · 2026-10-20
+## 2.17.0 · 2026-10-20
+
+> A complete UI library of SealCode's own, so agents build shops, wheels and menus that look finished.
+
+### New
+
+- **20 screen layouts** — Shops, inventories, select screens, quests, daily rewards, leaderboards, notifications, dialogs, landing and loading screens, HUDs, side menus, admin panels and settings, each with sizes for PC and phones.
+- **Three complete themes** — Cartoon card, classic studs and modern studs, each with its own panels, buttons, cards, tabs and bars.
+- **Prize wheel and crate reel** — Ready-made templates for a spinning prize wheel and a vertical case roll, with the result decided by the server.
+
+### Improved
+
+- **Polish and review** — Agents add motion, sounds, shop states (tiers, tags, owned, discounts) and check every screen against its layout before finishing.
 
 > Every Studio tool agents were missing, a UI library built from real references, and agents that ask before they style or publish.
 

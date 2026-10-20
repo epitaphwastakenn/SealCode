@@ -1,6 +1,6 @@
 # Gallery of UI archetypes
 
-Eighteen looks that real Roblox games use, described so you can build them from instances. Pick one archetype per game (see the table), then take its palette, type and signature components, and build the parts with the recipes in `construction.md`. `styles.md` has the five broad families; this file is the finer cut, and each archetype below names its nearest family.
+Eighteen looks that real Roblox games use, described so you can build them from instances. Three of them are worked out completely, with measurements, a surface kit and asset ids, in `themes/`: archetypes 7, 8 and 10 are built by `themes/cartoon-card.md`, and archetype 14 (square and rounded) by `themes/studs-classic.md` and `themes/studs-modern.md`. Load the theme file for those looks and this file for the others; the layouts in `layouts/` work with every archetype. Pick one archetype per game (see the table), then take its palette, type and signature components, and build the parts with the recipes in `construction.md`. `styles.md` has the five broad families; this file is the finer cut, and each archetype below names its nearest family.
 
 Text on buttons, tiles, tabs, chips and titles is centred in every archetype (see SKILL.md); the entries note the few places where left alignment belongs (rows with a value on the right, lists, body copy).
 

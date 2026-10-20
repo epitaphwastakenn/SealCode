@@ -1,5 +1,7 @@
 # Component construction
 
+Generic recipes for any archetype. The three themes (`themes/cartoon-card.md`, `studs-classic.md`, `studs-modern.md`) carry their own, more exact surface kits: use those when the game is in one of them, and this file for the other archetypes.
+
 Recipes in instance terms. Sizes are for a 1920x1080 design; use Scale for placement and size the outer regions from the viewport (see `roblox-gui`), then let these inner offsets follow.
 
 ## Spacing scale
@@ -24,9 +26,9 @@ ScreenGui  MainMenu   (ResetOnSpawn = false, IgnoreGuiInset = true, ZIndexBehavi
 ```
 Frame  PlayButton          Size {1,0},{0,0} via UIAspectRatioConstraint (AspectRatio 4.2), BackgroundTransparency 1
 ├─ Frame  Lip              Size {1,0},{1,0}, Position {0,0},{0,6}, BackgroundColor3 = dark shade, UICorner same radius
-├─ TextButton Face         Size {1,0},{1,0}, BackgroundColor3 = base, AutoButtonColor = false, Text = "",
+├─ TextButton Face         Size {1,0},{1,0}, BackgroundColor3 = white (the gradient carries the colour), AutoButtonColor = false, Text = "",
 │                          UICorner {0.35,0}, UIStroke (Thickness 4, Color ink, ApplyStrokeMode Border),
-│                          UIGradient (light shade -> base, Rotation 90)
+│                          UIGradient (light shade -> base, Rotation 90; a UIGradient multiplies the object colour, so keep the object white)
 │  ├─ Frame Shine          Size {1,-12},{0.38,0}, Position {0,6},{0,5}, BackgroundColor3 white,
 │  │                       BackgroundTransparency 0.72, UICorner same radius
 │  └─ TextLabel Label      Size {1,-24},{0.62,0}, AnchorPoint 0.5,0.5, Position {0.5,0},{0.52,0},

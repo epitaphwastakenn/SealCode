@@ -1,6 +1,6 @@
 # Style families
 
-Each family fixes colour, type, shape and depth. `gallery.md` cuts these into eighteen finer, named archetypes with full component recipes: prefer it when the user names a look. Pick one per game and keep every screen in it. Hex values are starting points: keep the relationships (base, light, dark, ink) when you change hue.
+Each family fixes colour, type, shape and depth. Cartoon and simulator (families 1 and 2) are worked out completely, with measurements and a surface kit, in `themes/cartoon-card.md`; brick looks are in `themes/studs-classic.md` and `themes/studs-modern.md`. `gallery.md` cuts these into eighteen finer, named archetypes with full component recipes: prefer it when the user names a look. Pick one per game and keep every screen in it. Hex values are starting points: keep the relationships (base, light, dark, ink) when you change hue.
 
 ## 1. Cartoon (bouncy, playful)
 

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
+import { isSkillFile } from "../src/studioBridge/studioSkills.ts";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -128,7 +129,7 @@ const buildCmd = Command.make(
       for (const entry of (yield* fs.readDirectory(studioSkillsDir, {
         recursive: true,
       })).toSorted()) {
-        if (!entry.endsWith(".md")) continue;
+        if (!isSkillFile(entry)) continue;
         studioSkillFiles.push({
           path: entry.split(path.sep).join("/"),
           text: yield* fs.readFileString(path.join(studioSkillsDir, entry)),

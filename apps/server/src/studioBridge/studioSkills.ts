@@ -39,6 +39,9 @@ const frontmatterValue = (text: string, key: string): string | undefined => {
   return undefined;
 };
 
+/** Skill text and the Luau templates some skills ship for agents to copy. */
+export const isSkillFile = (path: string): boolean => /\.(?:md|lua|luau)$/u.test(path);
+
 /** Groups `<skill>/<file>` entries into skills, keeping only those with a valid SKILL.md. */
 export const buildSkillLibrary = (
   files: ReadonlyArray<{ readonly path: string; readonly text: string }>,
@@ -46,7 +49,7 @@ export const buildSkillLibrary = (
   const grouped = new Map<string, Map<string, string>>();
   for (const file of files) {
     const [skill, ...rest] = file.path.split("/");
-    if (skill === undefined || rest.length === 0 || !file.path.endsWith(".md")) continue;
+    if (skill === undefined || rest.length === 0 || !isSkillFile(file.path)) continue;
     const entries = grouped.get(skill) ?? new Map<string, string>();
     entries.set(rest.join("/"), file.text.replaceAll("\r\n", "\n"));
     grouped.set(skill, entries);
@@ -74,7 +77,7 @@ export const loadStudioSkills = Effect.gen(function* () {
   const entries = yield* fs.readDirectory(dir, { recursive: true });
   const files: Array<{ path: string; text: string }> = [];
   for (const entry of entries.toSorted()) {
-    if (!entry.endsWith(".md")) continue;
+    if (!isSkillFile(entry)) continue;
     files.push({
       path: entry.split(path.sep).join("/"),
       text: yield* fs.readFileString(path.join(dir, entry)),
@@ -93,7 +96,7 @@ const MAX_RESULT_CHARS = 48_000;
 const MAX_RESOURCES = 10;
 
 const isSafeResource = (resource: string) =>
-  resource.endsWith(".md") &&
+  isSkillFile(resource) &&
   !resource.includes("\\") &&
   resource.split("/").every((segment) => segment !== "" && segment !== "." && segment !== "..");
 

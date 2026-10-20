@@ -97,6 +97,7 @@ return {
 		tools = {
 			{ "blender", "Run Blender jobs" },
 			{ "import_mesh", "Import meshes into Studio" },
+			{ "upload_asset", "Publish assets to Roblox" },
 		},
 	},
 	{

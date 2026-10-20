@@ -98,6 +98,7 @@ const STUDIO_TOOLS: Readonly<Record<string, readonly [title: string, detail?: De
   manage_studio: ["Studio windows", (args) => text(args.action)],
   blender: ["Blender job"],
   import_mesh: ["Import mesh", (args) => text(args.name)],
+  upload_asset: ["Publish asset", (args) => text(args.displayName)],
 };
 
 export const isStudioTool = (tool: string | undefined): boolean =>

@@ -10,6 +10,7 @@ import { blenderExecutableFor, RobloxStudioConfig } from "../roblox/RobloxStudio
 import * as ServerSettings from "../serverSettings.ts";
 import { parseObj, runBlenderJob } from "./blenderJobs.ts";
 import { assetDetails, assetThumbnail, searchStore } from "./creatorStore.ts";
+import { ASSET_TYPE_FOR_EXTENSION, uploadAsset } from "./openCloudAssets.ts";
 import { downscaleRgba, encodePng } from "./png.ts";
 import {
   closeStudio,
@@ -1838,6 +1839,65 @@ const make = Effect.gen(function* () {
       } satisfies StudioToolResult;
     }).pipe(Effect.catch((error) => Effect.succeed(errorResult("blender_failed", String(error)))));
 
+  const uploadAssetTool = (args: Args): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      const settings = (yield* serverSettings.getSettings).robloxStudio;
+      if (settings.openCloudApiKey.trim() === "") {
+        return errorResult(
+          "open_cloud_key_missing",
+          "Publishing needs a Roblox Open Cloud API key with the Assets API (write). Ask the user to add one in Settings, Connections, Roblox Studio, Open Cloud API key; until then use import_mesh for a session-only copy.",
+        );
+      }
+      const jobDir = str(args.jobDir);
+      const filePath =
+        str(args.filePath) ?? (jobDir === undefined ? undefined : `${jobDir}/model.glb`);
+      if (filePath === undefined)
+        return errorResult("invalid_arguments", "filePath or jobDir is required.");
+      const extension = (/\.[^./\\]+$/u.exec(filePath)?.[0] ?? "").toLowerCase();
+      const assetType =
+        (str(args.assetType) as "Model" | "Decal" | "Audio" | undefined) ??
+        ASSET_TYPE_FOR_EXTENSION[extension];
+      if (assetType === undefined) {
+        return errorResult(
+          "invalid_arguments",
+          "assetType is required for this file (Model, Decal or Audio).",
+        );
+      }
+      const creator =
+        settings.creatorGroupId.trim() !== ""
+          ? { groupId: settings.creatorGroupId.trim() }
+          : settings.creatorUserId.trim() !== ""
+            ? { userId: settings.creatorUserId.trim() }
+            : undefined;
+      if (creator === undefined) {
+        return errorResult(
+          "creator_missing",
+          "Set Upload as (a Roblox user id or group id) in Settings, Connections, Roblox Studio, so Roblox knows who owns the upload.",
+        );
+      }
+      const uploaded = yield* uploadAsset({
+        apiKey: settings.openCloudApiKey.trim(),
+        filePath,
+        assetType,
+        displayName: str(args.displayName) ?? "SealCode asset",
+        description: str(args.description) ?? "Uploaded by SealCode",
+        creator,
+        timeoutMs: 120_000,
+      });
+      return jsonResult({
+        success: uploaded.assetId !== undefined,
+        ...uploaded,
+        next:
+          uploaded.assetId === undefined
+            ? "Roblox is still processing the upload; check again later."
+            : assetType === "Model"
+              ? "Insert it with insert_asset and this assetId."
+              : assetType === "Decal"
+                ? "Use rbxassetid://<assetId> as an Image or Texture."
+                : "Use rbxassetid://<assetId> as a Sound's SoundId.",
+      });
+    }).pipe(Effect.catch((error) => Effect.succeed(errorResult("upload_failed", String(error)))));
+
   const importMesh = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
     Effect.gen(function* () {
       const jobDir = str(args.jobDir);
@@ -2660,6 +2720,21 @@ const make = Effect.gen(function* () {
       ),
       risk: "mutation",
       run: blender,
+    },
+    {
+      name: "upload_asset",
+      title: "Upload asset",
+      description:
+        "Publishes a local file to Roblox with the user's Open Cloud key, so it persists with the place: a Blender job's model (jobDir uploads its model.glb) or any .glb/.fbx model, a .png/.jpg image (Decal) or an .mp3/.ogg sound. Waits for Roblox to finish and returns the asset id; insert models with insert_asset. Needs the key and Upload as set in SealCode's Roblox Studio settings.",
+      inputSchema: object({
+        jobDir: { type: "string" },
+        filePath: { type: "string" },
+        assetType: { type: "string", enum: ["Model", "Decal", "Audio"] },
+        displayName: { type: "string" },
+        description: { type: "string" },
+      }),
+      risk: "irreversible",
+      run: uploadAssetTool,
     },
     {
       name: "import_mesh",

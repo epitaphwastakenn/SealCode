@@ -167,6 +167,11 @@ def _sealcode_export(path):
     except TypeError:
         kwargs.pop("export_triangulated_mesh", None)
         bpy.ops.wm.obj_export(**kwargs)
+    # A GLB beside it is what upload_asset publishes to Roblox.
+    try:
+        bpy.ops.export_scene.gltf(filepath=path[:-4] + ".glb", export_format="GLB", use_selection=True)
+    except Exception:
+        pass
     return True
 
 _status = {"scriptError": _sealcode_error}

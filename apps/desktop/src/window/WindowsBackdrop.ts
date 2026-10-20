@@ -18,26 +18,60 @@ export function resolveWindowsBackdropMaterial(state: {
   return state.floatingPanels ? "none" : "acrylic";
 }
 
+const DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+const DWMWA_BORDER_COLOR = 34;
+const DWMWCP_DONOTROUND = 1;
+const DWMWCP_ROUND = 2;
+const DWMWA_COLOR_NONE = 0xfffffffe;
+const DWMWA_COLOR_DEFAULT = 0xffffffff;
+
+export interface WindowsFrame {
+  readonly cornerPreference: number;
+  readonly borderColor: number;
+}
+
+// Chromium opts transparent windows out of Windows 11's rounded corners. Asking
+// DWM for them again keeps the acrylic and rounds the frame like any other app.
+// Electron maximizes a transparent window by resizing it to the work area, so
+// DWM never sees it maximized and keeps rounding it, which shows what is behind
+// the window in the screen corners; fullscreen does the same. The corners go
+// square while the window fills the display. With floating panels the window
+// rectangle is invisible, so DWM must neither round it nor outline it: the
+// panels draw their own corners and borders.
+export function resolveWindowsFrame(state: {
+  readonly floatingPanels: boolean;
+  readonly fillsDisplay: boolean;
+}): WindowsFrame {
+  return {
+    cornerPreference: state.floatingPanels || state.fillsDisplay ? DWMWCP_DONOTROUND : DWMWCP_ROUND,
+    borderColor: state.floatingPanels ? DWMWA_COLOR_NONE : DWMWA_COLOR_DEFAULT,
+  };
+}
+
 function fillsDisplay(window: Electron.BrowserWindow): boolean {
   return window.isFullScreen() || window.isMaximized();
 }
 
 const floatingPanelsByWindow = new WeakMap<Electron.BrowserWindow, boolean>();
 const appliedMaterialByWindow = new WeakMap<Electron.BrowserWindow, WindowsBackdropMaterial>();
+const appliedFrameByWindow = new WeakMap<Electron.BrowserWindow, WindowsFrame>();
 
 export function applyWindowsBackdrop(window: Electron.BrowserWindow): void {
   // A minimized window reports itself unmaximized; restoring it applies again.
   if (window.isDestroyed() || window.isMinimized()) return;
-  const material = resolveWindowsBackdropMaterial({
+  const state = {
     floatingPanels: floatingPanelsByWindow.get(window) ?? false,
     fillsDisplay: fillsDisplay(window),
-  });
-  if (appliedMaterialByWindow.get(window) === material) return;
-  appliedMaterialByWindow.set(window, material);
-  window.setBackgroundMaterial(material);
-  // Dropping the material repaints the window background opaque white unless
-  // the transparent color is set again afterwards.
-  window.setBackgroundColor("#00000000");
+  };
+  const material = resolveWindowsBackdropMaterial(state);
+  if (appliedMaterialByWindow.get(window) !== material) {
+    appliedMaterialByWindow.set(window, material);
+    window.setBackgroundMaterial(material);
+    // Dropping the material repaints the window background opaque white unless
+    // the transparent color is set again afterwards.
+    window.setBackgroundColor("#00000000");
+  }
+  applyWindowsFrame(window, resolveWindowsFrame(state));
 }
 
 export function setWindowsFloatingPanels(window: Electron.BrowserWindow, enabled: boolean): void {
@@ -45,34 +79,24 @@ export function setWindowsFloatingPanels(window: Electron.BrowserWindow, enabled
   applyWindowsBackdrop(window);
 }
 
-const DWMWA_WINDOW_CORNER_PREFERENCE = 33;
-const DWMWCP_DONOTROUND = 1;
-const DWMWCP_ROUND = 2;
-
-export function resolveWindowsCornerPreference(state: { readonly fillsDisplay: boolean }): number {
-  return state.fillsDisplay ? DWMWCP_DONOTROUND : DWMWCP_ROUND;
-}
-
-let setCornerPreferencePromise:
-  | Promise<(windowHandle: bigint, preference: number) => void>
+let setWindowAttributePromise:
+  | Promise<(windowHandle: bigint, attribute: number, value: number) => void>
   | undefined;
-const appliedCornerPreferenceByWindow = new WeakMap<Electron.BrowserWindow, number>();
 
-// Chromium opts transparent windows out of Windows 11's rounded corners. Asking
-// DWM for them again keeps the acrylic and rounds the frame like any other app.
-// Electron maximizes a transparent window by resizing it to the work area, so
-// DWM never sees it maximized and keeps rounding it, which shows what is behind
-// the window in the screen corners; fullscreen does the same. The corners go
-// square while the window fills the display.
-function syncWindowsCorners(window: Electron.BrowserWindow): void {
-  const preference = resolveWindowsCornerPreference({ fillsDisplay: fillsDisplay(window) });
-  if (appliedCornerPreferenceByWindow.get(window) === preference) return;
-  appliedCornerPreferenceByWindow.set(window, preference);
+function applyWindowsFrame(window: Electron.BrowserWindow, frame: WindowsFrame): void {
+  const applied = appliedFrameByWindow.get(window);
+  if (
+    applied?.cornerPreference === frame.cornerPreference &&
+    applied.borderColor === frame.borderColor
+  ) {
+    return;
+  }
+  appliedFrameByWindow.set(window, frame);
   const windowHandle = window.getNativeWindowHandle().readBigUInt64LE(0);
-  setCornerPreferencePromise ??= import("ffi-rs").then(({ DataType, load, open }) => {
+  setWindowAttributePromise ??= import("ffi-rs").then(({ DataType, load, open }) => {
     const dwmapi = "t3-dwmapi";
     open({ library: dwmapi, path: "dwmapi.dll" });
-    return (handle: bigint, value: number) => {
+    return (handle: bigint, attribute: number, value: number) => {
       const buffer = Buffer.alloc(4);
       buffer.writeUInt32LE(value);
       load({
@@ -80,14 +104,17 @@ function syncWindowsCorners(window: Electron.BrowserWindow): void {
         funcName: "DwmSetWindowAttribute",
         retType: DataType.I32,
         paramsType: [DataType.BigInt, DataType.U32, DataType.U8Array, DataType.U32],
-        paramsValue: [handle, DWMWA_WINDOW_CORNER_PREFERENCE, buffer, buffer.byteLength],
+        paramsValue: [handle, attribute, buffer, buffer.byteLength],
       });
     };
   });
   // Callbacks on one promise run in call order, so the latest state wins.
-  // Windows 10 rejects the attribute; square corners are its native look anyway.
-  void setCornerPreferencePromise
-    .then((setPreference) => setPreference(windowHandle, preference))
+  // Windows 10 rejects both attributes; its native frame is square and borderless.
+  void setWindowAttributePromise
+    .then((setAttribute) => {
+      setAttribute(windowHandle, DWMWA_WINDOW_CORNER_PREFERENCE, frame.cornerPreference);
+      setAttribute(windowHandle, DWMWA_BORDER_COLOR, frame.borderColor);
+    })
     .catch(() => undefined);
 }
 
@@ -96,11 +123,7 @@ function syncWindowsCorners(window: Electron.BrowserWindow): void {
 // maximize applied at launch. Electron's maximize of a transparent window is a
 // resize, so "resize" also catches snaps that size the window to the work area.
 export function trackWindowsDisplayFill(window: Electron.BrowserWindow): void {
-  const sync = () => {
-    if (window.isDestroyed() || window.isMinimized()) return;
-    applyWindowsBackdrop(window);
-    syncWindowsCorners(window);
-  };
+  const sync = () => applyWindowsBackdrop(window);
   window.on("maximize", sync);
   window.on("unmaximize", sync);
   window.on("enter-full-screen", sync);

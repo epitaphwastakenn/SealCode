@@ -18,6 +18,7 @@ import {
   revokeBackdropUrl,
 } from "~/lib/backdrop/processBackdrop";
 import { observeResize } from "~/lib/observeResize";
+import { panelClipPath } from "~/lib/backdrop/panelClipPath";
 import { isWindowsPlatform } from "~/lib/utils";
 
 // How far the image drifts against the mouse at full parallax, as a share of
@@ -97,15 +98,6 @@ function fadeColor(backdrop: AppBackdropSettings, edges: EdgeColors | null): str
 const FLOATING_PANEL_SELECTOR =
   '[data-app-sidebar] [data-slot="sidebar-inner"], [data-slot="sidebar-inset"]';
 
-function roundedRectPath({ left: x, top: y, width: w, height: h }: DOMRect, radius: number) {
-  const r = Math.max(0, Math.min(radius, w / 2, h / 2));
-  return (
-    `M${x + r},${y}H${x + w - r}A${r},${r} 0 0 1 ${x + w},${y + r}V${y + h - r}` +
-    `A${r},${r} 0 0 1 ${x + w - r},${y + h}H${x + r}A${r},${r} 0 0 1 ${x},${y + h - r}` +
-    `V${y + r}A${r},${r} 0 0 1 ${x + r},${y}Z`
-  );
-}
-
 /**
  * With floating panels the Windows app has no material behind the page, so the
  * image is cut to the panels and the gaps between them show the desktop.
@@ -118,8 +110,16 @@ function useClipToFloatingPanels(container: HTMLDivElement | null, enabled: bool
     // Resizes cover window and sidebar changes, and a panel leaving the DOM
     // reports one too. The DOM is only watched while a panel is still missing.
     const observed = new Map<Element, () => void>();
-    const mutationObserver = new MutationObserver(() => {
+    const scheduleMeasure = () => {
       if (frame === 0) frame = window.requestAnimationFrame(measure);
+    };
+    const mutationObserver = new MutationObserver(scheduleMeasure);
+    // The corner settings land on the root and change the panels' radius and
+    // shape without resizing them.
+    const rootObserver = new MutationObserver(scheduleMeasure);
+    rootObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["style", "data-smooth-corners"],
     });
     function measure() {
       frame = 0;
@@ -141,9 +141,10 @@ function useClipToFloatingPanels(container: HTMLDivElement | null, enabled: bool
       watchingDom = !complete;
       const path = panels
         .map((panel) =>
-          roundedRectPath(
+          panelClipPath(
             panel.getBoundingClientRect(),
             Number.parseFloat(getComputedStyle(panel).borderTopLeftRadius) || 0,
+            document.documentElement.dataset.smoothCorners === "true",
           ),
         )
         .join("");
@@ -154,6 +155,7 @@ function useClipToFloatingPanels(container: HTMLDivElement | null, enabled: bool
       if (frame !== 0) window.cancelAnimationFrame(frame);
       for (const unobserve of observed.values()) unobserve();
       mutationObserver.disconnect();
+      rootObserver.disconnect();
       container.style.removeProperty("clip-path");
     };
   }, [container, enabled]);

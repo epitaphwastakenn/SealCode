@@ -3,13 +3,20 @@ import * as NodeEvents from "node:events";
 import type * as Electron from "electron";
 import { describe, expect, it, vi } from "vite-plus/test";
 
-const cornerPreferences = vi.hoisted((): number[] => []);
+const DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+const DWMWA_BORDER_COLOR = 34;
+const DWMWCP_DONOTROUND = 1;
+const DWMWCP_ROUND = 2;
+const DWMWA_COLOR_NONE = 0xfffffffe;
+const DWMWA_COLOR_DEFAULT = 0xffffffff;
+
+const attributeWrites = vi.hoisted((): Array<[number, number]> => []);
 
 vi.mock("ffi-rs", () => ({
   DataType: {},
   open: () => undefined,
   load: ({ paramsValue }: { paramsValue: [bigint, number, Buffer, number] }) => {
-    cornerPreferences.push(paramsValue[2].readUInt32LE(0));
+    attributeWrites.push([paramsValue[1], paramsValue[2].readUInt32LE(0)]);
   },
 }));
 
@@ -18,9 +25,6 @@ import {
   setWindowsFloatingPanels,
   trackWindowsDisplayFill,
 } from "./WindowsBackdrop.ts";
-
-const DWMWCP_DONOTROUND = 1;
-const DWMWCP_ROUND = 2;
 
 describe("resolveWindowsBackdropMaterial", () => {
   it("keeps acrylic for a normal window", () => {
@@ -67,29 +71,40 @@ function makeFakeWindow() {
   };
 }
 
-const flushCornerPreference = () => vi.dynamicImportSettled();
+async function takeFrames() {
+  await vi.dynamicImportSettled();
+  const frames: Array<{ corners: number; border: number }> = [];
+  for (let index = 0; index < attributeWrites.length; index += 2) {
+    expect(attributeWrites[index]?.[0]).toBe(DWMWA_WINDOW_CORNER_PREFERENCE);
+    expect(attributeWrites[index + 1]?.[0]).toBe(DWMWA_BORDER_COLOR);
+    frames.push({ corners: attributeWrites[index]![1], border: attributeWrites[index + 1]![1] });
+  }
+  attributeWrites.length = 0;
+  return frames;
+}
+
+const rounded = { corners: DWMWCP_ROUND, border: DWMWA_COLOR_DEFAULT };
+const square = { corners: DWMWCP_DONOTROUND, border: DWMWA_COLOR_DEFAULT };
+const invisible = { corners: DWMWCP_DONOTROUND, border: DWMWA_COLOR_NONE };
 
 describe("trackWindowsDisplayFill", () => {
   it("squares the corners while the window fills the display and rounds them after", async () => {
-    cornerPreferences.length = 0;
+    await takeFrames();
     const fake = makeFakeWindow();
-    setWindowsFloatingPanels(fake.window, true);
+    setWindowsFloatingPanels(fake.window, false);
     trackWindowsDisplayFill(fake.window);
 
     // The launch maximize lands after the window exists.
     fake.state.maximized = true;
     fake.emit("maximize");
-    await flushCornerPreference();
-    expect(cornerPreferences).toEqual([DWMWCP_ROUND, DWMWCP_DONOTROUND]);
-    expect(fake.materials).toEqual(["none", "mica"]);
+    expect(await takeFrames()).toEqual([rounded, square]);
 
     // Minimizing reports unmaximized, which must not round a window that comes back maximized.
     fake.state.minimized = true;
     fake.emit("resize");
     fake.state.minimized = false;
     fake.emit("restore");
-    await flushCornerPreference();
-    expect(cornerPreferences).toEqual([DWMWCP_ROUND, DWMWCP_DONOTROUND]);
+    expect(await takeFrames()).toEqual([]);
 
     fake.state.maximized = false;
     fake.emit("unmaximize");
@@ -97,14 +112,23 @@ describe("trackWindowsDisplayFill", () => {
     fake.emit("enter-full-screen");
     fake.state.fullscreen = false;
     fake.emit("leave-full-screen");
-    await flushCornerPreference();
-    expect(cornerPreferences).toEqual([
-      DWMWCP_ROUND,
-      DWMWCP_DONOTROUND,
-      DWMWCP_ROUND,
-      DWMWCP_DONOTROUND,
-      DWMWCP_ROUND,
-    ]);
-    expect(fake.materials).toEqual(["none", "mica", "none", "mica", "none"]);
+    expect(await takeFrames()).toEqual([rounded, square, rounded]);
+    expect(fake.materials).toEqual(["acrylic", "mica", "acrylic", "mica", "acrylic"]);
+  });
+
+  it("keeps the window rectangle unrounded and unoutlined behind floating panels", async () => {
+    await takeFrames();
+    const fake = makeFakeWindow();
+    setWindowsFloatingPanels(fake.window, true);
+    trackWindowsDisplayFill(fake.window);
+    fake.state.fullscreen = true;
+    fake.emit("enter-full-screen");
+    fake.state.fullscreen = false;
+    fake.emit("leave-full-screen");
+    expect(await takeFrames()).toEqual([invisible]);
+    expect(fake.materials).toEqual(["none", "mica", "none"]);
+
+    setWindowsFloatingPanels(fake.window, false);
+    expect(await takeFrames()).toEqual([rounded]);
   });
 });

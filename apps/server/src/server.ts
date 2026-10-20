@@ -70,6 +70,10 @@ import * as TerminalManager from "./terminal/Manager.ts";
 import * as GlobalMcpManager from "./mcp/GlobalMcpManager.ts";
 import * as RobloxStudioConfig from "./roblox/RobloxStudioConfig.ts";
 import * as RobloxStudioStatus from "./roblox/RobloxStudioStatus.ts";
+import * as StudioBridge from "./studioBridge/StudioBridge.ts";
+import * as StudioBridgeServer from "./studioBridge/StudioBridgeServer.ts";
+import * as StudioPluginInstaller from "./studioBridge/StudioPluginInstaller.ts";
+import * as StudioTools from "./studioBridge/StudioTools.ts";
 import * as RobloxToolVisibility from "./roblox/RobloxToolVisibility.ts";
 import * as McpHttpServer from "./mcp/McpHttpServer.ts";
 import * as McpSessionRegistry from "./mcp/McpSessionRegistry.ts";
@@ -558,9 +562,20 @@ const layerProviderInstallationRefresh = Layer.effectDiscard(
   }),
 );
 
+/** SealCode's own Studio bridge; it listens only while the Roblox mode is `sealcode`. */
+const layerStudioBridge = StudioBridgeServer.layer.pipe(
+  Layer.provideMerge(StudioTools.layer),
+  Layer.provideMerge(StudioBridge.layer),
+  Layer.provide(StudioPluginInstaller.layer),
+  Layer.provide(ServerSecretStore.layer),
+);
+
 const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   AgentAwarenessRelay.layer,
-  RobloxStudioStatus.layer.pipe(Layer.provideMerge(GlobalMcpManager.layer)),
+  RobloxStudioStatus.layer.pipe(
+    Layer.provideMerge(GlobalMcpManager.layer),
+    Layer.provideMerge(layerStudioBridge),
+  ),
   VoiceTranscription.layer,
   HeldHooksWaker.layer,
   layerThreadSettlementWorker,

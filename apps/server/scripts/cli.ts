@@ -6,6 +6,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Schema from "effect/Schema";
 import { Command, Flag } from "effect/cli";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 
@@ -13,6 +14,7 @@ import { DEVELOPMENT_ICON_OVERRIDES } from "../../../scripts/lib/brand-assets.ts
 import { findEsmImportsOfExternalPackages } from "../../../scripts/lib/cli-executable-imports.ts";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import { packFiles } from "../src/roblox/roqerPack.ts";
+import { StudioPluginBundle } from "../src/studioBridge/StudioPluginInstaller.ts";
 import {
   ServerCliBuildAssetMissingError,
   ServerCliCommandExitError,
@@ -20,6 +22,8 @@ import {
   ServerCliDevelopmentIconTargetMissingError,
   ServerCliExecutableImportError,
 } from "./cliErrors.ts";
+
+const encodeStudioPluginBundle = Schema.encodeEffect(StudioPluginBundle);
 
 const RepoRoot = Effect.service(Path.Path).pipe(
   Effect.flatMap((path) => path.fromFileUrl(new URL("../../..", import.meta.url))),
@@ -96,6 +100,26 @@ const buildCmd = Command.make(
       } else {
         yield* Effect.logWarning("[cli] Web dist not found — skipping client bundle.");
       }
+
+      // SealCode's Studio plugin travels as one JSON file; the installer builds the model from it.
+      const studioPluginDir = path.join(serverDir, "resources/studio-plugin");
+      const studioPluginSources = [];
+      for (const entry of (yield* fs.readDirectory(studioPluginDir, {
+        recursive: true,
+      })).toSorted()) {
+        if (!entry.endsWith(".luau")) continue;
+        studioPluginSources.push({
+          path: entry.split(path.sep).join("/"),
+          source: yield* fs.readFileString(path.join(studioPluginDir, entry)),
+        });
+      }
+      yield* fs.writeFileString(
+        path.join(serverDir, "dist/studio-plugin.json"),
+        yield* encodeStudioPluginBundle(studioPluginSources),
+      );
+      yield* Effect.log(
+        `[cli] Bundled the Studio plugin (${String(studioPluginSources.length)} modules) into dist/studio-plugin.json`,
+      );
 
       const roqerDir = path.join(serverDir, "resources/roqer");
       if (yield* fs.exists(path.join(roqerDir, "manifest.json"))) {

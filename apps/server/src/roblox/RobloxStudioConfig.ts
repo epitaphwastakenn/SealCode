@@ -11,13 +11,17 @@ import * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
 
 import * as ServerConfig from "../config.ts";
+import { studioBridgeInstructions } from "../studioBridge/instructions.ts";
+import { DEFAULT_STUDIO_BRIDGE_PORT } from "../studioBridge/protocol.ts";
 import { unpackFiles } from "./roqerPack.ts";
 
 export const ROQER_SERVER_ID = "robloxstudio";
+export const STUDIO_BRIDGE_SERVER_ID = "studio";
 export const OFFICIAL_SERVER_ID = "roblox-studio-official";
 export const BLENDER_MCP_SERVER_ID = "blender";
 export const MANAGED_SERVER_IDS: ReadonlySet<string> = new Set([
   ROQER_SERVER_ID,
+  STUDIO_BRIDGE_SERVER_ID,
   OFFICIAL_SERVER_ID,
   BLENDER_MCP_SERVER_ID,
 ]);
@@ -34,8 +38,15 @@ export interface RoqerResources {
   readonly skills: number | undefined;
 }
 
+/** Where SealCode's own Studio bridge listens, and the token its MCP endpoint wants. */
+export interface StudioBridgeEndpoint {
+  readonly port: number;
+  readonly mcpToken: string;
+}
+
 export interface RobloxStudioEnvironment {
   readonly roqer: RoqerResources | undefined;
+  readonly studioBridge: StudioBridgeEndpoint | undefined;
   readonly roqerProblem: string | undefined;
   /** Runs the host: this server's own runtime unless it is a single executable. */
   readonly nodeCommand: string | undefined;
@@ -133,8 +144,23 @@ export const managedServersFor = (
     };
   }
 
+  if (roblox.mode === "sealcode" && environment.studioBridge !== undefined) {
+    const bridge = environment.studioBridge;
+    servers[STUDIO_BRIDGE_SERVER_ID] = {
+      id: STUDIO_BRIDGE_SERVER_ID,
+      displayName: "Roblox Studio (SealCode)",
+      enabled: true,
+      transport: "streamable-http",
+      url: `http://127.0.0.1:${String(bridge.port)}/mcp`,
+      args: [],
+      env: [],
+      headers: [setting({ name: "Authorization", value: `Bearer ${bridge.mcpToken}` }, true)],
+    };
+  }
+
   const official =
-    roblox.mode === "official" || (roblox.mode === "roqer" && roblox.officialMcpAlongside);
+    roblox.mode === "official" ||
+    ((roblox.mode === "roqer" || roblox.mode === "sealcode") && roblox.officialMcpAlongside);
   if (official && environment.officialMcpPath !== undefined) {
     servers[OFFICIAL_SERVER_ID] = {
       id: OFFICIAL_SERVER_ID,
@@ -239,6 +265,7 @@ export interface RobloxStudioConfigShape {
 
 const disabledEnvironment: RobloxStudioEnvironment = {
   roqer: undefined,
+  studioBridge: undefined,
   roqerProblem: undefined,
   nodeCommand: undefined,
   officialMcpPath: undefined,
@@ -454,8 +481,20 @@ const make = Effect.gen(function* () {
     ? blenderMcpCandidate
     : undefined;
 
+  const crypto = yield* Crypto.Crypto;
+  const configuredPort = Number(env.SEALCODE_STUDIO_BRIDGE_PORT?.trim() ?? "");
+  const studioBridge: StudioBridgeEndpoint = {
+    port:
+      Number.isInteger(configuredPort) && configuredPort > 0 && configuredPort < 65536
+        ? configuredPort
+        : DEFAULT_STUDIO_BRIDGE_PORT,
+    // A fresh token per run: only this process's tool gateway may call the bridge's tools.
+    mcpToken: Buffer.from(yield* crypto.randomBytes(24).pipe(Effect.orDie)).toString("base64url"),
+  };
+
   const environment: RobloxStudioEnvironment = {
     roqer,
+    studioBridge,
     roqerProblem:
       roqer === undefined
         ? "This SealCode build has no Roqer bundle (apps/server/resources/roqer)."
@@ -514,6 +553,14 @@ const make = Effect.gen(function* () {
   const instructions: RobloxStudioConfigShape["instructions"] = (settings, input) =>
     Effect.gen(function* () {
       const roblox = settings.robloxStudio;
+      if (roblox.mode === "sealcode" && roblox.instructions) {
+        if (!(yield* appliesTo(settings, input.workspaceRoot ?? input.cwd))) return undefined;
+        return studioBridgeInstructions({
+          autoPlaytest: roblox.autoPlaytest,
+          officialMcp: roblox.officialMcpAlongside && environment.officialMcpPath !== undefined,
+          blenderMcp: roblox.blenderMcp,
+        });
+      }
       if (roblox.mode !== "roqer" || !roblox.instructions) return undefined;
       if (!(yield* appliesTo(settings, input.workspaceRoot ?? input.cwd))) return undefined;
       const base = yield* loadInstructions;

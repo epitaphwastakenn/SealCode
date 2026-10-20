@@ -12,6 +12,7 @@ import * as Schema from "effect/Schema";
 import * as GlobalMcpManager from "../mcp/GlobalMcpManager.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import * as StudioBridge from "../studioBridge/StudioBridge.ts";
 import {
   blenderExecutableFor,
   blenderMcpLaunchFor,
@@ -30,6 +31,30 @@ const text = (value: unknown): string | undefined =>
   typeof value === "string" && value.length > 0 ? value : undefined;
 
 const decodeJson = Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Unknown));
+
+/** SealCode's own bridge, in the shape Settings shows for either bridge. */
+export const studioBridgeStatus = (
+  snapshot: StudioBridge.StudioBridgeSnapshot,
+): RobloxStudioBridgeStatus => ({
+  state: snapshot.lifecycle.state,
+  version: snapshot.build,
+  ...(snapshot.lifecycle.error === undefined ? {} : { error: snapshot.lifecycle.error }),
+  restarts: 0,
+  pluginUpdated: snapshot.lifecycle.pluginUpdated,
+  ...(snapshot.lifecycle.pluginProblem === undefined
+    ? {}
+    : { pluginProblem: snapshot.lifecycle.pluginProblem }),
+  ...(snapshot.lastRejection === undefined ? {} : { pluginRejected: snapshot.lastRejection }),
+  pluginConnected: snapshot.peers.length > 0,
+  places: snapshot.peers.map((peer) => ({
+    instanceId: peer.instanceId,
+    role: peer.role,
+    ...(peer.placeId > 0 ? { placeId: peer.placeId } : {}),
+    placeName: peer.placeName,
+    isRunning: peer.isRunning,
+    pluginVersion: peer.build,
+  })),
+});
 
 /** The host's `get_bridge_status` answer, read into the shape Settings shows. */
 export const parseBridgeStatus = (payload: unknown): RobloxStudioBridgeStatus | undefined => {
@@ -84,6 +109,7 @@ const make = Effect.gen(function* () {
   const manager = yield* GlobalMcpManager.GlobalMcpManager;
   const settings = yield* ServerSettings.ServerSettingsService;
   const runner = yield* ProcessRunner.ProcessRunner;
+  const studioBridge = yield* StudioBridge.StudioBridge;
   const versions = new Map<string, { readonly version: string | undefined; readonly at: number }>();
 
   /** Roqer's `blenderVersion`: an executable counts as Blender only when it answers as one. */
@@ -126,7 +152,11 @@ const make = Effect.gen(function* () {
     );
 
     let bridge: RobloxStudioBridgeStatus | undefined;
-    if (servers.some((status) => status.id === ROQER_SERVER_ID && status.state === "ready")) {
+    if (roblox.mode === "sealcode") {
+      bridge = studioBridgeStatus(yield* studioBridge.snapshot);
+    } else if (
+      servers.some((status) => status.id === ROQER_SERVER_ID && status.state === "ready")
+    ) {
       const result = yield* manager.callServerTool({
         serverId: ROQER_SERVER_ID,
         toolName: "get_bridge_status",

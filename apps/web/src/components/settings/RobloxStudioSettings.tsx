@@ -22,6 +22,7 @@ import { searchableSetting } from "./settingsSearch";
 
 const MODES: ReadonlyArray<{ value: RobloxStudioMode; label: string }> = [
   { value: "roqer", label: "Roqer (full toolset)" },
+  { value: "sealcode", label: "SealCode bridge (preview)" },
   { value: "official", label: "Roblox's own Studio MCP" },
   { value: "off", label: "Off" },
 ];
@@ -177,17 +178,20 @@ export function RobloxStudioSettings() {
     <SettingsSection {...searchableSetting("roblox-studio")}>
       <p className="px-3 text-xs leading-relaxed text-muted-foreground sm:px-4">
         Drive Roblox Studio from any agent. Roqer runs its Studio bridge, installs its Studio plugin
-        on every start, and gives agents its checks, Roblox skills and instructions. Open or restart
-        Roblox Studio after the plugin is installed.
+        on every start, and gives agents its checks, Roblox skills and instructions. The SealCode
+        bridge runs inside SealCode with its own plugin, panel and safety switches in Studio; it
+        covers the core tools so far. Open or restart Roblox Studio after a plugin is installed.
       </p>
       <SettingsRow
         title="Studio connection"
         description={
           status?.roqer.problem && roblox.mode === "roqer"
             ? status.roqer.problem
-            : status?.roqer.version
-              ? `Roqer ${status.roqer.version}${status.roqer.skills ? ` · ${String(status.roqer.skills)} skills` : ""}`
-              : "Choose how agents reach Roblox Studio."
+            : roblox.mode === "sealcode"
+              ? `SealCode Studio bridge${status?.bridge?.version ? ` ${status.bridge.version}` : ""}: core Studio tools, a Studio panel showing agent activity, and pause or read-only switches.`
+              : status?.roqer.version
+                ? `Roqer ${status.roqer.version}${status.roqer.skills ? ` · ${String(status.roqer.skills)} skills` : ""}`
+                : "Choose how agents reach Roblox Studio."
         }
         control={
           <Select
@@ -236,16 +240,22 @@ export function RobloxStudioSettings() {
               </Select>
             }
           />
-          {roblox.mode === "roqer" ? (
+          {roblox.mode === "roqer" || roblox.mode === "sealcode" ? (
             <>
               <SettingsRow
-                title="Roqer instructions and skills"
-                description="Gives each new conversation Roqer's working rules and its Roblox skill catalog. The skills stay loadable with load_skill either way."
+                title={
+                  roblox.mode === "roqer" ? "Roqer instructions and skills" : "Studio instructions"
+                }
+                description={
+                  roblox.mode === "roqer"
+                    ? "Gives each new conversation Roqer's working rules and its Roblox skill catalog. The skills stay loadable with load_skill either way."
+                    : "Gives each new conversation SealCode's rules for working safely in Studio."
+                }
                 control={
                   <Switch
                     checked={roblox.instructions}
                     onCheckedChange={(instructions) => update({ instructions })}
-                    aria-label="Roqer instructions"
+                    aria-label="Studio instructions"
                   />
                 }
               />
@@ -265,7 +275,7 @@ export function RobloxStudioSettings() {
                 description={
                   status?.officialMcpAvailable === false
                     ? "Roblox Studio's mcp.bat was not found on this machine."
-                    : "Adds Roblox's mesh, texture and material generation beside Roqer's tools."
+                    : "Adds Roblox's mesh, texture and material generation beside the bridge's tools."
                 }
                 control={
                   <Switch
@@ -275,6 +285,10 @@ export function RobloxStudioSettings() {
                   />
                 }
               />
+            </>
+          ) : null}
+          {roblox.mode === "roqer" ? (
+            <>
               <SettingsRow
                 title="Open Cloud API key"
                 description="Needed to upload models, decals and animations. Stored in the server's secret store and passed only to the Studio bridge."
@@ -412,7 +426,7 @@ export function RobloxStudioSettings() {
                   />
                 ))
               )}
-              {serverStatus("robloxstudio")?.state === "ready" ? (
+              {serverStatus("robloxstudio")?.state === "ready" || roblox.mode === "sealcode" ? (
                 <BridgeSummary status={status} />
               ) : null}
             </div>

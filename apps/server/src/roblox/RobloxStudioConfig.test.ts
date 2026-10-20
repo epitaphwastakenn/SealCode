@@ -8,6 +8,7 @@ import {
   OFFICIAL_SERVER_ID,
   ROQER_SERVER_ID,
   runSettingsFor,
+  STUDIO_BRIDGE_SERVER_ID,
   type RobloxStudioEnvironment,
 } from "./RobloxStudioConfig.ts";
 
@@ -22,6 +23,7 @@ const environment: RobloxStudioEnvironment = {
     commit: undefined,
     skills: 30,
   },
+  studioBridge: { port: 58760, mcpToken: "token" },
   roqerProblem: undefined,
   nodeCommand: "/bin/node",
   officialMcpPath: "C:\\Users\\me\\AppData\\Local\\Roblox\\mcp.bat",
@@ -64,6 +66,19 @@ describe("managedServersFor", () => {
       { name: "ROBLOX_OPEN_CLOUD_API_KEY", value: "key", sensitive: true },
       { name: "ROBLOX_CREATOR_GROUP_ID", value: "42", sensitive: false },
     ]);
+  });
+
+  it("points the SealCode mode at the in-server bridge's MCP endpoint, with its token as a secret", () => {
+    const servers = managedServersFor(
+      withRoblox({ mode: "sealcode", officialMcpAlongside: true }),
+      environment,
+    );
+    expect(Object.keys(servers).toSorted()).toEqual([OFFICIAL_SERVER_ID, STUDIO_BRIDGE_SERVER_ID]);
+    expect(servers[STUDIO_BRIDGE_SERVER_ID]).toMatchObject({
+      transport: "streamable-http",
+      url: "http://127.0.0.1:58760/mcp",
+      headers: [{ name: "Authorization", value: "Bearer token", sensitive: true }],
+    });
   });
 
   it("hands Roqer the Blender it was given, or the one found", () => {

@@ -932,10 +932,11 @@ export type SourceControlWritingStyleSettings = typeof SourceControlWritingStyle
 
 /**
  * How SealCode connects agents to Roblox Studio. `roqer` runs Roqer's harness (its Studio bridge
- * and auto-installed plugin, its checks, skills and instructions); `official` connects only the
- * MCP server Roblox Studio ships (`%LOCALAPPDATA%\Roblox\mcp.bat`).
+ * and auto-installed plugin, its checks, skills and instructions); `sealcode` runs SealCode's own
+ * bridge inside the server with its own plugin; `official` connects only the MCP server Roblox
+ * Studio ships (`%LOCALAPPDATA%\Roblox\mcp.bat`).
  */
-export const RobloxStudioMode = Schema.Literals(["off", "roqer", "official"]);
+export const RobloxStudioMode = Schema.Literals(["off", "roqer", "sealcode", "official"]);
 export type RobloxStudioMode = typeof RobloxStudioMode.Type;
 
 /** Which projects' threads see the Roblox tools and instructions. */

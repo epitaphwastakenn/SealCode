@@ -60,11 +60,12 @@ only to the Studio bridge. **Upload as** sets the user or group that uploads pub
 ## SealCode bridge (preview)
 
 **SealCode bridge (preview)** under **Studio connection** runs SealCode's own Studio bridge inside
-SealCode instead of Roqer. It covers the core tools so far (`mcp__studio__…`): the game tree,
-search, typed properties, atomic property changes, creating and deleting instances, script reads
-and edits checked against the revision the agent read and read back afterwards, Luau, playtests,
-output logs, the Studio selection and screenshots of the edit viewport (not during playtests). Assets, uploads, builds, UI inspection and
-Blender jobs still need Roqer.
+SealCode instead of Roqer. Its tools (`mcp__studio__…`) cover the game tree, search, typed
+properties, all-or-nothing builds, script edits checked against the revision the agent read and
+read back afterwards, Luau in the edit window or inside a running playtest, solo and multiplayer
+playtests, output logs, live UI inspection with an audit of layout problems, clicks and typing in a
+playtest, device simulation and side-by-side device screenshots. Agents also get the Roblox skill
+pack (roblox-brain, MIT). Assets, uploads, scatter and Blender jobs still need Roqer.
 
 - SealCode installs the **SealCode** plugin when the mode is on. Studio loads plugins when a place
   opens, so reopen places that were already open. The first time it connects, Studio asks whether
@@ -76,6 +77,10 @@ Blender jobs still need Roqer.
   SealCode to use another port. Choosing another mode removes the plugin again.
 - An unsaved place gets a `SealCodePlaceId` attribute on ServerStorage so SealCode recognizes it
   across restarts.
+- **Studio selection as context** tells the agent, with each message, what you have selected in
+  Studio and which script is open, so you can say "this part" or "the open script".
+- SealCode alerts you when Studio disconnects unexpectedly or while the agent is using it, and when
+  a playtest prints an error, following your notification settings.
 
 ## Roblox's own MCP
 

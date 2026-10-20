@@ -31,11 +31,16 @@ end
 State.role = role
 
 if role == "client" then
+	-- No HTTP here: the play server relays requests over the broker.
+	Logs.start()
+	local Router = require(root.Router)
+	require(root.Broker).startClient(Router.runLocal)
 	return
 end
 
 Logs.start()
 State.loadToggles()
+require(root.Handlers.Eval).cleanEdit()
 
 local pluginSessionId = HttpService:GenerateGUID(false)
 local PLACE_ID_ATTRIBUTE = "SealCodePlaceId"
@@ -103,8 +108,14 @@ local function identity()
 	}
 end
 
+local sessionHooks = {}
 Transport.configure({
 	identity = identity,
+	onSession = function()
+		for _, hook in sessionHooks do
+			task.spawn(hook)
+		end
+	end,
 	onNotify = function(message)
 		local text = "[SealCode] " .. tostring(message.title) .. (if message.body then ": " .. tostring(message.body) else "")
 		if message.level == "error" or message.level == "warning" then
@@ -129,6 +140,14 @@ end)
 
 if role == "server" then
 	require(root.Handlers.Runtime).afterEndTest = Transport.stop
+	local Broker = require(root.Broker)
+	Broker.startServer({
+		register = Transport.registerClient,
+		unregister = Transport.unregisterClient,
+	})
+	sessionHooks.server = function()
+		Broker.reregisterAll(Transport.registerClient)
+	end
 	-- No UI in a play DataModel: connect at once so the playtest's peer shows up.
 	Transport.start()
 	return

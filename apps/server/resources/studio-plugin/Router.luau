@@ -1,15 +1,21 @@
 --!nocheck
 -- Endpoint table and the plugin's own authority over what may run: the user's toggles are
--- enforced here, not on the server.
+-- enforced here, not on the server. Requests for a playtest client go through the broker.
 
 local Config = require(script.Parent.Config)
 local Logs = require(script.Parent.Logs)
 local State = require(script.Parent.State)
+local Broker = require(script.Parent.Broker)
 local Place = require(script.Parent.Handlers.Place)
 local Instances = require(script.Parent.Handlers.Instances)
 local Scripts = require(script.Parent.Handlers.Scripts)
 local Luau = require(script.Parent.Handlers.Luau)
 local Runtime = require(script.Parent.Handlers.Runtime)
+local Build = require(script.Parent.Handlers.Build)
+local Eval = require(script.Parent.Handlers.Eval)
+local Ui = require(script.Parent.Handlers.Ui)
+local Input = require(script.Parent.Handlers.Input)
+local Device = require(script.Parent.Handlers.Device)
 
 local Router = {}
 
@@ -22,17 +28,31 @@ local ROUTES = {
 	["set-properties"] = Instances.setProperties,
 	["create-instances"] = Instances.create,
 	["delete-instances"] = Instances.delete,
+	["build-instances"] = Build.run,
 	["get-script-source"] = Scripts.get,
 	["set-script-source"] = Scripts.set,
 	["edit-script"] = Scripts.edit,
 	["grep-scripts"] = Scripts.grep,
 	["execute-luau"] = Luau.execute,
+	["eval-runtime"] = Eval.run,
 	["start-playtest"] = Runtime.start,
 	["stop-playtest"] = Runtime.endTest,
 	["end-test"] = Runtime.endTest,
 	["playtest-state"] = Runtime.state,
+	["multiplayer-start"] = Runtime.multiplayerStart,
+	["multiplayer-state"] = Runtime.multiplayerState,
+	["add-players"] = Runtime.addPlayers,
+	["leave-test"] = Runtime.leaveTest,
 	["get-logs"] = Logs.read,
 	["capture-screenshot"] = Runtime.capture,
+	["capture-begin"] = Runtime.captureBegin,
+	["capture-read"] = Runtime.captureRead,
+	["inspect-ui"] = Ui.inspect,
+	["interact-ui"] = Ui.interact,
+	["simulate-mouse-input"] = Input.mouse,
+	["simulate-keyboard-input"] = Input.keyboard,
+	["device-get"] = Device.get,
+	["device-set"] = Device.set,
 }
 
 local MUTATING = {}
@@ -54,10 +74,6 @@ function Router.inFlightIds()
 	return ids
 end
 
-function Router.storedResponse(id: string)
-	return answered[id]
-end
-
 local function remember(id: string, response)
 	answered[id] = response
 	table.insert(answeredOrder, id)
@@ -74,10 +90,40 @@ local function refusal(endpoint: string)
 	if MUTATING[endpoint] and toggles.readOnly then
 		return "The user set Studio's SealCode panel to read-only, so changes are refused."
 	end
-	if endpoint == "execute-luau" and not toggles.allowLuau then
+	if (endpoint == "execute-luau" or endpoint == "eval-runtime") and not toggles.allowLuau then
 		return "The user turned off Luau execution in Studio's SealCode panel."
 	end
 	return nil
+end
+
+-- Runs one endpoint in this DataModel, with the toggles applied. Used by the client broker too.
+function Router.runLocal(endpoint: string, data)
+	local blocked = refusal(endpoint)
+	if blocked then
+		return { error = blocked, errorCode = "refused_in_studio" }
+	end
+	local handler = ROUTES[endpoint]
+	if handler == nil then
+		return { error = "Unknown endpoint: " .. tostring(endpoint) }
+	end
+	local mutating = MUTATING[endpoint] == true
+	-- One mutation at a time per DataModel; reads run alongside.
+	if mutating then
+		while mutationBusy do
+			task.wait()
+		end
+		mutationBusy = true
+	end
+	local ok, result = xpcall(handler, function(err)
+		return debug.traceback(tostring(err), 2)
+	end, if type(data) == "table" then data else {})
+	if mutating then
+		mutationBusy = false
+	end
+	if not ok then
+		return { error = "The Studio plugin failed: " .. string.sub(tostring(result), 1, 1500) }
+	end
+	return if type(result) == "table" then result else { result = result }
 end
 
 -- Runs one request and hands its answer to `send` (which retries until the bridge has it).
@@ -103,37 +149,20 @@ function Router.dispatch(message, send: (string, any) -> ())
 		startedAt = os.clock(),
 		time = os.date("%H:%M:%S"),
 		state = "running",
+		peer = if message.logicalId then "client" else nil,
 	}
 	inFlight[id] = true
 	State.inFlight += 1
 	State.recordActivity(entry)
 	task.spawn(function()
 		local response
-		local blocked = refusal(endpoint)
-		local handler = ROUTES[endpoint]
-		if blocked then
-			response = { error = blocked, errorCode = "refused_in_studio" }
-		elseif handler == nil then
-			response = { error = "Unknown endpoint: " .. tostring(endpoint) }
+		if type(message.logicalId) == "string" then
+			local blocked = refusal(endpoint)
+			response = if blocked
+				then { error = blocked, errorCode = "refused_in_studio" }
+				else Broker.forward(message.logicalId, endpoint, message.data)
 		else
-			-- One mutation at a time per DataModel; reads run alongside.
-			if entry.mutating then
-				while mutationBusy do
-					task.wait()
-				end
-				mutationBusy = true
-			end
-			local ok, result = xpcall(handler, function(err)
-				return debug.traceback(tostring(err), 2)
-			end, type(message.data) == "table" and message.data or {})
-			if entry.mutating then
-				mutationBusy = false
-			end
-			if ok then
-				response = if type(result) == "table" then result else { result = result }
-			else
-				response = { error = "The Studio plugin failed: " .. string.sub(tostring(result), 1, 1500) }
-			end
+			response = Router.runLocal(endpoint, message.data)
 		end
 		entry.durationMs = math.floor((os.clock() - entry.startedAt) * 1000)
 		entry.state = if response.error ~= nil or response.success == false then "error" else "ok"

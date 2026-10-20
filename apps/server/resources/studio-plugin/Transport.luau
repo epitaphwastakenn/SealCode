@@ -17,6 +17,7 @@ local pendingResponses = {}
 local identity = nil -- function returning the hello fields
 local wakeRetry = nil
 local onNotify = nil
+local onSession = nil
 
 local function post(route: string, body, timeoutHint: number?)
 	local encoded
@@ -135,6 +136,9 @@ local function hello()
 		State.server.build = body.serverBuild
 		State.server.protocol = body.protocol
 		State.logTransport("hello ok as " .. tostring(body.assignedRole))
+		if onSession then
+			task.spawn(onSession)
+		end
 		return true, nil
 	end
 	local reason = if type(body) == "table" and type(body.message) == "string" then body.message else err
@@ -210,6 +214,29 @@ end
 function Transport.configure(options)
 	identity = options.identity
 	onNotify = options.onNotify
+	onSession = options.onSession
+end
+
+-- The play server registers each player's client as a logical session it relays for.
+function Transport.registerClient(logicalId: string, player): boolean
+	if sessionToken == nil then
+		return false
+	end
+	local ok, _, body = post("/studio/v1/client", {
+		sessionToken = sessionToken,
+		action = "register",
+		logicalId = logicalId,
+		playerName = player.Name,
+		userId = player.UserId,
+	})
+	return ok and type(body) == "table" and body.success == true
+end
+
+function Transport.unregisterClient(logicalId: string)
+	if sessionToken == nil then
+		return
+	end
+	post("/studio/v1/client", { sessionToken = sessionToken, action = "unregister", logicalId = logicalId })
 end
 
 function Transport.isActive(): boolean

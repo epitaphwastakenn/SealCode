@@ -5,6 +5,7 @@ local AssetService = game:GetService("AssetService")
 local RunService = game:GetService("RunService")
 
 local Base64 = require(script.Parent.Parent.Base64)
+local Input = require(script.Parent.Input)
 
 local Runtime = {}
 
@@ -77,13 +78,14 @@ function Runtime.state()
 end
 
 -- Runs in the play server: only it may end the test.
-function Runtime.endTest()
+function Runtime.endTest(args)
 	local service = studioTest()
 	if service == nil then
 		return { error = "StudioTestService is unavailable in this playtest." }
 	end
+	local value = if type(args) == "table" and args.value ~= nil then args.value else "stopped_by_sealcode"
 	local ok, err = pcall(function()
-		service:EndTest("stopped_by_sealcode")
+		service:EndTest(value)
 	end)
 	if not ok then
 		return { error = "Studio refused to end the test: " .. tostring(err) }
@@ -137,7 +139,12 @@ local function shrink(pixels, width: number, height: number, scale: number)
 	return out, outWidth, outHeight
 end
 
-function Runtime.capture(args)
+-- Step one, in whichever DataModel owns the viewport: ask Studio for a screenshot.
+function Runtime.captureBegin()
+	local stalled = Input.notRendering()
+	if stalled then
+		return { error = stalled }
+	end
 	local ok, captureService = pcall(function()
 		return game:GetService("CaptureService")
 	end)
@@ -145,13 +152,13 @@ function Runtime.capture(args)
 		return { error = "CaptureService is unavailable in this Studio." }
 	end
 	local contentId = nil
-	local started = pcall(function()
+	local started, refusal = pcall(function()
 		captureService:CaptureScreenshot(function(id)
 			contentId = id
 		end)
 	end)
 	if not started then
-		return { error = "Studio refused the screenshot request." }
+		return { error = "Studio refused the screenshot request: " .. tostring(refusal) }
 	end
 	local deadline = os.clock() + 10
 	while contentId == nil and os.clock() < deadline do
@@ -161,6 +168,15 @@ function Runtime.capture(args)
 		return {
 			error = "The screenshot never arrived. Make sure the Studio window is visible (not minimized) so the viewport renders, then retry.",
 		}
+	end
+	return { success = true, contentId = contentId }
+end
+
+-- Step two, in the edit DataModel: turn the temporary screenshot into pixels.
+function Runtime.captureRead(args)
+	local contentId = args.contentId
+	if type(contentId) ~= "string" or contentId == "" then
+		return { error = "contentId is required" }
 	end
 	local image
 	local created, problem = pcall(function()
@@ -197,6 +213,108 @@ function Runtime.capture(args)
 		nativeHeight = nativeHeight,
 		data = Base64.encode(pixels),
 	}
+end
+
+function Runtime.capture(args)
+	local begun = Runtime.captureBegin()
+	if not begun.success then
+		return begun
+	end
+	return Runtime.captureRead({ contentId = begun.contentId, maxSize = args.maxSize })
+end
+
+-- Multiplayer tests: started from the edit DataModel, which then waits for the whole test.
+local multiplayer = { phase = "idle", players = nil, error = nil, result = nil }
+
+function Runtime.multiplayerStart(args)
+	local count = math.floor(tonumber(args.numPlayers) or 0)
+	if count < 1 or count > 8 then
+		return { error = "numPlayers must be 1 to 8" }
+	end
+	if multiplayer.phase == "starting" or multiplayer.phase == "running" or test.running then
+		return { error = "A playtest is already running." }
+	end
+	local service = studioTest()
+	if service == nil then
+		return { error = "This Studio has no StudioTestService." }
+	end
+	multiplayer = { phase = "starting", players = count, error = nil, result = nil }
+	test.running = true
+	test.mode = "multiplayer"
+	test.startedAt = os.clock()
+	task.spawn(function()
+		local ok, result = pcall(function()
+			return service:ExecuteMultiplayerTestAsync(count, args.testArgs)
+		end)
+		test.running = false
+		if ok then
+			multiplayer.phase = "completed"
+			multiplayer.result = result
+		else
+			multiplayer.phase = "failed"
+			multiplayer.error = tostring(result)
+		end
+	end)
+	task.wait(0.3)
+	if multiplayer.phase == "failed" then
+		return { error = "Studio did not start the multiplayer test: " .. tostring(multiplayer.error) }
+	end
+	multiplayer.phase = "running"
+	return { success = true, started = true, numPlayers = count }
+end
+
+function Runtime.multiplayerState()
+	local players = {}
+	for _, player in game:GetService("Players"):GetPlayers() do
+		table.insert(players, player.Name)
+	end
+	return {
+		phase = multiplayer.phase,
+		numPlayers = multiplayer.players,
+		error = multiplayer.error,
+		result = multiplayer.result,
+		players = players,
+	}
+end
+
+-- Runs in the play server.
+function Runtime.addPlayers(args)
+	local count = math.floor(tonumber(args.numPlayers) or 0)
+	if count < 1 or count > 8 then
+		return { error = "numPlayers must be 1 to 8" }
+	end
+	local service = studioTest()
+	if service == nil then
+		return { error = "StudioTestService is unavailable in this playtest." }
+	end
+	local before = #game:GetService("Players"):GetPlayers()
+	local ok, err = pcall(function()
+		service:AddPlayers(count)
+	end)
+	if not ok then
+		return { error = "Studio refused to add players: " .. tostring(err) }
+	end
+	return { success = true, playersBefore = before, requested = count }
+end
+
+-- Runs in a playtest client: the client leaves the test, the rest keeps running.
+function Runtime.leaveTest()
+	local service = studioTest()
+	if service == nil then
+		return { error = "StudioTestService is unavailable in this client." }
+	end
+	local ok, canLeave = pcall(function()
+		return service:CanLeaveTest()
+	end)
+	if ok and canLeave == false then
+		return { error = "Studio says this client cannot leave the test." }
+	end
+	task.defer(function()
+		pcall(function()
+			service:LeaveTest()
+		end)
+	end)
+	return { success = true }
 end
 
 return Runtime

@@ -8,7 +8,7 @@ import * as Schedule from "effect/Schedule";
 import { downscaleRgba, encodePng } from "./png.ts";
 import { StudioEndpoints, type StudioRole } from "./protocol.ts";
 import * as StudioBridge from "./StudioBridge.ts";
-import { placeKey } from "./StudioRouter.ts";
+import { placeKey, preferRuntimeClient } from "./StudioRouter.ts";
 import {
   errorResult,
   isFailurePayload,
@@ -305,11 +305,22 @@ const make = Effect.gen(function* () {
           timeoutMs,
         );
         if (ready) {
+          // Play mode also has a client; give the play server a moment to relay it.
+          const clientReady =
+            mode === "run" ||
+            (yield* waitUntil(
+              runtimePeers(place).pipe(
+                Effect.map((peers) => peers.some((peer) => peer.role.startsWith("client-"))),
+              ),
+              15_000,
+            ));
           return jsonResult({
             success: true,
             action: "start",
             mode,
-            message: "Playtest started; the server peer is connected.",
+            message: clientReady
+              ? "Playtest started; its peers are connected."
+              : "Playtest started; the server peer is connected, but no client peer appeared yet.",
             roles: (yield* bridge.peersOf(place)).map((peer) => peer.role),
           });
         }
@@ -388,36 +399,126 @@ const make = Effect.gen(function* () {
       return errorResult("invalid_arguments", 'action must be "start", "stop" or "status".');
     }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
 
-  const screenshot = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
-    Effect.gen(function* () {
-      const maxSize = Math.min(Math.max(Math.floor(num(args.maxSize) ?? 1600), 256), 4096);
-      // Studio captures only on a client: during a playtest the viewport belongs to the play
-      // DataModel, the play server refuses, and the edit DataModel's capture never fires.
-      const edit = yield* placeOf(args);
-      if ((yield* runtimePeers(placeKey(edit))).length > 0) {
-        return errorResult(
-          "playtest_running",
-          "Screenshots are not available while a playtest runs: Studio only captures from a playtest client, which this version of the bridge does not reach. Stop the playtest and capture the edit viewport, and use the output logs for runtime evidence.",
-        );
+  type Captured =
+    | {
+        readonly ok: true;
+        readonly png: Buffer;
+        readonly width: number;
+        readonly height: number;
+        readonly message: string;
+        readonly role: string;
       }
-      const { payload } = yield* call({
-        tool: "capture_screenshot",
-        args,
-        context,
-        endpoint: StudioEndpoints.captureScreenshot,
-        data: { maxSize },
-        target: "edit",
-        instanceId: edit.instanceId,
-        timeoutMs: 60_000,
-      });
+    | { readonly ok: false; readonly result: StudioToolResult };
+
+  /**
+   * One viewport image. During Play the client owns the viewport: it takes the screenshot and the
+   * edit DataModel turns it into pixels. In Run mode there is no client and Studio refuses.
+   */
+  const captureImage = (input: {
+    readonly args: Args;
+    readonly context: StudioToolContext;
+    readonly tool: string;
+    readonly maxSize: number;
+    readonly budgetBytes: number;
+    readonly target?: string | undefined;
+  }): Effect.Effect<Captured, StudioBridge.StudioRequestError> =>
+    Effect.gen(function* () {
+      const { args, context, tool } = input;
+      const edit = yield* placeOf(args);
+      const runtime = yield* runtimePeers(placeKey(edit));
+      const client =
+        input.target !== undefined && input.target.startsWith("client-")
+          ? runtime.find((peer) => peer.role === input.target)
+          : input.target === "edit"
+            ? undefined
+            : preferRuntimeClient(runtime.filter((peer) => peer.role.startsWith("client-")));
+      if (
+        input.target !== undefined &&
+        input.target.startsWith("client-") &&
+        client === undefined
+      ) {
+        return {
+          ok: false,
+          result: errorResult(
+            "runtime_client_required",
+            `No ${input.target} peer is connected. Start a playtest first.`,
+          ),
+        } as const;
+      }
+      if (client === undefined && runtime.length > 0 && input.target !== "edit") {
+        return {
+          ok: false,
+          result: errorResult(
+            "playtest_running",
+            "This playtest has no client (Run mode), and Studio only captures from a client. Stop the playtest to capture the edit viewport, or use Play mode.",
+          ),
+        } as const;
+      }
+      let payload: unknown;
+      if (client !== undefined) {
+        const begun = yield* call({
+          tool,
+          args,
+          context,
+          endpoint: StudioEndpoints.captureBegin,
+          data: {},
+          target: client.role,
+          instanceId: client.instanceId,
+          timeoutMs: 30_000,
+        });
+        if (isFailurePayload(begun.payload) || !isRecord(begun.payload)) {
+          return {
+            ok: false,
+            result: outdatedPlugin(begun.payload) ?? jsonResult(begun.payload),
+          } as const;
+        }
+        const read = yield* call({
+          tool,
+          args,
+          context,
+          endpoint: StudioEndpoints.captureRead,
+          data: { contentId: begun.payload.contentId, maxSize: input.maxSize },
+          target: "edit",
+          instanceId: edit.instanceId,
+          timeoutMs: 60_000,
+        });
+        payload = read.payload;
+        if (
+          isFailurePayload(payload) &&
+          isRecord(payload) &&
+          runtime.filter((peer) => peer.role.startsWith("client-")).length > 1
+        ) {
+          return {
+            ok: false,
+            result: errorResult(
+              "capture_failed",
+              `Multiplayer test clients run in their own Studio processes, so their screenshots cannot be read from the edit window. (${String(payload.error)})`,
+            ),
+          } as const;
+        }
+      } else {
+        payload = (yield* call({
+          tool,
+          args,
+          context,
+          endpoint: StudioEndpoints.captureScreenshot,
+          data: { maxSize: input.maxSize },
+          target: "edit",
+          instanceId: edit.instanceId,
+          timeoutMs: 60_000,
+        })).payload;
+      }
       if (isFailurePayload(payload) || !isRecord(payload)) {
-        return outdatedPlugin(payload) ?? jsonResult(payload);
+        return { ok: false, result: outdatedPlugin(payload) ?? jsonResult(payload) } as const;
       }
       const width = num(payload.width);
       const height = num(payload.height);
       const data = str(payload.data);
       if (width === undefined || height === undefined || data === undefined) {
-        return errorResult("capture_failed", "Studio's screenshot answer had no image.");
+        return {
+          ok: false,
+          result: errorResult("capture_failed", "Studio's screenshot answer had no image."),
+        } as const;
       }
       let pixels: { data: Uint8Array; width: number; height: number } = {
         data: Buffer.from(data, "base64"),
@@ -425,10 +526,13 @@ const make = Effect.gen(function* () {
         height,
       };
       if (pixels.data.byteLength < width * height * 4) {
-        return errorResult("capture_failed", "Studio's screenshot answer was truncated.");
+        return {
+          ok: false,
+          result: errorResult("capture_failed", "Studio's screenshot answer was truncated."),
+        } as const;
       }
       let png = encodePng(pixels.data, pixels.width, pixels.height);
-      while (png.byteLength > MAX_INLINE_IMAGE_BYTES && pixels.width > 64) {
+      while (png.byteLength > input.budgetBytes && pixels.width > 64) {
         pixels = downscaleRgba(pixels.data, pixels.width, pixels.height, 2);
         png = encodePng(pixels.data, pixels.width, pixels.height);
       }
@@ -436,16 +540,291 @@ const make = Effect.gen(function* () {
       const nativeHeight = num(payload.nativeHeight) ?? height;
       const scaleX = nativeWidth / pixels.width;
       const scaleY = nativeHeight / pixels.height;
+      const source = client === undefined ? "the Studio viewport" : `${client.role}'s view`;
       const message =
         scaleX === 1 && scaleY === 1
-          ? `Screenshot ${String(pixels.width)}x${String(pixels.height)} px of the Studio viewport, not downscaled.`
-          : `Screenshot ${String(pixels.width)}x${String(pixels.height)} px, downscaled from the ${String(nativeWidth)}x${String(nativeHeight)} viewport (multiply x by ${scaleX.toFixed(4)} and y by ${scaleY.toFixed(4)} for viewport pixels).`;
+          ? `Screenshot ${String(pixels.width)}x${String(pixels.height)} px of ${source}, not downscaled.`
+          : `Screenshot ${String(pixels.width)}x${String(pixels.height)} px of ${source}, downscaled from ${String(nativeWidth)}x${String(nativeHeight)} (multiply x by ${scaleX.toFixed(4)} and y by ${scaleY.toFixed(4)} for viewport pixels).`;
+      return {
+        ok: true,
+        png,
+        width: pixels.width,
+        height: pixels.height,
+        message,
+        role: client?.role ?? "edit",
+      } as const;
+    });
+
+  const screenshot = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      const captured = yield* captureImage({
+        args,
+        context,
+        tool: "capture_screenshot",
+        maxSize: Math.min(Math.max(Math.floor(num(args.maxSize) ?? 1600), 256), 4096),
+        budgetBytes: MAX_INLINE_IMAGE_BYTES,
+        target: str(args.target),
+      });
+      if (!captured.ok) return captured.result;
       return {
         content: [
-          jsonText({ width: pixels.width, height: pixels.height, format: "png", message }),
-          { type: "image", data: png.toString("base64"), mimeType: "image/png" },
+          jsonText({
+            width: captured.width,
+            height: captured.height,
+            format: "png",
+            role: captured.role,
+            message: captured.message,
+          }),
+          { type: "image", data: captured.png.toString("base64"), mimeType: "image/png" },
         ],
       } satisfies StudioToolResult;
+    }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
+
+  /** Runs code inside the playtest's own script VM (server or a client). */
+  const evalRuntime =
+    (side: "server" | "client") =>
+    (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
+      Effect.gen(function* () {
+        if (typeof args.code !== "string" || args.code.trim() === "") {
+          return errorResult("invalid_arguments", "code is required.");
+        }
+        const edit = yield* placeOf(args);
+        const runtime = yield* runtimePeers(placeKey(edit));
+        const role = side === "server" ? "server" : (str(args.target) ?? "client-1");
+        if (side === "client" && !role.startsWith("client-")) {
+          return errorResult("invalid_arguments", "eval_client_runtime needs target=client-N.");
+        }
+        const peer = runtime.find((candidate) => candidate.role === role);
+        if (peer === undefined) {
+          return errorResult(
+            side === "server" ? "playtest_required" : "runtime_client_required",
+            `eval_${side}_runtime needs a running playtest with a ${role} peer (connected: ${runtime.map((p) => p.role).join(", ") || "none"}).`,
+          );
+        }
+        const { payload } = yield* call({
+          tool: `eval_${side}_runtime`,
+          args,
+          context,
+          endpoint: StudioEndpoints.evalRuntime,
+          data: { code: args.code, __timeout: 50 },
+          target: role,
+          instanceId: peer.instanceId,
+          timeoutMs: 60_000,
+          summary: args.code.split("\n")[0]?.slice(0, 80),
+        });
+        return outdatedPlugin(payload) ?? jsonResult(payload);
+      }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
+
+  const clientRoles = (place: string) =>
+    runtimePeers(place).pipe(
+      Effect.map((peers) => peers.filter((peer) => peer.role.startsWith("client-"))),
+    );
+
+  const multiplayer = (args: Args, context: StudioToolContext): Effect.Effect<StudioToolResult> =>
+    Effect.gen(function* () {
+      const action = str(args.action);
+      const edit = yield* placeOf(args);
+      const place = placeKey(edit);
+      const timeoutMs = Math.min(
+        Math.max((num(args.timeout) ?? (action === "start" ? 90 : 30)) * 1000, 5000),
+        180_000,
+      );
+      const editCall = (endpoint: string, data: unknown) =>
+        call({
+          tool: "multiplayer_playtest",
+          args,
+          context,
+          endpoint,
+          data,
+          target: "edit",
+          instanceId: edit.instanceId,
+        });
+      const serverPeer = () =>
+        runtimePeers(place).pipe(
+          Effect.map((peers) => peers.find((peer) => peer.role === "server")),
+        );
+      if (action === "status") {
+        const state = yield* editCall(StudioEndpoints.multiplayerState, {}).pipe(
+          Effect.map(({ payload }) => payload),
+          Effect.orElseSucceed(() => undefined),
+        );
+        const roles = (yield* bridge.peersOf(place)).map((peer) => peer.role);
+        return jsonResult({
+          success: true,
+          roles,
+          playerCount: (yield* clientRoles(place)).length,
+          studio: state,
+        });
+      }
+      if (action === "start") {
+        const count = Math.floor(num(args.numPlayers) ?? 0);
+        if (count < 1 || count > 8)
+          return errorResult("invalid_arguments", "numPlayers must be 1 to 8.");
+        if ((yield* runtimePeers(place)).length > 0) {
+          return errorResult(
+            "playtest_running",
+            "A playtest is already running. Stop it before starting another.",
+          );
+        }
+        const requestedAt = yield* Clock.currentTimeMillis;
+        const { payload } = yield* editCall(StudioEndpoints.multiplayerStart, {
+          numPlayers: count,
+          testArgs: args.testArgs,
+        });
+        if (isFailurePayload(payload)) return outdatedPlugin(payload) ?? jsonResult(payload);
+        const ready = yield* waitUntil(
+          runtimePeers(place).pipe(
+            Effect.map((peers) => {
+              const fresh = peers.filter((peer) => peer.connectedAt >= requestedAt);
+              return (
+                fresh.some((peer) => peer.role === "server") &&
+                fresh.filter((peer) => peer.role.startsWith("client-")).length >= count
+              );
+            }),
+          ),
+          timeoutMs,
+        );
+        const roles = (yield* bridge.peersOf(place)).map((peer) => peer.role);
+        if (ready) {
+          return jsonResult({
+            success: true,
+            action,
+            message: `Multiplayer test running with ${String(count)} client(s).`,
+            roles,
+          });
+        }
+        const state = yield* editCall(StudioEndpoints.multiplayerState, {}).pipe(
+          Effect.map(({ payload: s }) => s),
+          Effect.orElseSucceed(() => undefined),
+        );
+        return jsonResult(
+          {
+            success: false,
+            action,
+            error: "playtest_not_ready",
+            message: `The multiplayer test did not register a server and ${String(count)} client(s) before the timeout.`,
+            roles,
+            studio: state,
+          },
+          { isError: true },
+        );
+      }
+      if (action === "add_players") {
+        const count = Math.floor(num(args.numPlayers) ?? 0);
+        if (count < 1 || count > 8)
+          return errorResult("invalid_arguments", "numPlayers must be 1 to 8.");
+        const server = yield* serverPeer();
+        if (server === undefined)
+          return errorResult("playtest_required", "No multiplayer test is running.");
+        const before = (yield* clientRoles(place)).length;
+        const { payload } = yield* call({
+          tool: "multiplayer_playtest",
+          args,
+          context,
+          endpoint: StudioEndpoints.addPlayers,
+          data: { numPlayers: count },
+          target: "server",
+          instanceId: server.instanceId,
+        });
+        if (isFailurePayload(payload)) return outdatedPlugin(payload) ?? jsonResult(payload);
+        const ready = yield* waitUntil(
+          clientRoles(place).pipe(Effect.map((clients) => clients.length >= before + count)),
+          timeoutMs,
+        );
+        const roles = (yield* bridge.peersOf(place)).map((peer) => peer.role);
+        return ready
+          ? jsonResult({ success: true, action, roles })
+          : jsonResult(
+              {
+                success: false,
+                action,
+                error: "players_not_ready",
+                message: "The new clients did not register before the timeout.",
+                roles,
+              },
+              { isError: true },
+            );
+      }
+      if (action === "leave_client") {
+        const role = str(args.target) ?? "client-1";
+        const client = (yield* clientRoles(place)).find((peer) => peer.role === role);
+        if (client === undefined)
+          return errorResult("runtime_client_required", `No ${role} peer is connected.`);
+        const { payload } = yield* call({
+          tool: "multiplayer_playtest",
+          args,
+          context,
+          endpoint: StudioEndpoints.leaveTest,
+          data: {},
+          target: role,
+          instanceId: client.instanceId,
+        }).pipe(
+          Effect.catchTags({
+            StudioPeerDisconnected: () => Effect.succeed({ payload: { success: true } }),
+          }),
+        );
+        if (isFailurePayload(payload)) return outdatedPlugin(payload) ?? jsonResult(payload);
+        const gone = yield* waitUntil(
+          clientRoles(place).pipe(
+            Effect.map((clients) => !clients.some((peer) => peer.role === role)),
+          ),
+          timeoutMs,
+        );
+        return gone
+          ? jsonResult({ success: true, action, left: role })
+          : jsonResult(
+              {
+                success: false,
+                action,
+                error: "client_still_connected",
+                message: `${role} did not leave before the timeout.`,
+              },
+              { isError: true },
+            );
+      }
+      if (action === "end") {
+        const server = yield* serverPeer();
+        if (server === undefined)
+          return jsonResult({
+            success: true,
+            action,
+            alreadyEnded: true,
+            message: "No multiplayer test is running.",
+          });
+        const { payload } = yield* call({
+          tool: "multiplayer_playtest",
+          args,
+          context,
+          endpoint: StudioEndpoints.endTest,
+          data: { value: args.value ?? "ended_by_sealcode" },
+          target: "server",
+          instanceId: server.instanceId,
+        }).pipe(
+          Effect.catchTags({
+            StudioPeerDisconnected: () => Effect.succeed({ payload: { success: true } }),
+          }),
+        );
+        if (isFailurePayload(payload)) return outdatedPlugin(payload) ?? jsonResult(payload);
+        const gone = yield* waitUntil(
+          runtimePeers(place).pipe(Effect.map((peers) => peers.length === 0)),
+          timeoutMs,
+        );
+        return gone
+          ? jsonResult({ success: true, action, message: "Multiplayer test ended." })
+          : jsonResult(
+              {
+                success: false,
+                action,
+                error: "teardown_incomplete",
+                message: "Studio was asked to end the test, but its peers are still connected.",
+              },
+              { isError: true },
+            );
+      }
+      return errorResult(
+        "invalid_arguments",
+        'action must be "start", "status", "add_players", "leave_client" or "end".',
+      );
     }).pipe(Effect.catch((error) => Effect.succeed(requestFailure(error))));
 
   interface LogEntry {
@@ -1000,6 +1379,91 @@ const make = Effect.gen(function* () {
       run: playtest,
     },
     {
+      name: "build_instances",
+      title: "Build",
+      description:
+        'Creates, clones, edits and removes instances under one root in a single all-or-nothing step (one Ctrl+Z). path is the root: an existing instance, a service (add only), or a new Model under an existing parent. operations: {op:"create", className, parent?, name?, properties?, attributes?, tags?, position?, rotation?, id?} | {op:"clone", source, parent?, transforms?:[{position?, rotation?, scale?}], id?} | {op:"set", target, properties?, attributes?, tags?, position?, rotation?} | {op:"remove", target}. Paths see the tree as it was before the batch; refer to things made earlier in the batch with "$<id>". position is world [x,y,z], rotation absolute degrees. Up to 500 operations.',
+      inputSchema: object(
+        {
+          path: { type: "string" },
+          operations: { type: "array", items: { type: "object" } },
+          ...instanceIdProperty,
+        },
+        ["path", "operations"],
+      ),
+      risk: "mutation",
+      run: (args, context) => {
+        if (typeof args.path !== "string" || args.path.trim() === "") {
+          return Effect.succeed(
+            errorResult("invalid_arguments", "path (the build root) is required."),
+          );
+        }
+        if (
+          !Array.isArray(args.operations) ||
+          args.operations.length === 0 ||
+          args.operations.length > 500
+        ) {
+          return Effect.succeed(
+            errorResult("invalid_arguments", "operations must be an array of 1 to 500 steps."),
+          );
+        }
+        return forward(
+          "build_instances",
+          StudioEndpoints.buildInstances,
+          () => ({ path: args.path, operations: args.operations }),
+          {
+            timeoutMs: 120_000,
+            summary: () =>
+              `${String(args.path)} (${String((args.operations as unknown[]).length)} steps)`,
+          },
+        )(args, context);
+      },
+    },
+    {
+      name: "eval_server_runtime",
+      title: "Run Luau in the play server",
+      description:
+        "Runs Luau inside the running playtest's server script VM, so require() returns the live modules with their state. Returns the value and print/warn output. Needs a running playtest.",
+      inputSchema: object({ code: { type: "string" }, ...instanceIdProperty }, ["code"]),
+      risk: "irreversible",
+      run: evalRuntime("server"),
+    },
+    {
+      name: "eval_client_runtime",
+      title: "Run Luau in a playtest client",
+      description:
+        "Runs Luau inside a playtest client's script VM (target client-N, default client-1): LocalPlayer, PlayerGui and client modules as the game sees them. Needs a Play or multiplayer test.",
+      inputSchema: object(
+        { code: { type: "string" }, target: { type: "string" }, ...instanceIdProperty },
+        ["code"],
+      ),
+      risk: "irreversible",
+      run: evalRuntime("client"),
+    },
+    {
+      name: "multiplayer_playtest",
+      title: "Multiplayer playtest",
+      description:
+        "Local server plus 1-8 clients. start (numPlayers, testArgs), status, add_players (numPlayers), leave_client (target client-N), end (value). Waits until Studio registers the peers. Clients run in their own Studio processes.",
+      inputSchema: object(
+        {
+          action: {
+            type: "string",
+            enum: ["start", "status", "add_players", "leave_client", "end"],
+          },
+          numPlayers: { type: "number" },
+          target: { type: "string" },
+          testArgs: { description: "Any JSON, given to StudioTestService:GetTestArgs." },
+          value: { description: "Any JSON returned to the edit window by end." },
+          timeout: { type: "number" },
+          ...instanceIdProperty,
+        },
+        ["action"],
+      ),
+      risk: "mutation",
+      run: multiplayer,
+    },
+    {
       name: "get_output_logs",
       title: "Output logs",
       description:
@@ -1019,9 +1483,10 @@ const make = Effect.gen(function* () {
       name: "capture_screenshot",
       title: "Screenshot",
       description:
-        "PNG of the Studio edit viewport, outside playtests. The Studio window must be visible (not minimized). x/y read off the image map to viewport pixels as the message says.",
+        "PNG of the viewport: the edit view, or during a Play test the client's view (target client-N to choose). Not available in Run mode. The Studio window must be visible. x/y read off the image map to viewport pixels as the message says.",
       inputSchema: object({
         maxSize: { type: "number", description: "Longest side in pixels (default 1600)." },
+        target: { type: "string", description: "edit, or client-N during a playtest." },
         ...instanceIdProperty,
       }),
       risk: "read",

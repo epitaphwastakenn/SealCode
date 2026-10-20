@@ -951,6 +951,8 @@ export const RobloxStudioSettings = Schema.Struct({
   /** Roqer's agent instructions and skill catalog on every turn of a Roblox thread. */
   instructions: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   autoPlaytest: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  /** In `sealcode` mode, each turn tells the agent what the user has selected in Studio. */
+  studioContext: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   /** In `roqer` mode, also connect Roblox's own MCP for its mesh, texture and material generation. */
   officialMcpAlongside: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   openCloudApiKey: TrimmedString.pipe(
@@ -1762,6 +1764,7 @@ export const ServerSettingsPatch = Schema.Struct({
       scope: Schema.optionalKey(RobloxStudioScope),
       instructions: Schema.optionalKey(Schema.Boolean),
       autoPlaytest: Schema.optionalKey(Schema.Boolean),
+      studioContext: Schema.optionalKey(Schema.Boolean),
       officialMcpAlongside: Schema.optionalKey(Schema.Boolean),
       openCloudApiKey: Schema.optionalKey(TrimmedString),
       creatorUserId: Schema.optionalKey(TrimmedString),

@@ -8,6 +8,8 @@ import * as Schema from "effect/Schema";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as RobloxStudioConfig from "../roblox/RobloxStudioConfig.ts";
 import * as ServerSettings from "../serverSettings.ts";
+import { studioSelectionContext } from "../studioBridge/instructions.ts";
+import * as StudioBridge from "../studioBridge/StudioBridge.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 
 export const IMAGE_VIEWER_HINT =
@@ -71,6 +73,7 @@ export const layer = Layer.effect(
     const registry = yield* ProviderInstanceRegistry.ProviderInstanceRegistry;
     const textGeneration = yield* TextGeneration.TextGeneration;
     const roblox = yield* RobloxStudioConfig.RobloxStudioConfig;
+    const studioBridge = yield* Effect.serviceOption(StudioBridge.StudioBridge);
     // Roqer's instructions are long, so a provider conversation gets them once rather than on
     // every turn: when it starts, and once more after a server restart or a settings change.
     const roqerDelivered = new Map<string, string>();
@@ -166,9 +169,18 @@ export const layer = Layer.effect(
             roqerDelivered.delete(roqerDelivered.keys().next().value ?? conversation);
           }
         }
+        // Unlike the instructions, the Studio selection changes between turns, so it rides on each.
+        const studioContext =
+          studioBridge._tag === "Some" &&
+          current.robloxStudio.mode === "sealcode" &&
+          current.robloxStudio.studioContext &&
+          (yield* roblox.appliesTo(current, input.workspaceRoot ?? input.cwd))
+            ? studioSelectionContext(yield* studioBridge.value.selections)
+            : undefined;
         const harness = [
           current.sealsInstructions.trim(),
           sendRoqer && roqer !== undefined ? withRoqerInstructions(roqer) : "",
+          studioContext ?? "",
         ]
           .filter((part) => part.length > 0)
           .join("\n\n");

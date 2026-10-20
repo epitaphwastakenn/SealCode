@@ -184,6 +184,15 @@ export interface StudioEvent {
   readonly payload: Record<string, unknown>;
 }
 
+export interface StudioSelection {
+  readonly instanceId: string;
+  readonly placeName: string;
+  readonly at: number;
+  readonly count: number;
+  readonly items: ReadonlyArray<{ readonly path: string; readonly className: string }>;
+  readonly activeScript?: string;
+}
+
 export interface StudioActivity {
   readonly requestId: string;
   readonly tool: string;
@@ -351,6 +360,8 @@ export class StudioBridge extends Context.Service<
     /** Drops every session, as when the listener stops. */
     readonly reset: Effect.Effect<void>;
     readonly snapshot: Effect.Effect<StudioBridgeSnapshot>;
+    /** What the user last had selected in the edit window of each connected place. */
+    readonly selections: Effect.Effect<ReadonlyArray<StudioSelection>>;
     readonly events: Stream.Stream<StudioEvent>;
     /** Emits whenever peers, lifecycle or activity change. */
     readonly changes: Stream.Stream<void>;
@@ -365,6 +376,7 @@ const make = Effect.gen(function* () {
   const tombstones = new Map<string, number>();
   const aliases = new Map<string, { readonly to: string; at: number }>();
   const activity: StudioActivity[] = [];
+  const selections = new Map<string, StudioSelection>();
   let lifecycle: StudioLifecycle = { state: "stopped", pluginUpdated: false };
   let agentLinked = false;
   let lastToolAt = 0;
@@ -466,6 +478,7 @@ const make = Effect.gen(function* () {
       });
       sessions.delete(session.peer.pluginSessionId);
       byToken.delete(session.token);
+      selections.delete(session.peer.pluginSessionId);
       session.clients.clear();
       if (session.waiter !== undefined) yield* Deferred.succeed(session.waiter, undefined);
       yield* failUnservable(session);
@@ -727,6 +740,35 @@ const make = Effect.gen(function* () {
         if (typeof raw !== "object" || raw === null) continue;
         const { type, ...rest } = raw as Record<string, unknown>;
         if (!(STUDIO_EVENT_TYPES as ReadonlyArray<unknown>).includes(type)) continue;
+        if (type === "selection_changed" && session.peer.role === "edit") {
+          const items = Array.isArray(rest.items)
+            ? rest.items.flatMap((item) =>
+                typeof item === "object" &&
+                item !== null &&
+                typeof (item as { path?: unknown }).path === "string"
+                  ? [
+                      {
+                        path: String((item as { path: string }).path).slice(0, 300),
+                        className: String((item as { className?: unknown }).className ?? "").slice(
+                          0,
+                          60,
+                        ),
+                      },
+                    ]
+                  : [],
+              )
+            : [];
+          selections.set(session.peer.pluginSessionId, {
+            instanceId: session.peer.instanceId,
+            placeName: session.peer.placeName,
+            at: now,
+            count: typeof rest.count === "number" ? rest.count : items.length,
+            items: items.slice(0, 20),
+            ...(typeof rest.activeScript === "string"
+              ? { activeScript: rest.activeScript.slice(0, 300) }
+              : {}),
+          });
+        }
         yield* PubSub.publish(eventsHub, {
           type: type as StudioEventType,
           instanceId: session.peer.instanceId,
@@ -996,6 +1038,12 @@ const make = Effect.gen(function* () {
       ...(lastRejection === undefined ? {} : { lastRejection }),
       recentActivity: [...activity],
     })),
+    selections: Effect.sync(() =>
+      [...selections.entries()].flatMap(([sessionId, selection]) => {
+        const live = sessions.get(sessionId);
+        return live === undefined ? [] : [{ ...selection, instanceId: live.peer.instanceId }];
+      }),
+    ),
     events: Stream.fromPubSub(eventsHub),
     changes: Stream.fromPubSub(changesHub),
   });

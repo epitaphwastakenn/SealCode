@@ -290,6 +290,35 @@ describe("StudioBridge", () => {
     }).pipe(Effect.provide(layer)),
   );
 
+  it.effect("remembers the latest selection of each connected edit window", () =>
+    Effect.gen(function* () {
+      const bridge = yield* StudioBridge.StudioBridge;
+      const { sessionToken } = yield* bridge.hello(hello());
+      yield* bridge.postEvents({
+        sessionToken,
+        events: [
+          {
+            type: "selection_changed",
+            count: 1,
+            items: [{ path: "game.Workspace.Door", className: "Part" }],
+            activeScript: "game.ServerScriptService.Main",
+          },
+        ],
+      });
+      expect(yield* bridge.selections).toMatchObject([
+        {
+          instanceId: "anon:abc",
+          placeName: "Obby",
+          count: 1,
+          items: [{ path: "game.Workspace.Door", className: "Part" }],
+          activeScript: "game.ServerScriptService.Main",
+        },
+      ]);
+      yield* bridge.bye(sessionToken);
+      expect(yield* bridge.selections).toEqual([]);
+    }).pipe(Effect.provide(layer)),
+  );
+
   it.effect("publishes plugin events and drops unknown ones", () =>
     Effect.gen(function* () {
       const bridge = yield* StudioBridge.StudioBridge;

@@ -565,7 +565,6 @@ const layerProviderInstallationRefresh = Layer.effectDiscard(
 /** SealCode's own Studio bridge; it listens only while the Roblox mode is `sealcode`. */
 const layerStudioBridge = StudioBridgeServer.layer.pipe(
   Layer.provideMerge(StudioTools.layer),
-  Layer.provideMerge(StudioBridge.layer),
   Layer.provide(StudioPluginInstaller.layer),
   Layer.provide(ServerSecretStore.layer),
 );
@@ -621,6 +620,8 @@ const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   Layer.effectDiscard(ProjectSettingsOverrideSweep.sweep),
 ).pipe(
   Layer.provideMerge(layerOrchestrationApplication),
+  // The bridge's registry sits below orchestration: turn framing reads the Studio selection.
+  Layer.provideMerge(StudioBridge.layer),
   Layer.provideMerge(RobloxStudioConfig.layer),
   Layer.provideMerge(RuntimeLayer.layerEventInfrastructure),
   Layer.provideMerge(

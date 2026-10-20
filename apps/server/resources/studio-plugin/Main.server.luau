@@ -238,7 +238,13 @@ end)
 
 -- Events for SealCode: the user's selection (debounced, compact) and new errors.
 local selectionVersion = 0
-Selection.SelectionChanged:Connect(function()
+local function activeScriptPath()
+	local ok, active = pcall(function()
+		return game:GetService("StudioService").ActiveScript
+	end)
+	return if ok and active then Util.pathOf(active) else nil
+end
+local function emitSelection()
 	selectionVersion += 1
 	local mine = selectionVersion
 	task.delay(0.3, function()
@@ -253,9 +259,14 @@ Selection.SelectionChanged:Connect(function()
 			end
 			table.insert(items, { path = Util.pathOf(instance), className = instance.ClassName })
 		end
-		Transport.emit({ type = "selection_changed", count = #selected, items = items })
+		Transport.emit({ type = "selection_changed", count = #selected, items = items, activeScript = activeScriptPath() })
 	end)
+end
+Selection.SelectionChanged:Connect(emitSelection)
+pcall(function()
+	game:GetService("StudioService"):GetPropertyChangedSignal("ActiveScript"):Connect(emitSelection)
 end)
+sessionHooks.selection = emitSelection
 
 local errorsThisSecond = 0
 local errorWindow = 0

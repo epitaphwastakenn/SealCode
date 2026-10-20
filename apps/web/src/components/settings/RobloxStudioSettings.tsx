@@ -272,6 +272,19 @@ export function RobloxStudioSettings() {
                   />
                 }
               />
+              {roblox.mode === "sealcode" ? (
+                <SettingsRow
+                  title="Studio selection as context"
+                  description="Each message tells the agent what you have selected in Studio and which script is open, so you can say “this part” or “the open script”."
+                  control={
+                    <Switch
+                      checked={roblox.studioContext}
+                      onCheckedChange={(studioContext) => update({ studioContext })}
+                      aria-label="Studio selection as context"
+                    />
+                  }
+                />
+              ) : null}
               <SettingsRow
                 title="Also connect Roblox's own MCP"
                 description={

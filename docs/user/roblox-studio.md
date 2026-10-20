@@ -1,94 +1,78 @@
 # Roblox Studio
 
-SealCode can drive Roblox Studio from any agent with [Roqer](https://github.com/S4US/Roqer)'s
-harness: its Studio bridge and plugin, its checks on every Studio call, its Roblox skill pack and
-its working instructions. Turn it on in **Settings → Connections → Roblox Studio**.
+SealCode connects agents to Roblox Studio through its own Studio plugin. Agents can read and build in
+your open place, write scripts, playtest, move the camera, take screenshots, use Creator Store assets
+and model in Blender, while you watch and control everything from a panel inside Studio.
+
+Turn it on in **Settings → Connections → Roblox Studio**.
 
 ## Start
 
-1. Choose **Roqer (full toolset)** under **Studio connection**. On Windows, SealCode turns this on
-   by itself the first time it starts on a machine with Roblox Studio installed.
-2. Fully close and reopen Roblox Studio once: SealCode installs the matching Studio plugin every
-   time it starts, and Studio only loads plugins when it opens.
-3. Open your place in Studio, then ask an agent in a Roblox project for something.
+1. Choose **SealCode** under **Studio connection**. On Windows, SealCode turns this on by itself the
+   first time it starts on a machine with Roblox Studio installed.
+2. Open your place in Studio. SealCode installs its plugin automatically; a Studio that was already
+   open loads it the next time a place opens.
+3. Ask an agent in a Roblox project for something.
 
-The status under the settings shows the bridge, the connected places, and when Studio must be
-restarted because it still runs an older plugin. **Reconnect** restarts the bridge. A bridge that
-stops on its own is restarted automatically.
+The plugin updates itself in place when SealCode updates, so you do not need to reopen Studio after
+an update. The status in Settings shows the connected places and whether the plugin is current.
+
+## The Studio panel
+
+Open it from the **SealCode** button on Studio's Plugins tab. It shows:
+
+- **Connection:** the place, the playtest peers, and buttons to disconnect or retry.
+- **Agent activity:** each action the agent takes, with its result and duration.
+- **Safety:** pause the agent, make the place read-only, or turn off running Luau.
+- **Agent tools:** every tool the agent can use, with its own switch. Search to find one quickly.
+  A tool you switch off is refused, whatever the agent asks.
+
+These switches are enforced in Studio and in SealCode.
 
 ## Which threads get it
 
-Only threads in a Roblox project get the Studio tools and Roqer's instructions, so other projects
-pay nothing for them. A Roblox project has a Rojo `*.project.json`, a place or model file, Roblox
-tooling such as `wally.toml` or `rokit.toml`, or an empty `.roqer` file in its root. Choose **All
-projects** to give them to every thread.
+Only threads in a Roblox project get the Studio tools and instructions, so other projects pay
+nothing for them. A Roblox project has a Rojo `*.project.json`, a place or model file, Roblox tooling
+such as `wally.toml` or `rokit.toml`, or an empty `.sealcode-roblox` file in its root. Choose
+**All projects** to give them to every thread.
 
-When the workspace holds a Rojo project, the agent is told about it and links the place to it with
-`manage_instance`, so script edits are saved to your files.
+## What agents can do
 
-## What the agent gets
+- Read the place: the tree, properties, scripts and the user's selection.
+- Build and edit: atomic builds that are one undo step, properties, instances, and scripts with
+  revision checks and automatic read-back.
+- Playtest: solo and multiplayer tests, code inside the running game, output logs.
+- See: move the camera, frame what they built, and take screenshots. **Screenshots appear in the
+  chat** under the action that took them.
+- Check UI: inspect and audit screens, click and type in them, and compare phones, tablets and PCs
+  with the device simulator.
+- Use the Creator Store: search free assets, check their details and thumbnail, and insert them.
+  Scripts inside inserted assets arrive disabled until the agent has reviewed them.
+- Model in Blender: run Blender jobs headless, with a topology report and a preview render, and
+  bring the model into Studio.
+- Manage Studio windows: open a place, and close older windows of it so they do not pile up.
 
-- The Studio tools (`mcp__robloxstudio__…`): inspect and edit the place, atomic builds, script
-  edits checked against the revision the agent read, playtests, runtime logs, screenshots, UI
-  inspection, Creator Store assets, animation and profiling. Every script write is read back and
-  checked, and Luau that would write a script's source is refused.
-- `load_skill` for Roqer's Roblox skills, `resolve_icon` for UI icons, `upload_assets` for several
-  uploads at once, and `get_bridge_status`.
-- Roqer's instructions, once at the start of each conversation. Turn them off with **Roqer
-  instructions and skills**; **Automatic playtests** says whether the agent playtests its changes
-  without being asked.
-
-Tool calls follow the thread's usual approval rules.
-
-## Uploads
-
-Uploading models, decals and animations needs a Roblox Open Cloud API key with the Assets API
-(write). Paste it in **Open Cloud API key**; it is kept in the server's secret store and passed
-only to the Studio bridge. **Upload as** sets the user or group that uploads publish as.
+Every tool call follows the thread's usual approval rules. Agents load SealCode's Roblox skills
+(design, building, scripting, networking, data and more) when a task needs them.
 
 ## Blender
 
-- **Blender modeling (Roqer)** lets the agent run Blender jobs in the background: it models in
-  stages, and each export is re-imported, measured and previewed for the agent before it uploads
-  the model. SealCode finds Blender in its usual install folders and Steam libraries; otherwise set
-  **Blender executable**. Each job runs a Python script with your permissions, so approve it as
-  you would any script.
-- **Blender MCP** connects an MCP server that drives your open Blender, such as MCP for Blender.
-  SealCode runs your MCP for Blender install when it finds one, otherwise `uvx blender-mcp`, or the
-  command you set.
+SealCode finds Blender in its usual install folders and Steam libraries; otherwise set **Blender
+executable**. Each Blender job runs a Python script with your permissions, so approve it as you
+would any script. Models brought in from Blender live in the current Studio session: publish them as
+assets before a saved or published place relies on them.
 
-## SealCode bridge (preview)
-
-**SealCode bridge (preview)** under **Studio connection** runs SealCode's own Studio bridge inside
-SealCode instead of Roqer. Its tools (`mcp__studio__…`) cover the game tree, search, typed
-properties, all-or-nothing builds, script edits checked against the revision the agent read and
-read back afterwards, Luau in the edit window or inside a running playtest, solo and multiplayer
-playtests, output logs, live UI inspection with an audit of layout problems, clicks and typing in a
-playtest, device simulation and side-by-side device screenshots. Agents also get the Roblox skill
-pack (roblox-brain, MIT). Assets, uploads, scatter and Blender jobs still need Roqer.
-
-- SealCode installs the **SealCode** plugin when the mode is on. Studio loads plugins when a place
-  opens, so reopen places that were already open. The first time it connects, Studio asks whether
-  the plugin may make HTTP requests: allow it.
-- The **SealCode** button on Studio's Plugins tab opens a panel with the connection, what the agent
-  is doing in that place, and switches to pause the agent, refuse changes, or refuse Luau. Studio
-  enforces them, whatever the agent asks.
-- The bridge listens on `127.0.0.1:58760`; set `SEALCODE_STUDIO_BRIDGE_PORT` before starting
-  SealCode to use another port. Choosing another mode removes the plugin again.
-- An unsaved place gets a `SealCodePlaceId` attribute on ServerStorage so SealCode recognizes it
-  across restarts.
-- **Studio selection as context** tells the agent, with each message, what you have selected in
-  Studio and which script is open, so you can say "this part" or "the open script".
-- SealCode alerts you when Studio disconnects unexpectedly or while the agent is using it, and when
-  a playtest prints an error, following your notification settings.
+**Blender MCP** connects a separate MCP server that drives your open Blender, such as MCP for
+Blender.
 
 ## Roblox's own MCP
 
-**Roblox's own Studio MCP** connects only the MCP server Roblox Studio ships, without Roqer. With
-Roqer on, **Also connect Roblox's own MCP** adds it for its mesh, texture and material generation.
+**Roblox's own Studio MCP** connects only the MCP server Roblox Studio ships. With the SealCode
+connection on, **Also connect Roblox's own MCP** adds it for its mesh, texture and material
+generation.
 
-## Other apps
+## Uploads
 
-Roqer's bridge listens on port 58741. If another app's bridge (Roqer itself, or a copy you added to
-Claude Code) already holds the port, SealCode's forwards to it; keep both at the same Roqer version,
-or Studio refuses the plugin of the other one.
+Publishing models, decals and animations needs a Roblox Open Cloud API key with the Assets API
+(write). Paste it in **Open Cloud API key**; it is kept in the server's secret store. **Upload as**
+sets the user or group that uploads publish as.

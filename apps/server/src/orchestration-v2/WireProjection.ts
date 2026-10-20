@@ -126,11 +126,13 @@ export function projectTurnItemForWire(item: OrchestrationV2TurnItem): Orchestra
     case "dynamic_tool": {
       const { output: rawOutput, ...projected } = item;
       const output = compactDynamicToolOutput(rawOutput);
+      const imageCount = toolOutputImages(rawOutput).length;
       return {
         ...projected,
         input: summarizeDynamicValue(item.input),
         ...(output === undefined ? {} : { output }),
         ...(hasDynamicValue(rawOutput) ? { outputOmitted: true } : {}),
+        ...(imageCount > 0 ? { outputImageCount: imageCount } : {}),
       };
     }
     default:

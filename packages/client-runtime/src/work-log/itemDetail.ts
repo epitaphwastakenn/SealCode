@@ -195,8 +195,13 @@ export function turnItemOutputText(item: OrchestrationV2TurnItem): string | null
 export function turnItemOutputImages(
   item: OrchestrationV2TurnItem,
 ): ReadonlyArray<Extract<AssetResource, { readonly _tag: "tool-output-image" }>> {
-  if (item.type !== "dynamic_tool" || item.outputOmitted === true) return [];
-  return toolOutputImages(item.output).map((_, index) => ({
+  if (item.type !== "dynamic_tool") return [];
+  // A wire item withholds its output but says how many images it holds.
+  const count =
+    item.outputOmitted === true
+      ? (item.outputImageCount ?? 0)
+      : toolOutputImages(item.output).length;
+  return Array.from({ length: count }, (_, index) => ({
     _tag: "tool-output-image",
     threadId: item.threadId,
     itemId: item.id,

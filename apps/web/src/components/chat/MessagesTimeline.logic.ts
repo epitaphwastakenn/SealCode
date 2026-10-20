@@ -81,7 +81,9 @@ function timelineEntryRunId(entry: TimelineEntry): RunId | null {
   if (entry.kind === "proposed-plan") {
     return entry.proposedPlan.runId;
   }
-  if (entry.kind === "html-render" || entry.kind === "mcp-app") return entry.runId;
+  if (entry.kind === "html-render" || entry.kind === "mcp-app" || entry.kind === "tool-images") {
+    return entry.runId;
+  }
   return entry.kind === "work" ? (entry.entry.runId ?? null) : null;
 }
 
@@ -614,6 +616,12 @@ type MessagesTimelineRowContent =
       htmlRender: HtmlRenderReference;
     }
   | {
+      kind: "tool-images";
+      id: string;
+      createdAt: string;
+      images: Extract<TimelineEntry, { kind: "tool-images" }>["images"];
+    }
+  | {
       kind: "mcp-app";
       id: string;
       createdAt: string;
@@ -788,6 +796,7 @@ function deriveSupersededAttemptFolds(
       (entry.kind === "message" && entry.message.role === "user") ||
       entry.kind === "html-render" ||
       entry.kind === "mcp-app" ||
+      entry.kind === "tool-images" ||
       timelineEntryIsPersistentResourceCard(entry) ||
       liveSubagentEntryIds.has(entry.id) ||
       (entry.kind === "work" && entry.entry.itemType === "system_notice")
@@ -1809,6 +1818,16 @@ export function deriveMessagesTimelineRows(input: {
       continue;
     }
 
+    if (timelineEntry.kind === "tool-images") {
+      nextRows.push({
+        kind: "tool-images",
+        id: timelineEntry.id,
+        createdAt: timelineEntry.createdAt,
+        images: timelineEntry.images,
+      });
+      continue;
+    }
+
     if (timelineEntry.kind === "html-render") {
       nextRows.push({
         kind: "html-render",
@@ -2260,6 +2279,15 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
 
     case "proposed-plan":
       return a.proposedPlan === (b as typeof a).proposedPlan;
+
+    case "tool-images": {
+      const bi = b as typeof a;
+      return (
+        a.createdAt === bi.createdAt &&
+        a.images.length === bi.images.length &&
+        a.images.every((image, index) => image.itemId === bi.images[index]?.itemId)
+      );
+    }
 
     case "html-render": {
       // Entries rebuild on any tool update; an equal page must keep its mounted frame.

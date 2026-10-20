@@ -54,7 +54,6 @@ import { resolveWorkGroupScrollAnchor } from "@t3tools/client-runtime/work-log/s
 import {
   turnItemHasDetail,
   turnItemNeedsDetailFetch,
-  turnItemOutputImages,
 } from "@t3tools/client-runtime/work-log/item-detail";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
 import {
@@ -2009,7 +2008,8 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
                 row.kind === "event" ||
                 row.kind === "attempt-fold" ||
                 row.kind === "html-render" ||
-                row.kind === "mcp-app"
+                row.kind === "mcp-app" ||
+                row.kind === "tool-images"
               ? "pb-2"
               : "pb-4",
         (row.kind === "message" && row.message.role === "assistant") ||
@@ -2057,6 +2057,7 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       ) : null}
       {row.kind === "assistant-meta" ? <AssistantMetaTimelineRow row={row} /> : null}
       {row.kind === "proposed-plan" ? <ProposedPlanTimelineRow row={row} /> : null}
+      {row.kind === "tool-images" ? <ToolImagesTimelineRow row={row} /> : null}
       {row.kind === "html-render" ? <HtmlRenderTimelineRow row={row} /> : null}
       {row.kind === "mcp-app" ? <McpAppTimelineRow row={row} /> : null}
       {row.kind === "working" ? <WorkingTimelineRow row={row} /> : null}
@@ -2950,6 +2951,28 @@ function ProposedPlanTimelineRow({
         workspaceRoot={ctx.workspaceRoot}
         findActive={ctx.findActive}
       />
+    </div>
+  );
+}
+
+/**
+ * Screenshots an agent's tool took (Studio captures, browser shots), shown in the conversation
+ * itself so the user follows what the agent sees without opening the work log.
+ */
+function ToolImagesTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "tool-images" }> }) {
+  const ctx = use(TimelineRowCtx);
+  return (
+    <div className="flex min-w-0 flex-wrap gap-2 px-1">
+      {row.images.map((resource) => (
+        <ChatMarkdownAssetImage
+          key={`${resource.itemId}:${String(resource.index)}`}
+          environmentId={ctx.activeThreadEnvironmentId}
+          resource={resource}
+          alt="Screenshot from the agent's tool"
+          maxHeightRem={row.images.length === 1 ? 20 : 12}
+          onImageExpand={ctx.onImageExpand}
+        />
+      ))}
     </div>
   );
 }
@@ -5546,9 +5569,6 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
       ? getQuestionAnswerPreview(workEntry.questionAnswer)
       : null;
   const viewedImagePath = workEntryViewedImagePath(workEntry);
-  const outputImages = workEntry.projectedItem
-    ? turnItemOutputImages(workEntry.projectedItem.item)
-    : [];
   const payload = workEntry.structuredPayload;
   const skill =
     payload?.type === "dynamic_tool"
@@ -5762,24 +5782,6 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
         </>
       }
     >
-      {outputImages.length > 0 ? (
-        // Screenshots an agent takes (Studio captures, browser shots) stay in view without
-        // expanding the row, so the user can follow what the agent sees.
-        <WorkLogDetails kind="media">
-          <div className="flex flex-wrap gap-2" onClick={stopRowToggle}>
-            {outputImages.map((resource) => (
-              <ChatMarkdownAssetImage
-                key={resource.index}
-                environmentId={ctx.activeThreadEnvironmentId}
-                resource={resource}
-                alt="Screenshot from the agent's tool"
-                maxHeightRem={outputImages.length === 1 ? 18 : 10}
-                onImageExpand={onImageExpand}
-              />
-            ))}
-          </div>
-        </WorkLogDetails>
-      ) : null}
       {expanded && viewedImage && threadRef ? (
         <WorkLogDetails kind="media">
           <ChatMarkdownAssetImage

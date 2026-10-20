@@ -23,7 +23,10 @@ import {
   formatSearchToolLabel,
 } from "@t3tools/shared/toolActivity";
 import type { HtmlRenderReference } from "@t3tools/shared/htmlRender";
-import { turnItemDetailRevision } from "@t3tools/client-runtime/work-log/item-detail";
+import {
+  turnItemDetailRevision,
+  turnItemOutputImages,
+} from "@t3tools/client-runtime/work-log/item-detail";
 import type { McpAppReference } from "@t3tools/shared/mcpApp";
 import { htmlRenderFromToolItem, mcpAppFromToolItem } from "@t3tools/shared/toolOutput";
 import {
@@ -142,6 +145,13 @@ export type TimelineEntry = (
       readonly createdAt: string;
       readonly runId: RunId | null;
       readonly htmlRender: HtmlRenderReference;
+    }
+  | {
+      readonly id: string;
+      readonly kind: "tool-images";
+      readonly createdAt: string;
+      readonly runId: RunId | null;
+      readonly images: ReturnType<typeof turnItemOutputImages>;
     }
   | {
       readonly id: string;
@@ -334,6 +344,8 @@ const PERSISTENT_RESOURCE_V2_ITEM_TYPES = new Set<OrchestrationV2TurnItem["type"
 ]);
 
 export function timelineEntryIsPersistentResourceCard(entry: TimelineEntry): boolean {
+  // Screenshots a tool took stay in view when the turn's work folds away.
+  if (entry.kind === "tool-images") return true;
   return (
     entry.kind === "event" && PERSISTENT_RESOURCE_V2_ITEM_TYPES.has(entry.projectedItem.item.type)
   );
@@ -763,6 +775,17 @@ export function deriveTimelineEntriesFromVisibleTurnItems(
       entry: projectedWorkEntry(row),
       ...attemptMetadata,
     });
+    const images = turnItemOutputImages(item);
+    if (images.length > 0 && item.status === "completed") {
+      entries.push({
+        id: `${item.id}:images`,
+        kind: "tool-images",
+        createdAt,
+        runId: item.runId,
+        images,
+        ...attemptMetadata,
+      });
+    }
   }
 
   const retainedMessageIds = new Set([...committedMessageIds, ...foldedAnswerMessageIds]);

@@ -20,30 +20,35 @@ scripting, wiring up UI, testing and checking. You review each change in a diff 
 
 ## Roblox development
 
-SealCode includes the [Roqer](https://github.com/S4US/Roqer) Roblox Studio harness, so any agent can work
-directly in your open place:
+SealCode has its own Roblox Studio plugin and connector, built for agents. Any agent can work directly in
+your open place, and you watch and steer it from a panel inside Studio:
 
-- **Live Studio tools.** Inspect and edit the place, run atomic builds, and edit scripts. Every script edit
-  is checked against the version the agent read and read back afterwards. Agents can also playtest, read
-  runtime logs, take screenshots, inspect UI, use Creator Store assets, and work with animation and
-  profiling.
-- **30 Roblox skills.** Agents load expert guidance when they need it: Luau and types, architecture,
-  networking and security, DataStores, UI design, game design, monetization, performance, lighting, audio,
-  physics, NPC AI, localization, analytics and a publish checklist.
-- **UI that fits every device.** Screens are built with Scale and constraints, text that never gets cut
-  off, and touch-sized buttons. Each screen is checked on phone, tablet, laptop, desktop and TV layouts
-  before it counts as done.
+- **Live Studio tools.** Read and edit the place, run atomic builds that are one undo step, and edit
+  scripts. Every script edit is checked against the version the agent read and read back afterwards.
+  Agents also playtest (solo and multiplayer), run code inside the running game and read the output.
+- **Agents that look at their work.** Agents move Studio's camera, frame what they built and take
+  screenshots, and every screenshot appears right in the chat, so you see what the agent sees.
+- **Creator Store assets.** Agents search free assets, check their details and thumbnails, and insert
+  them. Scripts inside arrive disabled until the agent has read them.
+- **UI that looks designed and fits every device.** A design skill for cartoon, simulator, modern,
+  sci-fi and fantasy styles, plus checks on phones, tablets, PCs and TV with Studio's device simulator.
+- **A Studio panel you control.** See every action as it happens, pause the agent, make the place
+  read-only, or switch off any single tool.
+- **Updates without restarts.** The plugin updates itself in place when SealCode updates, and agents
+  close old Studio windows instead of piling new ones up.
+- **31 Roblox skills.** Luau and types, architecture, networking and security, DataStores, UI design,
+  game design, monetization, performance, lighting, audio, physics, NPC AI, localization, analytics and
+  a publish checklist, loaded only when a task needs them.
 - **Rojo aware.** When your workspace has a Rojo project, script edits are saved to your files.
-- **Asset uploads.** Upload models, decals and animations through Open Cloud, as yourself or your group.
-- **Roblox's own Studio MCP**, alone or next to Roqer, for mesh, texture and material generation.
+- **Roblox's own Studio MCP** can run next to SealCode's for mesh, texture and material generation.
 
 Only Roblox projects get the Studio tools, so other projects don't pay for them. See
 [Roblox Studio](./docs/user/roblox-studio.md).
 
 ## 3D with Blender
 
-- **Background modeling.** Agents model in Blender in stages. Each export is re-imported, measured and
-  previewed before it is uploaded to Roblox.
+- **Background modeling.** Agents run Blender jobs headless. Each result is measured and rendered as a
+  preview, then brought into Studio.
 - **Clean topology checks.** Meshes are checked for ngons, loose geometry, flipped normals and other
   problems before export.
 - **Blender MCP.** Agents can drive your open Blender directly.
@@ -97,7 +102,7 @@ Then install and sign in to at least one agent:
 - **OpenCode:** install [OpenCode](https://opencode.ai) and run `opencode auth login`
 - **CommandCode:** install its `commandcode` CLI and sign in
 
-For Roblox, open **Settings → Connections → Roblox Studio**, choose **Roqer**, and restart Studio once.
+For Roblox, open **Settings → Connections → Roblox Studio** and choose **SealCode**. The Studio plugin installs itself.
 
 ### Run from source
 
@@ -138,6 +143,6 @@ welcome as issues.
 
 ## Credits
 
-SealCode is built on [T3 Code](https://github.com/pingdotgg/t3code) by Ping (MIT). Its Roblox harness
-is [Roqer](https://github.com/S4US/Roqer) (AGPL-3.0), which runs as a separate program. See
+SealCode is built on [T3 Code](https://github.com/pingdotgg/t3code) by Ping (MIT). Its Roblox skills
+build on [roblox-brain](https://github.com/TabooHarmony/roblox-brain) by TabooHarmony (MIT). See
 [open source licenses](./docs/user/open-source-licenses.md).

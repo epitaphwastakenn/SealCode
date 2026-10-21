@@ -534,7 +534,7 @@ export function LiveWorkEntryTimelineRow({
             <span className="line-clamp-4">
               <ChatMarkdown
                 inline
-                text={thoughtLine.slice(0, THOUGHT_PREVIEW_SOURCE_MAX_LENGTH)}
+                text={thoughtLine}
                 cwd={ctx.markdownCwd}
                 parseRawHtml={false}
                 extraRemarkPlugins={[[remarkThoughtPreview, "Thought"]]}

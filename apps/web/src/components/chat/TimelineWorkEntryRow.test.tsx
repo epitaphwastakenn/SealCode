@@ -235,6 +235,30 @@ it.each([false, true])("bounds live reasoning labels with thought row %s", (with
   expect(text.length).toBeLessThan(THOUGHT_PREVIEW_MAX_LENGTH + 30);
 });
 
+it.each([false, true])("bounds live source parsing with thought row %s", (withThought) => {
+  const entry = reasoningEntry(
+    `[Important reasoning](https://example.com/${"a".repeat(THOUGHT_PREVIEW_SOURCE_MAX_LENGTH)})`,
+  );
+  const html = renderContent(
+    <LiveWorkEntryTimelineRow
+      row={{
+        kind: "work-live",
+        id: "live-source-boundary",
+        createdAt: entry.createdAt,
+        entry,
+        groupedEntries: [entry],
+        groupId: "live-group",
+        expanded: false,
+        active: true,
+        ...(withThought ? { thought: entry } : {}),
+      }}
+    />,
+  );
+  // Beyond lookahead, an unresolved link retains the parser's literal syntax.
+  // Parsing or compacting the full source would resolve it and lose the brackets.
+  expect(html.replace(/<[^>]*>/g, "").startsWith("[Important reasoning](")).toBe(true);
+});
+
 it.each([
   ["completed", "Thought"],
   ["inProgress", "Thinking"],

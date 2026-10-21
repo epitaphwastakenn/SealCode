@@ -10,6 +10,20 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.17.1 · 2026-10-20
+
+> See a look before you apply it, and switch looks without a blank background.
+
+### Improved
+
+- **Preset previews** — Each appearance preset shows a small preview of the app with its colours, background image and effects.
+- **Instant look switching** — Switching presets keeps the current background until the new image is ready, so the app never goes blank.
+
+### Fixed
+
+- **Corners in fullscreen** — On Windows, maximized and fullscreen windows have square corners, so the desktop no longer shows through.
+- **Floating panels on Windows** — No more grey outline around the window or slivers at the panel corners.
+
 ## 2.17.0 · 2026-10-20
 
 > A complete UI library of SealCode's own, so agents build shops, wheels and menus that look finished.

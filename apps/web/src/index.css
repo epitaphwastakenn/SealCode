@@ -178,8 +178,11 @@ html[data-ui-motion="off"]
 }
 
 :root {
-  /* Settings > Appearance > Scrollbar size; medium unless data-scrollbar-size says otherwise. */
-  --app-scrollbar-width: 10px;
+  /* Thumb thickness from Settings > Appearance > Scrollbar size, plus the gap that keeps it off
+     the edge. --app-scrollbar-width is the whole lane, which scroll containers keep clear. */
+  --app-scrollbar-size: 10px;
+  --app-scrollbar-gap: 3px;
+  --app-scrollbar-width: calc(var(--app-scrollbar-size) + 2 * var(--app-scrollbar-gap));
   --appearance-contrast-base: 100%;
   --appearance-contrast-boost: 0%;
   --appearance-contrast-border-boost: 0%;
@@ -187,6 +190,12 @@ html[data-ui-motion="off"]
   /* Translucent so the thumb stays visible over glass and background images. */
   --app-scrollbar-thumb: rgb(0 0 0 / 22%);
   --app-scrollbar-thumb-hover: rgb(0 0 0 / 36%);
+  --app-scrollbar-arrow: rgb(0 0 0 / 45%);
+  /* Native scrollbar buttons only take images, so the arrow color is baked in per theme. */
+  --app-scrollbar-arrow-up: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2.5 8.5 7h-7z' fill='rgba(0,0,0,0.45)'/%3E%3C/svg%3E");
+  --app-scrollbar-arrow-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2.5 8.5 7h-7z' fill='rgba(0,0,0,0.45)' transform='rotate(180 5 5)'/%3E%3C/svg%3E");
+  --app-scrollbar-arrow-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2.5 8.5 7h-7z' fill='rgba(0,0,0,0.45)' transform='rotate(-90 5 5)'/%3E%3C/svg%3E");
+  --app-scrollbar-arrow-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2.5 8.5 7h-7z' fill='rgba(0,0,0,0.45)' transform='rotate(90 5 5)'/%3E%3C/svg%3E");
   /*
    * Compact UI geometry. Keep these values semantic so sidebar, palette,
    * tooltip, and toolbar controls cannot quietly drift apart.
@@ -237,17 +246,14 @@ html[data-ui-motion="off"]
     --appearance-contrast-target: white;
     --app-scrollbar-thumb: rgb(255 255 255 / 20%);
     --app-scrollbar-thumb-hover: rgb(255 255 255 / 32%);
+    --app-scrollbar-arrow: rgb(255 255 255 / 42%);
+    --app-scrollbar-arrow-up: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2.5 8.5 7h-7z' fill='rgba(255,255,255,0.42)'/%3E%3C/svg%3E");
+    --app-scrollbar-arrow-down: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2.5 8.5 7h-7z' fill='rgba(255,255,255,0.42)' transform='rotate(180 5 5)'/%3E%3C/svg%3E");
+    --app-scrollbar-arrow-left: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2.5 8.5 7h-7z' fill='rgba(255,255,255,0.42)' transform='rotate(-90 5 5)'/%3E%3C/svg%3E");
+    --app-scrollbar-arrow-right: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M5 2.5 8.5 7h-7z' fill='rgba(255,255,255,0.42)' transform='rotate(90 5 5)'/%3E%3C/svg%3E");
     --glass-blur: 16px;
     --glass-saturation: 1.08;
   }
-}
-
-:root[data-scrollbar-size="thin"] {
-  --app-scrollbar-width: 6px;
-}
-
-:root[data-scrollbar-size="thick"] {
-  --app-scrollbar-width: 14px;
 }
 
 .wco {
@@ -1920,13 +1926,43 @@ code {
   background: transparent;
 }
 
+/* The transparent border is the gap between the pill and the lane's edges. */
 ::-webkit-scrollbar-thumb {
-  background: var(--app-scrollbar-thumb);
+  min-height: 2rem;
+  min-width: 2rem;
+  border: var(--app-scrollbar-gap) solid transparent;
   border-radius: 999px;
+  background: var(--app-scrollbar-thumb) padding-box;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: var(--app-scrollbar-thumb-hover);
+  background: var(--app-scrollbar-thumb-hover) padding-box;
+}
+
+::-webkit-scrollbar-button:single-button {
+  display: block;
+  width: var(--app-scrollbar-width);
+  height: var(--app-scrollbar-width);
+  background-color: transparent;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: clamp(6px, var(--app-scrollbar-size), 12px);
+}
+
+::-webkit-scrollbar-button:single-button:vertical:decrement {
+  background-image: var(--app-scrollbar-arrow-up);
+}
+
+::-webkit-scrollbar-button:single-button:vertical:increment {
+  background-image: var(--app-scrollbar-arrow-down);
+}
+
+::-webkit-scrollbar-button:single-button:horizontal:decrement {
+  background-image: var(--app-scrollbar-arrow-left);
+}
+
+::-webkit-scrollbar-button:single-button:horizontal:increment {
+  background-image: var(--app-scrollbar-arrow-right);
 }
 
 /* Chat markdown rendering */

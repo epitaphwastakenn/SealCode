@@ -385,18 +385,32 @@ describe("ClientSettings chat width", () => {
 });
 
 describe("ClientSettings scrollbar size", () => {
-  it("gives existing settings the medium scrollbar", () => {
-    expect(decodeClientSettings({}).scrollbarSize).toBe("medium");
+  it("gives existing settings the default size", () => {
+    expect(decodeClientSettings({}).scrollbarSize).toBe(10);
   });
 
-  it.each(["thin", "medium", "thick"])("round-trips the %s size", (scrollbarSize) => {
+  it.each([6, 13, 20])("round-trips %spx", (scrollbarSize) => {
     const settings = decodeClientSettings({ scrollbarSize });
     expect(encodeClientSettings(settings).scrollbarSize).toBe(scrollbarSize);
     expect(decodeClientSettingsPatch({ scrollbarSize }).scrollbarSize).toBe(scrollbarSize);
   });
 
-  it("rejects unsupported sizes", () => {
-    expect(() => decodeClientSettings({ scrollbarSize: "huge" })).toThrow();
+  it.each([
+    ["thin", 6],
+    ["medium", 10],
+    ["thick", 14],
+  ] as const)("reads the 2.17.2 %s size as %spx", (legacy, px) => {
+    expect(decodeClientSettings({ scrollbarSize: legacy }).scrollbarSize).toBe(px);
+    expect(decodeClientSettingsPatch({ scrollbarSize: legacy }).scrollbarSize).toBe(px);
+    const settings = decodeClientSettings({
+      appearancePresets: [{ id: "look", name: "Look", settings: { scrollbarSize: legacy } }],
+    });
+    expect(settings.appearancePresets[0]?.settings.scrollbarSize).toBe(px);
+  });
+
+  it("rejects sizes outside the slider", () => {
+    expect(() => decodeClientSettings({ scrollbarSize: 5 })).toThrow();
+    expect(() => decodeClientSettings({ scrollbarSize: 21 })).toThrow();
     expect(() => decodeClientSettingsPatch({ scrollbarSize: "huge" })).toThrow();
   });
 });

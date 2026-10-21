@@ -33,7 +33,6 @@ import {
   DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
   DEFAULT_UNIFIED_SETTINGS,
   type ChatWidth,
-  type ScrollbarSize,
   type DiffLayout,
   type EnvironmentIdentificationMode,
   MAX_APPEARANCE_CONTRAST,
@@ -41,6 +40,7 @@ import {
   MAX_CODE_FONT_SIZE,
   MAX_GLASS_OPACITY,
   MAX_HARNESS_SOUND_VOLUME,
+  MAX_SCROLLBAR_SIZE,
   MAX_INTERFACE_FONT_SIZE,
   MAX_PANEL_ANIMATION_DURATION_MS,
   MAX_PROMPT_FONT_SIZE,
@@ -50,6 +50,7 @@ import {
   MIN_APPEARANCE_CONTRAST,
   MIN_GLASS_OPACITY,
   MIN_HARNESS_SOUND_VOLUME,
+  MIN_SCROLLBAR_SIZE,
   MIN_INTERFACE_FONT_SIZE,
   MIN_PANEL_ANIMATION_DURATION_MS,
   MIN_PROMPT_FONT_SIZE,
@@ -228,12 +229,6 @@ const CHAT_WIDTH_LABELS: Record<ChatWidth, string> = {
   comfortable: "Comfortable",
   wide: "Wide",
   full: "Full",
-};
-
-const SCROLLBAR_SIZE_LABELS: Record<ScrollbarSize, string> = {
-  thin: "Thin",
-  medium: "Medium",
-  thick: "Thick",
 };
 
 const DIFF_LAYOUT_LABELS: Record<DiffLayout, string> = {
@@ -1412,6 +1407,12 @@ export function AppearanceSettingsPanel() {
     "--settings-slider-progress": `${harnessSoundVolumeRatio * 100}%`,
     "--settings-slider-fill-offset": `${0.5 - harnessSoundVolumeRatio}rem`,
   } as CSSProperties;
+  const scrollbarSizeRatio =
+    (settings.scrollbarSize - MIN_SCROLLBAR_SIZE) / (MAX_SCROLLBAR_SIZE - MIN_SCROLLBAR_SIZE);
+  const scrollbarSizeSliderStyle = {
+    "--settings-slider-progress": `${scrollbarSizeRatio * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - scrollbarSizeRatio}rem`,
+  } as CSSProperties;
 
   return (
     <SettingsPageContainer>
@@ -1776,23 +1777,34 @@ export function AppearanceSettingsPanel() {
             ) : null
           }
           control={
-            <div className="w-full sm:w-40">
-              <Select
-                value={settings.scrollbarSize}
-                onValueChange={(value) => {
-                  if (value === "thin" || value === "medium" || value === "thick")
-                    updateSettings({ scrollbarSize: value });
-                }}
+            <div className="flex w-full items-center gap-3 sm:w-52">
+              <output
+                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+                htmlFor="scrollbar-size-slider"
               >
-                <SelectTrigger size="sm" className="w-full min-w-0" aria-label="Scrollbar size">
-                  <SelectValue>{SCROLLBAR_SIZE_LABELS[settings.scrollbarSize]}</SelectValue>
-                </SelectTrigger>
-                <SelectPopup align="end" alignItemWithTrigger={false}>
-                  <SelectItem value="thin">Thin</SelectItem>
-                  <SelectItem value="medium">Medium (default)</SelectItem>
-                  <SelectItem value="thick">Thick</SelectItem>
-                </SelectPopup>
-              </Select>
+                {settings.scrollbarSize}px
+              </output>
+              <input
+                aria-label="Scrollbar size"
+                className="settings-slider min-w-0 flex-1"
+                id="scrollbar-size-slider"
+                type="range"
+                min={MIN_SCROLLBAR_SIZE}
+                max={MAX_SCROLLBAR_SIZE}
+                step={1}
+                style={scrollbarSizeSliderStyle}
+                value={settings.scrollbarSize}
+                onChange={(event) => {
+                  const scrollbarSize = Number(event.currentTarget.value);
+                  if (
+                    Number.isInteger(scrollbarSize) &&
+                    scrollbarSize >= MIN_SCROLLBAR_SIZE &&
+                    scrollbarSize <= MAX_SCROLLBAR_SIZE
+                  ) {
+                    updateSettings({ scrollbarSize });
+                  }
+                }}
+              />
             </div>
           }
         />

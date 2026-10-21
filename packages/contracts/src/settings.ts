@@ -323,8 +323,27 @@ export const DiffColorScheme = Schema.Literals(["red-green", "blue-orange"]);
 export const ChatWidth = Schema.Literals(["comfortable", "wide", "full"]);
 export type ChatWidth = typeof ChatWidth.Type;
 
-export const ScrollbarSize = Schema.Literals(["thin", "medium", "thick"]);
+/** Scrollbar thumb thickness in px; the lane adds a small gap around it. */
+export const MIN_SCROLLBAR_SIZE = 6;
+export const MAX_SCROLLBAR_SIZE = 20;
+export const ScrollbarSize = Schema.Int.check(
+  Schema.isBetween({ minimum: MIN_SCROLLBAR_SIZE, maximum: MAX_SCROLLBAR_SIZE }),
+);
 export type ScrollbarSize = typeof ScrollbarSize.Type;
+export const DEFAULT_SCROLLBAR_SIZE: ScrollbarSize = 10;
+
+// 2.17.2 stored the size as one of three named steps.
+const LEGACY_SCROLLBAR_SIZES = { thin: 6, medium: 10, thick: 14 } as const;
+const LegacyScrollbarSize = Schema.Literals(["thin", "medium", "thick"]).pipe(
+  Schema.decodeTo(
+    ScrollbarSize,
+    SchemaTransformation.transform({
+      decode: (size): ScrollbarSize => LEGACY_SCROLLBAR_SIZES[size],
+      encode: (px) => (px <= 8 ? "thin" : px >= 12 ? "thick" : "medium"),
+    }),
+  ),
+);
+const ScrollbarSizeSetting = Schema.Union([ScrollbarSize, LegacyScrollbarSize]);
 
 export const ModelFavorite = Schema.Struct({
   provider: ProviderInstanceId,
@@ -349,7 +368,7 @@ export type ModelPreferences = {
 export const AppearancePresetSettings = Schema.Struct({
   appearanceContrast: Schema.optionalKey(AppearanceContrast),
   chatWidth: Schema.optionalKey(ChatWidth),
-  scrollbarSize: Schema.optionalKey(ScrollbarSize),
+  scrollbarSize: Schema.optionalKey(ScrollbarSizeSetting),
   diffColorScheme: Schema.optionalKey(DiffColorScheme),
   interfaceAnimationsEnabled: Schema.optionalKey(Schema.Boolean),
   panelAnimationDurationMs: Schema.optionalKey(PanelAnimationDurationMs),
@@ -411,7 +430,9 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed("red-green" as const)),
   ),
   chatWidth: ChatWidth.pipe(Schema.withDecodingDefault(Effect.succeed("comfortable" as const))),
-  scrollbarSize: ScrollbarSize.pipe(Schema.withDecodingDefault(Effect.succeed("medium" as const))),
+  scrollbarSize: ScrollbarSizeSetting.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SCROLLBAR_SIZE)),
+  ),
   loadBalancingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   loadBalancingWeights: LoadBalancingWeights.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   appearanceContrast: AppearanceContrast.pipe(
@@ -1868,7 +1889,7 @@ export const ClientSettingsPatch = Schema.Struct({
   inAppNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
   diffColorScheme: Schema.optionalKey(DiffColorScheme),
   chatWidth: Schema.optionalKey(ChatWidth),
-  scrollbarSize: Schema.optionalKey(ScrollbarSize),
+  scrollbarSize: Schema.optionalKey(ScrollbarSizeSetting),
   loadBalancingEnabled: Schema.optionalKey(Schema.Boolean),
   loadBalancingWeights: Schema.optionalKey(LoadBalancingWeights),
   appearanceContrast: Schema.optionalKey(AppearanceContrast),

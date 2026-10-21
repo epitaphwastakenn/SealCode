@@ -292,7 +292,7 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "scrollbar-size",
     title: "Scrollbar size",
     to: "/settings/appearance",
-    searchTerms: ["scrollbar scroll bar thick thin wide touchpad trackpad drag"],
+    searchTerms: ["scrollbar scroll bar thickness width wide touchpad trackpad drag arrows"],
   },
   {
     id: "interface-animations",

@@ -295,7 +295,7 @@ function ContrastAppearanceSync() {
 
   const scrollbarSize = useClientSettings((settings) => settings.scrollbarSize);
   useEffect(() => {
-    document.documentElement.dataset.scrollbarSize = scrollbarSize;
+    document.documentElement.style.setProperty("--app-scrollbar-size", `${scrollbarSize}px`);
   }, [scrollbarSize]);
 
   useEffect(() => {

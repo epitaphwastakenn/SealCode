@@ -75,11 +75,8 @@ function getRowBottom(state: TimelineListMeasurementState, index: number): numbe
 
 /**
  * The list's own content length includes the composer inset spacer, so this
- * measures from the last row instead. Rows appended during a turn have no
- * position until LegendList lays them out, so the measurement falls back to
- * the last positioned row: content that already overflowed cannot stop
- * overflowing because more arrived. A wholly unmeasured list or viewport
- * counts as fitting.
+ * measures from the last row instead. Unknown row positions or an unmeasured
+ * viewport counts as fitting.
  */
 export function timelineContentOverflowsViewport(
   state: TimelineListMeasurementState | undefined,
@@ -92,17 +89,17 @@ export function timelineContentOverflowsViewport(
   if (typeof scrollLength !== "number" || !Number.isFinite(scrollLength) || scrollLength <= 0) {
     return false;
   }
-  const visibleScrollLength = Math.max(0, scrollLength - input.composerInset - input.anchorOffset);
-  for (let index = state.data.length - 1; index >= 0; index -= 1) {
-    const top = state.positionAtIndex(index);
-    if (typeof top !== "number" || !Number.isFinite(top)) {
-      continue;
-    }
-    // A positioned row without a size still proves at least a pixel of content.
-    const bottom = getRowBottom(state, index) ?? top + 1;
-    return bottom > visibleScrollLength;
+  const lastIndex = state.data.length - 1;
+  // Overflow can use an unmeasured tail's lower bound; anchored-turn metrics need its height.
+  const lastTop = state.positionAtIndex(lastIndex);
+  const lastBottom =
+    getRowBottom(state, lastIndex) ??
+    (typeof lastTop === "number" && Number.isFinite(lastTop) ? lastTop + 1 : null);
+  if (lastBottom === null) {
+    return false;
   }
-  return false;
+  const visibleScrollLength = Math.max(0, scrollLength - input.composerInset - input.anchorOffset);
+  return lastBottom > visibleScrollLength;
 }
 
 export function getAnchoredTurnMetrics({

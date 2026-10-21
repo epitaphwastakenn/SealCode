@@ -10,6 +10,19 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.17.3 · 2026-10-21
+
+> Scrollbars sized the way you like, with room to breathe.
+
+### Improved
+
+- **Scrollbar size slider** — Set the scrollbar width anywhere from 6 to 20 px in Settings → Appearance. Your earlier Thin, Medium or Thick choice carries over.
+- **Easier-to-use scrollbars** — The thumb is a rounded pill set in from the window edge, with arrows at both ends.
+
+### Fixed
+
+- **Scrollbars covering content** — Wide scrollbars no longer sit on top of items along the right edge.
+
 ## 2.17.2 · 2026-10-21
 
 > Scrollbars you can actually grab on a touchpad.

@@ -293,6 +293,11 @@ function ContrastAppearanceSync() {
     document.documentElement.dataset.chatWidth = chatWidth;
   }, [chatWidth]);
 
+  const scrollbarSize = useClientSettings((settings) => settings.scrollbarSize);
+  useEffect(() => {
+    document.documentElement.dataset.scrollbarSize = scrollbarSize;
+  }, [scrollbarSize]);
+
   useEffect(() => {
     applyAppearanceContrast(document.documentElement, appearanceContrast);
   }, [appearanceContrast]);

@@ -178,13 +178,15 @@ html[data-ui-motion="off"]
 }
 
 :root {
-  --app-scrollbar-width: 6px;
+  /* Settings > Appearance > Scrollbar size; medium unless data-scrollbar-size says otherwise. */
+  --app-scrollbar-width: 10px;
   --appearance-contrast-base: 100%;
   --appearance-contrast-boost: 0%;
   --appearance-contrast-border-boost: 0%;
   --appearance-contrast-target: black;
-  --app-scrollbar-thumb: rgb(217 217 217);
-  --app-scrollbar-thumb-hover: rgb(191 191 191);
+  /* Translucent so the thumb stays visible over glass and background images. */
+  --app-scrollbar-thumb: rgb(0 0 0 / 22%);
+  --app-scrollbar-thumb-hover: rgb(0 0 0 / 36%);
   /*
    * Compact UI geometry. Keep these values semantic so sidebar, palette,
    * tooltip, and toolbar controls cannot quietly drift apart.
@@ -233,11 +235,19 @@ html[data-ui-motion="off"]
 
   @variant dark {
     --appearance-contrast-target: white;
-    --app-scrollbar-thumb: rgb(255 255 255 / 8%);
-    --app-scrollbar-thumb-hover: rgb(255 255 255 / 12%);
+    --app-scrollbar-thumb: rgb(255 255 255 / 20%);
+    --app-scrollbar-thumb-hover: rgb(255 255 255 / 32%);
     --glass-blur: 16px;
     --glass-saturation: 1.08;
   }
+}
+
+:root[data-scrollbar-size="thin"] {
+  --app-scrollbar-width: 6px;
+}
+
+:root[data-scrollbar-size="thick"] {
+  --app-scrollbar-width: 14px;
 }
 
 .wco {
@@ -1902,15 +1912,17 @@ code {
 /* Scrollbar styling */
 ::-webkit-scrollbar {
   width: var(--app-scrollbar-width);
+  height: var(--app-scrollbar-width);
 }
 
-::-webkit-scrollbar-track {
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
   background: transparent;
 }
 
 ::-webkit-scrollbar-thumb {
   background: var(--app-scrollbar-thumb);
-  border-radius: 3px;
+  border-radius: 999px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -2136,23 +2148,12 @@ code {
   border-radius: 0.75rem;
   background: var(--muted);
   padding: 0.8rem 0.9rem;
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--contrast-border) 78%, transparent) transparent;
 }
 
 .chat-markdown pre code {
   border: none;
   background: transparent;
   padding: 0;
-}
-
-.chat-markdown pre::-webkit-scrollbar {
-  height: 7px;
-}
-
-.chat-markdown pre::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--contrast-border) 78%, transparent);
 }
 
 :is(.chat-markdown, .composer-tiptap) .chat-markdown-codeblock-header {

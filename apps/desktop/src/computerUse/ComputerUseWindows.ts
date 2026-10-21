@@ -97,9 +97,9 @@ export class ComputerUseOverlay {
         `<div class="card" style="display:flex;align-items:center;gap:10px;padding:0 10px 0 14px">
           <span class="dot"></span>
           <div style="flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
-            ${escapeHtml(agentName)} está usando o computador
+            ${escapeHtml(agentName)} is using your computer
           </div>
-          <button id="stop">Parar <span class="muted">Esc</span></button>
+          <button id="stop">Stop <span class="muted">Esc</span></button>
         </div>`,
         `window.__stop = new Promise((resolve) => document.getElementById("stop").onclick = () => resolve(true));`,
       ),
@@ -151,9 +151,9 @@ export class ComputerUseOverlay {
 }
 
 const TIER_LABELS: Readonly<Record<ComputerUseGrant["tier"], string>> = {
-  full: "Acesso total",
-  click: "Só cliques (terminal/IDE)",
-  read: "Só leitura (navegador)",
+  full: "Full access",
+  click: "Clicks only (terminal/IDE)",
+  read: "View only (browser)",
 };
 
 /** Asks the person at this computer; resolves false when they deny or close the dialog. */
@@ -178,7 +178,7 @@ export async function askForComputerAccess(input: {
     show: false,
     skipTaskbar: false,
     transparent: true,
-    title: "Permitir uso do computador",
+    title: "Allow computer use",
     webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   window.setContentProtection(true);
@@ -195,12 +195,12 @@ export async function askForComputerAccess(input: {
     await window.loadURL(
       page(
         `<div class="card" style="--line:${palette().border};display:flex;flex-direction:column;gap:12px;padding:18px">
-          <div style="font-size:15px;font-weight:600">${escapeHtml(input.agentName)} quer usar estes aplicativos</div>
+          <div style="font-size:15px;font-weight:600">${escapeHtml(input.agentName)} wants to use these apps</div>
           ${input.reason ? `<div class="muted">${escapeHtml(input.reason)}</div>` : ""}
           <ul style="list-style:none;padding:0;flex:1;overflow:auto">${rows}</ul>
-          <div class="muted" style="font-size:12px">A janela do SealCode vira um mini-painel enquanto o agente trabalha. Esc interrompe.</div>
+          <div class="muted" style="font-size:12px">SealCode shrinks to a small panel while the agent works. Press Esc to stop it.</div>
           <div style="display:flex;justify-content:flex-end;gap:8px">
-            <button id="deny">Negar</button><button id="allow" class="primary">Permitir</button>
+            <button id="deny">Deny</button><button id="allow" class="primary">Allow</button>
           </div>
         </div>`,
         `window.__decision = new Promise((resolve) => {

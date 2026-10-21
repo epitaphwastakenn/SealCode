@@ -289,6 +289,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["wide full width column layout messages composer monitor"],
   },
   {
+    id: "scrollbar-size",
+    title: "Scrollbar size",
+    to: "/settings/appearance",
+    searchTerms: ["scrollbar scroll bar thick thin wide touchpad trackpad drag"],
+  },
+  {
     id: "interface-animations",
     title: "Interface animations",
     to: "/settings/appearance",
@@ -1070,11 +1076,9 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "computer-use",
-    title: "Uso do computador",
+    title: "Computer use",
     to: "/settings/connections",
-    searchTerms: [
-      "computer use mouse keyboard screen screenshot overlay desktop apps paint uso do computador tela",
-    ],
+    searchTerms: ["computer use mouse keyboard screen screenshot overlay desktop apps paint"],
     desktopOnly: true,
     windowsOnly: true,
     localBackendManagementOnly: true,

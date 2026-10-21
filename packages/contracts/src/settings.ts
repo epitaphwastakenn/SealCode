@@ -323,6 +323,9 @@ export const DiffColorScheme = Schema.Literals(["red-green", "blue-orange"]);
 export const ChatWidth = Schema.Literals(["comfortable", "wide", "full"]);
 export type ChatWidth = typeof ChatWidth.Type;
 
+export const ScrollbarSize = Schema.Literals(["thin", "medium", "thick"]);
+export type ScrollbarSize = typeof ScrollbarSize.Type;
+
 export const ModelFavorite = Schema.Struct({
   provider: ProviderInstanceId,
   model: TrimmedNonEmptyString,
@@ -346,6 +349,7 @@ export type ModelPreferences = {
 export const AppearancePresetSettings = Schema.Struct({
   appearanceContrast: Schema.optionalKey(AppearanceContrast),
   chatWidth: Schema.optionalKey(ChatWidth),
+  scrollbarSize: Schema.optionalKey(ScrollbarSize),
   diffColorScheme: Schema.optionalKey(DiffColorScheme),
   interfaceAnimationsEnabled: Schema.optionalKey(Schema.Boolean),
   panelAnimationDurationMs: Schema.optionalKey(PanelAnimationDurationMs),
@@ -407,6 +411,7 @@ export const ClientSettingsSchema = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed("red-green" as const)),
   ),
   chatWidth: ChatWidth.pipe(Schema.withDecodingDefault(Effect.succeed("comfortable" as const))),
+  scrollbarSize: ScrollbarSize.pipe(Schema.withDecodingDefault(Effect.succeed("medium" as const))),
   loadBalancingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   loadBalancingWeights: LoadBalancingWeights.pipe(Schema.withDecodingDefault(Effect.succeed({}))),
   appearanceContrast: AppearanceContrast.pipe(
@@ -1863,6 +1868,7 @@ export const ClientSettingsPatch = Schema.Struct({
   inAppNotificationsEnabled: Schema.optionalKey(Schema.Boolean),
   diffColorScheme: Schema.optionalKey(DiffColorScheme),
   chatWidth: Schema.optionalKey(ChatWidth),
+  scrollbarSize: Schema.optionalKey(ScrollbarSize),
   loadBalancingEnabled: Schema.optionalKey(Schema.Boolean),
   loadBalancingWeights: Schema.optionalKey(LoadBalancingWeights),
   appearanceContrast: Schema.optionalKey(AppearanceContrast),

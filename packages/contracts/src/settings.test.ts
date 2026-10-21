@@ -384,6 +384,23 @@ describe("ClientSettings chat width", () => {
   });
 });
 
+describe("ClientSettings scrollbar size", () => {
+  it("gives existing settings the medium scrollbar", () => {
+    expect(decodeClientSettings({}).scrollbarSize).toBe("medium");
+  });
+
+  it.each(["thin", "medium", "thick"])("round-trips the %s size", (scrollbarSize) => {
+    const settings = decodeClientSettings({ scrollbarSize });
+    expect(encodeClientSettings(settings).scrollbarSize).toBe(scrollbarSize);
+    expect(decodeClientSettingsPatch({ scrollbarSize }).scrollbarSize).toBe(scrollbarSize);
+  });
+
+  it("rejects unsupported sizes", () => {
+    expect(() => decodeClientSettings({ scrollbarSize: "huge" })).toThrow();
+    expect(() => decodeClientSettingsPatch({ scrollbarSize: "huge" })).toThrow();
+  });
+});
+
 describe("ClientSettings load balancing", () => {
   it("requires opt-in when settings are new or omit load balancing", () => {
     expect(decodeClientSettings({}).loadBalancingEnabled).toBe(false);

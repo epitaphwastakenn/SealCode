@@ -455,7 +455,7 @@ export const make = Effect.gen(function* () {
   };
 
   const invoke = (command: Extract<ComputerUseCommandType, { type: "invoke" }>) => {
-    const agentName = command.agentName?.trim() || "O agente";
+    const agentName = command.agentName?.trim() || "The agent";
     perform(command.threadId, agentName, command.action).then(
       (result) => emit({ type: "result", requestId: command.requestId, ok: true, result }),
       (error: unknown) =>

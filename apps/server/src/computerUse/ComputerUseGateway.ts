@@ -32,7 +32,7 @@ const agentNameFor = (providerInstanceId: string) =>
     ? "Claude"
     : /codex/iu.test(providerInstanceId)
       ? "Codex"
-      : "O agente";
+      : "The agent";
 
 const forbidden = HttpServerResponse.jsonUnsafe(
   {

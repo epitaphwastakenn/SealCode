@@ -33,6 +33,7 @@ import {
   DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
   DEFAULT_UNIFIED_SETTINGS,
   type ChatWidth,
+  type ScrollbarSize,
   type DiffLayout,
   type EnvironmentIdentificationMode,
   MAX_APPEARANCE_CONTRAST,
@@ -227,6 +228,12 @@ const CHAT_WIDTH_LABELS: Record<ChatWidth, string> = {
   comfortable: "Comfortable",
   wide: "Wide",
   full: "Full",
+};
+
+const SCROLLBAR_SIZE_LABELS: Record<ScrollbarSize, string> = {
+  thin: "Thin",
+  medium: "Medium",
+  thick: "Thick",
 };
 
 const DIFF_LAYOUT_LABELS: Record<DiffLayout, string> = {
@@ -811,6 +818,9 @@ export function useSettingsRestore(onRestored?: () => void) {
       ? ["Diff colors"]
       : []),
     ...(settings.chatWidth !== DEFAULT_UNIFIED_SETTINGS.chatWidth ? ["Chat width"] : []),
+    ...(settings.scrollbarSize !== DEFAULT_UNIFIED_SETTINGS.scrollbarSize
+      ? ["Scrollbar size"]
+      : []),
     ...(settings.panelAnimationDurationMs !== DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs
       ? ["Panel animations"]
       : []),
@@ -996,6 +1006,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       appearanceContrast: DEFAULT_UNIFIED_SETTINGS.appearanceContrast,
       diffColorScheme: DEFAULT_UNIFIED_SETTINGS.diffColorScheme,
       chatWidth: DEFAULT_UNIFIED_SETTINGS.chatWidth,
+      scrollbarSize: DEFAULT_UNIFIED_SETTINGS.scrollbarSize,
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
       harnessSoundVolume: DEFAULT_UNIFIED_SETTINGS.harnessSoundVolume,
@@ -1745,6 +1756,41 @@ export function AppearanceSettingsPanel() {
                   <SelectItem value="comfortable">Comfortable (default)</SelectItem>
                   <SelectItem value="wide">Wide</SelectItem>
                   <SelectItem value="full">Full</SelectItem>
+                </SelectPopup>
+              </Select>
+            </div>
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("scrollbar-size")}
+          description="Make scrollbars wider so they are easier to grab and drag, especially with a touchpad."
+          resetAction={
+            settings.scrollbarSize !== DEFAULT_UNIFIED_SETTINGS.scrollbarSize ? (
+              <SettingResetButton
+                label="scrollbar size"
+                onClick={() =>
+                  updateSettings({ scrollbarSize: DEFAULT_UNIFIED_SETTINGS.scrollbarSize })
+                }
+              />
+            ) : null
+          }
+          control={
+            <div className="w-full sm:w-40">
+              <Select
+                value={settings.scrollbarSize}
+                onValueChange={(value) => {
+                  if (value === "thin" || value === "medium" || value === "thick")
+                    updateSettings({ scrollbarSize: value });
+                }}
+              >
+                <SelectTrigger size="sm" className="w-full min-w-0" aria-label="Scrollbar size">
+                  <SelectValue>{SCROLLBAR_SIZE_LABELS[settings.scrollbarSize]}</SelectValue>
+                </SelectTrigger>
+                <SelectPopup align="end" alignItemWithTrigger={false}>
+                  <SelectItem value="thin">Thin</SelectItem>
+                  <SelectItem value="medium">Medium (default)</SelectItem>
+                  <SelectItem value="thick">Thick</SelectItem>
                 </SelectPopup>
               </Select>
             </div>

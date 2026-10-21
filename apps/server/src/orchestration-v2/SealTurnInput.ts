@@ -12,8 +12,7 @@ import { studioSelectionContext } from "../studioBridge/instructions.ts";
 import * as StudioBridge from "../studioBridge/StudioBridge.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 
-export const IMAGE_VIEWER_HINT =
-  "Selecione um modelo visualizador para dar capacidades de visão à este modelo.";
+export const IMAGE_VIEWER_HINT = "Choose an image viewer model to give this model vision.";
 
 export class SealTurnInputError extends Schema.TaggedError<SealTurnInputError>()(
   "SealTurnInputError",

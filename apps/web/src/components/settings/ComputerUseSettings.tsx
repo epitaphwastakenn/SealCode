@@ -16,31 +16,31 @@ export function ComputerUseSettings() {
   return (
     <SettingsSection {...searchableSetting("computer-use")}>
       <p className="px-3 text-xs leading-relaxed text-muted-foreground sm:px-4">
-        Deixa os agentes verem a tela e usarem mouse e teclado neste computador. Cada aplicativo
-        pede sua permissão; navegadores ficam só leitura e terminais e IDEs só aceitam cliques.
-        Enquanto o agente trabalha, o SealCode vira um mini-painel no canto da tela, e Esc
-        interrompe. Vale para sessões novas dos agentes.
+        Let agents see the screen and use the mouse and keyboard on this computer. Each app asks for
+        your permission first; browsers stay view only, and terminals and IDEs only take clicks.
+        While the agent works, SealCode shrinks to a small panel in the corner of the screen, and
+        Esc stops it. Applies to new agent sessions.
       </p>
       <SettingsRow
-        title="Uso do computador"
-        description="Oferece as ferramentas de computer use às threads do Claude."
+        title="Computer use"
+        description="Offer the computer use tools to Claude threads."
         control={
           <Switch
             checked={computerUse.enabled}
             onCheckedChange={(enabled) => update({ enabled })}
-            aria-label="Uso do computador"
+            aria-label="Computer use"
           />
         }
       />
       <SettingsRow
-        title="Reexibir aplicativos quando o agente terminar"
-        description="Restaura as janelas minimizadas para tirar apps não permitidos do caminho do agente."
+        title="Restore apps when the agent finishes"
+        description="Bring back the windows that were minimized to keep apps the agent wasn't allowed to use out of its way."
         control={
           <Switch
             checked={computerUse.restoreHiddenApps}
             disabled={!computerUse.enabled}
             onCheckedChange={(restoreHiddenApps) => update({ restoreHiddenApps })}
-            aria-label="Reexibir aplicativos quando o agente terminar"
+            aria-label="Restore apps when the agent finishes"
           />
         }
       />

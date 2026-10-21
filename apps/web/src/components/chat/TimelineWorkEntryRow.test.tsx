@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { expect, it, vi } from "vite-plus/test";
 
 import { ReasoningTraceContent, SimpleWorkEntryRow } from "./TimelineWorkEntryRow";
+import { LiveWorkEntryTimelineRow } from "./TimelineWorkGroupRows";
 import ChatMarkdown from "../ChatMarkdown";
 import {
   remarkThoughtPreview,
@@ -208,6 +209,30 @@ it("renders full reasoning when the row is expanded", () => {
   );
   expect(html.match(/<strong>fragment<\/strong>/g)).toHaveLength(10_000);
   expect(html.replace(/<[^>]*>/g, "")).toContain("Final reasoning conclusion.");
+});
+
+it.each([false, true])("bounds live reasoning labels with thought row %s", (withThought) => {
+  const detail = `Opening reasoning ${"fragment ".repeat(21_000)} Final conclusion.`;
+  const entry = reasoningEntry(detail);
+  const html = renderContent(
+    <LiveWorkEntryTimelineRow
+      row={{
+        kind: "work-live",
+        id: "live-reasoning",
+        createdAt: entry.createdAt,
+        entry,
+        groupedEntries: [entry],
+        groupId: "live-group",
+        expanded: false,
+        active: true,
+        ...(withThought ? { thought: entry } : {}),
+      }}
+    />,
+  );
+  const text = html.replace(/<[^>]*>/g, "");
+  expect(text).toContain("Opening reasoning fragment");
+  expect(text).not.toContain("Final conclusion.");
+  expect(text.length).toBeLessThan(THOUGHT_PREVIEW_MAX_LENGTH + 30);
 });
 
 it.each([

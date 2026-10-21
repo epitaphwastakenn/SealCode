@@ -1,10 +1,26 @@
 import { EnvironmentId } from "@t3tools/contracts";
 import { createRef, type ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { expect, it } from "vite-plus/test";
+import { expect, it, vi } from "vite-plus/test";
 
 import { ReasoningTraceContent, SimpleWorkEntryRow } from "./TimelineWorkEntryRow";
+import ChatMarkdown from "../ChatMarkdown";
+import {
+  remarkThoughtPreview,
+  THOUGHT_PREVIEW_MAX_LENGTH,
+  THOUGHT_PREVIEW_SOURCE_MAX_LENGTH,
+} from "./TimelineWorkEntryRow.logic";
 import { TimelineRowActivityCtx, TimelineRowCtx, WorkGroupViewCtx } from "./timelineRowContext";
+
+vi.mock(import("../../hooks/useSettings"), async (original) => {
+  const actual = await original();
+  type Settings = ReturnType<typeof actual.getClientSettings>;
+  function useClientSettings<T = Settings>(select?: (settings: Settings) => T): T {
+    const settings = { ...actual.getClientSettings(), mathRenderingEnabled: true };
+    return select ? select(settings) : (settings as T);
+  }
+  return { ...actual, useClientSettings };
+});
 
 function renderContent(content: ReactNode) {
   return renderToStaticMarkup(
@@ -75,6 +91,12 @@ it("renders the entire expanded reasoning trace, including content beyond the pr
   expect(html).toContain("Final reasoning conclusion.");
 });
 
+function renderedLabel(html: string) {
+  return html
+    .replace(/<span\b[^>]*data-slot="tooltip-trigger"[^>]*>[\s\S]*?<\/span>/g, "")
+    .replace(/<[^>]*>/g, "");
+}
+
 function reasoningEntry(detail: string) {
   return {
     id: "reasoning-full-trace",
@@ -97,6 +119,78 @@ it("renders a compact reasoning row from a bounded prefix of a huge trace", () =
   const visibleText = html.replace(/<[^>]*>/g, "");
   expect(visibleText).not.toContain("Final reasoning conclusion.");
   expect(visibleText.length).toBeLessThan(3_000);
+});
+
+// These constructs cross the former source cap, but close within bounded lookahead.
+// Compare actual row output with the parser's full-source flattened label.
+it.each([3_000, THOUGHT_PREVIEW_SOURCE_MAX_LENGTH - 200])(
+  "keeps the leading rendered text of inline constructs with %i source characters",
+  (length) => {
+    const words = "word ".repeat(Math.ceil(length / 5));
+    for (const [detail, opening] of [
+      [
+        `[Important reasoning](https://example.com/${"a".repeat(length)}) then continue`,
+        "Important reasoning then continue",
+      ],
+      [`**Important reasoning ${words}end**`, "Important reasoning word "],
+      [`*Important reasoning ${words}end*`, "Important reasoning word "],
+      [`\`Important reasoning ${words}end\``, "Important reasoning word "],
+      [
+        `[Important reasoning][ref]\n\n${words}\n\n[ref]: /destination`,
+        "Important reasoning word ",
+      ],
+    ] as const) {
+      const html = renderContent(
+        <SimpleWorkEntryRow workEntry={reasoningEntry(detail)} workspaceRoot={undefined} />,
+      );
+      const expected = renderContent(
+        <ChatMarkdown
+          cwd={undefined}
+          inline
+          text={detail}
+          extraRemarkPlugins={[[remarkThoughtPreview, "Thought"]]}
+        />,
+      );
+      const text = renderedLabel(html);
+      expect(text).toBe(renderedLabel(expected));
+      expect(text.startsWith(opening)).toBe(true);
+      expect(text.length).toBeLessThanOrEqual(THOUGHT_PREVIEW_MAX_LENGTH);
+    }
+  },
+);
+
+it("keeps parser-owned math when its closing delimiter needs source lookahead", () => {
+  const detail = `$x${" + x".repeat(1_000)}$ then continue`;
+  const html = renderContent(
+    <SimpleWorkEntryRow workEntry={reasoningEntry(detail)} workspaceRoot={undefined} />,
+  );
+  const expected = renderContent(
+    <ChatMarkdown
+      cwd={undefined}
+      inline
+      text={detail}
+      extraRemarkPlugins={[[remarkThoughtPreview, "Thought"]]}
+    />,
+  );
+  expect(html).toContain(expected);
+  // SSR uses the formula's visible fallback until the lazy math renderer loads.
+  expect(renderedLabel(html).startsWith("\\(x + x")).toBe(true);
+  expect(renderedLabel(html)).toBe(renderedLabel(expected));
+  expect(html).toContain('data-markdown-math="inline"');
+});
+
+it("does not read a closing delimiter or visible tail beyond source lookahead", () => {
+  const detail = `**Important reasoning ${"word ".repeat(4_000)}end**\n\nHidden tail.`;
+  const html = renderContent(
+    <SimpleWorkEntryRow workEntry={reasoningEntry(detail)} workspaceRoot={undefined} />,
+  );
+  // Beyond lookahead we preserve the parser's literal interpretation rather than
+  // guessing whether authored punctuation is an unfinished formatting delimiter.
+  const text = renderedLabel(html);
+  expect(text.startsWith("**Important reasoning word ")).toBe(true);
+  expect(text.length).toBeLessThanOrEqual(THOUGHT_PREVIEW_MAX_LENGTH);
+  expect(text).not.toContain("end");
+  expect(text).not.toContain("Hidden tail.");
 });
 
 it("renders full reasoning when the row is expanded", () => {

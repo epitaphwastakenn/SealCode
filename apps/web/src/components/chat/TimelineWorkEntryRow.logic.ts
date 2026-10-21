@@ -188,7 +188,11 @@ export function workEntryIconName(workEntry: TimelineWorkEntry): WorkEntryIconNa
   return workToneIcon(workEntry.tone).iconName;
 }
 
-export const THOUGHT_PREVIEW_MAX_LENGTH = 2_048;
+// Look past the visible label so long destinations and inline delimiters can close.
+// This is bounded lookahead, not document-wide Markdown parity: a closing delimiter
+// or reference definition beyond this prefix remains unresolved by the parser.
+export const THOUGHT_PREVIEW_SOURCE_MAX_LENGTH = 8_192;
+export const THOUGHT_PREVIEW_MAX_LENGTH = 512;
 
 /** Compact reasoning keeps formulas while flattening other Markdown into label text. */
 export function remarkThoughtPreview(fallback: string) {

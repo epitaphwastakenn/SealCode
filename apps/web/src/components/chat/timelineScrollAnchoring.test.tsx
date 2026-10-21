@@ -1,6 +1,10 @@
 import { MessageId, RunId } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
-import { observeTimelineRun, getAnchoredTurnMetrics } from "./timelineScrollAnchoring";
+import {
+  observeTimelineRun,
+  getAnchoredTurnMetrics,
+  timelineContentOverflowsViewport,
+} from "./timelineScrollAnchoring";
 
 function buildState({
   positions,
@@ -8,8 +12,8 @@ function buildState({
   scroll = 0,
   scrollLength = 700,
 }: {
-  readonly positions: readonly number[];
-  readonly sizes: readonly number[];
+  readonly positions: readonly (number | undefined)[];
+  readonly sizes: readonly (number | undefined)[];
   readonly scroll?: number;
   readonly scrollLength?: number;
 }) {
@@ -23,6 +27,27 @@ function buildState({
 }
 
 describe("timeline scroll anchoring", () => {
+  it("keeps overflowing prose scrollable while an appended tool row is unmeasured", () => {
+    const viewport = { composerInset: 180, anchorOffset: 24 };
+    const prose = buildState({
+      positions: [0, 160],
+      sizes: [120, 8400],
+      scroll: 2147,
+      scrollLength: 748,
+    });
+    expect(timelineContentOverflowsViewport(prose, viewport)).toBe(true);
+
+    // A new row can arrive before LegendList has laid it out. The measured
+    // prose still proves overflow, so upward navigation must remain possible.
+    const toolStarted = buildState({
+      positions: [0, 160, undefined],
+      sizes: [120, 8400, undefined],
+      scroll: 2147,
+      scrollLength: 748,
+    });
+    expect(timelineContentOverflowsViewport(toolStarted, viewport)).toBe(true);
+  });
+
   it("targets the real row end instead of any temporary reserved tail", () => {
     const state = buildState({
       positions: [0, 1720, 1880],

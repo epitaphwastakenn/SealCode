@@ -10,6 +10,18 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.17.2 · 2026-10-21
+
+> Scrollbars you can actually grab on a touchpad.
+
+### Improved
+
+- **Wider scrollbars** — Scrollbars are wider by default and easier to drag on a touchpad. Pick Thin, Medium or Thick in Settings → Appearance; presets save your choice.
+
+### Fixed
+
+- **Computer use in English** — The computer use settings and messages, and a hint in the image viewer, were in Portuguese. They are in English now, like the rest of the app.
+
 ## 2.17.1 · 2026-10-20
 
 > See a look before you apply it, and switch looks without a blank background.

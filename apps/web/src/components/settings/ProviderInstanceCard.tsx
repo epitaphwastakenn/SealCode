@@ -1319,12 +1319,11 @@ export function ProviderInstanceCard({
       ) : null}
 
       {driverOption !== undefined ? (
-        <SettingsSection title="Models">
+        <SettingsSection
+          title="Models"
+          description="Model preferences and custom models are saved on the selected environment and shared across connected devices."
+        >
           <div className="px-3 py-3 sm:px-4">
-            <p className="mb-3 text-xs text-muted-foreground">
-              Model preferences and custom models are saved on the selected environment and shared
-              across connected devices.
-            </p>
             <ProviderModelsSection
               canManageCustomModels={!readOnly}
               canWritePreferences={canWriteSettings}

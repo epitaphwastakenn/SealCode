@@ -49,6 +49,11 @@ export type ThemeDefinition = SharedThemeDefinition &
   Readonly<{
     /** Blends the theme canvas toward its accent across the workspace. */
     gradient?: boolean;
+    /**
+     * -1 (darker) to 1 (lighter), applied over the saved colors when painting.
+     * The colors themselves are never rewritten, so 0 restores the theme exactly.
+     */
+    brightness?: number;
   }>;
 export type ThemeFile = Readonly<{
   version: typeof THEME_FILE_VERSION;
@@ -60,6 +65,7 @@ export type ThemeFile = Readonly<{
   collection?: ThemeCollection;
   managed?: boolean;
   gradient?: boolean;
+  brightness?: number;
 }>;
 
 /**
@@ -119,6 +125,18 @@ function isThemeId(value: unknown): value is string {
 
 function isThemeLabel(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0 && value.trim().length <= 48;
+}
+
+/** Lenient: anything that is not a usable nonzero number means "unchanged". */
+export function parseThemeBrightness(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
+  const rounded = Math.round(Math.min(1, Math.max(-1, value)) * 100) / 100;
+  return rounded === 0 ? undefined : rounded;
+}
+
+function brightnessField(value: unknown): { brightness?: number } {
+  const brightness = parseThemeBrightness(value);
+  return brightness === undefined ? {} : { brightness };
 }
 
 function parseThemeCollection(value: unknown): ThemeCollection | undefined {
@@ -187,6 +205,7 @@ function parseStoredTheme(value: unknown): ThemeDefinition | null {
     ...(collection ? { collection } : {}),
     ...(value.managed === true ? { managed: true } : {}),
     ...(value.gradient === true ? { gradient: true } : {}),
+    ...brightnessField(value.brightness),
   };
 }
 
@@ -1063,12 +1082,152 @@ export function singleAppearanceOf(theme: ThemeDefinition): ThemeAppearance | nu
   return modes.length === 1 ? modes[0]! : null;
 }
 
+// Each foreground is held to the contrast it had before the shift (capped at
+// AA), so text follows its surface instead of sinking into it.
+const BRIGHTNESS_FOREGROUND_PAIRS: ReadonlyArray<readonly [ThemeColorRole, ThemeColorRole]> = [
+  ["text", "canvas"],
+  ["textMuted", "canvas"],
+  ["mutedForeground", "canvas"],
+  ["secondaryLabel", "canvas"],
+  ["iconMuted", "canvas"],
+  ["placeholder", "canvas"],
+  ["toolbarForeground", "toolbar"],
+  ["toolbarControlForeground", "toolbarControl"],
+  ["accentForeground", "accent"],
+  ["secondaryForeground", "secondary"],
+  ["accentSurfaceForeground", "accentSurface"],
+  ["messageForeground", "messageSurface"],
+  ["messageActionForeground", "messageAction"],
+  ["codeForeground", "codeBackground"],
+  ["searchMatchForeground", "searchMatchBackground"],
+  ["searchMatchActiveForeground", "searchMatchActiveBackground"],
+  ["sidebarForeground", "sidebar"],
+  ["sidebarMutedForeground", "sidebar"],
+  ["terminalForeground", "terminalBackground"],
+  ["errorForeground", "errorSurface"],
+  ["warningForeground", "warningSurface"],
+  ["updateForeground", "updateSurface"],
+];
+
+// Brand and status colors keep their identity; surfaces, borders and text take
+// the full shift.
+const BRIGHTNESS_MILD_ROLES: ReadonlySet<ThemeColorRole> = new Set([
+  "accent",
+  "focus",
+  "update",
+  "error",
+  "warning",
+  "messageAction",
+  "messageActionHover",
+  "searchMatchBackground",
+  "searchMatchActiveBackground",
+  "terminalCursor",
+]);
+
+const BRIGHTNESS_FULL_STRENGTH = 0.85;
+const BRIGHTNESS_MILD_STRENGTH = 0.25;
+const BRIGHTNESS_MAX_CONTRAST = 4.5;
+
+function shiftLightness(L: number, brightness: number, strength: number): number {
+  const amount = Math.abs(brightness) * strength;
+  return brightness > 0 ? L + (1 - L) * amount : L * (1 - amount);
+}
+
+function oklchContrast(first: ThemeOklch, second: ThemeRgbColor): number {
+  return themeContrastRatio(themeOklchToRgb(first), second);
+}
+
+/**
+ * Moves a palette towards darker (-1) or lighter (1) in OKLCH, keeping hue and
+ * chroma, and re-seats foregrounds so text stays as readable as it was. 0 is
+ * the identity: the very same object comes back.
+ */
+export function adjustThemeColorsBrightness(colors: ThemeColors, brightness: number): ThemeColors {
+  const amount = Math.min(1, Math.max(-1, brightness));
+  if (!Number.isFinite(amount) || amount === 0) return colors;
+
+  const original = new Map<ThemeColorRole, ParsedThemeColor>();
+  const shifted = new Map<ThemeColorRole, ParsedThemeColor>();
+  for (const role of THEME_COLOR_ROLES) {
+    const parsed = parseThemeColor(colors[role]);
+    if (!parsed) continue;
+    original.set(role, parsed);
+    const strength = BRIGHTNESS_MILD_ROLES.has(role)
+      ? BRIGHTNESS_MILD_STRENGTH
+      : BRIGHTNESS_FULL_STRENGTH;
+    shifted.set(role, {
+      alpha: parsed.alpha,
+      color: { ...parsed.color, L: shiftLightness(parsed.color.L, amount, strength) },
+    });
+  }
+
+  for (const [foreground, background] of BRIGHTNESS_FOREGROUND_PAIRS) {
+    const before = original.get(foreground);
+    const beforeSurface = original.get(background);
+    const after = shifted.get(foreground);
+    const afterSurface = shifted.get(background);
+    if (!before || !beforeSurface || !after || !afterSurface) continue;
+
+    const target = Math.min(
+      BRIGHTNESS_MAX_CONTRAST,
+      oklchContrast(before.color, themeOklchToRgb(beforeSurface.color)),
+    );
+    const surface = themeOklchToRgb(afterSurface.color);
+    if (oklchContrast(after.color, surface) >= target) continue;
+
+    // Mirroring the lightness keeps a muted label muted when its surface flips
+    // across the middle; the solver only has to nudge it the rest of the way.
+    const mirrored = { ...after.color, L: 1 - after.color.L };
+    const start =
+      oklchContrast(mirrored, surface) > oklchContrast(after.color, surface)
+        ? mirrored
+        : after.color;
+    shifted.set(foreground, {
+      alpha: after.alpha,
+      color: solveOklchLightness(
+        start,
+        surface,
+        target,
+        themeRelativeLuminance(surface) < 0.179 ? "lighter" : "darker",
+      ),
+    });
+  }
+
+  const result: Partial<Record<ThemeColorRole, string>> = {};
+  for (const role of THEME_COLOR_ROLES) {
+    const color = shifted.get(role);
+    result[role] = color
+      ? formatOklchThemeColor(mapThemeOklchToSrgbGamut(color.color), color.alpha)
+      : colors[role];
+  }
+  return result as ThemeColors;
+}
+
+const brightnessCache = new WeakMap<ThemeColors, Map<number, ThemeColors>>();
+
+// Callers compare palettes by reference, so one input and amount must always
+// give back the same object.
+function brightenedThemeColors(colors: ThemeColors, brightness: number | undefined): ThemeColors {
+  if (!brightness) return colors;
+  let byBrightness = brightnessCache.get(colors);
+  if (!byBrightness) {
+    byBrightness = new Map();
+    brightnessCache.set(colors, byBrightness);
+  }
+  let adjusted = byBrightness.get(brightness);
+  if (!adjusted) {
+    adjusted = adjustThemeColorsBrightness(colors, brightness);
+    byBrightness.set(brightness, adjusted);
+  }
+  return adjusted;
+}
+
 export function getThemeColorsForMode(
   theme: ThemeDefinition,
   mode: ThemeAppearance,
 ): ThemeColors | null {
-  if (mode === theme.appearance) return theme.colors;
-  return theme.variants?.[mode] ?? null;
+  const colors = mode === theme.appearance ? theme.colors : theme.variants?.[mode];
+  return colors ? brightenedThemeColors(colors, theme.brightness) : null;
 }
 
 export function getThemeModes(theme: ThemeDefinition): ReadonlyArray<ThemeAppearance> {
@@ -1370,6 +1529,7 @@ export function parseThemeFile(value: unknown): ThemeDefinition {
     ...(collection ? { collection } : {}),
     ...(value.managed === true ? { managed: true } : {}),
     ...(value.gradient === true ? { gradient: true } : {}),
+    ...brightnessField(value.brightness),
   };
 }
 
@@ -1385,6 +1545,7 @@ export function serializeThemeFile(theme: ThemeDefinition): string {
     ...(canonicalTheme.collection ? { collection: canonicalTheme.collection } : {}),
     ...(canonicalTheme.managed ? { managed: true } : {}),
     ...(canonicalTheme.gradient ? { gradient: true } : {}),
+    ...brightnessField(canonicalTheme.brightness),
   };
   return `${JSON.stringify(file, null, 2)}\n`;
 }

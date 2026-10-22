@@ -10,12 +10,14 @@ export function FoldedSettingsSection({
   id,
   title,
   summary,
+  description,
   control,
   headerPlacement = "inside",
   children,
 }: {
   readonly id: string;
   readonly title: ReactNode;
+  readonly description?: ReactNode;
   readonly summary?: string | null;
   readonly control?: ReactNode;
   readonly headerPlacement?: "inside" | "outside";
@@ -54,6 +56,11 @@ export function FoldedSettingsSection({
               </h2>
               {control}
             </div>
+            {description ? (
+              <p className="-mt-1.5 max-w-2xl px-3 text-xs leading-relaxed text-muted-foreground sm:px-4">
+                {description}
+              </p>
+            ) : null}
             <CollapsiblePanel>
               <SettingsGroup>{children}</SettingsGroup>
             </CollapsiblePanel>
@@ -75,10 +82,17 @@ export function FoldedSettingsSection({
                 open && "rotate-90",
               )}
             />
-            <span className="shrink-0 text-sm font-medium">{title}</span>
-            {summary ? (
-              <span className="min-w-0 truncate text-xs text-muted-foreground">{summary}</span>
-            ) : null}
+            <span className="flex min-w-0 flex-col gap-0.5">
+              <span className="flex min-w-0 items-center gap-2">
+                <span className="shrink-0 text-sm font-medium">{title}</span>
+                {summary ? (
+                  <span className="min-w-0 truncate text-xs text-muted-foreground">{summary}</span>
+                ) : null}
+              </span>
+              {description ? (
+                <span className="text-xs leading-relaxed text-muted-foreground">{description}</span>
+              ) : null}
+            </span>
           </CollapsibleTrigger>
           {control ? <div className="flex shrink-0 items-center">{control}</div> : null}
         </div>

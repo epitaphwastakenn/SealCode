@@ -1084,14 +1084,16 @@ export const SETTINGS_SEARCH_ITEMS = [
     title: "Roblox Studio",
     to: "/settings/connections",
     searchTerms: [
-      "roblox studio sealcode plugin mcp bridge blender skills rojo open cloud playtest luau screenshot camera creator store",
+      "roblox studio sealcode plugin mcp bridge blender skills rojo open cloud playtest luau screenshot camera creator store panel switch tool safety pause agent read-only",
     ],
   },
   {
     id: "computer-use",
     title: "Computer use",
     to: "/settings/connections",
-    searchTerms: ["computer use mouse keyboard screen screenshot overlay desktop apps paint"],
+    searchTerms: [
+      "computer use mouse keyboard screen screenshot overlay desktop apps paint permission browsers view only terminals ides clicks esc stops new agent sessions",
+    ],
     desktopOnly: true,
     windowsOnly: true,
     localBackendManagementOnly: true,
@@ -1100,7 +1102,9 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "global-mcp-servers",
     title: "Global MCP servers",
     to: "/settings/connections",
-    searchTerms: ["model context protocol tools stdio http sse providers"],
+    searchTerms: [
+      "model context protocol tools stdio http sse providers external servers authenticated gateway local process configuration",
+    ],
   },
   {
     id: "archive",

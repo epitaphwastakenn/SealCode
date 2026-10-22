@@ -381,11 +381,10 @@ export function GlobalMcpSettings() {
   };
 
   return (
-    <SettingsSection {...searchableSetting("global-mcp-servers")}>
-      <p className="px-3 text-xs leading-relaxed text-muted-foreground sm:px-4">
-        Connect external MCP servers once for this SealCode environment. Every provider receives the
-        authenticated gateway, while local process configuration stays on the server.
-      </p>
+    <SettingsSection
+      {...searchableSetting("global-mcp-servers")}
+      description="Connect external MCP servers once for this SealCode environment. Every provider receives the authenticated gateway, while local process configuration stays on the server."
+    >
       {Object.values(servers).map((server) => (
         <McpServerCard
           key={server.id}

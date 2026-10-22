@@ -173,13 +173,10 @@ export function RobloxStudioSettings() {
   };
 
   return (
-    <SettingsSection {...searchableSetting("roblox-studio")}>
-      <p className="px-3 text-xs leading-relaxed text-muted-foreground sm:px-4">
-        Drive Roblox Studio from any agent. SealCode installs its own Studio plugin and keeps it up
-        to date in place. The plugin adds a Studio panel with a switch for every tool, plus safety
-        switches to pause the agent, make the place read-only or stop Luau. Agents can move the
-        camera and send screenshots to the chat, use Creator Store assets and model in Blender.
-      </p>
+    <SettingsSection
+      {...searchableSetting("roblox-studio")}
+      description="Drive Roblox Studio from any agent. SealCode installs its own Studio plugin and keeps it up to date in place. The plugin adds a Studio panel with a switch for every tool, plus safety switches to pause the agent, make the place read-only or stop Luau. Agents can move the camera and send screenshots to the chat, use Creator Store assets and model in Blender."
+    >
       <SettingsRow
         title="Studio connection"
         description={

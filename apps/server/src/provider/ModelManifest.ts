@@ -14,6 +14,7 @@ import * as Semaphore from "effect/Semaphore";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
 import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
+import { withoutPromptInjectedOptions } from "@t3tools/shared/model";
 import { ServerConfig } from "../config.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import { hasValidClaudeManifestAdapters } from "./ClaudeModelManifest.ts";
@@ -136,7 +137,9 @@ export function resolveProviderCatalog(
       ...(entry.aliases ? { aliases: entry.aliases } : {}),
       ...(entry.badge ? { badge: entry.badge } : {}),
       status: entry.status,
-      capabilities: profile?.capabilities ?? null,
+      capabilities: profile?.capabilities
+        ? withoutPromptInjectedOptions(profile.capabilities)
+        : null,
       adapter: entry.adapter,
       profileAdapter: profile?.adapter,
     });

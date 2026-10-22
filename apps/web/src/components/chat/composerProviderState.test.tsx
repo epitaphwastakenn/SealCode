@@ -9,7 +9,6 @@ import {
 import { getProviderOptionDescriptors } from "@t3tools/shared/model";
 import { getProviderModelCapabilities } from "../../providerModels";
 import {
-  getComposerPromptInjectionState,
   getComposerProviderState,
   getComposerReasoningStep,
   renderProviderTraitsMenuContent,
@@ -23,7 +22,6 @@ const MODEL = "test-model";
 function selectDescriptor(
   id: string,
   options: ReadonlyArray<{ id: string; label: string; isDefault?: boolean }>,
-  promptInjectedValues?: ReadonlyArray<string>,
 ): Extract<ProviderOptionDescriptor, { type: "select" }> {
   const defaultId = options.find((option) => option.isDefault)?.id;
   return {
@@ -32,9 +30,6 @@ function selectDescriptor(
     type: "select",
     options: [...options],
     ...(defaultId ? { currentValue: defaultId } : {}),
-    ...(promptInjectedValues && promptInjectedValues.length > 0
-      ? { promptInjectedValues: [...promptInjectedValues] }
-      : {}),
   };
 }
 
@@ -64,25 +59,12 @@ function selections(
   return entries.map(([id, value]) => ({ id, value }));
 }
 
-const ULTRATHINK_FRAME_CLASSES = {
-  composerFrameClassName: "ultrathink-frame",
-  composerSurfaceClassName: "shadow-[0_0_0_1px_rgba(255,255,255,0.07)_inset]",
-  modelPickerIconClassName: "ultrathink-chroma",
-} as const;
-
 const MAX_EFFORT_FRAME_CLASSES = {
   composerFrameClassName: "max-effort-frame",
   composerSurfaceClassName: "shadow-[0_0_0_1px_rgba(255,255,255,0.07)_inset]",
 } as const;
 
 describe("getComposerProviderState", () => {
-  it("derives a stable prompt injection state for ordinary prompt edits", () => {
-    expect(getComposerPromptInjectionState("Investigate this failure")).toBe("none");
-    expect(getComposerPromptInjectionState("Ultrathink:\nInvestigate this failure")).toBe(
-      "ultrathink",
-    );
-  });
-
   it("uses descriptor defaults for display without dispatching them as overrides", () => {
     const state = getComposerProviderState({
       provider: PROVIDER,
@@ -340,53 +322,23 @@ describe("getComposerProviderState", () => {
     expect(state.modelOptionsForDispatch).toEqual(selections(["variant", "max"]));
   });
 
-  it("adds ultrathink class names when the prompt triggers a promptInjectedValues descriptor", () => {
+  it("resumes a retired ultrathink effort on the strongest reasoning level", () => {
     const state = getComposerProviderState({
       provider: PROVIDER,
       model: MODEL,
       models: modelWith([
-        selectDescriptor(
-          "effort",
-          [
-            { id: "medium", label: "Medium" },
-            { id: "high", label: "High", isDefault: true },
-            { id: "ultrathink", label: "Ultrathink" },
-          ],
-          ["ultrathink"],
-        ),
+        selectDescriptor("effort", [
+          { id: "high", label: "High", isDefault: true },
+          { id: "max", label: "Max" },
+          { id: "ultracode", label: "Ultracode" },
+        ]),
       ]),
-      promptInjectionState: getComposerPromptInjectionState(
-        "Ultrathink:\nInvestigate this failure",
-      ),
-      modelOptions: selections(["effort", "medium"]),
+      modelOptions: selections(["effort", "ultrathink"]),
       planModeEnabled: true,
     });
 
-    expect(state).toEqual({
-      provider: PROVIDER,
-      promptEffort: "medium",
-      modelOptionsForDispatch: selections(["effort", "medium"]),
-      ...ULTRATHINK_FRAME_CLASSES,
-    });
-  });
-
-  it("does not add ultrathink class names when the descriptor has no promptInjectedValues", () => {
-    const state = getComposerProviderState({
-      provider: PROVIDER,
-      model: MODEL,
-      models: modelWith([
-        selectDescriptor("effort", [{ id: "high", label: "High", isDefault: true }]),
-      ]),
-      promptInjectionState: getComposerPromptInjectionState(
-        "Ultrathink:\nInvestigate this failure",
-      ),
-      modelOptions: undefined,
-      planModeEnabled: true,
-    });
-
-    expect(state).not.toHaveProperty("composerFrameClassName");
-    expect(state).not.toHaveProperty("composerSurfaceClassName");
-    expect(state).not.toHaveProperty("modelPickerIconClassName");
+    expect(state.promptEffort).toBe("max");
+    expect(state.modelOptionsForDispatch).toEqual(selections(["effort", "max"]));
   });
 
   it("defaults fastMode to false when the provider reports true but the user has not selected it", () => {
@@ -532,8 +484,6 @@ describe("provider traits render guards", () => {
       model: MODEL,
       models,
       modelOptions: undefined,
-      prompt: "",
-      onPromptChange: () => {},
       planModeEnabled: true,
     };
 
@@ -549,22 +499,6 @@ describe("getComposerReasoningStep", () => {
     { id: "high", label: "High" },
   ];
   const INSTANCE = ProviderInstanceId.make("codex");
-  const CLAUDE = {
-    provider: ProviderDriverKind.make("claudeAgent"),
-    instanceId: ProviderInstanceId.make("claudeAgent"),
-    models: modelWith([
-      selectDescriptor(
-        "effort",
-        [
-          { id: "medium", label: "Medium" },
-          { id: "high", label: "High", isDefault: true },
-          { id: "ultrathink", label: "Ultrathink" },
-        ],
-        ["ultrathink"],
-      ),
-    ]),
-  };
-
   function step(input: Partial<Parameters<typeof getComposerReasoningStep>[0]>) {
     return getComposerReasoningStep({
       provider: PROVIDER,
@@ -572,8 +506,6 @@ describe("getComposerReasoningStep", () => {
       model: MODEL,
       models: modelWith([selectDescriptor("reasoningEffort", LEVELS)]),
       modelOptions: undefined,
-      prompt: "Fix the bug",
-      cursor: 0,
       planModeEnabled: true,
       direction: 1,
       ...input,
@@ -602,65 +534,8 @@ describe("getComposerReasoningStep", () => {
         }),
         `${from} by ${direction}`,
       ).toStrictEqual({
-        prompt: "Fix the bug",
-        cursor: 0,
         modelOptions: selections(["contextWindow", "1m"], ["reasoningEffort", to]),
       });
-    }
-  });
-
-  it("adds and strips the Ultrathink prefix while the caret stays on the same character", () => {
-    for (const { prompt, modelOptions, direction, expected } of [
-      {
-        prompt: "  Fix the bug \n",
-        modelOptions: selections(["effort", "high"]),
-        direction: 1,
-        expected: { prompt: "Ultrathink:\nFix the bug", cursor: 20 },
-      },
-      {
-        // The prefix, not the draft's Medium, is the current level.
-        prompt: "Ultrathink:\n  Fix the bug",
-        modelOptions: selections(["effort", "medium"]),
-        direction: -1,
-        expected: {
-          prompt: "Fix the bug",
-          cursor: 8,
-          modelOptions: selections(["effort", "high"]),
-        },
-      },
-    ] as const) {
-      const result = step({
-        ...CLAUDE,
-        prompt,
-        cursor: prompt.indexOf("bug"),
-        modelOptions,
-        direction,
-      });
-      expect(result).toStrictEqual(expected);
-      expect(result?.prompt.slice(result.cursor)).toMatch(/^bug/);
-    }
-    // A caret in leading whitespace must not land inside the new prefix.
-    expect(
-      step({ ...CLAUDE, prompt: "   Fix", modelOptions: selections(["effort", "high"]) })?.cursor,
-    ).toBe("Ultrathink:\n".length);
-  });
-
-  it("skips Ultrathink for slash commands and does nothing when the prompt locks it", () => {
-    expect(
-      step({ ...CLAUDE, prompt: "/review", modelOptions: selections(["effort", "high"]) }),
-    ).toStrictEqual({
-      prompt: "/review",
-      cursor: 0,
-      modelOptions: selections(["effort", "medium"]),
-    });
-    for (const [prompt, direction] of [
-      ["Please ultrathink harder", 1],
-      ["Ultrathink:\nPlease ultrathink harder", -1],
-    ] as const) {
-      expect(
-        step({ ...CLAUDE, prompt, modelOptions: selections(["effort", "high"]), direction }),
-        prompt,
-      ).toBeNull();
     }
   });
 

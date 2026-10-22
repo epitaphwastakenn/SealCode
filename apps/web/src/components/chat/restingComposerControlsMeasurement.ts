@@ -19,17 +19,24 @@ function elementInlineMarginWidth(element: HTMLElement): number {
   );
 }
 
+function hiddenWidth(element: HTMLElement | null): number {
+  return element ? Math.max(0, element.scrollWidth - element.clientWidth) : 0;
+}
+
 function providerModelPickerNaturalWidth(picker: HTMLElement): number {
   const renderedWidth = picker.getBoundingClientRect().width;
   if (renderedWidth === 0) return 0;
   const style = getComputedStyle(picker);
   const label = picker.querySelector<HTMLElement>('[data-chat-provider-model-picker-label="true"]');
   const labelIsCollapsed = label?.clientWidth === 0 && getComputedStyle(label).flexGrow === "0";
-  const hiddenLabelWidth =
-    label && !labelIsCollapsed ? Math.max(0, label.scrollWidth - label.clientWidth) : 0;
+  const hiddenLabelWidth = labelIsCollapsed ? 0 : hiddenWidth(label);
+  // The effort label truncates once the model label is gone; recover it too.
+  const hiddenEffortWidth = hiddenWidth(
+    picker.querySelector<HTMLElement>('[data-chat-provider-model-picker-effort-label="true"]'),
+  );
   const maxWidth = Number.parseFloat(style.maxWidth);
   const naturalWidth = Math.min(
-    renderedWidth + hiddenLabelWidth,
+    renderedWidth + hiddenLabelWidth + hiddenEffortWidth,
     Number.isFinite(maxWidth) ? maxWidth : Number.POSITIVE_INFINITY,
   );
   return naturalWidth + elementInlineMarginWidth(picker);
@@ -82,16 +89,24 @@ export function measureRestingComposerControls(
   const separatorWidth = separator ? elementOuterWidth(separator) : 0;
   const overflow = controls.querySelector<HTMLElement>("[data-resting-controls-overflow]");
   const separatorAndGapWidth = separatorWidth > 0 ? separatorWidth + gap : 0;
+  // Controls that never move into overflow, such as attach and the usage
+  // meter, still take room the blocks cannot use.
+  const fixedControlsWidth = Array.from(
+    controls.querySelectorAll<HTMLElement>("[data-resting-controls-fixed]"),
+    elementOuterWidth,
+  ).reduce((total, width) => total + (width > 0 ? width + gap : 0), 0);
   const blocks = Array.from(controls.querySelectorAll<HTMLElement>("[data-resting-block]"));
   const widths = blocks.map(controlBlockWidths);
   return {
     gap,
     naturalFixedWidth:
       (picker ? providerModelPickerNaturalWidth(picker) : elementOuterWidth(leadingControl)) +
-      separatorAndGapWidth,
+      separatorAndGapWidth +
+      fixedControlsWidth,
     minimumFixedWidth:
       (picker ? providerModelPickerMinimumWidth(picker) : elementOuterWidth(leadingControl)) +
-      separatorAndGapWidth,
+      separatorAndGapWidth +
+      fixedControlsWidth,
     blockWidths: widths.map((width) => width.natural),
     iconOnlyBlockWidths: widths.map((width) => width.iconOnly),
     overflowWidth: overflow ? elementOuterWidth(overflow) : 0,

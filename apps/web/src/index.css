@@ -2334,49 +2334,6 @@ code {
   color: var(--code-foreground) !important;
 }
 
-.ultrathink-frame {
-  --ultrathink-spectrum: linear-gradient(
-    120deg,
-    #ff6b6b 0%,
-    #f59e0b 18%,
-    #22c55e 36%,
-    #14b8a6 54%,
-    #3b82f6 72%,
-    #ec4899 90%,
-    #ff6b6b 100%
-  );
-  position: relative;
-}
-
-.ultrathink-frame::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 2px;
-  background-image: var(--ultrathink-spectrum);
-  background-size: 220% 220%;
-  background-position: 0% 50%;
-  pointer-events: none;
-  filter: saturate(0.82) brightness(0.92);
-  -webkit-mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask:
-    linear-gradient(#000 0 0) content-box,
-    linear-gradient(#000 0 0);
-  mask-composite: exclude;
-}
-
-.ultrathink-frame > * {
-  position: relative;
-}
-
-.ultrathink-chroma {
-  filter: saturate(1.2);
-}
-
 @keyframes preview-loading-progress {
   from {
     transform: scaleX(0.04);
@@ -2617,13 +2574,36 @@ html[data-theme-gradient="true"] [data-slot="sidebar-inset"] {
 /* SealCode: reasoning effort slider. One-shot motion only: the fill and thumb
    glide between steps, and reaching the top level plays a single sheen. */
 .reasoning-slider-glide {
-  transition-property: left, width, box-shadow, background-color, scale;
+  transition-property: left, clip-path, filter, box-shadow, border-color, scale;
   transition-duration: 260ms;
   transition-timing-function: cubic-bezier(0.32, 0.72, 0, 1);
 }
 
+.reasoning-slider-tick {
+  transition-property: background-color, scale;
+  transition-duration: 160ms;
+  transition-timing-function: ease-out;
+}
+
+.reasoning-slider-track {
+  box-shadow: inset 0 1px 2px rgb(0 0 0 / 18%);
+  transition: background-color 160ms ease-out;
+}
+
+.group:hover > .reasoning-slider-track {
+  background-color: color-mix(in srgb, var(--muted-foreground) 24%, transparent);
+}
+
 [data-dragging="true"] .reasoning-slider-glide {
   transition-duration: 0ms;
+}
+
+[data-motion="off"] :is(.reasoning-slider-glide, .reasoning-slider-tick, .reasoning-slider-track) {
+  transition-duration: 0ms;
+}
+
+[data-motion="off"] :is(.reasoning-slider-sheen, .reasoning-slider-label-in) {
+  animation: none;
 }
 
 @keyframes reasoning-slider-sheen {
@@ -2662,7 +2642,7 @@ html[data-theme-gradient="true"] [data-slot="sidebar-inset"] {
 }
 
 /* SealCode: top reasoning level frames the composer with a quiet violet
-   border that fades in once. Static afterwards, like the ultrathink frame. */
+   border that fades in once. Static afterwards. */
 @keyframes max-effort-border-in {
   from {
     opacity: 0;
@@ -2706,7 +2686,9 @@ html[data-theme-gradient="true"] [data-slot="sidebar-inset"] {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .reasoning-slider-glide {
+  .reasoning-slider-glide,
+  .reasoning-slider-tick,
+  .reasoning-slider-track {
     transition-duration: 0ms;
   }
 

@@ -3,7 +3,6 @@ import {
   getModelSelectionBooleanOptionValue,
   getModelSelectionStringOptionValue,
   getProviderOptionDescriptors,
-  resolvePromptInjectedEffort,
 } from "@t3tools/shared/model";
 
 import {
@@ -19,7 +18,6 @@ import {
 export interface CompiledClaudeModelSelection {
   readonly apiModelId: string;
   readonly effort: string | undefined;
-  readonly promptEffort: string | undefined;
   readonly settings: Readonly<Record<string, boolean>>;
   readonly queryIdentity: string;
 }
@@ -47,11 +45,9 @@ export function compileClaudeModelSelection(
     ...(isClaudeCatalogUltracodeEffort(resolvedEffort) ? { ultracode: true } : {}),
   };
   const apiModelId = resolveClaudeCatalogApiModelId(catalog, selection);
-  const promptEffort = resolvePromptInjectedEffort(capabilities, rawEffort) ?? undefined;
   return {
     apiModelId,
     effort,
-    promptEffort,
     settings,
     queryIdentity: JSON.stringify({ apiModelId, effort: effort ?? null, settings }),
   };

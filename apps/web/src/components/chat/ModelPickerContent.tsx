@@ -10,7 +10,6 @@ import {
   MODEL_PICKER_JUMP_KEYBINDING_COMMANDS,
 } from "@t3tools/contracts";
 import {
-  applyClaudePromptEffortPrefix,
   buildProviderOptionSelectionsFromDescriptors,
   resolveSelectableModel,
 } from "@t3tools/shared/model";
@@ -397,8 +396,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   onModelOptionsChange?:
     | ((nextOptions: ReadonlyArray<ProviderOptionSelection> | undefined) => void)
     | undefined;
-  prompt?: string | undefined;
-  onPromptChange?: ((prompt: string) => void) | undefined;
 }) {
   const {
     keybindings: providedKeybindings,
@@ -869,13 +866,11 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
       provider: activeTraitsEntry.driverKind,
       models: props.models,
       model: props.model,
-      prompt: props.prompt ?? "",
       modelOptions: props.modelOptions,
-      allowPromptInjectedEffort: true,
       planModeEnabled,
     });
   })();
-  const { onModelOptionsChange, onPromptChange, prompt } = props;
+  const { onModelOptionsChange } = props;
   const updateDescriptors = (nextDescriptors: ReadonlyArray<ProviderOptionDescriptor>) => {
     onModelOptionsChange?.(buildProviderOptionSelectionsFromDescriptors(nextDescriptors));
   };
@@ -884,20 +879,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     value: string,
   ) => {
     if (!value || !traitsVisibility) return;
-    const currentPrompt = prompt ?? "";
-    if (descriptor.promptInjectedValues?.includes(value)) {
-      onPromptChange?.(
-        currentPrompt.trim().length === 0
-          ? "Ultrathink:\n"
-          : applyClaudePromptEffortPrefix(currentPrompt, "ultrathink"),
-      );
-      return;
-    }
-    const isPrimary = descriptor.id === traitsVisibility.primarySelectDescriptor?.id;
-    if (traitsVisibility.ultrathinkInBodyText && isPrimary) return;
-    if (traitsVisibility.ultrathinkPromptControlled && isPrimary) {
-      onPromptChange?.(currentPrompt.replace(/^Ultrathink:\s*/i, ""));
-    }
     updateDescriptors(
       replaceDescriptorCurrentValue(traitsVisibility.descriptors, descriptor.id, value),
     );
@@ -1183,12 +1164,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                 className="shrink-0 space-y-2.5 border-t border-border/60 bg-muted/15 px-3.5 py-2.5"
               >
                 {traitsVisibility.selectDescriptors.map((descriptor) => {
-                  const isPrimary = descriptor.id === traitsVisibility.primarySelectDescriptor?.id;
-                  const selectedValue =
-                    traitsVisibility.ultrathinkPromptControlled && isPrimary
-                      ? "ultrathink"
-                      : (getDescriptorStringValue(descriptor) ?? "");
-                  const disabled = traitsVisibility.ultrathinkInBodyText && isPrimary;
+                  const selectedValue = getDescriptorStringValue(descriptor) ?? "";
                   const label = descriptor.label.toLowerCase();
                   if (
                     (label.includes("effort") || label.includes("reasoning")) &&
@@ -1199,8 +1175,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                         key={descriptor.id}
                         descriptor={descriptor}
                         selectedValue={selectedValue}
-                        disabled={disabled}
-                        promptControlled={traitsVisibility.ultrathinkPromptControlled}
                         onSelect={(optionId) => handleSelectOptionChange(descriptor, optionId)}
                       />
                     );
@@ -1211,11 +1185,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                         <span className="text-3xs font-semibold uppercase tracking-wider text-muted-foreground/80">
                           {descriptor.label}
                         </span>
-                        {traitsVisibility.ultrathinkPromptControlled && isPrimary ? (
-                          <span className="text-3xs font-medium text-warning">
-                            Prompt-controlled
-                          </span>
-                        ) : null}
                       </div>
                       <div className="flex flex-wrap gap-1.5">
                         {descriptor.options.map((option) => {
@@ -1224,7 +1193,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                             <button
                               key={option.id}
                               type="button"
-                              disabled={disabled}
                               onClick={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
@@ -1235,7 +1203,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                                 isSelected
                                   ? "border-primary/60 bg-primary/15 font-semibold text-primary"
                                   : "border-border/40 bg-muted/40 text-muted-foreground hover:border-border/70 hover:bg-muted/80 hover:text-foreground",
-                                disabled && "cursor-not-allowed opacity-40",
                               )}
                             >
                               <span>{option.label}</span>

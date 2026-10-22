@@ -62,8 +62,6 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   models?: ReadonlyArray<ServerProviderModel>;
   modelOptions?: ReadonlyArray<ProviderOptionSelection> | null | undefined;
   onModelOptionsChange?: (nextOptions: ReadonlyArray<ProviderOptionSelection> | undefined) => void;
-  prompt?: string;
-  onPromptChange?: (prompt: string) => void;
 }) {
   const composerFloatingLayerProps = useComposerMenuProps();
   const [uncontrolledIsMenuOpen, setUncontrolledIsMenuOpen] = useState(false);
@@ -284,7 +282,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
             <span
               data-chat-provider-model-picker-effort="true"
               className={cn(
-                "inline-flex shrink-0 items-center gap-1 text-xs font-normal transition-colors duration-200",
+                "inline-flex min-w-0 items-center gap-1 text-xs font-normal transition-colors duration-200",
                 isMaxEffort ? "font-semibold text-primary" : "text-muted-foreground/80",
               )}
             >
@@ -298,7 +296,12 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                   <path d="M8 0L9.79 6.21L16 8L9.79 9.79L8 16L6.21 9.79L0 8L6.21 6.21L8 0Z" />
                 </svg>
               ) : null}
-              {props.effortLabel}
+              <span
+                className="min-w-0 truncate"
+                data-chat-provider-model-picker-effort-label="true"
+              >
+                {props.effortLabel}
+              </span>
             </span>
           ) : null}
           {selectedModel?.isUnavailable && !selectedEntries && props.triggerLabel === undefined ? (
@@ -349,8 +352,6 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
                 models: props.models,
                 modelOptions: props.modelOptions,
                 onModelOptionsChange: props.onModelOptionsChange,
-                prompt: props.prompt,
-                onPromptChange: props.onPromptChange,
               }
             : {})}
         />

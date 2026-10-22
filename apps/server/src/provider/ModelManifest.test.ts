@@ -66,6 +66,25 @@ describe("resolveProviderCatalog", () => {
     assert.strictEqual(catalog?.defaultChatModel, "model-next");
   });
 
+  it("drops Claude's prompt-injected Ultrathink level from the bundled manifest", () => {
+    const catalog = ModelManifest.resolveProviderCatalog(
+      ModelManifest.BUNDLED_MODEL_MANIFEST,
+      ProviderDriverKind.make("claudeAgent"),
+    );
+    assert.isNotNull(catalog);
+    for (const model of catalog?.models ?? []) {
+      for (const descriptor of model.capabilities?.optionDescriptors ?? []) {
+        if (descriptor.type !== "select") continue;
+        assert.isUndefined(descriptor.promptInjectedValues, model.slug);
+        assert.notInclude(
+          descriptor.options.map((option) => option.id),
+          "ultrathink",
+          model.slug,
+        );
+      }
+    }
+  });
+
   it("rejects invalid catalog references", () => {
     const invalidCatalog = (input: {
       readonly models: NonNullable<ModelManifest.ModelManifestData["providers"]>[string]["models"];

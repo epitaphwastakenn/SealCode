@@ -136,7 +136,7 @@ const CUSTOM_MODEL_CLAUDE_SETTINGS = Schema.decodeSync(ClaudeSettings)({
 const CLAUDE_TEST_MODEL_SELECTION = {
   instanceId: ProviderInstanceId.make(ClaudeAdapterV2.CLAUDE_PROVIDER),
   model: "claude-sonnet-4-6",
-  options: [{ id: "effort", value: "ultrathink" }],
+  options: [{ id: "effort", value: "high" }],
 } satisfies ModelSelection;
 const CLAUDE_TEST_RESTART_MODEL_SELECTION = {
   ...CLAUDE_TEST_MODEL_SELECTION,
@@ -1697,27 +1697,24 @@ describe("ClaudeAdapterV2 attachments", () => {
     {
       name: "ordinary text",
       prompt: "What’s in this image?",
-      expectedText: "Ultrathink:\nWhat’s in this image?",
+      expectedText: "What’s in this image?",
       command: undefined,
-      ultrathink: true,
     },
     {
       name: "mid-sentence skill",
       prompt: "please $implement fixes\n\nThen report the result",
-      expectedText: "Ultrathink:\nplease /implement fixes\n\nThen report the result",
+      expectedText: "please /implement fixes\n\nThen report the result",
       command: "/implement fixes\n\nThen report the result",
-      ultrathink: true,
     },
     {
       name: "prompt-leading skill",
       prompt: "$implement fixes",
       expectedText: "/implement fixes",
       command: undefined,
-      ultrathink: false,
     },
   ])(
     "preserves $name with images and files on sends and steering",
-    ({ prompt, expectedText, command, ultrathink }) =>
+    ({ prompt, expectedText, command }) =>
       Effect.scoped(
         Effect.gen(function* () {
           const fileSystem = yield* FileSystem.FileSystem;
@@ -1733,10 +1730,7 @@ describe("ClaudeAdapterV2 attachments", () => {
             path.join(claudeHome, "skills", "implement", "SKILL.md"),
             "---\ndescription: Implement the requested change\n---\nImplement it.\n",
           );
-          const modelSelection = {
-            ...CLAUDE_TEST_MODEL_SELECTION,
-            options: ultrathink ? CLAUDE_TEST_MODEL_SELECTION.options : [],
-          };
+          const modelSelection = CLAUDE_TEST_MODEL_SELECTION;
           const attachmentsDir = yield* fileSystem.makeTempDirectoryScoped({
             prefix: "t3-claude-v2-attachments-",
           });

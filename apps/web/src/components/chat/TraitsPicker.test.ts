@@ -61,7 +61,6 @@ function display(descriptors: ReadonlyArray<ProviderOptionDescriptor>) {
     provider: CODEX,
     descriptors,
     primarySelectDescriptorId: "reasoningEffort",
-    ultrathinkPromptControlled: false,
   });
 }
 
@@ -95,7 +94,6 @@ describe("buildTraitsTriggerDisplay", () => {
               speed,
             ],
             primarySelectDescriptorId: "profile",
-            ultrathinkPromptControlled: false,
           }),
         ).toEqual({ label: "Balanced · 1M · High Fast" });
       }
@@ -104,7 +102,6 @@ describe("buildTraitsTriggerDisplay", () => {
           provider: CODEX,
           descriptors: [CONTEXT_WINDOW, { ...EFFORT, id }, serviceTierDescriptor("ultrafast")],
           primarySelectDescriptorId: CONTEXT_WINDOW.id,
-          ultrathinkPromptControlled: false,
         }),
       ).toEqual({ label: "1M · High Ultrafast" });
     },
@@ -120,7 +117,6 @@ describe("buildTraitsTriggerDisplay", () => {
           { id: "thinking", label: "Thinking", type: "boolean", currentValue: true },
         ],
         primarySelectDescriptorId: "reasoning",
-        ultrathinkPromptControlled: false,
       }),
     ).toEqual({ label: "High Fast · Thinking On" });
   });
@@ -156,7 +152,6 @@ describe("buildTraitsTriggerDisplay", () => {
               fastModeDescriptor(true),
             ],
             primarySelectDescriptorId: EFFORT.id,
-            ultrathinkPromptControlled: false,
           }),
         ).toEqual({ label: `${label} Fast` });
       }
@@ -238,17 +233,6 @@ describe("buildTraitsTriggerDisplay", () => {
     };
     expect(display([unresolved])).toEqual({ label: "" });
   });
-
-  it("still renders prompt-controlled ultrathink with Fast", () => {
-    expect(
-      buildTraitsTriggerDisplay({
-        provider: CODEX,
-        descriptors: [EFFORT, fastModeDescriptor(true)],
-        primarySelectDescriptorId: "reasoningEffort",
-        ultrathinkPromptControlled: true,
-      }),
-    ).toEqual({ label: "Ultrathink Fast" });
-  });
 });
 
 describe("buildUnavailableModelOptionDescriptors", () => {
@@ -303,7 +287,6 @@ it("shows Unknown until a matching provider report provides Default", () => {
       ),
     ],
     primarySelectDescriptorId: "variant",
-    ultrathinkPromptControlled: false,
     modelSelection: selection,
   };
   expect(buildTraitsTriggerDisplay(input).label).toBe("Unknown");

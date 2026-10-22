@@ -13,9 +13,7 @@ const effort = {
     { id: "low", label: "Low" },
     { id: "high", label: "High", isDefault: true },
     { id: "max", label: "Max" },
-    { id: "ultrathink", label: "Ultrathink" },
   ],
-  promptInjectedValues: ["ultrathink"],
 };
 
 const contextWindow = {
@@ -29,7 +27,6 @@ const contextWindow = {
 };
 
 const runtime = {
-  effortMap: { ultrathink: null },
   modelSuffixes: { contextWindow: { expanded: "[expanded]" } },
   contextWindowTokens: { standard: 200_000, expanded: 1_000_000 },
 };

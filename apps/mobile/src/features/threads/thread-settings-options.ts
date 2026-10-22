@@ -1,8 +1,8 @@
 import type { ProviderOptionDescriptor, RuntimeMode } from "@t3tools/contracts";
 
 /**
- * Prompt-injected values (ultrathink and friends) are filtered from the
- * descriptor metadata; ultracode is a real option but a workflow trigger, not a
+ * Prompt-injected values are filtered for servers that still send them (newer
+ * ones strip them); ultracode is a real option but a workflow trigger, not a
  * reasoning level.
  */
 const HIDDEN_EFFORT_OPTION_IDS: ReadonlySet<string> = new Set(["ultracode"]);

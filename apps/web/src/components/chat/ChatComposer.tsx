@@ -332,7 +332,6 @@ import {
   slashCommandItemsForPromptPosition,
 } from "./composerSlashCommandSearch";
 import {
-  getComposerPromptInjectionState,
   getComposerProviderState,
   getComposerReasoningStep,
   renderProviderTraitsMenuContent,
@@ -1211,7 +1210,7 @@ function useRestingComposerControlsLayout(host: HTMLDivElement | null, useContro
           currentHost,
           controls,
           ...controls.querySelectorAll<HTMLElement>(
-            "[data-resting-block], [data-composer-control-label], [data-chat-provider-model-picker-label]",
+            "[data-resting-block], [data-composer-control-label], [data-chat-provider-model-picker-label], [data-chat-provider-model-picker-effort-label]",
           ),
         ],
         measure,
@@ -1512,14 +1511,12 @@ export interface ChatComposerHandle {
     previewAnnotations: PreviewAnnotationPayload[];
     reviewComments: ReviewCommentContext[];
     threadContexts: ThreadContextRecord[];
-    selectedPromptEffort: string | null;
     selectedModelOptionsForDispatch: unknown;
     selectedModelSelection: ModelSelection;
     multipleModelSelections: ReadonlyArray<ModelSelection> | null;
     providerAvailable: boolean;
     selectedProvider: ProviderDriverKind;
     selectedModel: string;
-    selectedProviderModels: ReadonlyArray<ServerProvider["models"][number]>;
     interactionMode: ProviderInteractionMode;
     interactionModeEnabled: boolean;
   };
@@ -1828,7 +1825,6 @@ function useComposerProviderModel(
     readonly threadRef: ScopedThreadRef | DraftId;
     readonly threadModelSelection: ModelSelection | null | undefined;
     readonly projectModelSelection: ModelSelection | null | undefined;
-    readonly promptInjectionState: ReturnType<typeof getComposerPromptInjectionState>;
   },
 ) {
   const {
@@ -1838,7 +1834,6 @@ function useComposerProviderModel(
     threadRef,
     threadModelSelection,
     projectModelSelection,
-    promptInjectionState,
     candidateInstanceIds,
     lockedProvider,
     lockedInstanceId,
@@ -1875,7 +1870,6 @@ function useComposerProviderModel(
     provider: selectedProvider,
     model: modelState.selectedModel,
     models: selectedProviderModels,
-    promptInjectionState,
     modelOptions: modelState.modelOptions?.[selectedInstanceId],
     planModeEnabled: settings.planModeEnabled,
   });
@@ -2322,7 +2316,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     threadRef: composerDraftTarget,
     threadModelSelection: activeThreadModelSelection,
     projectModelSelection: activeProjectDefaultModelSelection,
-    promptInjectionState: getComposerPromptInjectionState(prompt),
     candidateInstanceIds: [
       composerDraft.activeProvider ?? null,
       activeThread?.runtime?.providerInstanceId,
@@ -2383,7 +2376,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     selectedProviderStatus: selectedProviderStatus,
   });
 
-  const selectedPromptEffort = composerProviderState.promptEffort;
   const selectedModelOptionsForDispatch = composerProviderState.modelOptionsForDispatch;
   const { enabled: planModeUiEnabled, interactionMode } = resolveComposerInteractionMode({
     planModeEnabled: settings.planModeEnabled,
@@ -2895,7 +2887,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     setComposerTrigger(detectComposerTrigger(nextPrompt, nextPrompt.length));
     scheduleComposerFocus();
   };
-  const setPromptFromTraitsStable = useStableCallback(setPromptFromTraits);
 
   // SealCode keeps the reasoning level inside the model picker; the trigger
   // shows it next to the model name instead of a separate traits control.
@@ -2922,16 +2913,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       provider: selectedProvider,
       models: selectedProviderModels,
       model: selectedModel,
-      prompt,
       modelOptions: composerModelOptions?.[selectedInstanceId],
-      allowPromptInjectedEffort: true,
       planModeEnabled: settings.planModeEnabled,
     });
     const display = buildTraitsTriggerDisplay({
       provider: selectedProvider,
       descriptors: visibility.descriptors,
       primarySelectDescriptorId: visibility.primarySelectDescriptor?.id ?? null,
-      ultrathinkPromptControlled: visibility.ultrathinkPromptControlled,
       reportedModelSelection,
     });
     return {
@@ -2968,8 +2956,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     models: selectedProviderModels,
     modelOptions: composerModelOptions?.[selectedInstanceId],
     reportedModelSelection,
-    prompt,
-    onPromptChange: setPromptFromTraitsStable,
     planModeEnabled: settings.planModeEnabled,
   });
   const [inlineRestingControlsHost, setInlineRestingControlsHost] = useState<HTMLDivElement | null>(
@@ -3464,7 +3450,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     composerTerminalContexts,
     prompt,
     selectedModel,
-    selectedPromptEffort,
     selectedProvider,
   ] as const;
   const [providerInputValidatedFor, setProviderInputValidatedFor] = useState(providerInputInputs);
@@ -5348,8 +5333,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       models={selectedProviderModels}
       modelOptions={composerModelOptions?.[selectedInstanceId]}
       onModelOptionsChange={handleModelOptionsChangeStable}
-      prompt={prompt}
-      onPromptChange={setPromptFromTraitsStable}
     />
   );
   const composerUsageMeter = (
@@ -5389,6 +5372,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 type="button"
                 size={composerControlsCollapsed ? "xs" : "sm"}
                 className="-ms-1 shrink-0 px-1.5 text-muted-foreground hover:text-foreground"
+                data-resting-controls-fixed
                 onPointerDown={(event) => event.preventDefault()}
                 onClick={() => attachmentInputRef.current?.click()}
                 disabled={isConnecting || isComposerApprovalState || projectSelectionRequired}
@@ -6333,26 +6317,17 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           models: selectedProviderModels,
           modelOptions: composerModelOptions?.[selectedInstanceId],
           reportedModelSelection,
-          prompt: promptRef.current,
-          cursor: readComposerSnapshotStable().expandedCursor,
           planModeEnabled: settings.planModeEnabled,
           direction,
         });
         if (!change) return;
-        if (change.modelOptions) {
-          useComposerDraftStore
-            .getState()
-            .setProviderModelOptions(composerDraftTarget, selectedProvider, change.modelOptions, {
-              instanceId: selectedInstanceId,
-              model: selectedModel,
-              persistSticky: true,
-            });
-        }
-        if (change.prompt !== promptRef.current) {
-          applyPromptReplacementStable(0, promptRef.current.length, change.prompt, {
-            expandedCursorAfterReplace: change.cursor,
+        useComposerDraftStore
+          .getState()
+          .setProviderModelOptions(composerDraftTarget, selectedProvider, change.modelOptions, {
+            instanceId: selectedInstanceId,
+            model: selectedModel,
+            persistSticky: true,
           });
-        }
       },
       toggleModelPicker: () => {
         if (isComposerModelPickerOpen) {
@@ -6455,7 +6430,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         previewAnnotations: composerPreviewAnnotations,
         reviewComments: composerReviewComments,
         threadContexts: composerThreadContexts,
-        selectedPromptEffort,
         selectedModelOptionsForDispatch,
         selectedModelSelection,
         multipleModelSelections:
@@ -6472,7 +6446,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           (!noProviderAvailable && providerSendBlockReason === null),
         selectedProvider,
         selectedModel,
-        selectedProviderModels,
         interactionMode,
         interactionModeEnabled: planModeUiEnabled,
       }),
@@ -6533,7 +6506,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       routeKind,
       noProviderAvailable,
       providerSendBlockReason,
-      selectedPromptEffort,
       selectedProvider,
       selectedProviderModels,
       interactionMode,

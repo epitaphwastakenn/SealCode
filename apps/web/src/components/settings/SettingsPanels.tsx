@@ -364,10 +364,7 @@ function HarnessHelperModelRow(props: {
                 provider={instanceEntry?.driverKind ?? DEFAULT_DRIVER_KIND}
                 models={instanceEntry?.models ?? []}
                 model={activeSelection.model}
-                prompt=""
-                onPromptChange={() => {}}
                 modelOptions={activeSelection.options}
-                allowPromptInjectedEffort={false}
                 planModeEnabled={
                   props.settings.planModeEnabled || selectsPlanAgent(activeSelection.options)
                 }
@@ -3735,10 +3732,7 @@ export function GeneralSettingsPanel() {
                     provider={textGenProvider}
                     models={textGenInstanceEntry?.models ?? []}
                     model={textGenModel}
-                    prompt=""
-                    onPromptChange={() => {}}
                     modelOptions={textGenModelOptions}
-                    allowPromptInjectedEffort={false}
                     planModeEnabled={
                       settings.planModeEnabled || selectsPlanAgent(textGenModelOptions)
                     }
@@ -3838,10 +3832,7 @@ export function GeneralSettingsPanel() {
                       provider={imageViewerInstanceEntry.driverKind}
                       models={imageViewerInstanceEntry.models}
                       model={imageViewerModel}
-                      prompt=""
-                      onPromptChange={() => {}}
                       modelOptions={imageViewerModelOptions}
-                      allowPromptInjectedEffort={false}
                       planModeEnabled={
                         settings.planModeEnabled || selectsPlanAgent(imageViewerModelOptions)
                       }
@@ -3917,10 +3908,7 @@ export function GeneralSettingsPanel() {
                       )?.models ?? []
                     }
                     model={diffReviewSelection.model}
-                    prompt=""
-                    onPromptChange={() => {}}
                     modelOptions={diffReviewSelection.options}
-                    allowPromptInjectedEffort={false}
                     planModeEnabled={
                       settings.planModeEnabled || selectsPlanAgent(diffReviewSelection.options)
                     }

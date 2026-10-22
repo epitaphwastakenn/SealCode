@@ -147,16 +147,45 @@ function resolveDescriptorChoiceValue(
   if (descriptor.options.length === 0) {
     return trimmed;
   }
-  if (
-    descriptor.promptInjectedValues?.includes(trimmed) &&
-    descriptor.options.some((option) => option.id === trimmed)
-  ) {
-    return descriptor.options.find((option) => option.isDefault)?.id;
-  }
   if (descriptor.options.some((option) => option.id === trimmed)) {
     return trimmed;
   }
+  if (trimmed === RETIRED_ULTRATHINK_EFFORT) {
+    const strongest = descriptor.options.findLast(
+      (option) => !WORKFLOW_EFFORT_OPTION_IDS.has(option.id),
+    );
+    if (strongest) return strongest.id;
+  }
   return descriptor.currentValue ?? descriptor.options.find((option) => option.isDefault)?.id;
+}
+
+/**
+ * Claude's old "ultrathink" effort level only prefixed the prompt. Drafts and
+ * threads saved with it resume on the strongest reasoning level. Ultracode is a
+ * workflow mode on top of xhigh, not a stronger reasoning level.
+ */
+const RETIRED_ULTRATHINK_EFFORT = "ultrathink";
+const WORKFLOW_EFFORT_OPTION_IDS: ReadonlySet<string> = new Set(["ultracode"]);
+
+/**
+ * SealCode offers no prompt-injected choices: typing "ultrathink" in a Claude
+ * prompt already does what that level did. Manifests, bundled or fetched from
+ * upstream, still list them, so they are dropped where capabilities are read.
+ */
+export function withoutPromptInjectedOptions(caps: ModelCapabilities): ModelCapabilities {
+  const descriptors = caps.optionDescriptors;
+  if (!descriptors?.some((entry) => entry.type === "select" && entry.promptInjectedValues)) {
+    return caps;
+  }
+  return {
+    ...caps,
+    optionDescriptors: descriptors.map((descriptor) => {
+      if (descriptor.type !== "select" || !descriptor.promptInjectedValues) return descriptor;
+      const injected = new Set(descriptor.promptInjectedValues);
+      const { promptInjectedValues: _dropped, ...rest } = descriptor;
+      return { ...rest, options: descriptor.options.filter((option) => !injected.has(option.id)) };
+    }),
+  };
 }
 
 function cloneDescriptor(descriptor: ProviderOptionDescriptor): ProviderOptionDescriptor {
@@ -325,10 +354,6 @@ export function buildExplicitProviderOptionSelectionsFromDescriptors(
   return normalized && normalized.length > 0 ? normalized : undefined;
 }
 
-export function isClaudeUltrathinkPrompt(text: string | null | undefined): boolean {
-  return typeof text === "string" && /\bultrathink\b/i.test(text);
-}
-
 export function codexModelFamily(slug: string): string {
   return slug.startsWith("openai.gpt-") ? slug.slice("openai.".length) : slug;
 }
@@ -494,40 +519,4 @@ export function createModelSelection(
     model,
   };
   return selections.length > 0 ? { ...base, options: selections } : base;
-}
-
-export function resolvePromptInjectedEffort(
-  caps: ModelCapabilities,
-  rawEffort: string | null | undefined,
-): string | null {
-  const trimmed = trimOrNull(rawEffort);
-  if (!trimmed) return null;
-  const descriptors = getProviderOptionDescriptors({ caps });
-  for (const descriptor of descriptors) {
-    if (descriptor.type === "select" && descriptor.promptInjectedValues?.includes(trimmed)) {
-      return trimmed;
-    }
-  }
-  return null;
-}
-
-export function applyClaudePromptEffortPrefix(
-  text: string,
-  effort: string | null | undefined,
-): string {
-  const trimmed = text.trim();
-  if (!trimmed) {
-    return trimmed;
-  }
-  // Prefixing a slash command turns it into plain prose, so Claude never
-  // runs it. Command names come from arbitrary file names ("/deploy.prod",
-  // "/plugin:skill"), so accept any first token without a second slash;
-  // absolute paths like "/home/theo/app.ts" keep the prefix.
-  if (effort !== "ultrathink" || /^\/[^\s/]+(?:\s|$)/u.test(trimmed)) {
-    return trimmed;
-  }
-  if (trimmed.startsWith("Ultrathink:")) {
-    return trimmed;
-  }
-  return `Ultrathink:\n${trimmed}`;
 }

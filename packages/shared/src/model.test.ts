@@ -2,7 +2,6 @@ import { describe, expect, it } from "vite-plus/test";
 import { ProviderDriverKind, ProviderInstanceId, type ModelCapabilities } from "@t3tools/contracts";
 
 import {
-  applyClaudePromptEffortPrefix,
   buildExplicitProviderOptionSelectionsFromDescriptors,
   buildProviderOptionSelectionsFromDescriptors,
   createModelCapabilities,
@@ -21,6 +20,7 @@ import {
   normalizeModelSlug,
   modelHasVision,
   modelSelectionsEqual,
+  withoutPromptInjectedOptions,
 } from "./model.ts";
 
 it("keeps the Codex catalog display formatting", () => {
@@ -80,10 +80,10 @@ const claudeCaps: ModelCapabilities = createModelCapabilities({
       options: [
         { id: "medium", label: "Medium" },
         { id: "high", label: "High", isDefault: true },
-        { id: "ultrathink", label: "Ultrathink" },
+        { id: "max", label: "Max" },
+        { id: "ultracode", label: "Ultracode" },
       ],
       currentValue: "high",
-      promptInjectedValues: ["ultrathink"],
     },
     {
       id: "contextWindow",
@@ -116,10 +116,10 @@ describe("descriptor helpers", () => {
         options: [
           { id: "medium", label: "Medium" },
           { id: "high", label: "High", isDefault: true },
-          { id: "ultrathink", label: "Ultrathink" },
+          { id: "max", label: "Max" },
+          { id: "ultracode", label: "Ultracode" },
         ],
         currentValue: "medium",
-        promptInjectedValues: ["ultrathink"],
       },
       {
         id: "contextWindow",
@@ -223,33 +223,41 @@ describe("descriptor helpers", () => {
   });
 });
 
-describe("applyClaudePromptEffortPrefix", () => {
-  it("keeps slash commands intact when ultrathink is selected", () => {
-    expect(applyClaudePromptEffortPrefix("/compact", "ultrathink")).toBe("/compact");
-    expect(applyClaudePromptEffortPrefix(" /compact keep recent errors ", "ultrathink")).toBe(
-      "/compact keep recent errors",
-    );
-    expect(applyClaudePromptEffortPrefix(" /review src/model.ts ", "ultrathink")).toBe(
-      "/review src/model.ts",
-    );
-    expect(applyClaudePromptEffortPrefix("/security-review", "ultrathink")).toBe(
-      "/security-review",
-    );
-    expect(applyClaudePromptEffortPrefix("/plugin:skill run", "ultrathink")).toBe(
-      "/plugin:skill run",
-    );
-    expect(applyClaudePromptEffortPrefix("/deploy.prod to staging", "ultrathink")).toBe(
-      "/deploy.prod to staging",
-    );
+describe("retired Ultrathink effort", () => {
+  it("resumes saved ultrathink selections on the strongest reasoning level", () => {
+    const [effort] = getProviderOptionDescriptors({
+      caps: claudeCaps,
+      selections: [{ id: "effort", value: "ultrathink" }],
+    });
+    expect(effort?.currentValue).toBe("max");
   });
 
-  it("still adds the ultrathink prefix to ordinary prompts", () => {
-    expect(applyClaudePromptEffortPrefix("Investigate this failure", "ultrathink")).toBe(
-      "Ultrathink:\nInvestigate this failure",
-    );
-    expect(applyClaudePromptEffortPrefix("/home/theo/app.ts crashed on load", "ultrathink")).toBe(
-      "Ultrathink:\n/home/theo/app.ts crashed on load",
-    );
+  it("drops prompt-injected options from manifest capabilities", () => {
+    const caps = createModelCapabilities({
+      optionDescriptors: [
+        {
+          id: "effort",
+          label: "Reasoning",
+          type: "select",
+          options: [
+            { id: "high", label: "High", isDefault: true },
+            { id: "ultrathink", label: "Ultrathink" },
+          ],
+          promptInjectedValues: ["ultrathink"],
+        },
+        { id: "fastMode", label: "Fast Mode", type: "boolean" },
+      ],
+    });
+    expect(withoutPromptInjectedOptions(caps).optionDescriptors).toEqual([
+      {
+        id: "effort",
+        label: "Reasoning",
+        type: "select",
+        options: [{ id: "high", label: "High", isDefault: true }],
+      },
+      { id: "fastMode", label: "Fast Mode", type: "boolean" },
+    ]);
+    expect(withoutPromptInjectedOptions(claudeCaps)).toBe(claudeCaps);
   });
 });
 

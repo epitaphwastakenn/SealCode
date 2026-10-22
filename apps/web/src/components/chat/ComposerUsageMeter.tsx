@@ -47,9 +47,10 @@ export function ComposerUsageMeter(props: {
           <Button
             size="icon-sm"
             variant="ghost-muted"
-            className="size-7"
+            className="size-7 shrink-0"
             aria-label={`${title}: ${usage.peakPercent}% used`}
             data-composer-usage-meter
+            data-resting-controls-fixed
           >
             <span className="relative flex size-5 items-center justify-center">
               <svg

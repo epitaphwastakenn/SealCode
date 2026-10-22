@@ -41,12 +41,12 @@ describe("compileClaudeModelSelection", () => {
     ).toEqual({ fastMode: false });
   });
 
-  it("uses the model default SDK effort alongside prompt-injected effort", () => {
-    expect(
-      compileClaudeModelSelection(
-        selection("claude-sonnet-4-6", [{ id: "effort", value: "ultrathink" }]),
-      ),
-    ).toMatchObject({ effort: "high", promptEffort: "ultrathink" });
+  it("resumes a retired ultrathink selection on the strongest SDK effort", () => {
+    const compiled = compileClaudeModelSelection(
+      selection("claude-opus-5-5", [{ id: "effort", value: "ultrathink" }]),
+    );
+    expect(compiled.effort).toBe("max");
+    expect(compiled.settings).not.toHaveProperty("ultracode");
   });
 
   it("keeps explicit effort for models missing from the local catalog", () => {

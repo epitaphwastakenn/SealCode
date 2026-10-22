@@ -11,6 +11,8 @@ const testState = vi.hoisted(() => {
     defaultModelSelection: null,
     defaultRuntimeMode: "full-access" as RuntimeMode,
   };
+  let threadShells: ReadonlyArray<Record<string, unknown>> = [];
+  let routeTarget: unknown = null;
   let storedDraft: {
     readonly draftId: string;
     readonly environmentId: string;
@@ -46,6 +48,16 @@ const testState = vi.hoisted(() => {
     get projectRemoved() {
       return projectRemoved;
     },
+    get threadShells() {
+      return threadShells;
+    },
+    get routeTarget() {
+      return routeTarget;
+    },
+    viewing(nextRouteTarget: unknown, nextThreadShells: ReadonlyArray<Record<string, unknown>>) {
+      routeTarget = nextRouteTarget;
+      threadShells = nextThreadShells;
+    },
     removeProject() {
       projectRemoved = true;
     },
@@ -61,6 +73,8 @@ const testState = vi.hoisted(() => {
     ) {
       storedDraft = nextStoredDraft;
       projectRemoved = false;
+      threadShells = [];
+      routeTarget = null;
       targetSettings = {
         defaultThreadEnvMode: workspaceDefaults.envMode,
         newWorktreesStartFromOrigin: workspaceDefaults.startFromOrigin,
@@ -71,6 +85,7 @@ const testState = vi.hoisted(() => {
       router.navigate.mockClear();
       draftStore.setDraftThreadContext.mockClear();
       draftStore.setLogicalProjectDraftThreadId.mockClear();
+      draftStore.setModelSelection.mockClear();
       projectFileRead = new Promise<null>((resolve) => {
         completeProjectFileRead = resolve;
       });
@@ -156,7 +171,6 @@ vi.mock("../composerDraftStore", () => {
 vi.mock("../lib/chatThreadActions", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../lib/chatThreadActions")>()),
   hasExplicitComposerModelSelection: () => false,
-  resolveNewThreadModelSelectionOverride: () => null,
 }));
 vi.mock("../lib/t3ProjectFileDefaults", () => ({
   readT3ProjectFile: () => testState.projectFileRead,
@@ -181,8 +195,9 @@ vi.mock("../state/entities", () => {
   return {
     readProject: () => (testState.projectRemoved ? null : project),
     readProjects: () => (testState.projectRemoved ? [] : [project]),
-    readThreadShell: () => null,
-    readThreadShells: () => [],
+    readThreadShell: (ref: { readonly threadId: string }) =>
+      testState.threadShells.find((thread) => thread.id === ref.threadId) ?? null,
+    readThreadShells: () => testState.threadShells,
     useProjects: () => [],
     useThread: () => null,
   };
@@ -191,7 +206,7 @@ vi.mock("../state/server", () => ({
   environmentServerConfigsAtom: {},
   primaryServerSettingsAtom: "primary-settings",
 }));
-vi.mock("../threadRoutes", () => ({ resolveThreadRouteTarget: () => null }));
+vi.mock("../threadRoutes", () => ({ resolveThreadRouteTarget: () => testState.routeTarget }));
 vi.mock("../uiStateStore", () => ({
   legacyProjectCwdPreferenceKey: () => "remote-project",
   useUiStateStore: () => [],
@@ -242,5 +257,88 @@ describe.each([
     await expect(pendingOpen).resolves.toBeNull();
     expect(testState.router.navigate).not.toHaveBeenCalled();
     expect(testState.draftStore.setLogicalProjectDraftThreadId).not.toHaveBeenCalled();
+  });
+
+  it("seeds the draft with the target project's last-used settings, not its workspace", async () => {
+    testState.reset(draft);
+    const lastUsedSelection = {
+      instanceId: "codex",
+      model: "gpt-6.1-sol",
+      options: [{ id: "reasoningEffort", value: "high" }],
+    };
+    testState.viewing(null, [
+      {
+        id: "thread-last-used",
+        environmentId: "environment-ssh",
+        projectId: "project-remote",
+        modelSelection: lastUsedSelection,
+        runtimeMode: "auto",
+        interactionMode: "plan",
+        branch: "feature/last-used",
+        worktreePath: "/remote/project/.worktrees/last-used",
+        updatedAt: "2026-10-21T10:00:00.000Z",
+      },
+    ]);
+    const pendingOpen = useNewThreadHandler()({
+      environmentId: "environment-ssh",
+      projectId: "project-remote",
+    } as never);
+    testState.completeProjectFileRead(null);
+    await pendingOpen;
+
+    expect(testState.draftStore.setLogicalProjectDraftThreadId).toHaveBeenLastCalledWith(
+      "remote-project",
+      expect.anything(),
+      expect.any(String),
+      expect.objectContaining({
+        runtimeMode: "auto",
+        interactionMode: "plan",
+        branch: null,
+        worktreePath: null,
+        envMode: "local",
+      }),
+    );
+    expect(testState.draftStore.setModelSelection).toHaveBeenLastCalledWith(
+      expect.any(String),
+      lastUsedSelection,
+      expect.anything(),
+    );
+  });
+
+  it("does not carry the viewed thread's settings into a different project", async () => {
+    testState.reset(draft);
+    testState.viewing(
+      {
+        kind: "server",
+        threadRef: { environmentId: "environment-primary", threadId: "thread-other-project" },
+      },
+      [
+        {
+          id: "thread-other-project",
+          environmentId: "environment-primary",
+          projectId: "project-other",
+          modelSelection: { instanceId: "claudeAgent", model: "claude-opus-5-5", options: [] },
+          runtimeMode: "approval-required",
+          interactionMode: "plan",
+          branch: null,
+          worktreePath: null,
+          updatedAt: "2026-10-21T10:00:00.000Z",
+        },
+      ],
+    );
+    const pendingOpen = useNewThreadHandler()({
+      environmentId: "environment-ssh",
+      projectId: "project-remote",
+    } as never);
+    testState.completeProjectFileRead(null);
+    await pendingOpen;
+
+    expect(testState.draftStore.setModelSelection).not.toHaveBeenCalled();
+    expect(testState.draftStore.setLogicalProjectDraftThreadId).not.toHaveBeenCalledWith(
+      expect.anything(),
+      expect.anything(),
+      expect.anything(),
+      expect.objectContaining({ interactionMode: "plan" }),
+    );
   });
 });

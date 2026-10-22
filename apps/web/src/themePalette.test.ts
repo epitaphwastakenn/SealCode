@@ -3,6 +3,7 @@ import { converter } from "culori/fn";
 import { BUILT_IN_THEMES } from "@t3tools/shared/themePalettes";
 
 import {
+  adjustThemeColorsBrightness,
   applyThemeColorPreview,
   applyThemePalette,
   getThemeColorsForMode,
@@ -429,6 +430,103 @@ describe("theme files", () => {
 
     expect(theme.gradient).toBe(true);
     expect(JSON.parse(serializeThemeFile(theme)).gradient).toBe(true);
+  });
+
+  describe("brightness", () => {
+    const lightBase = getStandardThemeColors("light");
+    const darkBase = getStandardThemeColors("dark");
+    const lightness = (value: string) => converter("oklch")(value)!.l;
+    const TEXT_ON_SURFACE = [
+      ["text", "canvas"],
+      ["textMuted", "canvas"],
+      ["sidebarForeground", "sidebar"],
+      ["codeForeground", "codeBackground"],
+      ["terminalForeground", "terminalBackground"],
+    ] as const;
+
+    it("returns the same palette at 0 and restores the original colors", () => {
+      expect(adjustThemeColorsBrightness(darkBase, 0)).toBe(darkBase);
+      const theme = parseThemeFile({
+        version: THEME_FILE_VERSION,
+        name: "Dimmed",
+        appearance: "dark",
+        colors: darkBase,
+        brightness: 0.4,
+      });
+      expect(getThemeColorsForMode(theme, "dark")).not.toEqual(theme.colors);
+      expect(getThemeColorsForMode({ ...theme, brightness: 0 }, "dark")).toEqual(theme.colors);
+    });
+
+    it("moves surfaces in the requested direction and keeps hue", () => {
+      const lighter = adjustThemeColorsBrightness(darkBase, 0.6);
+      const darker = adjustThemeColorsBrightness(darkBase, -0.6);
+      expect(lightness(lighter.canvas)).toBeGreaterThan(lightness(darkBase.canvas));
+      expect(lightness(darker.canvas)).toBeLessThan(lightness(darkBase.canvas));
+      expect(lightness(lighter.border)).toBeGreaterThan(lightness(darkBase.border));
+      const hue = (value: string) => converter("oklch")(value)!.h!;
+      expect(Math.abs(hue(lighter.accent) - hue(darkBase.accent))).toBeLessThan(2);
+    });
+
+    it("keeps text at least as readable as before, capped at AA, in both directions", () => {
+      for (const base of [lightBase, darkBase]) {
+        for (const brightness of [-1, -0.5, 0.5, 1]) {
+          const adjusted = adjustThemeColorsBrightness(base, brightness);
+          for (const [foreground, surface] of TEXT_ON_SURFACE) {
+            const required = Math.min(4.5, contrastRatio(base[foreground], base[surface])) - 0.05;
+            expect(
+              contrastRatio(adjusted[foreground], adjusted[surface]),
+              `${foreground} on ${surface} at ${brightness}`,
+            ).toBeGreaterThanOrEqual(required);
+          }
+        }
+      }
+    });
+
+    it("moves the brand colors less than the surfaces", () => {
+      const adjusted = adjustThemeColorsBrightness(darkBase, 1);
+      const surfaceShift = lightness(adjusted.canvas) - lightness(darkBase.canvas);
+      const accentShift = lightness(adjusted.accent) - lightness(darkBase.accent);
+      expect(Math.abs(accentShift)).toBeLessThan(surfaceShift);
+    });
+
+    it("applies to variants, caches by reference, and round-trips through the theme file", () => {
+      const theme = parseThemeFile({
+        version: THEME_FILE_VERSION,
+        name: "Bright pair",
+        appearance: "light",
+        colors: lightBase,
+        variants: { dark: darkBase },
+        brightness: -0.3,
+      });
+      expect(theme.brightness).toBe(-0.3);
+      const light = getThemeColorsForMode(theme, "light");
+      expect(getThemeColorsForMode(theme, "light")).toBe(light);
+      expect(getThemeColorsForMode(theme, "dark")).not.toEqual(theme.variants?.dark);
+      expect(parseThemeFile(JSON.parse(serializeThemeFile(theme))).brightness).toBe(-0.3);
+    });
+
+    it("opens themes without a usable brightness unchanged", () => {
+      for (const brightness of [undefined, 0, "bright", Number.NaN]) {
+        const theme = parseThemeFile({
+          version: THEME_FILE_VERSION,
+          name: "Plain",
+          appearance: "dark",
+          colors: { accent: "#5b6cff" },
+          ...(brightness === undefined ? {} : { brightness }),
+        });
+        expect(theme.brightness).toBeUndefined();
+        expect(getThemeColorsForMode(theme, "dark")).toBe(theme.colors);
+        expect(JSON.parse(serializeThemeFile(theme))).not.toHaveProperty("brightness");
+      }
+      const clamped = parseThemeFile({
+        version: THEME_FILE_VERSION,
+        name: "Clamped",
+        appearance: "dark",
+        colors: { accent: "#5b6cff" },
+        brightness: 7,
+      });
+      expect(clamped.brightness).toBe(1);
+    });
   });
 
   it("suppresses sidebar artwork during a live custom-theme preview", () => {

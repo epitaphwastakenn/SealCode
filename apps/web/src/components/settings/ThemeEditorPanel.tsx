@@ -1,7 +1,14 @@
 import { MousePointer2Icon, PaintbrushIcon, PlusIcon, XIcon } from "lucide-react";
 import { ChevronDown, ChevronUp } from "lucide";
-import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
+import {
+  adjustThemeColorsBrightness,
   applyThemeColorPreview,
   THEME_COLOR_ROLES,
   THEME_FILE_VERSION,
@@ -331,6 +338,7 @@ export function ThemeEditorPanel({
   const [name, setName] = useState("");
   const [activeAppearance, setActiveAppearance] = useState<ThemeAppearance>(initialAppearance);
   const [gradient, setGradient] = useState(false);
+  const [brightness, setBrightness] = useState(0);
   const [isAdvanced, setIsAdvanced] = useState(false);
   const [colorsByAppearance, setColorsByAppearance] = useState<ThemeEditorColorsByAppearance>(() =>
     getThemeEditorColorsByAppearance(),
@@ -410,6 +418,9 @@ export function ThemeEditorPanel({
       // Gradient is opt-in for new themes, including duplicates. Editing keeps the
       // theme's existing choice.
       setGradient(editingTheme?.gradient === true);
+      // Unlike the gradient, a duplicate keeps its source's brightness: it is
+      // part of how the source looks.
+      setBrightness(sourceTheme?.brightness ?? 0);
       // Themes saved by the guided editor carry the managed flag; anything else
       // (imports, hand-edited files, older saves) opens in advanced mode so
       // guided regeneration cannot silently discard hand-tuned colors.
@@ -470,12 +481,17 @@ export function ThemeEditorPanel({
   if (appliedMergeTargetId !== mergeTargetId) {
     setAppliedMergeTargetId(mergeTargetId);
     setGradient(mergeTarget ? mergeTarget.gradient === true : editingTheme?.gradient === true);
+    setBrightness(mergeTarget ? (mergeTarget.brightness ?? 0) : (editingTheme?.brightness ?? 0));
   }
 
   useEffect(() => {
     if (!open) return;
-    applyThemeColorPreview(colorsByAppearance[activeAppearance], activeAppearance, gradient);
-  }, [activeAppearance, colorsByAppearance, gradient, open]);
+    applyThemeColorPreview(
+      adjustThemeColorsBrightness(colorsByAppearance[activeAppearance], brightness),
+      activeAppearance,
+      gradient,
+    );
+  }, [activeAppearance, brightness, colorsByAppearance, gradient, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -800,6 +816,7 @@ export function ThemeEditorPanel({
               ...Object.fromEntries(editedModes.map((mode) => [mode, colorsForSave[mode]])),
             },
             ...(gradient ? { gradient: true } : {}),
+            ...(brightness !== 0 ? { brightness } : {}),
             ...(mergeTarget.managed === true && !isAdvanced ? { managed: true } : {}),
           }),
           ...(mergeTarget.collection ? { collection: mergeTarget.collection } : {}),
@@ -820,6 +837,7 @@ export function ThemeEditorPanel({
               ? { variants: { [variantAppearance]: colorsForSave[variantAppearance] } }
               : {}),
             ...(gradient ? { gradient: true } : {}),
+            ...(brightness !== 0 ? { brightness } : {}),
             ...(isAdvanced ? {} : { managed: true }),
           }),
           ...(editingTheme.collection ? { collection: editingTheme.collection } : {}),
@@ -844,6 +862,7 @@ export function ThemeEditorPanel({
               [activeAppearance]: colorsForSave[activeAppearance],
             },
             ...(gradient ? { gradient: true } : {}),
+            ...(brightness !== 0 ? { brightness } : {}),
             ...(mergeTarget.managed === true && !isAdvanced ? { managed: true } : {}),
           }),
           ...(mergeTarget.collection ? { collection: mergeTarget.collection } : {}),
@@ -856,6 +875,7 @@ export function ThemeEditorPanel({
             appearance: activeAppearance,
             colors: colorsForSave[activeAppearance],
             ...(gradient ? { gradient: true } : {}),
+            ...(brightness !== 0 ? { brightness } : {}),
             ...(isAdvanced ? {} : { managed: true }),
           }),
         );
@@ -961,6 +981,48 @@ export function ThemeEditorPanel({
       </span>
     </label>
   );
+
+  const renderBrightnessSlider = () => {
+    const percent = Math.round(brightness * 100);
+    const ratio = (brightness + 1) / 2;
+    return (
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-center gap-3">
+        <span className="text-sm font-medium">Brightness</span>
+        <div className="flex min-w-0 items-center gap-2">
+          <input
+            aria-label="Theme brightness"
+            aria-valuetext={percent === 0 ? "Original" : `${percent > 0 ? "+" : ""}${percent}%`}
+            className="settings-slider min-w-0 flex-1"
+            max={100}
+            min={-100}
+            onChange={(event) => setBrightness(Number(event.currentTarget.value) / 100)}
+            onDoubleClick={() => setBrightness(0)}
+            step={1}
+            style={
+              {
+                "--settings-slider-progress": `${ratio * 100}%`,
+                "--settings-slider-fill-offset": `${0.5 - ratio}rem`,
+              } as CSSProperties
+            }
+            type="range"
+            value={percent}
+          />
+          <output className="w-9 shrink-0 text-right font-mono text-xs tabular-nums text-muted-foreground">
+            {percent > 0 ? `+${percent}` : percent}
+          </output>
+          <Button
+            aria-label="Reset brightness"
+            disabled={brightness === 0}
+            onClick={() => setBrightness(0)}
+            size="xs"
+            variant="ghost"
+          >
+            Reset
+          </Button>
+        </div>
+      </div>
+    );
+  };
 
   const renderColorsHeader = () => (
     <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-start gap-3">
@@ -1206,6 +1268,7 @@ export function ThemeEditorPanel({
             ) : null}
             {renderAppearanceButtons()}
             {renderGradientToggle()}
+            {renderBrightnessSlider()}
             <div className="space-y-3">
               {renderColorsHeader()}
               {renderColorFields()}

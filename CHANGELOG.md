@@ -10,6 +10,19 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.17.5 · 2026-10-22
+
+> Caught up with 700 upstream T3 Code changes, a theme brightness slider and tidier settings.
+
+### New
+
+- **Theme brightness** — When you create or edit a theme, a brightness slider makes the whole theme darker or lighter without changing each colour. Back in the middle, the theme is exactly as before.
+
+### Improved
+
+- **Up to date with T3 Code** — About 700 upstream changes: faster performance, provider and model compatibility, server and web fixes. Everything SealCode adds stays as it was.
+- **Settings descriptions** — Section descriptions such as Roblox Studio, Computer Use and Global MCP Servers now sit under the section title as a quieter subtitle, instead of as a row of plain text.
+
 ## 2.17.4 · 2026-10-22
 
 > A bolder effort slider and a composer that stays tidy at any size.

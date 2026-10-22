@@ -97,48 +97,13 @@ export function useNewThreadHandler() {
     const requestingRouteHref = router.state.location.href;
     const routeChangedSinceRequest = () => router.state.location.href !== requestingRouteHref;
     const currentRouteTarget = getCurrentRouteTarget();
-    const carrySourceShell =
-      currentRouteTarget?.kind === "server" ? readThreadShell(currentRouteTarget.threadRef) : null;
-    const carrySourceDraft =
-      currentRouteTarget?.kind === "draft" ? getDraftSession(currentRouteTarget.draftId) : null;
-    const carrySourceComposer = currentRouteTarget
-      ? getComposerDraft(
-          currentRouteTarget.kind === "server"
-            ? currentRouteTarget.threadRef
-            : currentRouteTarget.draftId,
-        )
-      : null;
-    const composerActiveProvider = carrySourceComposer?.activeProvider ?? null;
-    const composerModelSelection = composerActiveProvider
-      ? (carrySourceComposer?.modelSelectionByProvider[composerActiveProvider] ?? null)
-      : null;
-    const carrySourceProject = carrySourceShell ?? carrySourceDraft;
-    // The viewed thread only speaks for its own project; past it, the target
-    // project's most recently used thread does.
-    const carryFromRoute =
-      carrySourceProject?.environmentId === projectRef.environmentId &&
-      carrySourceProject.projectId === projectRef.projectId;
+    // A new thread starts from the target project's last user-used settings,
+    // not from whatever thread happens to be on screen; picks already made
+    // in the destination draft are kept below.
     const lastUsed = resolveProjectLastUsedSettings(readThreadShells(), projectRef);
-    const carryModelSelection =
-      (carryFromRoute ? (composerModelSelection ?? carrySourceShell?.modelSelection) : null) ??
-      lastUsed?.modelSelection ??
-      null;
-    const carryInteractionMode =
-      (carryFromRoute
-        ? (carrySourceComposer?.interactionMode ??
-          carrySourceShell?.interactionMode ??
-          carrySourceDraft?.interactionMode)
-        : null) ??
-      lastUsed?.interactionMode ??
-      null;
-    // A draft session's runtime mode is not a choice: drafts are created with
-    // the built-in default and the composer shows the project default instead.
-    const carryRuntimeMode =
-      (carryFromRoute
-        ? (carrySourceComposer?.runtimeMode ?? carrySourceShell?.runtimeMode)
-        : null) ??
-      lastUsed?.runtimeMode ??
-      null;
+    const carryModelSelection = lastUsed?.modelSelection ?? null;
+    const carryInteractionMode = lastUsed?.interactionMode ?? null;
+    const carryRuntimeMode = lastUsed?.runtimeMode ?? null;
     const project = projects.find(
       (candidate) =>
         candidate.id === projectRef.projectId &&

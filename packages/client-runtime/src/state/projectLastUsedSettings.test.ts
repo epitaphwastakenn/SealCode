@@ -48,6 +48,40 @@ describe("resolveProjectLastUsedSettings", () => {
     });
   });
 
+  it("skips threads the user never wrote in, however recent", () => {
+    const settings = resolveProjectLastUsedSettings(
+      [
+        thread("user-written", {
+          runtimeMode: "auto",
+          latestUserAuthoredMessageAt: "2026-10-02T00:00:00.000Z",
+        }),
+        thread("scheduled-run", {
+          updatedAt: "2026-10-09T00:00:00.000Z",
+          latestUserAuthoredMessageAt: null,
+        }),
+        thread("legacy-recent", { updatedAt: "2026-10-08T00:00:00.000Z" }),
+      ],
+      { environmentId, projectId },
+    );
+
+    expect(settings?.modelSelection.model).toBe("user-written");
+    expect(
+      resolveProjectLastUsedSettings([thread("automated", { latestUserAuthoredMessageAt: null })], {
+        environmentId,
+        projectId,
+      }),
+    ).toBeNull();
+  });
+
+  it("falls back to the latest update on servers without authored timestamps", () => {
+    const settings = resolveProjectLastUsedSettings(
+      [thread("older"), thread("newer", { updatedAt: "2026-10-03T00:00:00.000Z" })],
+      { environmentId, projectId },
+    );
+
+    expect(settings?.modelSelection.model).toBe("newer");
+  });
+
   it("ignores other projects, other environments, and subagent threads", () => {
     const later = { updatedAt: "2026-10-09T00:00:00.000Z" };
     const settings = resolveProjectLastUsedSettings(

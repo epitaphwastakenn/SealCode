@@ -358,6 +358,69 @@ describe.each([
       expect.objectContaining({ interactionMode: "plan" }),
     );
   });
+  it("prefers the project's last user-used thread over the viewed one", async () => {
+    testState.reset(draft);
+    const sameProjectThread = {
+      environmentId: "environment-ssh",
+      projectId: "project-remote",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+    };
+    const userSelection = { instanceId: "codex", model: "gpt-6.1-sol", options: [] };
+    const viewed = (threadId: string) => ({
+      kind: "server",
+      threadRef: { environmentId: "environment-ssh", threadId },
+    });
+    const threads = [
+      {
+        ...sameProjectThread,
+        id: "thread-subagent",
+        modelSelection: { instanceId: "codex", model: "gpt-6.1-mini", options: [] },
+        runtimeMode: "full-access",
+        lineage: { relationshipToParent: "subagent" },
+        updatedAt: "2026-10-21T12:00:00.000Z",
+        latestUserAuthoredMessageAt: null,
+      },
+      {
+        ...sameProjectThread,
+        id: "thread-older",
+        modelSelection: { instanceId: "claudeAgent", model: "claude-opus-5-5", options: [] },
+        runtimeMode: "approval-required",
+        updatedAt: "2026-10-20T10:00:00.000Z",
+        latestUserAuthoredMessageAt: "2026-10-20T10:00:00.000Z",
+      },
+      {
+        ...sameProjectThread,
+        id: "thread-user",
+        modelSelection: userSelection,
+        runtimeMode: "auto",
+        updatedAt: "2026-10-21T10:00:00.000Z",
+        latestUserAuthoredMessageAt: "2026-10-21T10:00:00.000Z",
+      },
+    ];
+
+    for (const threadId of ["thread-subagent", "thread-older"]) {
+      testState.reset(draft);
+      testState.viewing(viewed(threadId), threads);
+      const pendingOpen = useNewThreadHandler()({
+        environmentId: "environment-ssh",
+        projectId: "project-remote",
+      } as never);
+      testState.completeProjectFileRead(null);
+      await pendingOpen;
+
+      expect(testState.draftStore.setRuntimeMode).toHaveBeenLastCalledWith(
+        expect.any(String),
+        "auto",
+      );
+      expect(testState.draftStore.setModelSelection).toHaveBeenLastCalledWith(
+        expect.any(String),
+        userSelection,
+        expect.anything(),
+      );
+    }
+  });
 });
 
 describe("useNewThreadHandler runtime mode precedence", () => {

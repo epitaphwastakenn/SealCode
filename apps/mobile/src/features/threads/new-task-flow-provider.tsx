@@ -632,11 +632,16 @@ export function NewTaskFlowProvider(
     ) ?? null;
   const planModeEnabled =
     legacyPlanModeEnabled && selectedProviderStatus?.showInteractionModeToggle !== false;
-  const interactionMode = planModeEnabled
-    ? (selectedProjectDraft.interactionMode ??
-      lastUsed?.interactionMode ??
-      DEFAULT_PROVIDER_INTERACTION_MODE)
-    : DEFAULT_PROVIDER_INTERACTION_MODE;
+  // Display and submission resolve through the same function so an untouched
+  // draft sends the mode it shows.
+  const interactionMode = resolvePendingTaskInteractionMode({
+    preferenceLoaded: planModePreferenceLoaded,
+    planModeEnabled: legacyPlanModeEnabled,
+    draftInteractionMode: selectedProjectDraft.interactionMode,
+    inheritedInteractionMode: lastUsed?.interactionMode,
+    queuedInteractionMode: editingPendingTask?.interactionMode,
+    provider: selectedProviderStatus,
+  });
   const setSelectedModelKey = (
     key: string | null,
     options?: ReadonlyArray<ProviderOptionSelection>,
@@ -1066,6 +1071,7 @@ export function NewTaskFlowProvider(
         preferenceLoaded: planModePreferenceLoaded,
         planModeEnabled: legacyPlanModeEnabled,
         draftInteractionMode: draft.interactionMode,
+        inheritedInteractionMode: lastUsed?.interactionMode,
         queuedInteractionMode: editingPendingTask?.interactionMode,
         provider: selectedEnvironmentServerConfig?.providers.find(
           (candidate) => candidate.instanceId === draftModelSelection.instanceId,

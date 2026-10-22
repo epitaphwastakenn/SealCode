@@ -22,29 +22,40 @@ export interface ProjectLastUsedSettings {
 }
 
 /**
- * The composer settings of the project's most recently used thread. Agents
- * pick subagent settings, so those threads say nothing about the user's choice.
+ * The composer settings of the project thread the user last wrote in. Agents
+ * pick subagent settings, and a null latestUserAuthoredMessageAt marks a
+ * thread only automation has written in, so neither says anything about the
+ * user's choice. Servers that predate the field omit it; their threads fall
+ * back to updatedAt and only count when no thread carries the field.
  */
 export function resolveProjectLastUsedSettings(
   threads: ReadonlyArray<ProjectLastUsedSettingsThread>,
   project: { readonly environmentId: EnvironmentId; readonly projectId: ProjectId },
 ): ProjectLastUsedSettings | null {
-  let latest: ProjectLastUsedSettingsThread | null = null;
-  let latestAt = "";
+  let authored: ProjectLastUsedSettingsThread | null = null;
+  let authoredAt = "";
+  let legacy: ProjectLastUsedSettingsThread | null = null;
+  let legacyAt = "";
   for (const thread of threads) {
     if (
       thread.environmentId !== project.environmentId ||
       thread.projectId !== project.projectId ||
-      thread.lineage?.relationshipToParent === "subagent"
+      thread.lineage?.relationshipToParent === "subagent" ||
+      thread.latestUserAuthoredMessageAt === null
     ) {
       continue;
     }
-    const usedAt = thread.latestUserAuthoredMessageAt ?? thread.updatedAt;
-    if (latest === null || usedAt > latestAt) {
-      latest = thread;
-      latestAt = usedAt;
+    if (thread.latestUserAuthoredMessageAt === undefined) {
+      if (legacy === null || thread.updatedAt > legacyAt) {
+        legacy = thread;
+        legacyAt = thread.updatedAt;
+      }
+    } else if (authored === null || thread.latestUserAuthoredMessageAt > authoredAt) {
+      authored = thread;
+      authoredAt = thread.latestUserAuthoredMessageAt;
     }
   }
+  const latest = authored ?? legacy;
   return latest === null
     ? null
     : {

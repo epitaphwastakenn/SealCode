@@ -13,6 +13,7 @@ const testState = vi.hoisted(() => {
   };
   let threadShells: ReadonlyArray<Record<string, unknown>> = [];
   let routeTarget: unknown = null;
+  let runtimeModeSource: "environment" | "project" = "environment";
   let storedDraft: {
     readonly draftId: string;
     readonly environmentId: string;
@@ -29,7 +30,7 @@ const testState = vi.hoisted(() => {
     }),
   };
   const draftStore = {
-    getComposerDraft: vi.fn(() => ({})),
+    getComposerDraft: vi.fn((): Record<string, unknown> => ({})),
     getDraftSessionByLogicalProjectKey: vi.fn(() => storedDraft),
     getDraftSession: vi.fn(() => null),
     getDraftThread: vi.fn(() => null),
@@ -37,6 +38,7 @@ const testState = vi.hoisted(() => {
     setDraftThreadContext: vi.fn(),
     setLogicalProjectDraftThreadId: vi.fn(),
     setModelSelection: vi.fn(),
+    setRuntimeMode: vi.fn(),
   };
 
   return {
@@ -53,6 +55,13 @@ const testState = vi.hoisted(() => {
     },
     get routeTarget() {
       return routeTarget;
+    },
+    get runtimeModeSource() {
+      return runtimeModeSource;
+    },
+    configureProjectRuntimeMode(mode: RuntimeMode) {
+      targetSettings = { ...targetSettings, defaultRuntimeMode: mode };
+      runtimeModeSource = "project";
     },
     viewing(nextRouteTarget: unknown, nextThreadShells: ReadonlyArray<Record<string, unknown>>) {
       routeTarget = nextRouteTarget;
@@ -75,6 +84,7 @@ const testState = vi.hoisted(() => {
       projectRemoved = false;
       threadShells = [];
       routeTarget = null;
+      runtimeModeSource = "environment";
       targetSettings = {
         defaultThreadEnvMode: workspaceDefaults.envMode,
         newWorktreesStartFromOrigin: workspaceDefaults.startFromOrigin,
@@ -86,6 +96,9 @@ const testState = vi.hoisted(() => {
       draftStore.setDraftThreadContext.mockClear();
       draftStore.setLogicalProjectDraftThreadId.mockClear();
       draftStore.setModelSelection.mockClear();
+      draftStore.setRuntimeMode.mockClear();
+      draftStore.getComposerDraft.mockReset();
+      draftStore.getComposerDraft.mockReturnValue({});
       projectFileRead = new Promise<null>((resolve) => {
         completeProjectFileRead = resolve;
       });
@@ -142,7 +155,11 @@ vi.mock("@t3tools/shared/projectSettings", () => ({
             defaultThreadEnvMode:
               settings.defaultThreadEnvMode ?? projectFile?.defaultThreadEnvMode ?? "local",
           },
-    sources: { defaultModelSelection: "environment", defaultThreadEnvMode: "environment" },
+    sources: {
+      defaultModelSelection: "environment",
+      defaultThreadEnvMode: "environment",
+      defaultRuntimeMode: testState.runtimeModeSource,
+    },
     overrides: {},
   }),
   resolveNewThreadEnvMode: (input: {
@@ -340,5 +357,64 @@ describe.each([
       expect.anything(),
       expect.objectContaining({ interactionMode: "plan" }),
     );
+  });
+});
+
+describe("useNewThreadHandler runtime mode precedence", () => {
+  const lastUsedThread = {
+    id: "thread-last-used",
+    environmentId: "environment-ssh",
+    projectId: "project-remote",
+    modelSelection: { instanceId: "codex", model: "gpt-6.1-sol", options: [] },
+    runtimeMode: "auto",
+    interactionMode: "default",
+    branch: null,
+    worktreePath: null,
+    updatedAt: "2026-10-21T10:00:00.000Z",
+  };
+  const openTarget = async () => {
+    const pendingOpen = useNewThreadHandler()({
+      environmentId: "environment-ssh",
+      projectId: "project-remote",
+    } as never);
+    testState.completeProjectFileRead(null);
+    await pendingOpen;
+  };
+
+  it("lets a project-configured runtime mode win over the last used one", async () => {
+    testState.reset(null);
+    testState.configureProjectRuntimeMode("approval-required");
+    testState.viewing(null, [lastUsedThread]);
+    await openTarget();
+
+    expect(testState.draftStore.setRuntimeMode).not.toHaveBeenCalled();
+    expect(testState.draftStore.setLogicalProjectDraftThreadId).toHaveBeenLastCalledWith(
+      "remote-project",
+      expect.anything(),
+      expect.any(String),
+      expect.objectContaining({ runtimeMode: "approval-required" }),
+    );
+  });
+
+  it("keeps the runtime mode a reused draft already picked", async () => {
+    testState.reset({
+      draftId: "draft-existing",
+      environmentId: "environment-ssh",
+      promotedTo: null,
+      threadId: "thread-existing",
+    });
+    testState.draftStore.getComposerDraft.mockReturnValue({ runtimeMode: "approval-required" });
+    testState.viewing(null, [lastUsedThread]);
+    await openTarget();
+
+    expect(testState.draftStore.setRuntimeMode).not.toHaveBeenCalled();
+  });
+
+  it("writes the last used runtime mode where the composer reads it", async () => {
+    testState.reset(null);
+    testState.viewing(null, [lastUsedThread]);
+    await openTarget();
+
+    expect(testState.draftStore.setRuntimeMode).toHaveBeenCalledWith("draft-delayed", "auto");
   });
 });

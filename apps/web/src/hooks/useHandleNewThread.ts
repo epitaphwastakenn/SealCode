@@ -29,6 +29,7 @@ import {
   useProjects,
   useQuietThreadShell,
 } from "../state/entities";
+import { resolveProjectLastUsedSettings } from "@t3tools/client-runtime/state/project-last-used-settings";
 import {
   hasExplicitComposerModelSelection,
   resolveNewDraftStartFromOrigin,
@@ -91,6 +92,7 @@ export function useNewThreadHandler() {
       setDraftThreadContext,
       setLogicalProjectDraftThreadId,
       setModelSelection,
+      setRuntimeMode,
     } = useComposerDraftStore.getState();
     const requestingRouteHref = router.state.location.href;
     const routeChangedSinceRequest = () => router.state.location.href !== requestingRouteHref;
@@ -110,11 +112,32 @@ export function useNewThreadHandler() {
     const composerModelSelection = composerActiveProvider
       ? (carrySourceComposer?.modelSelectionByProvider[composerActiveProvider] ?? null)
       : null;
-    const carryModelSelection = composerModelSelection ?? carrySourceShell?.modelSelection ?? null;
+    const carrySourceProject = carrySourceShell ?? carrySourceDraft;
+    // The viewed thread only speaks for its own project; past it, the target
+    // project's most recently used thread does.
+    const carryFromRoute =
+      carrySourceProject?.environmentId === projectRef.environmentId &&
+      carrySourceProject.projectId === projectRef.projectId;
+    const lastUsed = resolveProjectLastUsedSettings(readThreadShells(), projectRef);
+    const carryModelSelection =
+      (carryFromRoute ? (composerModelSelection ?? carrySourceShell?.modelSelection) : null) ??
+      lastUsed?.modelSelection ??
+      null;
     const carryInteractionMode =
-      carrySourceComposer?.interactionMode ??
-      carrySourceShell?.interactionMode ??
-      carrySourceDraft?.interactionMode ??
+      (carryFromRoute
+        ? (carrySourceComposer?.interactionMode ??
+          carrySourceShell?.interactionMode ??
+          carrySourceDraft?.interactionMode)
+        : null) ??
+      lastUsed?.interactionMode ??
+      null;
+    // A draft session's runtime mode is not a choice: drafts are created with
+    // the built-in default and the composer shows the project default instead.
+    const carryRuntimeMode =
+      (carryFromRoute
+        ? (carrySourceComposer?.runtimeMode ?? carrySourceShell?.runtimeMode)
+        : null) ??
+      lastUsed?.runtimeMode ??
       null;
     const project = projects.find(
       (candidate) =>
@@ -129,7 +152,16 @@ export function useNewThreadHandler() {
       project,
     );
     const projectDefaultModelSelection = projectSettings.settings.defaultModelSelection;
-    const defaultRuntimeMode = projectSettings.settings.defaultRuntimeMode;
+    const inheritedRuntimeMode =
+      projectSettings.sources.defaultRuntimeMode === "project" ? null : carryRuntimeMode;
+    const defaultRuntimeMode = inheritedRuntimeMode ?? projectSettings.settings.defaultRuntimeMode;
+    // The composer reads a draft's runtime mode from its composer state, so
+    // an inherited mode is written there too, unless the draft already has a pick.
+    const applyInheritedRuntimeMode = (destinationDraftId: DraftId) => {
+      if (inheritedRuntimeMode && !getComposerDraft(destinationDraftId)?.runtimeMode) {
+        setRuntimeMode(destinationDraftId, inheritedRuntimeMode);
+      }
+    };
     const resolveModelSelectionOverride = (destinationDraftId: DraftId) =>
       resolveNewThreadModelSelectionOverride({
         projectDefaultSelection: projectDefaultModelSelection ?? null,
@@ -273,6 +305,9 @@ export function useNewThreadHandler() {
             ...(carryInteractionMode ? { interactionMode: carryInteractionMode } : {}),
           },
         );
+        if (!isDraftAlreadyOpen) {
+          applyInheritedRuntimeMode(emptyStoredDraftThread.draftId);
+        }
         const opened = {
           draftId: emptyStoredDraftThread.draftId,
           threadId: emptyStoredDraftThread.threadId,
@@ -368,6 +403,7 @@ export function useNewThreadHandler() {
         runtimeMode: defaultRuntimeMode,
         ...(carryInteractionMode ? { interactionMode: carryInteractionMode } : {}),
       });
+      applyInheritedRuntimeMode(draftId);
       applyStickyState(draftId);
       const modelSelectionOverride = resolveModelSelectionOverride(draftId);
       if (modelSelectionOverride) {

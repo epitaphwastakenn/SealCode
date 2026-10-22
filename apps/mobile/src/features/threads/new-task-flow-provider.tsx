@@ -103,6 +103,7 @@ import {
   squashAtomCommandFailure,
 } from "@t3tools/client-runtime/state/runtime";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
+import { resolveProjectLastUsedSettings } from "@t3tools/client-runtime/state/project-last-used-settings";
 import { EnvironmentProject } from "@t3tools/client-runtime/state/shell";
 import { type VcsRef } from "@t3tools/client-runtime/state/vcs";
 import {
@@ -559,9 +560,19 @@ export function NewTaskFlowProvider(
   const draftStartFromOrigin = selectedProjectDraft.workspaceSelection?.startFromOrigin;
   const startFromOrigin =
     isGitRepo && (draftStartFromOrigin ?? projectSettings.settings.newWorktreesStartFromOrigin);
+  // A queued task keeps its own settings; a new one starts from the project's
+  // most recently used thread.
+  const lastUsed =
+    editingPendingTask || !selectedProject
+      ? null
+      : resolveProjectLastUsedSettings(threads, {
+          environmentId: selectedProject.environmentId,
+          projectId: selectedProject.id,
+        });
   const defaultRuntimeMode = editingPendingTask
     ? (editingPendingTask.runtimeMode ?? DEFAULT_RUNTIME_MODE)
-    : projectSettings.settings.defaultRuntimeMode;
+    : ((projectSettings.sources.defaultRuntimeMode === "project" ? null : lastUsed?.runtimeMode) ??
+      projectSettings.settings.defaultRuntimeMode);
   const runtimeMode = selectedProjectDraft.runtimeMode ?? defaultRuntimeMode;
 
   // Antigravity keeps unavailable selections so sign-out or a catalog change
@@ -576,6 +587,11 @@ export function NewTaskFlowProvider(
     projectSettings.settings.defaultModelSelection,
     selectedProject?.id ?? null,
   );
+  const lastUsedModelSelection = resolveDefaultableModelSelection(
+    selectedEnvironmentServerConfig,
+    lastUsed?.modelSelection ?? null,
+    selectedProject?.id ?? null,
+  );
   const storedStickyModelSelection = useStickyComposerModelSelection();
   const stickyModelSelection = resolveDefaultableModelSelection(
     selectedEnvironmentServerConfig,
@@ -584,7 +600,10 @@ export function NewTaskFlowProvider(
   );
   const modelOptions = buildModelOptions(
     selectedEnvironmentServerConfig,
-    draftModelSelection ?? projectDefaultModelSelection ?? stickyModelSelection,
+    draftModelSelection ??
+      projectDefaultModelSelection ??
+      lastUsedModelSelection ??
+      stickyModelSelection,
     undefined,
     selectedProject?.id ?? null,
   );
@@ -592,6 +611,7 @@ export function NewTaskFlowProvider(
   const selectedModel = resolveNewTaskModelSelection({
     draftSelection: draftModelSelection,
     projectDefaultSelection: projectDefaultModelSelection,
+    lastUsedSelection: lastUsedModelSelection,
     stickySelection: stickyModelSelection,
     modelOptions,
   });
@@ -613,7 +633,9 @@ export function NewTaskFlowProvider(
   const planModeEnabled =
     legacyPlanModeEnabled && selectedProviderStatus?.showInteractionModeToggle !== false;
   const interactionMode = planModeEnabled
-    ? (selectedProjectDraft.interactionMode ?? DEFAULT_PROVIDER_INTERACTION_MODE)
+    ? (selectedProjectDraft.interactionMode ??
+      lastUsed?.interactionMode ??
+      DEFAULT_PROVIDER_INTERACTION_MODE)
     : DEFAULT_PROVIDER_INTERACTION_MODE;
   const setSelectedModelKey = (
     key: string | null,

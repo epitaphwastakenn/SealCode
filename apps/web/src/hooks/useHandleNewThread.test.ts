@@ -410,9 +410,11 @@ describe.each([
       testState.completeProjectFileRead(null);
       await pendingOpen;
 
-      expect(testState.draftStore.setRuntimeMode).toHaveBeenLastCalledWith(
+      expect(testState.draftStore.setLogicalProjectDraftThreadId).toHaveBeenLastCalledWith(
+        "remote-project",
+        expect.anything(),
         expect.any(String),
-        "auto",
+        expect.objectContaining({ runtimeMode: "auto" }),
       );
       expect(testState.draftStore.setModelSelection).toHaveBeenLastCalledWith(
         expect.any(String),
@@ -444,40 +446,66 @@ describe("useNewThreadHandler runtime mode precedence", () => {
     await pendingOpen;
   };
 
+  const reusableDraft = {
+    draftId: "draft-existing",
+    environmentId: "environment-ssh",
+    promotedTo: null,
+    threadId: "thread-existing",
+  };
+  // Composer state holds only modes the user picked; an inherited one written
+  // there would outrank every later default.
+  const lastSessionRuntimeMode = () => {
+    expect(testState.draftStore.setRuntimeMode).not.toHaveBeenCalled();
+    return testState.draftStore.setLogicalProjectDraftThreadId.mock.lastCall?.[3]?.runtimeMode;
+  };
+
   it("lets a project-configured runtime mode win over the last used one", async () => {
     testState.reset(null);
     testState.configureProjectRuntimeMode("approval-required");
     testState.viewing(null, [lastUsedThread]);
     await openTarget();
 
-    expect(testState.draftStore.setRuntimeMode).not.toHaveBeenCalled();
-    expect(testState.draftStore.setLogicalProjectDraftThreadId).toHaveBeenLastCalledWith(
-      "remote-project",
-      expect.anything(),
-      expect.any(String),
-      expect.objectContaining({ runtimeMode: "approval-required" }),
-    );
+    expect(lastSessionRuntimeMode()).toBe("approval-required");
   });
 
-  it("keeps the runtime mode a reused draft already picked", async () => {
-    testState.reset({
-      draftId: "draft-existing",
-      environmentId: "environment-ssh",
-      promotedTo: null,
-      threadId: "thread-existing",
-    });
+  // The composer shows the draft session's mode until the user picks one, so
+  // reopening an untouched draft must refresh it rather than keep the mode it
+  // inherited the first time.
+  it.each([
+    ["from elsewhere", null],
+    ["while it is open", { kind: "draft", draftId: "draft-existing" }],
+  ])("refreshes a reused draft's inherited runtime mode when opened %s", async (_, route) => {
+    testState.reset(reusableDraft);
+    testState.viewing(route, [lastUsedThread]);
+    await openTarget();
+    expect(lastSessionRuntimeMode()).toBe("auto");
+
+    testState.reset(reusableDraft);
+    testState.viewing(route, [
+      lastUsedThread,
+      {
+        ...lastUsedThread,
+        id: "thread-newer",
+        runtimeMode: "approval-required",
+        updatedAt: "2026-10-22T10:00:00.000Z",
+      },
+    ]);
+    await openTarget();
+    expect(lastSessionRuntimeMode()).toBe("approval-required");
+
+    testState.reset(reusableDraft);
+    testState.configureProjectRuntimeMode("full-access");
+    testState.viewing(route, [lastUsedThread]);
+    await openTarget();
+    expect(lastSessionRuntimeMode()).toBe("full-access");
+  });
+
+  it("leaves a runtime mode the user picked in a reused draft's composer alone", async () => {
+    testState.reset(reusableDraft);
     testState.draftStore.getComposerDraft.mockReturnValue({ runtimeMode: "approval-required" });
     testState.viewing(null, [lastUsedThread]);
     await openTarget();
 
     expect(testState.draftStore.setRuntimeMode).not.toHaveBeenCalled();
-  });
-
-  it("writes the last used runtime mode where the composer reads it", async () => {
-    testState.reset(null);
-    testState.viewing(null, [lastUsedThread]);
-    await openTarget();
-
-    expect(testState.draftStore.setRuntimeMode).toHaveBeenCalledWith("draft-delayed", "auto");
   });
 });

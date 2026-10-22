@@ -582,11 +582,19 @@ export function NewTaskFlowProvider(
     selectedProjectDraft.modelSelection ?? null,
     selectedProject?.id ?? null,
   );
-  const projectDefaultModelSelection = resolveDefaultableModelSelection(
+  // A model configured on the project wins over its history; the
+  // environment's default only applies after the project's history.
+  const configuredDefaultModelSelection = resolveDefaultableModelSelection(
     selectedEnvironmentServerConfig,
     projectSettings.settings.defaultModelSelection,
     selectedProject?.id ?? null,
   );
+  const projectDefaultModelSelection =
+    projectSettings.sources.defaultModelSelection === "environment"
+      ? null
+      : configuredDefaultModelSelection;
+  const environmentDefaultModelSelection =
+    projectDefaultModelSelection === null ? configuredDefaultModelSelection : null;
   const lastUsedModelSelection = resolveDefaultableModelSelection(
     selectedEnvironmentServerConfig,
     lastUsed?.modelSelection ?? null,
@@ -603,6 +611,7 @@ export function NewTaskFlowProvider(
     draftModelSelection ??
       projectDefaultModelSelection ??
       lastUsedModelSelection ??
+      environmentDefaultModelSelection ??
       stickyModelSelection,
     undefined,
     selectedProject?.id ?? null,
@@ -612,6 +621,7 @@ export function NewTaskFlowProvider(
     draftSelection: draftModelSelection,
     projectDefaultSelection: projectDefaultModelSelection,
     lastUsedSelection: lastUsedModelSelection,
+    environmentDefaultSelection: environmentDefaultModelSelection,
     stickySelection: stickyModelSelection,
     modelOptions,
   });

@@ -1,36 +1,74 @@
-import { ProviderInstanceId, type ModelSelection } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  ProjectId,
+  ProviderInstanceId,
+  type ModelSelection,
+  type ServerSettings,
+} from "@t3tools/contracts";
+import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
 import { describe, expect, it } from "vite-plus/test";
-import { resolveNewThreadModelSelectionOverride } from "./chatThreadActions";
+import { resolveNewThreadDefaults } from "./chatThreadActions";
 
-const PROJECT_DEFAULT_SELECTION: ModelSelection = {
-  instanceId: ProviderInstanceId.make("codex"),
-  model: "project-default",
+const projectId = ProjectId.make("project-a");
+const ENVIRONMENT_DEFAULT: ModelSelection = {
+  instanceId: ProviderInstanceId.make("claudeAgent"),
+  model: "claude-opus-5-5",
 };
-const CARRIED_SELECTION: ModelSelection = {
+const PROJECT_DEFAULT: ModelSelection = {
   instanceId: ProviderInstanceId.make("codex"),
-  model: "carried-model",
+  model: "gpt-6.1-mini",
+  options: [{ id: "reasoningEffort", value: "low" }],
 };
+const lastUsed = {
+  modelSelection: {
+    instanceId: ProviderInstanceId.make("codex"),
+    model: "gpt-6.1-sol",
+    options: [{ id: "reasoningEffort", value: "high" }],
+  },
+  runtimeMode: "auto",
+  interactionMode: "plan",
+} as const;
 
-describe("chatThreadActions", () => {
-  it("does not carry a non-explicit model from the destination draft back into itself", () => {
-    expect(
-      resolveNewThreadModelSelectionOverride({
-        projectDefaultSelection: null,
-        carrySelection: CARRIED_SELECTION,
-        carrySourceDraftId: "draft-a",
-        destinationDraftId: "draft-a",
-      }),
-    ).toBeNull();
+function settingsFor(overrides: Partial<ServerSettings> = {}) {
+  return resolveProjectSettings(
+    {
+      ...DEFAULT_SERVER_SETTINGS,
+      defaultModelSelection: ENVIRONMENT_DEFAULT,
+      defaultRuntimeMode: "approval-required",
+      ...overrides,
+    },
+    projectId,
+  );
+}
+
+describe("resolveNewThreadDefaults", () => {
+  it("prefers the project's last-used settings over environment defaults", () => {
+    expect(resolveNewThreadDefaults({ projectSettings: settingsFor(), lastUsed })).toEqual({
+      modelSelection: lastUsed.modelSelection,
+      runtimeMode: "auto",
+      interactionMode: "plan",
+    });
   });
 
-  it("keeps the project default above any carried selection", () => {
-    expect(
-      resolveNewThreadModelSelectionOverride({
-        projectDefaultSelection: PROJECT_DEFAULT_SELECTION,
-        carrySelection: CARRIED_SELECTION,
-        carrySourceDraftId: "draft-a",
-        destinationDraftId: "draft-b",
-      }),
-    ).toEqual(PROJECT_DEFAULT_SELECTION);
+  it("falls back to environment defaults for a project nobody has used", () => {
+    expect(resolveNewThreadDefaults({ projectSettings: settingsFor(), lastUsed: null })).toEqual({
+      modelSelection: ENVIRONMENT_DEFAULT,
+      runtimeMode: "approval-required",
+      interactionMode: null,
+    });
+  });
+
+  it("lets settings configured on the project itself win over its last-used settings", () => {
+    const projectSettings = settingsFor({
+      projectSettingsOverrides: {
+        [projectId]: { defaultModelSelection: PROJECT_DEFAULT, defaultRuntimeMode: "full-access" },
+      },
+    });
+
+    expect(resolveNewThreadDefaults({ projectSettings, lastUsed })).toEqual({
+      modelSelection: PROJECT_DEFAULT,
+      runtimeMode: "full-access",
+      interactionMode: "plan",
+    });
   });
 });

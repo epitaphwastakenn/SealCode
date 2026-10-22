@@ -1,10 +1,14 @@
 import { scopeProjectRef } from "@t3tools/client-runtime/environment";
+import type { ProjectLastUsedSettings } from "@t3tools/client-runtime/state/project-last-used-settings";
 import type {
   EnvironmentId,
   ModelSelection,
   ProjectId,
+  ProviderInteractionMode,
+  RuntimeMode,
   ScopedProjectRef,
 } from "@t3tools/contracts";
+import type { ResolvedProjectSettings } from "@t3tools/shared/projectSettings";
 import type { ComposerThreadDraftState, DraftThreadEnvMode } from "../composerDraftStore";
 
 type ComposerModelSelectionState = Pick<
@@ -43,16 +47,30 @@ export function resolveNewDraftStartFromOrigin(input: {
   return input.envMode === "worktree" && input.newWorktreesStartFromOrigin;
 }
 
-export function resolveNewThreadModelSelectionOverride(input: {
-  readonly projectDefaultSelection: ModelSelection | null;
-  readonly carrySelection: ModelSelection | null;
-  readonly carrySourceDraftId: string | null;
-  readonly destinationDraftId: string;
-}): ModelSelection | null {
-  return (
-    input.projectDefaultSelection ??
-    (input.carrySourceDraftId === input.destinationDraftId ? null : input.carrySelection)
-  );
+/**
+ * What a new thread in a project starts with when the draft has no pick of its
+ * own: a setting configured on the project itself wins, then the project's
+ * last user-used settings, then environment defaults.
+ */
+export function resolveNewThreadDefaults(input: {
+  readonly projectSettings: ResolvedProjectSettings;
+  readonly lastUsed: ProjectLastUsedSettings | null;
+}): {
+  readonly modelSelection: ModelSelection | null;
+  readonly runtimeMode: RuntimeMode;
+  readonly interactionMode: ProviderInteractionMode | null;
+} {
+  const { settings, sources } = input.projectSettings;
+  return {
+    modelSelection:
+      (sources.defaultModelSelection === "environment" ? null : settings.defaultModelSelection) ??
+      input.lastUsed?.modelSelection ??
+      settings.defaultModelSelection,
+    runtimeMode:
+      (sources.defaultRuntimeMode === "environment" ? input.lastUsed?.runtimeMode : null) ??
+      settings.defaultRuntimeMode,
+    interactionMode: input.lastUsed?.interactionMode ?? null,
+  };
 }
 
 export function hasExplicitComposerModelSelection(

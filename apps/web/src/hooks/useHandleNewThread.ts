@@ -33,7 +33,7 @@ import { resolveProjectLastUsedSettings } from "@t3tools/client-runtime/state/pr
 import {
   hasExplicitComposerModelSelection,
   resolveNewDraftStartFromOrigin,
-  resolveNewThreadModelSelectionOverride,
+  resolveNewThreadDefaults,
 } from "../lib/chatThreadActions";
 import { readT3ProjectFile } from "../lib/t3ProjectFileDefaults";
 import { appAtomRegistry } from "../rpc/atomRegistry";
@@ -92,18 +92,10 @@ export function useNewThreadHandler() {
       setDraftThreadContext,
       setLogicalProjectDraftThreadId,
       setModelSelection,
-      setRuntimeMode,
     } = useComposerDraftStore.getState();
     const requestingRouteHref = router.state.location.href;
     const routeChangedSinceRequest = () => router.state.location.href !== requestingRouteHref;
     const currentRouteTarget = getCurrentRouteTarget();
-    // A new thread starts from the target project's last user-used settings,
-    // not from whatever thread happens to be on screen; picks already made
-    // in the destination draft are kept below.
-    const lastUsed = resolveProjectLastUsedSettings(readThreadShells(), projectRef);
-    const carryModelSelection = lastUsed?.modelSelection ?? null;
-    const carryInteractionMode = lastUsed?.interactionMode ?? null;
-    const carryRuntimeMode = lastUsed?.runtimeMode ?? null;
     const project = projects.find(
       (candidate) =>
         candidate.id === projectRef.projectId &&
@@ -116,25 +108,17 @@ export function useNewThreadHandler() {
       project?.id ?? null,
       project,
     );
-    const projectDefaultModelSelection = projectSettings.settings.defaultModelSelection;
-    const inheritedRuntimeMode =
-      projectSettings.sources.defaultRuntimeMode === "project" ? null : carryRuntimeMode;
-    const defaultRuntimeMode = inheritedRuntimeMode ?? projectSettings.settings.defaultRuntimeMode;
-    // The composer reads a draft's runtime mode from its composer state, so
-    // an inherited mode is written there too, unless the draft already has a pick.
-    const applyInheritedRuntimeMode = (destinationDraftId: DraftId) => {
-      if (inheritedRuntimeMode && !getComposerDraft(destinationDraftId)?.runtimeMode) {
-        setRuntimeMode(destinationDraftId, inheritedRuntimeMode);
-      }
-    };
-    const resolveModelSelectionOverride = (destinationDraftId: DraftId) =>
-      resolveNewThreadModelSelectionOverride({
-        projectDefaultSelection: projectDefaultModelSelection ?? null,
-        carrySelection: carryModelSelection,
-        carrySourceDraftId:
-          currentRouteTarget?.kind === "draft" ? currentRouteTarget.draftId : null,
-        destinationDraftId,
-      });
+    // A new thread starts from the target project, not from whatever thread
+    // happens to be on screen. These are written to the draft session, which
+    // the composer shows until the user picks something in the composer itself.
+    const {
+      modelSelection: defaultModelSelection,
+      runtimeMode: defaultRuntimeMode,
+      interactionMode: carryInteractionMode,
+    } = resolveNewThreadDefaults({
+      projectSettings,
+      lastUsed: resolveProjectLastUsedSettings(readThreadShells(), projectRef),
+    });
     const resolveDefaultEnvMode = async (): Promise<DraftThreadEnvMode> => {
       const consultProjectFile =
         project !== undefined && projectSettings.settings.defaultThreadEnvMode === null;
@@ -238,7 +222,7 @@ export function useNewThreadHandler() {
         if (workspaceContext) {
           setDraftThreadContext(emptyStoredDraftThread.draftId, {
             ...workspaceContext,
-            ...(!isDraftAlreadyOpen ? { runtimeMode: defaultRuntimeMode } : {}),
+            runtimeMode: defaultRuntimeMode,
             ...(carryInteractionMode ? { interactionMode: carryInteractionMode } : {}),
           });
         }
@@ -246,11 +230,8 @@ export function useNewThreadHandler() {
         const storedDraftHasExplicitModelPick = hasExplicitComposerModelSelection(storedDraft);
         if (!storedDraftHasExplicitModelPick) {
           applyStickyState(emptyStoredDraftThread.draftId);
-          const modelSelectionOverride = resolveModelSelectionOverride(
-            emptyStoredDraftThread.draftId,
-          );
-          if (modelSelectionOverride) {
-            setModelSelection(emptyStoredDraftThread.draftId, modelSelectionOverride, {
+          if (defaultModelSelection) {
+            setModelSelection(emptyStoredDraftThread.draftId, defaultModelSelection, {
               replaceOptions: true,
             });
           }
@@ -266,13 +247,10 @@ export function useNewThreadHandler() {
           {
             threadId: emptyStoredDraftThread.threadId,
             ...workspaceContext,
-            ...(!isDraftAlreadyOpen ? { runtimeMode: defaultRuntimeMode } : {}),
+            runtimeMode: defaultRuntimeMode,
             ...(carryInteractionMode ? { interactionMode: carryInteractionMode } : {}),
           },
         );
-        if (!isDraftAlreadyOpen) {
-          applyInheritedRuntimeMode(emptyStoredDraftThread.draftId);
-        }
         const opened = {
           draftId: emptyStoredDraftThread.draftId,
           threadId: emptyStoredDraftThread.threadId,
@@ -368,11 +346,9 @@ export function useNewThreadHandler() {
         runtimeMode: defaultRuntimeMode,
         ...(carryInteractionMode ? { interactionMode: carryInteractionMode } : {}),
       });
-      applyInheritedRuntimeMode(draftId);
       applyStickyState(draftId);
-      const modelSelectionOverride = resolveModelSelectionOverride(draftId);
-      if (modelSelectionOverride) {
-        setModelSelection(draftId, modelSelectionOverride, { replaceOptions: true });
+      if (defaultModelSelection) {
+        setModelSelection(draftId, defaultModelSelection, { replaceOptions: true });
       }
       await router.navigate({
         to: "/draft/$draftId",

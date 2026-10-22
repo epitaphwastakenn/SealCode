@@ -1,6 +1,10 @@
 import type { DraftId } from "~/composerDraftStore";
 import { composerDraftHasUserContent, useComposerDraftStore } from "~/composerDraftStore";
-import { resolveEnvironmentMachineKind, type ScopedProjectRef } from "@t3tools/contracts";
+import {
+  DEFAULT_SERVER_SETTINGS,
+  resolveEnvironmentMachineKind,
+  type ScopedProjectRef,
+} from "@t3tools/contracts";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { FolderPlusIcon } from "lucide-react";
@@ -13,7 +17,10 @@ import { primaryServerKeybindingsAtom } from "~/state/server";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
 import { useScratchProject } from "~/hooks/useScratchProject";
 import { useClientSettings } from "~/hooks/useSettings";
-import { hasExplicitComposerModelSelection } from "~/lib/chatThreadActions";
+import {
+  hasExplicitComposerModelSelection,
+  resolveNewThreadDefaults,
+} from "~/lib/chatThreadActions";
 import {
   deriveLogicalProjectKeyFromSettings,
   selectProjectGroupingSettings,
@@ -43,6 +50,7 @@ import { InlineButton } from "../ui/button";
 import { DraftProjectName } from "./DraftProjectName";
 import { DraftHeroProjectHeading } from "./DraftHeroProjectHeading";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import { resolveProjectLastUsedSettings } from "@t3tools/client-runtime/state/project-last-used-settings";
 
 const ADD_PROJECT_VALUE = "add-project";
 
@@ -182,22 +190,26 @@ export function DraftHeroHeadline({
       void openProjectDraft(scopeProjectRef(project.environmentId, project.id));
       return;
     }
-    setLogicalProjectDraftThreadId(
-      logicalProjectKey,
-      scopeProjectRef(project.environmentId, project.id),
-      draftId,
-    );
+    // A retargeted draft that keeps its content takes the new project's
+    // defaults for whatever the user has not picked in the composer.
+    const projectRef = scopeProjectRef(project.environmentId, project.id);
+    const defaults = resolveNewThreadDefaults({
+      projectSettings: resolveProjectSettings(
+        environments.find((environment) => environment.environmentId === project.environmentId)
+          ?.serverConfig?.settings ?? DEFAULT_SERVER_SETTINGS,
+        project.id,
+        project,
+      ),
+      lastUsed: resolveProjectLastUsedSettings(threads, projectRef),
+    });
+    setLogicalProjectDraftThreadId(logicalProjectKey, projectRef, draftId, {
+      runtimeMode: defaults.runtimeMode,
+      ...(defaults.interactionMode ? { interactionMode: defaults.interactionMode } : {}),
+    });
     if (!hasExplicitComposerModelSelection(currentDraft)) {
       applyStickyState(draftId);
-      const environmentSettings = environments.find(
-        (environment) => environment.environmentId === project.environmentId,
-      )?.serverConfig?.settings;
-      const defaultModelSelection = environmentSettings
-        ? resolveProjectSettings(environmentSettings, project.id, project).settings
-            .defaultModelSelection
-        : project.defaultModelSelection;
-      if (defaultModelSelection) {
-        setModelSelection(draftId, defaultModelSelection, {
+      if (defaults.modelSelection) {
+        setModelSelection(draftId, defaults.modelSelection, {
           replaceOptions: true,
         });
       }

@@ -72,7 +72,7 @@ function getProviderOptionSelectionValue(
   return getRawSelectionValueById(selections, id);
 }
 
-export function getProviderOptionStringSelectionValue(
+function getProviderOptionStringSelectionValue(
   selections: ReadonlyArray<ProviderOptionSelection> | null | undefined,
   id: string,
 ): string | undefined {
@@ -80,7 +80,7 @@ export function getProviderOptionStringSelectionValue(
   return typeof value === "string" ? value : undefined;
 }
 
-export function getProviderOptionBooleanSelectionValue(
+function getProviderOptionBooleanSelectionValue(
   selections: ReadonlyArray<ProviderOptionSelection> | null | undefined,
   id: string,
 ): boolean | undefined {
@@ -134,6 +134,20 @@ export function modelSelectionsEqual(left: ModelSelection, right: ModelSelection
       ([id, value], index) => id === rightOptions[index]?.[0] && value === rightOptions[index]?.[1],
     )
   );
+}
+
+/**
+ * Whether a composer's draft model pick is what the thread already runs. Web sends
+ * `fastMode: false` for models with a fast toggle while mobile omits it, so off counts as unset.
+ */
+export function draftModelPickMatchesThread(pick: ModelSelection, thread: ModelSelection): boolean {
+  const withoutFastModeOff = (selection: ModelSelection) =>
+    createModelSelection(
+      selection.instanceId,
+      selection.model,
+      selection.options?.filter((option) => option.id !== "fastMode" || option.value !== false),
+    );
+  return modelSelectionsEqual(withoutFastModeOff(pick), withoutFastModeOff(thread));
 }
 
 function resolveDescriptorChoiceValue(

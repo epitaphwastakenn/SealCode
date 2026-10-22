@@ -84,6 +84,8 @@ export const VcsRef = Schema.Struct({
   name: TrimmedNonEmptyStringSchema,
   isRemote: Schema.optional(Schema.Boolean),
   remoteName: Schema.optional(TrimmedNonEmptyStringSchema),
+  // Full Git ref, for example refs/remotes/origin/feature.
+  upstreamRef: Schema.optional(TrimmedNonEmptyStringSchema),
   current: Schema.Boolean,
   isDefault: Schema.Boolean,
   worktreePath: TrimmedNonEmptyStringSchema.pipe(Schema.NullOr),
@@ -276,6 +278,7 @@ export const VcsStatusStreamEvent = Schema.Union([
 export type VcsStatusStreamEvent = typeof VcsStatusStreamEvent.Type;
 
 export const VcsListRefsResult = Schema.Struct({
+  isAtRepositoryRoot: Schema.optional(Schema.Boolean),
   refs: Schema.Array(VcsRef),
   isRepo: Schema.Boolean,
   hasPrimaryRemote: Schema.Boolean,
@@ -358,6 +361,8 @@ export const GitCommandFailureReason = Schema.Literals([
   "host_key_unverified",
   "not_a_repository",
   "path_already_exists",
+  "push_rejected_by_remote",
+  "push_rejected_non_fast_forward",
   "ref_not_found",
   "remote_unreachable",
   "tag_would_be_clobbered",

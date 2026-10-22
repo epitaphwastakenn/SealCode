@@ -33,9 +33,9 @@ import { ModelPickerSidebar } from "./ModelPickerSidebar";
 import { ReasoningEffortSlider } from "./ReasoningEffortSlider";
 import {
   getDescriptorStringValue,
-  getTraitsSectionVisibility,
   replaceDescriptorCurrentValue,
-} from "./TraitsPicker";
+} from "@t3tools/client-runtime/model-traits";
+import { getTraitsSectionVisibility } from "./TraitsPicker";
 import { Kbd } from "../ui/kbd";
 import { getProviderStatusMessage, hasProviderSetup } from "./ProviderStatusBanner";
 import {
@@ -111,7 +111,7 @@ export function resolveModelPickerSelectedModel(input: {
   return input.options.find((option) => option.slug === input.model);
 }
 
-export function shouldIncludeModelPickerOption(input: {
+function shouldIncludeModelPickerOption(input: {
   readonly entry: ProviderInstanceEntry;
   readonly option: ModelEsque;
   readonly activeInstanceId: ProviderInstanceId;
@@ -130,7 +130,7 @@ export function shouldIncludeModelPickerOption(input: {
   );
 }
 
-export function shouldOfferModelPickerSetup(
+function shouldOfferModelPickerSetup(
   entry: ProviderInstanceEntry,
   options: ReadonlyArray<ModelEsque>,
 ): boolean {
@@ -145,7 +145,7 @@ export function shouldOfferModelPickerSetup(
   );
 }
 
-export function adjacentModelPickerProvider(input: {
+function adjacentModelPickerProvider(input: {
   entries: ReadonlyArray<ProviderInstanceEntry>;
   selectedInstanceId: ProviderInstanceId | "favorites";
   direction: 1 | -1;

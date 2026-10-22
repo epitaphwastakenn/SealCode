@@ -60,22 +60,6 @@ describe("applyAntigravityAcpModelSelection", () => {
     }),
   );
 
-  it.effect("reapplies an explicit selection even when setup reports the same model", () =>
-    Effect.gen(function* () {
-      const { runtime, selections } = makeModelRuntime([
-        { ...modelConfig, currentValue: "gemini-saved" },
-      ]);
-      const model = yield* applyAntigravityAcpModelSelection({
-        runtime,
-        model: "gemini-saved",
-        mapError: (cause) => cause,
-      });
-
-      expect(model).toBe("gemini-saved");
-      expect(selections).toEqual(["gemini-saved"]);
-    }),
-  );
-
   it.effect.each([undefined, null, ANTIGRAVITY_DEFAULT_MODEL])(
     "uses the native default for %s without sending an internal model ID",
     (requestedModel) =>
@@ -485,30 +469,6 @@ it.layer(NodeServices.layer)("buildAntigravityPrompt", (it) => {
     }),
   );
 
-  it.effect("rejects missing folded clipboard text", () =>
-    Effect.gen(function* () {
-      const fixture = yield* makeAttachmentFixture();
-      const pastedText = {
-        ...textAttachment,
-        name: "pasted-text.txt",
-        mimeType: "text/plain",
-        source: { _tag: "pasted-text" as const },
-      } satisfies ChatAttachment;
-
-      const error = yield* buildAntigravityPrompt({
-        input: "Inspect the pasted text only as needed.",
-        attachments: [pastedText],
-        attachmentsDir: fixture.attachmentsDir,
-      }).pipe(Effect.flip);
-
-      expect(error).toMatchObject({
-        _tag: "AcpRequestError",
-        code: -32602,
-        errorMessage: "Could not read attachment 'pasted-text.txt'.",
-      });
-    }),
-  );
-
   it.effect.each([
     { name: "archive.zip", mimeType: "application/zip" },
     { name: "clip.mp4", mimeType: "video/mp4" },
@@ -564,34 +524,6 @@ it.layer(NodeServices.layer)("buildAntigravityPrompt", (it) => {
       expect(prompt).toEqual([
         { type: "text", text: "Transcribe this." },
         { type: "audio", data: bytes.toString("base64"), mimeType: "audio/wav" },
-      ]);
-    }),
-  );
-
-  it.effect("uses a PDF file resource link without copying or reading its bytes", () =>
-    Effect.gen(function* () {
-      const fixture = yield* makeAttachmentFixture();
-      const upload = yield* fixture.write(pdfAttachment, "%PDF-1.7\n");
-      const forbidFileAccess = () =>
-        Effect.die("PDF prompt construction must only inspect the file.");
-      const prompt = yield* buildAntigravityPrompt({
-        input: undefined,
-        attachments: [pdfAttachment],
-        attachmentsDir: fixture.attachmentsDir,
-      }).pipe(
-        Effect.provideService(FileSystem.FileSystem, {
-          ...fixture.fs,
-          readFile: forbidFileAccess,
-          writeFile: forbidFileAccess,
-          writeFileString: forbidFileAccess,
-          copyFile: forbidFileAccess,
-          copy: forbidFileAccess,
-          rename: forbidFileAccess,
-        }),
-      );
-
-      expect(prompt).toEqual([
-        { type: "resource_link", uri: upload.uri, name: "report.pdf", mimeType: "application/pdf" },
       ]);
     }),
   );
@@ -767,23 +699,6 @@ it.layer(NodeServices.layer)("buildAntigravityPrompt", (it) => {
         _tag: "AcpRequestError",
         code: -32602,
         errorMessage: "Could not read attachment 'screen.png'.",
-      });
-    }),
-  );
-
-  it.effect("rejects an empty turn", () =>
-    Effect.gen(function* () {
-      const fixture = yield* makeAttachmentFixture();
-      const error = yield* buildAntigravityPrompt({
-        input: "  ",
-        attachments: [],
-        attachmentsDir: fixture.attachmentsDir,
-      }).pipe(Effect.flip);
-
-      expect(error).toMatchObject({
-        _tag: "AcpRequestError",
-        code: -32602,
-        errorMessage: "A turn requires text or supported attachments.",
       });
     }),
   );

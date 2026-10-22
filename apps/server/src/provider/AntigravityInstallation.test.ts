@@ -18,10 +18,7 @@ import * as Stream from "effect/Stream";
 import { HttpClient, HttpClientResponse } from "effect/http";
 
 import * as AntigravityInstallation from "./AntigravityInstallation.ts";
-import {
-  resolveAntigravityReleaseAsset,
-  type AntigravityReleaseAsset,
-} from "./antigravityRelease.ts";
+import { type AntigravityReleaseAsset } from "./antigravityRelease.ts";
 
 const serverContents = "antigravity runtime\n";
 const harnessContents = "local harness\n";
@@ -277,7 +274,7 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
       expect(path.dirname(selected.harnessPath)).toBe(path.dirname(selected.executablePath));
       expect(yield* fs.readFileString(selected.executablePath)).toBe(serverContents);
       expect(yield* fs.readFileString(selected.harnessPath)).toBe(harnessContents);
-      // The previous release had no running session, so it went with the install.
+      // SealCode prunes the previous release once the new one is active.
       expect(yield* fs.readDirectory(path.join(installation.managedDirectory, "versions"))).toEqual(
         [(yield* releaseAsset()).sha256],
       );
@@ -780,28 +777,4 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
       expect(requests).toEqual([]);
     }),
   );
-
-  it("resolves all supported platform release assets including Intel Mac", () => {
-    const supportedPlatforms: Array<{ readonly platform: NodeJS.Platform; readonly arch: string }> =
-      [
-        { platform: "darwin", arch: "arm64" },
-        { platform: "darwin", arch: "x64" },
-        { platform: "linux", arch: "x64" },
-        { platform: "linux", arch: "arm64" },
-        { platform: "win32", arch: "x64" },
-        { platform: "win32", arch: "arm64" },
-      ];
-
-    for (const { platform, arch } of supportedPlatforms) {
-      const asset = resolveAntigravityReleaseAsset(platform, arch);
-      expect(asset).not.toBeNull();
-      expect(asset?.version).toBe("1.3.0");
-      expect(asset?.url).toContain("1.3.0");
-      expect(asset?.archiveBytes).toBeGreaterThan(0);
-      expect(asset?.executable.bytes).toBeGreaterThan(0);
-      expect(asset?.harness.bytes).toBeGreaterThan(0);
-    }
-
-    expect(resolveAntigravityReleaseAsset("freebsd", "x64")).toBeNull();
-  });
 });

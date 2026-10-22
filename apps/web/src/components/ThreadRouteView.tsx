@@ -21,6 +21,7 @@ import {
 import { useUiStateStore } from "../uiStateStore";
 import { useThreadRefs, useQuietThreadShell } from "../state/entities";
 import { useEnvironmentShellStatus } from "../state/shell";
+import { useEnvironmentThread } from "../state/threads";
 import {
   buildThreadRouteParams,
   isThreadRouteSnapshotAuthoritative,
@@ -88,10 +89,22 @@ export function ThreadRouteView({ target }: { target: ThreadRouteTarget }) {
   if (nextChatViewKey !== chatViewKey) {
     setChatViewKey(nextChatViewKey);
   }
+  // Until the shell lists the thread, its own load (HTTP, then the socket)
+  // decides whether it exists. Read only then: once listed, ChatView keeps
+  // this stream open and its updates need not re-render the route.
+  const unlistedThreadRef =
+    target.kind === "server" && serverThreadShell === null && draftThread === null
+      ? target.threadRef
+      : null;
+  const unlistedThreadDetail = useEnvironmentThread(
+    unlistedThreadRef?.environmentId ?? null,
+    unlistedThreadRef?.threadId ?? null,
+  );
   const renderState = resolveThreadRouteRenderState({
     bootstrapComplete,
     serverThreadExists: serverThreadShell !== null,
     serverThreadDeleted: serverThreadShell?.deletedAt != null,
+    unlistedThreadDetail,
     draftThreadExists: draftThread !== null,
   });
   const serverThreadStarted = threadHasStarted(serverThreadShell);

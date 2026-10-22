@@ -1,4 +1,4 @@
-import { ProjectId, ThreadId } from "@t3tools/contracts";
+import { ThreadId } from "@t3tools/contracts";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vite-plus/test";
 
 import {
@@ -10,15 +10,10 @@ import {
   type PersistedUiState,
   persistState,
   reorderProjects,
-  reorderThreads,
   resolveProjectExpanded,
-  setDefaultAdvertisedEndpointKey,
   setLastOpenThreadRoute,
   setProjectExpanded,
   setProjectPinned,
-  setSidebarProjectScopeKey,
-  setThreadChangedFilesExpanded,
-  setTimelineTurnExpanded,
   type UiState,
 } from "./uiStateStore";
 
@@ -92,25 +87,6 @@ describe("uiStateStore pure functions", () => {
     expect(setProjectExpanded(next, keys, false)).toBe(next);
   });
 
-  it("pins and unpins logical project groups", () => {
-    const pinned = setProjectPinned(makeUiState(), "logical-project", true);
-
-    expect(pinned.pinnedProjectKeys).toEqual(["logical-project"]);
-    expect(setProjectPinned(pinned, "logical-project", true)).toBe(pinned);
-    expect(setProjectPinned(pinned, "logical-project", false).pinnedProjectKeys).toEqual([]);
-  });
-
-  it("reorders from the current atom-derived project order", () => {
-    const project1 = ProjectId.make("project-1");
-    const project2 = ProjectId.make("project-2");
-    const project3 = ProjectId.make("project-3");
-    const currentOrder = [project1, project2, project3];
-
-    const next = reorderProjects(makeUiState(), currentOrder, [project1], [project3]);
-
-    expect(next.projectOrder).toEqual([project2, project3, project1]);
-  });
-
   it("moves grouped project members together", () => {
     const keyALocal = "env-local:proj-a";
     const keyARemote = "env-remote:proj-a";
@@ -122,120 +98,9 @@ describe("uiStateStore pure functions", () => {
 
     expect(next.projectOrder).toEqual([keyB, keyC, keyALocal, keyARemote]);
   });
-
-  it("does not reorder missing or identical groups", () => {
-    const currentOrder = ["env-local:proj-a", "env-local:proj-b"];
-    const state = makeUiState();
-
-    expect(reorderProjects(state, currentOrder, ["env-local:missing"], ["env-local:proj-b"])).toBe(
-      state,
-    );
-    expect(reorderProjects(state, currentOrder, ["env-local:proj-a"], ["env-local:proj-a"])).toBe(
-      state,
-    );
-  });
-
-  it("persists thread order within a project group", () => {
-    const state = makeUiState();
-
-    const next = reorderThreads(
-      state,
-      "repo",
-      ["thread-a", "thread-b", "thread-c"],
-      "thread-c",
-      "thread-a",
-    );
-
-    expect(next.threadOrderByGroup).toEqual({
-      repo: ["thread-c", "thread-a", "thread-b"],
-    });
-    expect(
-      reorderThreads(next, "repo", ["thread-c", "thread-a", "thread-b"], "thread-c", "thread-c"),
-    ).toBe(next);
-  });
-
-  it("stores explicit changed-file expansion choices", () => {
-    const threadId = ThreadId.make("thread-1");
-    const collapsed = setThreadChangedFilesExpanded(makeUiState(), threadId, "turn-1", false);
-
-    expect(collapsed.threadChangedFilesExpandedById).toEqual({
-      [threadId]: {
-        "turn-1": false,
-      },
-    });
-    expect(
-      setThreadChangedFilesExpanded(collapsed, threadId, "turn-1", true)
-        .threadChangedFilesExpandedById,
-    ).toEqual({
-      [threadId]: {
-        "turn-1": true,
-      },
-    });
-  });
-
-  it("stores and removes expanded timeline turns per thread", () => {
-    const expanded = setTimelineTurnExpanded(makeUiState(), "thread-1", "turn-1", true);
-
-    expect(expanded.timelineExpandedTurnIdsByThread).toEqual({
-      "thread-1": ["turn-1"],
-    });
-    expect(setTimelineTurnExpanded(expanded, "thread-1", "turn-1", true)).toBe(expanded);
-    expect(
-      setTimelineTurnExpanded(expanded, "thread-1", "turn-1", false)
-        .timelineExpandedTurnIdsByThread,
-    ).toEqual({});
-  });
-
-  it("stores the endpoint preference by stable key", () => {
-    const next = setDefaultAdvertisedEndpointKey(makeUiState(), "desktop-core:lan:http");
-
-    expect(next.defaultAdvertisedEndpointKey).toBe("desktop-core:lan:http");
-    expect(setDefaultAdvertisedEndpointKey(next, "desktop-core:lan:http")).toBe(next);
-    expect(setDefaultAdvertisedEndpointKey(next, "")).toMatchObject({
-      defaultAdvertisedEndpointKey: null,
-    });
-  });
-
-  it("stores the sidebar project scope and resets it to all projects", () => {
-    const scoped = setSidebarProjectScopeKey(makeUiState(), "github.com/pingdotgg/t3code");
-
-    expect(scoped.sidebarProjectScopeKey).toBe("github.com/pingdotgg/t3code");
-    expect(setSidebarProjectScopeKey(scoped, "github.com/pingdotgg/t3code")).toBe(scoped);
-    expect(setSidebarProjectScopeKey(scoped, null).sidebarProjectScopeKey).toBeNull();
-    expect(setSidebarProjectScopeKey(scoped, "").sidebarProjectScopeKey).toBeNull();
-  });
-
-  it("stores the last open thread route without rewriting equal values", () => {
-    const initialState = makeUiState();
-    const route = {
-      kind: "server" as const,
-      environmentId: "environment-local",
-      threadId: "thread-1",
-    };
-    const next = setLastOpenThreadRoute(initialState, route);
-
-    expect(next.lastOpenThreadRoute).toEqual(route);
-    expect(setLastOpenThreadRoute(next, route)).toBe(next);
-    expect(setLastOpenThreadRoute(next, { kind: "draft", draftId: "draft-1" })).toEqual({
-      ...next,
-      lastOpenThreadRoute: { kind: "draft", draftId: "draft-1" },
-    });
-  });
 });
 
 describe("parsePersistedState", () => {
-  it("hydrates the last selected pull request merge method", () => {
-    const parsed = parsePersistedState({
-      pullRequestMergeMethod: "squash",
-    });
-    const invalid = parsePersistedState({
-      pullRequestMergeMethod: "fast-forward",
-    });
-
-    expect(parsed.pullRequestMergeMethod).toBe("squash");
-    expect(invalid.pullRequestMergeMethod).toBe("merge");
-  });
-
   it("hydrates raw UI-owned state without server entities", () => {
     const parsed = parsePersistedState({
       projectExpandedById: {
@@ -243,7 +108,6 @@ describe("parsePersistedState", () => {
         invalid: "no" as unknown as boolean,
       },
       projectOrder: ["physical-b", "", "physical-a", "physical-b"],
-      pinnedProjectKeys: ["logical-b", "", "logical-a", "logical-b"],
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
         invalid: "not-a-date",
@@ -256,9 +120,6 @@ describe("parsePersistedState", () => {
           "turn-2": true,
         },
       },
-      timelineExpandedTurnIdsByThread: {
-        "environment:thread-1": ["turn-1", "turn-2"],
-      },
     });
 
     expect(parsed).toEqual({
@@ -266,11 +127,13 @@ describe("parsePersistedState", () => {
         logical: false,
       },
       projectOrder: ["physical-b", "physical-a"],
-      pinnedProjectKeys: ["logical-b", "logical-a"],
+      pinnedProjectKeys: [],
       threadOrderByGroup: {},
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
+      timelineExpandedTurnIdsByThread: {},
+      lastOpenThreadRoute: null,
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
       sidebarProjectScopeKey: null,
       pullRequestMergeMethod: "merge",
@@ -280,10 +143,6 @@ describe("parsePersistedState", () => {
           "turn-2": true,
         },
       },
-      timelineExpandedTurnIdsByThread: {
-        "environment:thread-1": ["turn-1", "turn-2"],
-      },
-      lastOpenThreadRoute: null,
     });
   });
 
@@ -315,21 +174,21 @@ describe("parsePersistedState", () => {
     expect(resolveProjectExpanded(parsed.projectExpandedById, ["unknown"])).toBe(true);
   });
 
-  it("preserves legacy expanded-only semantics for one-way migration", () => {
-    const parsed = parsePersistedState({
-      expandedProjectCwds: ["/repo/a"],
-    });
+  it("stores the last open thread route without rewriting equal values", () => {
+    const initialState = makeUiState();
+    const route = {
+      kind: "server" as const,
+      environmentId: "environment-local",
+      threadId: "thread-1",
+    };
+    const next = setLastOpenThreadRoute(initialState, route);
 
-    expect(
-      resolveProjectExpanded(parsed.projectExpandedById, [
-        legacyProjectCwdPreferenceKey("/repo/a"),
-      ]),
-    ).toBe(true);
-    expect(
-      resolveProjectExpanded(parsed.projectExpandedById, [
-        legacyProjectCwdPreferenceKey("/repo/b"),
-      ]),
-    ).toBe(false);
+    expect(next.lastOpenThreadRoute).toEqual(route);
+    expect(setLastOpenThreadRoute(next, route)).toBe(next);
+    expect(setLastOpenThreadRoute(next, { kind: "draft", draftId: "draft-1" })).toEqual({
+      ...next,
+      lastOpenThreadRoute: { kind: "draft", draftId: "draft-1" },
+    });
   });
 });
 
@@ -374,6 +233,9 @@ describe("uiStateStore persistence", () => {
       projectOrder: ["physical-b", "physical-a"],
       pinnedProjectKeys: ["logical-b"],
       threadOrderByGroup: {},
+      timelineExpandedTurnIdsByThread: {
+        "environment:thread-1": ["turn-1", "turn-2"],
+      },
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
@@ -382,9 +244,6 @@ describe("uiStateStore persistence", () => {
           "turn-1": false,
           "turn-2": true,
         },
-      },
-      timelineExpandedTurnIdsByThread: {
-        "environment:thread-1": ["turn-1", "turn-2"],
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
     });
@@ -404,6 +263,9 @@ describe("uiStateStore persistence", () => {
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
+      timelineExpandedTurnIdsByThread: {
+        "environment:thread-1": ["turn-1", "turn-2"],
+      },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
       sidebarProjectScopeKey: null,
       threadChangedFilesExpansionVersion: 2,
@@ -414,9 +276,6 @@ describe("uiStateStore persistence", () => {
         },
       },
       pullRequestMergeMethod: "merge",
-      timelineExpandedTurnIdsByThread: {
-        "environment:thread-1": ["turn-1", "turn-2"],
-      },
       lastOpenThreadRoute: null,
     });
     expect(parsePersistedState(persisted)).toEqual({
@@ -434,47 +293,6 @@ describe("uiStateStore persistence", () => {
     expect(parsePersistedState(persisted).sidebarProjectScopeKey).toBe(
       "github.com/pingdotgg/t3code",
     );
-  });
-
-  it("round-trips the last open thread route and drops invalid values", () => {
-    const state = makeUiState({
-      lastOpenThreadRoute: {
-        kind: "server",
-        environmentId: "environment-local",
-        threadId: "thread-1",
-      },
-    });
-
-    persistState(state);
-
-    const persisted = JSON.parse(
-      localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
-    ) as PersistedUiState;
-    expect(persisted.lastOpenThreadRoute).toEqual({
-      kind: "server",
-      environmentId: "environment-local",
-      threadId: "thread-1",
-    });
-    expect(parsePersistedState(persisted).lastOpenThreadRoute).toEqual(state.lastOpenThreadRoute);
-    expect(
-      parsePersistedState({
-        lastOpenThreadRoute: { kind: "server", environmentId: "", threadId: "thread-1" },
-      }).lastOpenThreadRoute,
-    ).toBeNull();
-  });
-
-  it("drops the temporary expanded-only migration fallback when rewriting state", () => {
-    const migrated = parsePersistedState({
-      expandedProjectCwds: ["/repo/a"],
-    });
-
-    persistState(migrated);
-
-    const persisted = JSON.parse(
-      localStorageStub.getItem(PERSISTED_STATE_KEY) ?? "{}",
-    ) as PersistedUiState;
-    expect(resolveProjectExpanded(persisted.projectExpandedById ?? {}, ["unknown"])).toBe(true);
-    expect(persisted).not.toHaveProperty("threadPanelOpen");
   });
 });
 

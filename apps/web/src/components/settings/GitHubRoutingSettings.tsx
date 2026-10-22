@@ -53,6 +53,7 @@ export function GitHubRoutingSettings({
     <FoldedSettingsSection
       id={id}
       title={title}
+      description="Machines you trust here can read PR data through each other's GitHub access. Enable both machines. Read and act may use broader permissions than the machine that owns them. This applies only to this device."
       summary={
         summarizeGitHubRouting(
           environments.map((environment) => ({
@@ -62,11 +63,6 @@ export function GitHubRoutingSettings({
         ) ?? "Off"
       }
     >
-      <p className="px-3 py-2.5 text-xs text-muted-foreground sm:px-4">
-        Machines you trust here can read PR data through each other's GitHub access. Enable both
-        machines. Read and act may use broader permissions than the machine that owns them. This
-        applies only to this device.
-      </p>
       {environments.map((environment) => (
         <EnvironmentRow
           key={environment.environmentId}

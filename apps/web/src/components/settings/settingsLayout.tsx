@@ -213,6 +213,7 @@ export function useRelativeTimeTick(intervalMs = 1_000) {
 export function SettingsSection({
   title,
   hideTitle = false,
+  description,
   icon,
   titleAction,
   headerAction,
@@ -223,6 +224,8 @@ export function SettingsSection({
 }: ComponentPropsWithoutRef<"section"> & {
   title: string;
   hideTitle?: boolean;
+  /** Explains the whole section; a row's own `description` explains just that row. */
+  description?: ReactNode;
   icon?: ReactNode;
   titleAction?: ReactNode;
   headerAction?: ReactNode;
@@ -255,6 +258,11 @@ export function SettingsSection({
           <div className="flex min-h-7 min-w-7 items-center justify-end">{headerAction}</div>
         </div>
       )}
+      {description && !hideTitle ? (
+        <p className="-mt-1.5 max-w-2xl px-3 text-xs leading-relaxed text-muted-foreground sm:px-4">
+          {description}
+        </p>
+      ) : null}
       <SettingsGroup data-settings-scroll-target={hideTitle ? "" : undefined} variant={variant}>
         {children}
       </SettingsGroup>

@@ -114,7 +114,7 @@ export function useNewThreadHandler() {
     const {
       modelSelection: defaultModelSelection,
       runtimeMode: defaultRuntimeMode,
-      interactionMode: carryInteractionMode,
+      interactionMode: defaultInteractionMode,
     } = resolveNewThreadDefaults({
       projectSettings,
       lastUsed: resolveProjectLastUsedSettings(readThreadShells(), projectRef),
@@ -223,7 +223,7 @@ export function useNewThreadHandler() {
           setDraftThreadContext(emptyStoredDraftThread.draftId, {
             ...workspaceContext,
             runtimeMode: defaultRuntimeMode,
-            ...(carryInteractionMode ? { interactionMode: carryInteractionMode } : {}),
+            interactionMode: defaultInteractionMode,
           });
         }
         const storedDraft = getComposerDraft(emptyStoredDraftThread.draftId);
@@ -248,7 +248,7 @@ export function useNewThreadHandler() {
             threadId: emptyStoredDraftThread.threadId,
             ...workspaceContext,
             runtimeMode: defaultRuntimeMode,
-            ...(carryInteractionMode ? { interactionMode: carryInteractionMode } : {}),
+            interactionMode: defaultInteractionMode,
           },
         );
         const opened = {
@@ -344,7 +344,7 @@ export function useNewThreadHandler() {
             newWorktreesStartFromOrigin: projectSettings.settings.newWorktreesStartFromOrigin,
           }),
         runtimeMode: defaultRuntimeMode,
-        ...(carryInteractionMode ? { interactionMode: carryInteractionMode } : {}),
+        interactionMode: defaultInteractionMode,
       });
       applyStickyState(draftId);
       if (defaultModelSelection) {

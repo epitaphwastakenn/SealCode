@@ -1,10 +1,6 @@
 import type { DraftId } from "~/composerDraftStore";
 import { composerDraftHasUserContent, useComposerDraftStore } from "~/composerDraftStore";
-import {
-  DEFAULT_SERVER_SETTINGS,
-  resolveEnvironmentMachineKind,
-  type ScopedProjectRef,
-} from "@t3tools/contracts";
+import { resolveEnvironmentMachineKind, type ScopedProjectRef } from "@t3tools/contracts";
 import { scopedProjectKey, scopeProjectRef } from "@t3tools/client-runtime/environment";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
 import { FolderPlusIcon } from "lucide-react";
@@ -17,10 +13,7 @@ import { primaryServerKeybindingsAtom } from "~/state/server";
 import { useNewThreadHandler } from "~/hooks/useHandleNewThread";
 import { useScratchProject } from "~/hooks/useScratchProject";
 import { useClientSettings } from "~/hooks/useSettings";
-import {
-  hasExplicitComposerModelSelection,
-  resolveNewThreadDefaults,
-} from "~/lib/chatThreadActions";
+import { retargetDraftToProject } from "~/lib/chatThreadActions";
 import {
   deriveLogicalProjectKeyFromSettings,
   selectProjectGroupingSettings,
@@ -49,8 +42,6 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { InlineButton } from "../ui/button";
 import { DraftProjectName } from "./DraftProjectName";
 import { DraftHeroProjectHeading } from "./DraftHeroProjectHeading";
-import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
-import { resolveProjectLastUsedSettings } from "@t3tools/client-runtime/state/project-last-used-settings";
 
 const ADD_PROJECT_VALUE = "add-project";
 
@@ -76,12 +67,7 @@ export function DraftHeroHeadline({
   const primaryEnvironmentId = usePrimaryEnvironmentId();
   const projectGroupingSettings = useClientSettings(selectProjectGroupingSettings);
   const projectSortOrder = useClientSettings((settings) => settings.sidebarProjectSortOrder);
-  const setLogicalProjectDraftThreadId = useComposerDraftStore(
-    (store) => store.setLogicalProjectDraftThreadId,
-  );
   const getComposerDraft = useComposerDraftStore((store) => store.getComposerDraft);
-  const applyStickyState = useComposerDraftStore((store) => store.applyStickyState);
-  const setModelSelection = useComposerDraftStore((store) => store.setModelSelection);
   const openAddProject = () => openCommandPalette({ open: "add-project" });
   const { scratchEnvironmentId, scratchWorkspaceRootFor, openScratchProject } = useScratchProject();
   const openProjectDraft = useNewThreadHandler();
@@ -190,30 +176,17 @@ export function DraftHeroHeadline({
       void openProjectDraft(scopeProjectRef(project.environmentId, project.id));
       return;
     }
-    // A retargeted draft that keeps its content takes the new project's
-    // defaults for whatever the user has not picked in the composer.
-    const projectRef = scopeProjectRef(project.environmentId, project.id);
-    const defaults = resolveNewThreadDefaults({
-      projectSettings: resolveProjectSettings(
-        environments.find((environment) => environment.environmentId === project.environmentId)
-          ?.serverConfig?.settings ?? DEFAULT_SERVER_SETTINGS,
-        project.id,
-        project,
-      ),
-      lastUsed: resolveProjectLastUsedSettings(threads, projectRef),
+    retargetDraftToProject({
+      draftId,
+      projectRef: scopeProjectRef(project.environmentId, project.id),
+      project,
+      environmentSettings: environments.find(
+        (environment) => environment.environmentId === project.environmentId,
+      )?.serverConfig?.settings,
+      threads,
+      logicalProjectKey,
+      refreshModel: true,
     });
-    setLogicalProjectDraftThreadId(logicalProjectKey, projectRef, draftId, {
-      runtimeMode: defaults.runtimeMode,
-      ...(defaults.interactionMode ? { interactionMode: defaults.interactionMode } : {}),
-    });
-    if (!hasExplicitComposerModelSelection(currentDraft)) {
-      applyStickyState(draftId);
-      if (defaults.modelSelection) {
-        setModelSelection(draftId, defaults.modelSelection, {
-          replaceOptions: true,
-        });
-      }
-    }
   };
   const startScratch = async (): Promise<boolean> => {
     if (scratchTargetEnvironmentId === null || isScratchDraft) {

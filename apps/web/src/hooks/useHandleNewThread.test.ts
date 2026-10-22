@@ -500,6 +500,18 @@ describe("useNewThreadHandler runtime mode precedence", () => {
     expect(lastSessionRuntimeMode()).toBe("full-access");
   });
 
+  // The store keeps a session's interaction mode when none is passed, so a
+  // reused draft must be told the default to drop a Plan it inherited.
+  it("resets a reused draft's inherited Plan when the project has no history", async () => {
+    testState.reset(reusableDraft);
+    testState.viewing(null, []);
+    await openTarget();
+
+    expect(testState.draftStore.setLogicalProjectDraftThreadId.mock.lastCall?.[3]).toMatchObject({
+      interactionMode: "default",
+    });
+  });
+
   it("leaves a runtime mode the user picked in a reused draft's composer alone", async () => {
     testState.reset(reusableDraft);
     testState.draftStore.getComposerDraft.mockReturnValue({ runtimeMode: "approval-required" });

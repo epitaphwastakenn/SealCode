@@ -10,6 +10,19 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.17.4 · 2026-10-22
+
+> A bolder effort slider and a composer that stays tidy at any size.
+
+### Improved
+
+- **Effort slider** — The effort slider is thicker and easier to grab. Its fill warms up from blue to purple to amber as effort rises, and the active level glows softly. Reduced motion turns the transitions off.
+- **Claude effort levels** — Claude's effort levels now end at Ultracode. Ultrathink is no longer an effort level: type "ultrathink" in your message when you want it. Threads saved with Ultrathink open at Max.
+
+### Fixed
+
+- **Usage meter overlap** — In a small window, or when the composer collapses, the usage meter no longer covers the other composer controls.
+
 ## 2.17.3 · 2026-10-21
 
 > Scrollbars sized the way you like, with room to breathe.

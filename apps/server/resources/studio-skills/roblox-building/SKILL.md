@@ -2,7 +2,7 @@
 name: roblox-building
 description: "Use when building or editing geometry, maps, props, or generated assets with MCP or standalone Luau."
 when_to_use: "Also for fixing map gaps, z-fighting, scale, collisions or players escaping the map, placing store assets, and reviewing a map layout."
-last_reviewed: 2026-10-14
+last_reviewed: 2026-10-23
 sources:
   - original
   - https://create.roblox.com/docs/en-us/projects/assets/privacy.md
@@ -64,3 +64,16 @@ Player ~5 studs | Door 4w×7h | Ceiling 10-14 | Counter 3.5-4 | Seat 1.5 | Path 
 Guessing coordinates | unanchored/duplicate parts | hardcoded world positions | silent CSG failure | oversized batches | claims without readback
 
 **Details:** `references/full.md` (maps, validation, assets).
+
+## SealCode playbooks
+
+A practical playbook written by SealCode from live Studio research (verified in Studio on
+2026-10-23). Load it in addition to `references/full.md` when the task matches:
+
+- `references/building-sealcode.md`: building scenes and maps that look good: measured character
+  scale and traversal limits (steps, ledges, gaps, slopes), composition (focal point, buildings
+  facing it, curved paths, three height layers), 20 audited Creator Store kits with verdicts, the
+  kit audit, prop placement and modular assembly code, palette and terrain colours, terrain recipes
+  (hills, painted paths, ponds) with the 4-stud voxel rules, performance counts, the decoration
+  optimisation pass, StreamingEnabled behaviour, and a multi-angle screenshot checklist. Load it
+  for any map, level or scene that must look good.

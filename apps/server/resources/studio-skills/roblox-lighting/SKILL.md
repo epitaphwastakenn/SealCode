@@ -2,7 +2,7 @@
 name: roblox-lighting
 description: "Use when setting up or changing Roblox lighting, atmosphere, day/night cycles, or post-processing effects."
 when_to_use: "Also when a scene looks flat, too dark or washed out, shadows are wrong, or lighting hurts mobile performance."
-last_reviewed: 2026-07-26
+last_reviewed: 2026-10-23
 sources:
   - https://raw.githubusercontent.com/Roblox/creator-docs/main/content/en-us/environment/lighting.md
   - https://raw.githubusercontent.com/Roblox/creator-docs/main/content/en-us/environment/atmosphere.md
@@ -84,3 +84,15 @@ end)
 ### References
 
 - Mood presets (Day, Golden Hour, Night, Horror, Underwater, Sci-Fi), zone tweens, full examples: `references/full.md`
+
+## SealCode playbooks
+
+A practical playbook written by SealCode from live Studio research (verified in Studio on
+2026-10-23). Load it in addition to `references/full.md` when the task matches:
+
+- `references/lighting-sealcode.md`: eight tested atmosphere presets (sunny day, sunset, night,
+  horror, sci-fi neon, fantasy, cozy interior, cartoon simulator) as one module that sets every
+  Lighting, Atmosphere, Sky, Bloom, ColorCorrection, SunRays and DepthOfField value, verified
+  skybox ids, the changes that break a look, a server-time day-night cycle, a pixel meter for
+  legibility, which effects survive each graphics quality level, and a review checklist. Load it
+  before setting or reviewing any lighting.

@@ -52,6 +52,7 @@ import {
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
 import { makeAntigravityAdapterV2 } from "../../orchestration-v2/Adapters/AntigravityAdapterV2.ts";
+import { terminateOrphanedAntigravityRuntimes } from "../acp/AntigravityOrphanedRuntimes.ts";
 import { makeAcpNativeLoggerFactory } from "@t3tools/provider-acp/server/nativeLogging";
 import { ProviderDriverError } from "../Errors.ts";
 import { makeAntigravityProvider } from "../AntigravityProvider.ts";
@@ -147,6 +148,12 @@ export const AntigravityDriver: ProviderDriver<
       ),
     );
     const profileDirectory = directories.profile;
+    // Before the temp sweep: a leftover runtime keeps its unpacked files locked.
+    if ((yield* HostProcess.Platform) === "win32") {
+      yield* terminateOrphanedAntigravityRuntimes(
+        path.join(host.paths.baseDir, "tools", "antigravity-acp"),
+      ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
+    }
     for (const directory of [
       directories.runtimeTemp,
       path.join(profileDirectory, "antigravity-acp", "tmp"),

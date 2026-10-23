@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import { startBrowserSpeechRecognition } from "../../lib/browserSpeechRecognition";
 import {
@@ -17,6 +17,63 @@ export interface UseComposerVoiceControllerOptions {
   onTranscriptReady: (transcript: string) => void;
 }
 
+/** Outside the hook: the React Compiler skips any hook with a try/finally. */
+async function transcribeVoiceNote(input: {
+  stopRecording: () => Promise<VoiceRecordingPayload | null>;
+  speechSession: ReturnType<typeof startBrowserSpeechRecognition>;
+  transcribeRecording: (payload: VoiceRecordingPayload) => Promise<string>;
+  onTranscriptReady: (transcript: string) => void;
+  isCurrent: () => boolean;
+}) {
+  try {
+    const [payload, browserTranscript] = await Promise.all([
+      input.stopRecording(),
+      input.speechSession?.stop() ?? Promise.resolve(""),
+    ]);
+    if (!input.isCurrent()) {
+      return;
+    }
+
+    const localTranscript = browserTranscript.trim();
+    if (localTranscript.length > 0) {
+      input.onTranscriptReady(localTranscript);
+      return;
+    }
+    if (!payload) {
+      toastManager.add({
+        type: "warning",
+        title: "No audio was captured.",
+      });
+      return;
+    }
+
+    const transcript = (await input.transcribeRecording(payload)).trim();
+    if (!input.isCurrent()) {
+      return;
+    }
+    if (transcript.length === 0) {
+      toastManager.add({
+        type: "warning",
+        title: "No speech was recognized.",
+      });
+      return;
+    }
+    input.onTranscriptReady(transcript);
+  } catch (error) {
+    if (!input.isCurrent()) {
+      return;
+    }
+    toastManager.add({
+      type: "error",
+      title: "Voice transcription failed",
+      description:
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : "The voice note could not be transcribed.",
+    });
+  }
+}
+
 export function useComposerVoiceController(options: UseComposerVoiceControllerOptions) {
   const {
     isRecording,
@@ -30,7 +87,12 @@ export function useComposerVoiceController(options: UseComposerVoiceControllerOp
   const requestIdRef = useRef(0);
   const speechSessionRef = useRef<ReturnType<typeof startBrowserSpeechRecognition>>(null);
   const disabledRef = useRef(options.disabled === true);
-  disabledRef.current = options.disabled === true;
+  // Written in an effect: a ref write during render keeps the React Compiler
+  // from memoizing this hook, and with it the composer that renders per token.
+  useLayoutEffect(() => {
+    disabledRef.current = options.disabled === true;
+  });
+  const { onTranscriptReady, transcribeRecording } = options;
 
   const durationLabel = formatVoiceRecordingDuration(durationMs);
 
@@ -55,7 +117,7 @@ export function useComposerVoiceController(options: UseComposerVoiceControllerOp
     });
   }, [cancelRecording, isRecording, isTranscribing, options.disabled]);
 
-  const startComposerVoiceRecording = useCallback(async () => {
+  const startComposerVoiceRecording = async () => {
     if (options.disabled || isRecording || isTranscribing) {
       return;
     }
@@ -80,15 +142,9 @@ export function useComposerVoiceController(options: UseComposerVoiceControllerOp
         description: describeVoiceRecordingStartError(error),
       });
     }
-  }, [
-    isRecording,
-    isTranscribing,
-    options.disabled,
-    options.pendingUserInputCount,
-    startRecording,
-  ]);
+  };
 
-  const submitComposerVoiceRecording = useCallback(async () => {
+  const submitComposerVoiceRecording = async () => {
     if (!isRecording) {
       return;
     }
@@ -99,68 +155,28 @@ export function useComposerVoiceController(options: UseComposerVoiceControllerOp
     const speechSession = speechSessionRef.current;
     speechSessionRef.current = null;
 
-    try {
-      const [payload, browserTranscript] = await Promise.all([
-        stopRecording(),
-        speechSession?.stop() ?? Promise.resolve(""),
-      ]);
-      if (requestIdRef.current !== requestId || disabledRef.current) {
-        return;
-      }
-
-      const localTranscript = browserTranscript.trim();
-      if (localTranscript.length > 0) {
-        options.onTranscriptReady(localTranscript);
-        return;
-      }
-      if (!payload) {
-        toastManager.add({
-          type: "warning",
-          title: "No audio was captured.",
-        });
-        return;
-      }
-
-      const transcript = (await options.transcribeRecording(payload)).trim();
-      if (requestIdRef.current !== requestId || disabledRef.current) {
-        return;
-      }
-      if (transcript.length === 0) {
-        toastManager.add({
-          type: "warning",
-          title: "No speech was recognized.",
-        });
-        return;
-      }
-      options.onTranscriptReady(transcript);
-    } catch (error) {
-      if (requestIdRef.current !== requestId || disabledRef.current) {
-        return;
-      }
-      toastManager.add({
-        type: "error",
-        title: "Voice transcription failed",
-        description:
-          error instanceof Error && error.message.trim().length > 0
-            ? error.message
-            : "The voice note could not be transcribed.",
-      });
-    } finally {
+    await transcribeVoiceNote({
+      stopRecording,
+      speechSession,
+      transcribeRecording,
+      onTranscriptReady,
+      isCurrent: () => requestIdRef.current === requestId && !disabledRef.current,
+    }).finally(() => {
       if (requestIdRef.current === requestId) {
         setIsTranscribing(false);
       }
-    }
-  }, [isRecording, options, stopRecording]);
+    });
+  };
 
-  const cancelComposerVoiceRecording = useCallback(() => {
+  const cancelComposerVoiceRecording = () => {
     requestIdRef.current += 1;
     speechSessionRef.current?.abort();
     speechSessionRef.current = null;
     setIsTranscribing(false);
     void cancelRecording();
-  }, [cancelRecording]);
+  };
 
-  const toggleComposerVoiceRecording = useCallback(() => {
+  const toggleComposerVoiceRecording = () => {
     if (isTranscribing) {
       return;
     }
@@ -169,7 +185,7 @@ export function useComposerVoiceController(options: UseComposerVoiceControllerOp
       return;
     }
     void startComposerVoiceRecording();
-  }, [isRecording, isTranscribing, startComposerVoiceRecording, submitComposerVoiceRecording]);
+  };
 
   return {
     isVoiceRecording: isRecording,

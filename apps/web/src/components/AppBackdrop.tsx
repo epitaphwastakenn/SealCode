@@ -71,7 +71,24 @@ function useClipToFloatingPanels(container: HTMLDivElement | null, enabled: bool
     const scheduleMeasure = () => {
       if (frame === 0) frame = window.requestAnimationFrame(measure);
     };
-    const mutationObserver = new MutationObserver(scheduleMeasure);
+    // Streaming adds nodes to the body many times a second; measuring forces a
+    // layout, so only a panel arriving or leaving schedules one.
+    const touchesPanel = (nodes: NodeList) =>
+      Array.prototype.some.call(
+        nodes,
+        (node: Node) =>
+          node instanceof Element &&
+          (node.matches(FLOATING_PANEL_SELECTOR) ||
+            node.querySelector(FLOATING_PANEL_SELECTOR) !== null),
+      );
+    const mutationObserver = new MutationObserver((records) => {
+      if (
+        records.some(
+          (record) => touchesPanel(record.addedNodes) || touchesPanel(record.removedNodes),
+        )
+      )
+        scheduleMeasure();
+    });
     // The corner settings land on the root and change the panels' radius and
     // shape without resizing them.
     const rootObserver = new MutationObserver(scheduleMeasure);

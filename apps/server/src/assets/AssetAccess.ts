@@ -37,7 +37,11 @@ import {
   PROJECT_FAVICON_FALLBACK_MARKER,
 } from "@t3tools/shared/projectFavicon";
 import { isNetworkPath } from "@t3tools/shared/path";
-import { MAX_TOOL_OUTPUT_IMAGE_BASE64_LENGTH, toolOutputImages } from "@t3tools/shared/toolOutput";
+import {
+  MAX_TOOL_OUTPUT_IMAGE_BASE64_LENGTH,
+  readToolOutputImage as readSharedToolOutputImage,
+  toolOutputImageBlocks,
+} from "@t3tools/shared/toolOutput";
 import * as Clock from "effect/Clock";
 import * as Crypto from "effect/Crypto";
 import * as Effect from "effect/Effect";
@@ -59,6 +63,10 @@ import * as ServerSecretStore from "../auth/ServerSecretStore.ts";
 import { parseAttachmentFileExtension, resolveAttachmentPathById } from "../attachmentStore.ts";
 import * as ServerConfig from "../config.ts";
 import * as Orchestrator from "../orchestration-v2/Orchestrator.ts";
+import {
+  storedToolOutputImageFile,
+  TOOL_OUTPUT_IMAGES_DIRECTORY,
+} from "../orchestration-v2/ToolOutputImageStore.ts";
 import { expandHomePath } from "@t3tools/provider-core/server/pathExpansion";
 import * as ProjectFaviconResolver from "../project/ProjectFaviconResolver.ts";
 import { isWithinRoot } from "../workspace/KnownWorkspaces.ts";
@@ -246,11 +254,24 @@ const readToolOutputImage = Effect.fn("AssetAccess.readToolOutputImage")(functio
 }) {
   const orchestrator = yield* Orchestrator.OrchestratorV2;
   const item = yield* orchestrator.getTurnItem(input);
-  const image =
-    item?.type === "dynamic_tool" ? toolOutputImages(item.output)[input.index] : undefined;
-  return image?.data === undefined || image.data.length > MAX_TOOL_OUTPUT_IMAGE_BASE64_LENGTH
-    ? null
-    : { mimeType: image.mimeType, bytes: Buffer.from(image.data, "base64") };
+  const block =
+    item?.type === "dynamic_tool" ? toolOutputImageBlocks(item.output)[input.index] : undefined;
+  const image = readSharedToolOutputImage(block);
+  if (image === null) return null;
+  if (image.data !== undefined) {
+    return image.data.length > MAX_TOOL_OUTPUT_IMAGE_BASE64_LENGTH
+      ? null
+      : { mimeType: image.mimeType, bytes: Buffer.from(image.data, "base64") };
+  }
+  const file = storedToolOutputImageFile(block);
+  if (file === undefined) return null;
+  const config = yield* ServerConfig.ServerConfig;
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const bytes = yield* optionOnNotFound(
+    fileSystem.readFile(path.join(config.attachmentsDir, TOOL_OUTPUT_IMAGES_DIRECTORY, file)),
+  );
+  return Option.isSome(bytes) ? { mimeType: image.mimeType, bytes: bytes.value } : null;
 });
 
 /** Serves an `.icns` favicon as its embedded PNG, since browsers cannot draw it. */

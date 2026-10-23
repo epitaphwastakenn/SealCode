@@ -77,6 +77,28 @@ const exitOnCancel = process.env.T3_ACP_EXIT_ON_CANCEL === "1";
 const runningCommandIgnoresTerm = process.env.T3_ACP_RUNNING_COMMAND_IGNORE_TERM === "1";
 const runningCommandPidPath = process.env.T3_ACP_RUNNING_COMMAND_PID_PATH;
 const runningCommandSeparateSession = process.env.T3_ACP_RUNNING_COMMAND_SEPARATE_SESSION === "1";
+const helperTreePidPath = process.env.T3_ACP_HELPER_TREE_PID_PATH;
+// Antigravity's runtime is a launcher whose server starts a harness: a child
+// with a grandchild that lives as long as the agent. Publish both before
+// serving, so the session exists only once the pids can be read.
+if (helperTreePidPath !== undefined) {
+  const helper = NodeChildProcess.spawn(
+    process.execPath,
+    [
+      "-e",
+      [
+        'const { spawn } = require("node:child_process");',
+        "const grandchild = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1e9)'], { stdio: 'ignore' });",
+        'require("node:fs").writeFileSync(process.argv[1], `${process.pid} ${grandchild.pid}`);',
+        "process.stdout.write('ready\\n');",
+        "setInterval(() => {}, 1e9);",
+      ].join(" "),
+      helperTreePidPath,
+    ],
+    { stdio: ["ignore", "pipe", "ignore"] },
+  );
+  await new Promise((resolve) => helper.stdout.once("data", resolve));
+}
 const exitAfterRunningCommandLaunch = process.env.T3_ACP_EXIT_AFTER_RUNNING_COMMAND_LAUNCH === "1";
 const omitXAiPromptCompleteStopReason =
   process.env.T3_ACP_OMIT_XAI_PROMPT_COMPLETE_STOP_REASON === "1";

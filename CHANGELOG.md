@@ -10,6 +10,20 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.17.6 · 2026-10-23
+
+> Antigravity cleans up after itself, and long sessions stay responsive.
+
+### New
+
+- **Building and lighting playbooks** — Roblox agents build scenes and set the lighting from guides researched live in Studio: human scale, kits from the Creator Store, terrain, and eight measured lighting presets with a day-night cycle.
+
+### Fixed
+
+- **Leftover Antigravity processes** — On Windows, Antigravity runtimes left behind when SealCode closed or crashed kept running and used memory. SealCode now stops them when it starts.
+- **Freezes in long sessions** — Screenshots from Roblox Studio tools are saved as files instead of inside SealCode's database, so long sessions no longer stall on disk writes.
+- **Floating panels while streaming** — With floating panels on, the window no longer re-measures itself on every streamed word.
+
 ## 2.17.5 · 2026-10-22
 
 > Caught up with 700 upstream T3 Code changes, a theme brightness slider and tidier settings.

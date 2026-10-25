@@ -58,6 +58,7 @@ import { ProviderDriverError } from "../Errors.ts";
 import { makeAntigravityProvider } from "../AntigravityProvider.ts";
 import { antigravityBaseSlug } from "../antigravityModelVariants.ts";
 import { makeAntigravityUsageProbe } from "../antigravityUsageLimits.ts";
+import { makeAntigravityIpv4Fallback } from "../antigravityIpv4Fallback.ts";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import * as ModelCatalog from "@t3tools/provider-core/server/ModelCatalog";
 import {
@@ -187,6 +188,7 @@ export const AntigravityDriver: ProviderDriver<
         ),
       );
     const defaultModel = currentCatalog.pipe(Effect.map((catalog) => catalog?.defaultChatModel));
+    const ipv4Fallback = yield* makeAntigravityIpv4Fallback();
 
     const makeRuntime = Effect.fn("AntigravityDriver.makeRuntime")(function* (
       input: Omit<AntigravityAcpRuntimeInput, "spawn" | "childProcessSpawner">,
@@ -268,7 +270,9 @@ export const AntigravityDriver: ProviderDriver<
           installation: executable,
           profile,
           cwd: input.cwd,
-          baseEnv: withAgentDeviceEnvironment(processEnvironment, input),
+          baseEnv: yield* ipv4Fallback.environment(
+            withAgentDeviceEnvironment(processEnvironment, input),
+          ),
           auth,
           runtimeTempDirectory,
         }),

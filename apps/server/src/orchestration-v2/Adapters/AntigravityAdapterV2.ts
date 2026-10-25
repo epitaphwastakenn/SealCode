@@ -44,6 +44,12 @@ import {
 } from "@t3tools/provider-acp/server/adapter";
 
 const ANTIGRAVITY_PROVIDER = ProviderDriverKind.make("antigravity");
+// A healthy agent streams its first thought or reply within seconds. When it cannot reach
+// Google (often broken IPv6: its bundled Python has no IPv4 fallback race) it stays silent
+// for minutes while the turn looks like it is thinking.
+export const ANTIGRAVITY_SILENT_TURN_NOTICE_MS = 30_000;
+export const ANTIGRAVITY_SILENT_TURN_MESSAGE =
+  "Antigravity has not responded after 30 seconds and may not be reaching Google. Check this machine's network connection. Broken IPv6 is a common cause.";
 
 const AntigravityProviderCapabilitiesV2 = {
   ...AcpProviderCapabilitiesV2,
@@ -173,6 +179,10 @@ export function makeAntigravityAcpAdapterFlavor(
     // Loading history replays every tool call; resume restores the session
     // without the replay and is what the official client does.
     preferResumeSession: true,
+    silentTurnNotice: {
+      afterMs: ANTIGRAVITY_SILENT_TURN_NOTICE_MS,
+      message: ANTIGRAVITY_SILENT_TURN_MESSAGE,
+    },
     // Antigravity applies session/cancel only once its current step ends, and a
     // stalled model call never ends, so Stop and steering restart the runtime
     // instead; the next turn resumes the session.

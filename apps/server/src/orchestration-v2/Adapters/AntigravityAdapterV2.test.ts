@@ -23,6 +23,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Queue from "effect/Queue";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import { ChildProcessSpawner } from "effect/process";
 import type * as EffectAcpSchema from "effect-acp/compat";
 
@@ -36,6 +37,7 @@ import { normalizeAntigravitySessionUpdate } from "../../provider/acp/Antigravit
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import {
+  ANTIGRAVITY_SILENT_TURN_MESSAGE,
   makeAntigravityAcpAdapterFlavor,
   makeAntigravityAdapterV2,
 } from "./AntigravityAdapterV2.ts";
@@ -509,6 +511,7 @@ const startHangingTurn = Effect.fn("test.startHangingTurn")(function* (
     new URL("../../../scripts/acp-mock-agent.ts", import.meta.url),
   );
   const instanceId = ProviderInstanceId.make(`antigravity-${name}-test`);
+  const promptSent = yield* Deferred.make<void>();
   const adapter = yield* makeAntigravityAdapterV2({
     instanceId,
     selfInvocation: yield* resolveSelfInvocation(),
@@ -522,7 +525,14 @@ const startHangingTurn = Effect.fn("test.startHangingTurn")(function* (
           cwd: input.cwd,
           env: { T3_ACP_ANTIGRAVITY: "1", T3_ACP_HANG_PROMPT_FOREVER: "1", ...env },
         },
-      }).pipe(Effect.provideService(Crypto.Crypto, crypto)),
+      }).pipe(
+        Effect.provideService(Crypto.Crypto, crypto),
+        Effect.map((runtime): AcpSessionRuntime.AcpSessionRuntime["Service"] => ({
+          ...runtime,
+          prompt: (request) =>
+            Deferred.succeed(promptSent, undefined).pipe(Effect.andThen(runtime.prompt(request))),
+        })),
+      ),
     withProcess: (_stop, task) => task,
     defaultModel: Effect.succeed(undefined),
   });
@@ -541,9 +551,15 @@ const startHangingTurn = Effect.fn("test.startHangingTurn")(function* (
     runtimePolicy,
   });
   const turnUpdates = yield* Queue.unbounded<ProviderAdapter.ProviderAdapterV2Event>();
+  const turnItems = yield* Queue.unbounded<ProviderAdapter.ProviderAdapterV2Event>();
   yield* session.events.pipe(
-    Stream.filter((event) => event.type === "provider_turn.updated"),
-    Stream.runForEach((event) => Queue.offer(turnUpdates, event)),
+    Stream.runForEach((event) =>
+      event.type === "provider_turn.updated"
+        ? Queue.offer(turnUpdates, event)
+        : event.type === "turn_item.updated"
+          ? Queue.offer(turnItems, event)
+          : Effect.void,
+    ),
     Effect.forkScoped,
   );
   const providerThread = yield* session.ensureThread({
@@ -597,7 +613,7 @@ const startHangingTurn = Effect.fn("test.startHangingTurn")(function* (
     .pipe(Effect.forkScoped);
   const started = yield* Queue.take(turnUpdates);
   if (started.type !== "provider_turn.updated") return yield* Effect.die("unreachable");
-  return Effect.gen(function* () {
+  const stop = Effect.gen(function* () {
     // The soft cancel would hold Stop for its 15 second timeout and then fail.
     yield* session
       .interruptTurn({
@@ -613,6 +629,7 @@ const startHangingTurn = Effect.fn("test.startHangingTurn")(function* (
     }
     return status;
   });
+  return { stop, promptSent, turnItems };
 });
 
 function processExists(pid: number): boolean {
@@ -629,7 +646,7 @@ describe("AntigravityAdapterV2 Stop", () => {
   // stalled model call never finishes; Stop must not wait on either.
   it.live("ends a turn the agent never finishes without waiting for its cancel", () =>
     Effect.gen(function* () {
-      const stop = yield* startHangingTurn("stop", {});
+      const { stop } = yield* startHangingTurn("stop", {});
       assert.equal(yield* stop, "interrupted");
     }).pipe(Effect.provide(layerSession), Effect.scoped),
   );
@@ -642,7 +659,9 @@ describe("AntigravityAdapterV2 Stop", () => {
       const path = yield* Path.Path;
       const pidDirectory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-ag-tree-" });
       const pidPath = path.join(pidDirectory, "helper-tree.pid");
-      const stop = yield* startHangingTurn("tree", { T3_ACP_HELPER_TREE_PID_PATH: pidPath });
+      const { stop } = yield* startHangingTurn("tree", {
+        T3_ACP_HELPER_TREE_PID_PATH: pidPath,
+      });
       const pids = (yield* fileSystem.readFileString(pidPath)).trim().split(" ").map(Number);
       assert.lengthOf(pids, 2);
       for (const pid of pids) assert.isTrue(processExists(pid), `helper ${pid} started`);
@@ -650,6 +669,48 @@ describe("AntigravityAdapterV2 Stop", () => {
       assert.equal(yield* stop, "interrupted");
 
       for (const pid of pids) assert.isFalse(processExists(pid), `helper ${pid} survived Stop`);
+    }).pipe(Effect.provide(layerSession), Effect.scoped),
+  );
+});
+
+const silentTurnNotices = (items: ReadonlyArray<ProviderAdapter.ProviderAdapterV2Event>) =>
+  items.flatMap((event) =>
+    event.type === "turn_item.updated" && event.turnItem.type === "system_notice"
+      ? [event.turnItem.message]
+      : [],
+  );
+
+describe("AntigravityAdapterV2 silent turns", () => {
+  // Without network to Google the agent accepts the prompt and then says nothing for minutes.
+  it.effect("tells the user when the agent has said nothing 30 seconds into a turn", () =>
+    Effect.gen(function* () {
+      const turn = yield* startHangingTurn("silent", {});
+      yield* Deferred.await(turn.promptSent);
+      yield* TestClock.adjust("29 seconds");
+      assert.deepEqual(silentTurnNotices(yield* Queue.clear(turn.turnItems)), []);
+
+      yield* TestClock.adjust("1 second");
+      const notice = yield* Queue.take(turn.turnItems);
+      assert.deepEqual(silentTurnNotices([notice]), [ANTIGRAVITY_SILENT_TURN_MESSAGE]);
+      assert.include(ANTIGRAVITY_SILENT_TURN_MESSAGE, "Broken IPv6");
+    }).pipe(Effect.provide(layerSession), Effect.scoped),
+  );
+
+  it.effect("stays quiet when the agent has started answering", () =>
+    Effect.gen(function* () {
+      const turn = yield* startHangingTurn("answering", {
+        T3_ACP_HANG_PROMPT_FOREVER: "0",
+        T3_ACP_EMIT_CONTENT_THEN_HANG: "1",
+      });
+      const answer = yield* Queue.take(turn.turnItems).pipe(
+        Effect.repeat({
+          until: (event) =>
+            event.type === "turn_item.updated" && event.turnItem.type === "assistant_message",
+        }),
+      );
+      assert.equal(answer.type, "turn_item.updated");
+      yield* TestClock.adjust("30 seconds");
+      assert.deepEqual(silentTurnNotices(yield* Queue.clear(turn.turnItems)), []);
     }).pipe(Effect.provide(layerSession), Effect.scoped),
   );
 });

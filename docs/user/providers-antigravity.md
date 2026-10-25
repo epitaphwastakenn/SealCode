@@ -142,5 +142,10 @@ If Google reports `SUBSCRIPTION_REQUIRED`, an account restriction, or a usage li
 follow the provider's message and any retry time. See [Google's account plans][plans]
 for eligibility.
 
+If sign-in or a turn says Antigravity has not reached Google, check the machine's
+network connection. Broken IPv6 is a common cause: when SealCode finds that IPv6 to
+Google fails while IPv4 works, it connects Antigravity over IPv4 by itself. A proxy
+set in `HTTPS_PROXY` is used as is.
+
 [registry]: https://github.com/agentclientprotocol/registry/blob/main/antigravity-acp/agent.json
 [plans]: https://antigravity.google/docs/plans

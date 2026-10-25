@@ -36,7 +36,6 @@ import {
   type ModelSelection,
   NodeId,
   type OrchestrationV2AppThread,
-  type OrchestrationV2PendingBackgroundTask,
   OrchestrationV2ProviderThread,
   ProjectId,
   ProviderInstanceId,

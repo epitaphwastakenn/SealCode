@@ -321,6 +321,12 @@ export interface AcpAdapterV2Flavor {
    * the agent supports both. Antigravity's load replays history slowly.
    */
   readonly preferResumeSession?: boolean;
+  /**
+   * Posts a warning in the thread when a turn gets no agent output this long
+   * after its prompt, for agents whose silence usually means they cannot reach
+   * their model service.
+   */
+  readonly silentTurnNotice?: { readonly afterMs: number; readonly message: string };
   readonly onSessionEvent?: (
     event: AcpSessionRuntime.AcpSessionRuntimeEvent,
   ) => Effect.Effect<void>;
@@ -1124,6 +1130,7 @@ interface ActiveAcpTurn {
   promptSettled: boolean;
   promptSettledStatus: "completed" | "interrupted" | "failed" | "cancelled" | null;
   workAccepted: boolean;
+  agentOutputSeen: boolean;
   readonly promptWireSettled: Deferred.Deferred<void, never>;
   backgroundFinalizeGeneration: number;
 }
@@ -2206,6 +2213,43 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               (yield* resolveItemOrdinal(context, `terminal-failure:${context.providerTurnId}`)),
           };
           yield* emitProviderRetry(context, "running");
+        });
+
+        const emitSilentTurnNotice = Effect.fnUntraced(function* (
+          context: ActiveAcpTurn,
+          message: string,
+        ) {
+          if (
+            context.finalized ||
+            context.interrupted ||
+            context.agentOutputSeen ||
+            (yield* Ref.get(activeTurn)) !== context
+          )
+            return;
+          const nativeItemId = `${context.nativeTurnId}:silent-turn-notice`;
+          const now = yield* DateTime.now;
+          yield* emitProviderEvent({
+            type: "turn_item.updated",
+            driver,
+            turnItem: {
+              id: idAllocator.derive.turnItemFromProviderItem({ driver, nativeItemId }),
+              threadId: context.input.threadId,
+              runId: context.input.runId,
+              nodeId: context.input.rootNodeId,
+              providerThreadId: context.input.providerThread.id,
+              providerTurnId: context.providerTurnId,
+              nativeItemRef: { driver, nativeId: nativeItemId, strength: "weak" },
+              parentItemId: null,
+              ordinal: yield* resolveItemOrdinal(context, nativeItemId),
+              type: "system_notice",
+              status: "completed",
+              title: message,
+              message,
+              startedAt: now,
+              completedAt: now,
+              updatedAt: now,
+            },
+          });
         });
 
         const lastCapturedProposedPlan = yield* Ref.make<{
@@ -4911,6 +4955,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
             }
             return;
           }
+          if (acpRootSessionUpdateIngestsOutput(notification)) context.agentOutputSeen = true;
           if (
             update.sessionUpdate !== "tool_call_update" &&
             update.sessionUpdate !== "plan" &&
@@ -7446,6 +7491,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               promptSettled: false,
               promptSettledStatus: null,
               workAccepted: false,
+              agentOutputSeen: false,
               promptWireSettled,
               backgroundFinalizeGeneration: 0,
             };
@@ -7584,6 +7630,20 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               return;
             }
             const promptGeneration = yield* Ref.get(runtimeCallbackGeneration);
+            if (flavor.silentTurnNotice !== undefined) {
+              const notice = flavor.silentTurnNotice;
+              yield* Deferred.await(context.completed).pipe(
+                Effect.timeoutOrElse({
+                  duration: notice.afterMs,
+                  orElse: () =>
+                    runRuntimeCallbackAtGeneration(
+                      promptGeneration,
+                      emitSilentTurnNotice(context, notice.message),
+                    ).pipe(Effect.asVoid),
+                }),
+                Effect.forkIn(sessionScope),
+              );
+            }
             yield* runtime.prompt({ prompt: promptParts!.prompt }).pipe(
               Effect.tap(() =>
                 Ref.update(promptInstructionStates, (current) => {

@@ -21,6 +21,7 @@ import { ANTIGRAVITY_MODEL_OPTION_IDS } from "../../provider/antigravityModelVar
 import {
   antigravityPermissionMode,
   applyAntigravityAcpModelSelection,
+  buildAntigravityPrompt,
   type AntigravityAcpRuntimeInput,
 } from "../../provider/acp/AntigravityAcpSupport.ts";
 import {
@@ -159,6 +160,16 @@ export function makeAntigravityAcpAdapterFlavor(
     runtimeHarness: "Antigravity",
     capabilities: AntigravityProviderCapabilitiesV2,
     makeRuntime,
+    buildPrompt: ({ text, attachments, promptCapabilities }) =>
+      buildAntigravityPrompt({
+        input: text,
+        attachments,
+        attachmentsDir: options.host.paths.attachmentsDir,
+        promptCapabilities,
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, options.fileSystem),
+        Effect.provideService(Path.Path, options.path),
+      ),
     // Loading history replays every tool call; resume restores the session
     // without the replay and is what the official client does.
     preferResumeSession: true,

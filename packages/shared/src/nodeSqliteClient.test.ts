@@ -422,3 +422,64 @@ it.effect.each([
       );
     }).pipe(Effect.provide(SqliteClient.layer({ filename: ":memory:" }))),
 );
+
+// regression: #24660 one long read held the only reader, so every other read queued behind it
+it.effect("runs a read while another read transaction holds a reader", () =>
+  withReaderClient((sql) =>
+    Effect.gen(function* () {
+      const opened = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const long = yield* Effect.forkChild(
+        sql
+          .withTransaction(
+            countEntries(sql).pipe(
+              Effect.andThen(Deferred.succeed(opened, undefined)),
+              Effect.andThen(Deferred.await(release)),
+            ),
+          )
+          .pipe(SqliteClient.readOnly),
+      );
+      yield* Deferred.await(opened);
+      // With a single reader this waits for the release below, which never comes.
+      assert.equal(yield* countEntries(sql).pipe(SqliteClient.readOnly), 1);
+      yield* Deferred.succeed(release, undefined);
+      yield* Fiber.join(long);
+    }),
+  ),
+);
+
+// regression: #23482 a read transaction pinning the WAL past journal_size_limit froze every write.
+// Live: the checkpoint worker is a real thread and the admission deadline a real timer.
+it.live("admits writes after a deadline while an outside reader pins the WAL", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-sqlite-admission-" });
+    const filename = path.join(directory, "state.sqlite");
+    const payload = new Uint8Array(256 * 1024);
+    yield* Effect.gen(function* () {
+      const sql = yield* SqlClient.SqlClient;
+      yield* sql`PRAGMA journal_mode = WAL`;
+      yield* sql`CREATE TABLE blobs(data BLOB)`;
+      yield* sql`INSERT INTO blobs VALUES (${payload})`;
+      const outside = new NodeSqlite.DatabaseSync(filename, { readOnly: true });
+      yield* Effect.addFinalizer(() => Effect.sync(() => outside.close()));
+      outside.exec("BEGIN");
+      outside.prepare("SELECT count(*) FROM blobs").get();
+      // 200 x 64 pages passes the 10,000-frame ceiling, where writes wait for a checkpoint.
+      for (let i = 0; i < 200; i++) yield* sql`INSERT INTO blobs VALUES (${payload})`;
+      outside.exec("COMMIT");
+      yield* sql`INSERT INTO blobs VALUES (${payload})`;
+      const rows = yield* sql<{ count: number }>`SELECT count(*) AS count FROM blobs`;
+      assert.equal(rows[0]?.count, 202);
+    }).pipe(
+      Effect.provide(
+        SqliteClient.layer({
+          filename,
+          checkpointWorker: true,
+          writeAdmissionTimeout: "20 millis",
+        }),
+      ),
+    );
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);

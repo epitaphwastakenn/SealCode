@@ -613,6 +613,7 @@ export interface ComposerUsage {
  */
 function antigravityWindowPrefixes(model: string): readonly string[] | null {
   const slug = model.toLowerCase();
+  if (slug.includes("argon")) return ["gemini-argon-"];
   if (slug.startsWith("gemini")) return ["gemini-"];
   if (slug.startsWith("claude")) return ["3p-", "claude-"];
   if (slug.startsWith("gpt")) return ["3p-", "gpt-"];
@@ -652,7 +653,12 @@ export function composerUsage(
   const prefixes =
     provider.driver === "antigravity" && model ? antigravityWindowPrefixes(model) : null;
   if (prefixes) {
-    windows = windows.filter((window) => prefixes.some((prefix) => window.id.startsWith(prefix)));
+    // Argon has its own quota group, so its `gemini-argon-` windows never gate other Gemini models.
+    windows = windows.filter(
+      (window) =>
+        prefixes.some((prefix) => window.id.startsWith(prefix)) &&
+        (prefixes.includes("gemini-argon-") || !window.id.startsWith("gemini-argon-")),
+    );
     const [first] = windows;
     group = first?.label.includes(" · ") ? (first.label.split(" · ")[0] ?? null) : null;
   }

@@ -1348,12 +1348,21 @@ describe("composerUsage", () => {
         { ...weekly, id: "gemini-weekly", label: "Gemini · Weekly", usedPercent: 10 },
         { ...window, id: "3p-5h", label: "Claude & GPT (shared) · 5-hour", usedPercent: 90 },
         { ...weekly, id: "3p-weekly", label: "Claude & GPT (shared) · Weekly", usedPercent: 100 },
+        {
+          ...weekly,
+          id: "gemini-argon-wtu-weekly",
+          label: "Gemini 4 Argon · Weekly",
+          usedPercent: 60,
+        },
       ]),
     });
     const gemini = composerUsage(antigravity, "gemini-3.8-flash", now);
     expect(gemini?.group).toBe("Gemini");
     expect(gemini?.rows.map((row) => row.window.id)).toEqual(["gemini-5h", "gemini-weekly"]);
     expect(gemini?.peakPercent).toBe(20);
+    const argon = composerUsage(antigravity, "gemini-4-argon-high", now);
+    expect(argon?.group).toBe("Gemini 4 Argon");
+    expect(argon?.peakPercent).toBe(60);
     const shared = composerUsage(antigravity, "claude-sonnet-4-6", now);
     expect(shared?.group).toBe("Claude & GPT (shared)");
     expect(shared?.peakPercent).toBe(100);

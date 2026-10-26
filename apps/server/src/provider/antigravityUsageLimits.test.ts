@@ -79,14 +79,14 @@ const fixture = Effect.fn("AntigravityUsageTest.fixture")(function* (
       }),
     );
   if (!options.missingToken) yield* writeToken(options.refreshToken ?? "refresh-a");
-  const requests: Array<{ url: string; body: string }> = [];
+  const requests: Array<{ url: string; body: string; userAgent: string | undefined }> = [];
   const http = HttpClient.make((request, url, _signal, fiber) =>
     Effect.sync(() => {
       const init = Context.getOrUndefined(fiber.context, FetchHttpClient.RequestInit);
       expect(init?.redirect).toBe("manual");
       const body =
         request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
-      requests.push({ url: request.url, body });
+      requests.push({ url: request.url, body, userAgent: request.headers["user-agent"] });
       if (request.url.endsWith("/token")) {
         expect(new URLSearchParams(body).get("grant_type")).toBe("refresh_token");
         return HttpClientResponse.fromWeb(
@@ -125,6 +125,121 @@ const fixture = Effect.fn("AntigravityUsageTest.fixture")(function* (
 });
 
 describe("Antigravity subscription limits", () => {
+  it.effect("labels the Gemini Argon bucket separately and probes as the ACP client", () =>
+    Effect.gen(function* () {
+      // A real account's summary for the ACP client, with descriptions trimmed.
+      const { probe, requests } = yield* fixture({
+        summary: {
+          groups: [
+            {
+              buckets: [
+                {
+                  bucketId: "gemini-weekly",
+                  displayName: "Weekly Limit Remaining",
+                  window: "weekly",
+                  resetTime: "2026-11-01T20:07:26Z",
+                  description: "You have used some of your weekly limit.",
+                  remainingFraction: 0.9999131,
+                },
+                {
+                  bucketId: "gemini-5h",
+                  displayName: "Five Hour Limit Remaining",
+                  window: "5h",
+                  resetTime: "2026-10-26T09:05:01Z",
+                  remainingFraction: 1,
+                },
+              ],
+              displayName: "Gemini Models",
+              description: "Models within this group: Gemini Flash, Gemini Pro",
+            },
+            {
+              buckets: [
+                {
+                  bucketId: "3p-weekly",
+                  displayName: "Weekly Limit Remaining",
+                  window: "weekly",
+                  resetTime: "2026-11-02T04:05:01Z",
+                  remainingFraction: 1,
+                },
+                {
+                  bucketId: "3p-5h",
+                  displayName: "Five Hour Limit Remaining",
+                  window: "5h",
+                  resetTime: "2026-10-26T09:05:01Z",
+                  remainingFraction: 1,
+                },
+              ],
+              displayName: "Claude and GPT models",
+              description: "Models within this group: Claude Opus, Claude Sonnet, GPT-OSS",
+            },
+            {
+              buckets: [
+                {
+                  bucketId: "gemini-argon-wtu-weekly",
+                  displayName: "Gemini 4 Argon Weekly Limit",
+                  window: "weekly",
+                  resetTime: "2026-10-31T21:27:15Z",
+                  description: "You have used some of your weekly limit.",
+                  remainingFraction: 0.78405213,
+                },
+              ],
+              displayName: "Gemini 4 Argon",
+              description: "For paid Pro plans, Argon quota is separate.",
+            },
+          ],
+          description: "Within each group, models share a weekly limit and a 5-hour limit.",
+        },
+      });
+      const limits = yield* probe;
+      expect(
+        limits.windows.map(({ id, label, usedPercent, resetsAt }) => ({
+          id,
+          label,
+          usedPercent: Math.round(usedPercent),
+          resetsAt,
+        })),
+      ).toEqual([
+        {
+          id: "3p-5h",
+          label: "Claude & GPT (shared) · 5-hour",
+          usedPercent: 0,
+          resetsAt: "2026-10-26T09:05:01.000Z",
+        },
+        {
+          id: "gemini-5h",
+          label: "Gemini · 5-hour",
+          usedPercent: 0,
+          resetsAt: "2026-10-26T09:05:01.000Z",
+        },
+        {
+          id: "3p-weekly",
+          label: "Claude & GPT (shared) · Weekly",
+          usedPercent: 0,
+          resetsAt: "2026-11-02T04:05:01.000Z",
+        },
+        {
+          id: "gemini-argon-wtu-weekly",
+          label: "Gemini 4 Argon · Weekly",
+          usedPercent: 22,
+          resetsAt: "2026-10-31T21:27:15.000Z",
+        },
+        {
+          id: "gemini-weekly",
+          label: "Gemini · Weekly",
+          usedPercent: 0,
+          resetsAt: "2026-11-01T20:07:26.000Z",
+        },
+      ]);
+      const quotaRequests = requests.filter((request) =>
+        request.url.endsWith(":retrieveUserQuotaSummary"),
+      );
+      expect(quotaRequests.length).toBeGreaterThan(0);
+      for (const request of quotaRequests) {
+        expect(request.userAgent).toMatch(/^antigravity\/acp\//);
+      }
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
   it.effect("reports separate Gemini and shared Claude/GPT five-hour and weekly limits", () =>
     Effect.gen(function* () {
       const { probe, requests } = yield* fixture();

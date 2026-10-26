@@ -10,6 +10,30 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.17.7 · 2026-10-26
+
+> Gemini 4 Argon in Antigravity, every usage limit, and an app that no longer freezes on its database.
+
+### New
+
+- **Gemini 4 Argon** — Antigravity now runs the newer agent, so Gemini 4 Argon is in the model picker.
+- **All Antigravity limits** — Usage shows the Gemini and Gemini 4 Argon limits next to the shared Claude & GPT ones.
+- **PDF attachments** — PDFs you attach go to Claude and Antigravity as documents.
+
+### Improved
+
+- **Antigravity on tricky networks** — When Antigravity cannot reach Google over IPv6, it switches to IPv4 by itself. If a sign-in or turn still stalls, SealCode says so instead of thinking forever.
+- **New threads remember your setup** — A new thread starts with the model and modes you last used in that project.
+- **Ctrl+W on Windows** — Closing the last window with Ctrl+W asks before quitting.
+
+### Fixed
+
+- **Freezes** — The app no longer freezes when a slow database read blocks every write, old turn snapshots are compacted, and screenshots saved before 2.17.6 move out of the database.
+- **Chat jumping to the bottom** — Scrolling up during a turn keeps your place.
+- **Large reasoning blocks** — Opening a thread with long reasoning no longer freezes the window.
+- **CommandCode reasoning** — The reasoning slider runs from off up to max, and models no longer default to off.
+- **Antigravity usage** — Each call is counted once, and untouched limits no longer show a moving reset countdown.
+
 ## 2.17.6 · 2026-10-23
 
 > Antigravity cleans up after itself, and long sessions stay responsive.

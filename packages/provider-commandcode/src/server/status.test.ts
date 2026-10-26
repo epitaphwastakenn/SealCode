@@ -29,7 +29,7 @@ meta/muse-spark-1.2-contributor      Muse Spark 1.2 at ~95% off
 
 const MODEL_REFERENCE = `| Id (use EXACTLY this) | Name | Context | Efforts | $/1M in/out | Best for |
 |---|---|---|---|---|---|
-| \`deepseek/deepseek-v4-flash\` | DeepSeek V4 Flash (latest) | 1M | high, max | $0.14/$0.28 | fast |
+| \`deepseek/deepseek-v4-flash\` | DeepSeek V4 Flash (latest) | 1M | off, high, max | $0.14/$0.28 | fast |
 | \`meta/muse-spark-1.2-contributor\` | Muse Spark 1.2 Contributor | 1.05M | — | $0.1/$0.2 | cheap |
 `;
 
@@ -130,12 +130,52 @@ it.layer(NodeServices.layer)("CommandCode status", (it) => {
       ]);
       const efforts = snapshot.models[0]?.capabilities?.optionDescriptors?.[0];
       expect(efforts?.type === "select" && efforts.options.map((option) => option.id)).toEqual([
+        "off",
         "high",
         "max",
       ]);
       expect(snapshot.models[1]?.capabilities?.optionDescriptors).toEqual([]);
       expect(snapshot.usageLimits).toBeUndefined();
       expect((yield* fake.invocations).length).toBe(0);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("prefers the CLI's cached remote catalog over its bundled one", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const fake = yield* makeFakeCommandCode({
+        modelList: `${MODEL_LIST}moonshotai/kimi-k3.1-pro             frontier reasoning
+`,
+      });
+      const home = yield* fileSystem.makeTempDirectoryScoped({ prefix: "commandcode-home-" });
+      const cache = NodePath.join(home, ".commandcode", "cache", "model-catalog", "v1");
+      yield* fileSystem.makeDirectory(cache, { recursive: true });
+      yield* fileSystem.writeFileString(
+        NodePath.join(cache, "catalog-test.json"),
+        JSON.stringify({
+          fetchedAt: 1,
+          body: {
+            data: [
+              {
+                id: "moonshotai/Kimi-K3.1-Pro",
+                name: "Kimi K3.1 Pro",
+                reasoningEfforts: ["low", "high", "max"],
+              },
+            ],
+          },
+        }),
+      );
+
+      const snapshot = yield* check({ enabled: true, binaryPath: fake.binaryPath }, { home });
+
+      const kimi = snapshot.models.find((model) => model.slug === "moonshotai/kimi-k3.1-pro");
+      expect(kimi?.name).toBe("Kimi K3.1 Pro");
+      const efforts = kimi?.capabilities?.optionDescriptors?.[0];
+      expect(efforts?.type === "select" && efforts.options.map((option) => option.id)).toEqual([
+        "low",
+        "high",
+        "max",
+      ]);
     }).pipe(Effect.scoped),
   );
 

@@ -1,4 +1,5 @@
 import type { ServerProviderModel } from "@t3tools/contracts";
+import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveCommandPath, resolveSpawnCommand } from "@t3tools/shared/shell";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -22,6 +23,7 @@ import {
   COMMAND_CODE_FALLBACK_MODELS,
   COMMAND_CODE_NO_EFFORT_CAPABILITIES,
   commandCodeModels,
+  parseCommandCodeModelCatalog,
   parseCommandCodeModelList,
   parseCommandCodeModelReference,
 } from "./models.ts";
@@ -94,6 +96,24 @@ const readModelReference = Effect.fn("readCommandCodeModelReference")(function* 
   return "";
 });
 
+const readModelCatalogCache = Effect.fn("readCommandCodeModelCatalogCache")(function* (
+  environment: NodeJS.ProcessEnv,
+) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const home =
+    environment.USERPROFILE?.trim() ||
+    environment.HOME?.trim() ||
+    (yield* HostProcess.HomeDirectory);
+  const directory = path.join(home, ".commandcode", "cache", "model-catalog", "v1");
+  const names = yield* fileSystem.readDirectory(directory).pipe(Effect.orElseSucceed(() => []));
+  return yield* Effect.forEach(
+    names.filter((name) => name.startsWith("catalog-") && name.endsWith(".json")),
+    (name) =>
+      fileSystem.readFileString(path.join(directory, name)).pipe(Effect.orElseSucceed(() => "")),
+  );
+});
+
 export const checkCommandCodeProviderStatus = Effect.fn("checkCommandCodeProviderStatus")(
   function* (settings: CommandCodeSettings, environment: NodeJS.ProcessEnv, cwd?: string) {
     if (!settings.enabled) return yield* makePendingCommandCodeProvider(settings);
@@ -109,8 +129,8 @@ export const checkCommandCodeProviderStatus = Effect.fn("checkCommandCodeProvide
         models,
         probe,
       });
-    const run = (args: ReadonlyArray<string>) =>
-      Effect.gen(function* () {
+    const run = Effect.fn("checkCommandCodeProviderStatus.run")(
+      function* (args: ReadonlyArray<string>) {
         const spawnCommand = yield* resolveSpawnCommand(settings.binaryPath, args, {
           env: environment,
         });
@@ -122,7 +142,10 @@ export const checkCommandCodeProviderStatus = Effect.fn("checkCommandCodeProvide
             ...(cwd ? { cwd } : {}),
           }),
         );
-      }).pipe(Effect.timeoutOption(PROBE_TIMEOUT_MS), Effect.result);
+      },
+      Effect.timeoutOption(PROBE_TIMEOUT_MS),
+      Effect.result,
+    );
 
     // `--no-auto-update` keeps a status refresh from replacing the binary mid-run.
     const versionResult = yield* run(["--no-auto-update", "--version"]);
@@ -168,11 +191,14 @@ export const checkCommandCodeProviderStatus = Effect.fn("checkCommandCodeProvide
             `${listResult.success.value.stdout}\n${listResult.success.value.stderr}`,
           )
         : [];
-    const reference = parseCommandCodeModelReference(
-      yield* readModelReference(settings.binaryPath, environment).pipe(
-        Effect.orElseSucceed(() => ""),
+    const reference = new Map([
+      ...parseCommandCodeModelReference(
+        yield* readModelReference(settings.binaryPath, environment).pipe(
+          Effect.orElseSucceed(() => ""),
+        ),
       ),
-    );
+      ...parseCommandCodeModelCatalog(yield* readModelCatalogCache(environment)),
+    ]);
     const usageLimits = yield* readCommandCodeUsageLimits(environment);
     return snapshot(
       // The CLI has no sign-in probe that stays offline and quiet. A signed-out

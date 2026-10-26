@@ -114,6 +114,23 @@ it.effect(
     }).pipe(Effect.provide(layerTest)),
 );
 
+// regression: #24660 every read of a V2-born thread looked up its missing legacy import again
+it.effect("looks up a thread without a legacy import once after shells are reconciled", () =>
+  Effect.gen(function* () {
+    const importer = yield* LegacyV1ThreadImporter.LegacyV1ThreadImporter;
+    yield* seedPendingTranscripts;
+    let lookups = 0;
+    const countLookups = Effect.provideService(Statement.CurrentTransformer, (statement) => {
+      if (statement.compile()[0].includes("FROM orchestration_v2_legacy_imports")) lookups++;
+      return Effect.succeed(statement);
+    });
+    const bornInV2 = ThreadId.make("thread:born-in-v2");
+    yield* importer.ensureTranscript(bornInV2).pipe(countLookups);
+    yield* importer.ensureTranscript(bornInV2).pipe(countLookups);
+    assert.equal(lookups, 1);
+  }).pipe(Effect.provide(layerTest)),
+);
+
 // regression: #15920 one bad legacy message stopped the server from starting
 it.effect("propagates interruption from transcript reads and retry-marker writes", () =>
   Effect.gen(function* () {

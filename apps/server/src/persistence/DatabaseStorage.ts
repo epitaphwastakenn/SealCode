@@ -15,11 +15,15 @@ import * as SqlClient from "effect/sql/SqlClient";
 import { resolveHostCliCommand } from "../cli/invocation.ts";
 import * as ServerConfig from "../config.ts";
 import * as ProjectionMaintenance from "../orchestration-v2/ProjectionMaintenance.ts";
+import * as ToolOutputImageStore from "../orchestration-v2/ToolOutputImageStore.ts";
 import { forkParked } from "../serverActivation.ts";
+import { VACUUM_ON_START_FILE } from "./Sqlite.ts";
+import * as ToolOutputImageBackfill from "./ToolOutputImageBackfill.ts";
 
 /** Pages returned per reclaim pass; one minute of churn, not a backlog. */
 const RECLAIM_PAGES_PER_PASS = 1024;
 const COMPACTION_INTERVAL = Duration.hours(6);
+const TOOL_OUTPUT_IMAGES_EXTERNALIZED_FILE = "tool-output-images-externalized";
 
 export class DatabaseStorage extends Context.Service<
   DatabaseStorage,
@@ -94,11 +98,23 @@ const make = Effect.gen(function* () {
     Effect.catch((cause) => Effect.logWarning("Database space reclamation failed", { cause })),
   );
 
+  // Started with the pass, so its first page counts toward the first slice.
+  const startPacing = Effect.map(Clock.monotonicTimeNanos, (started) => {
+    let sliceStarted = started;
+    return Effect.gen(function* () {
+      const elapsed = (yield* Clock.monotonicTimeNanos) - sliceStarted;
+      if (elapsed < 25_000_000n) return;
+      // Keep background maintenance at 10% duty, including pages that exceed the budget.
+      yield* Effect.sleep((Number(elapsed) / 1_000_000) * 9);
+      sliceStarted = yield* Clock.monotonicTimeNanos;
+    });
+  });
+
   // Even a pass that deletes nothing scans the event store. Persist completion
   // so restarting does not trigger another scan before the six-hour interval.
   const compactedAtPath = path.join(path.dirname(config.dbPath), "compacted-at");
   const compact = Effect.gen(function* () {
-    const result = yield* maintenance.compactEventStore;
+    const result = yield* maintenance.compactEventStore(yield* startPacing);
     const completedAt = yield* Clock.currentTimeMillis;
     yield* fs.writeFileString(compactedAtPath, String(completedAt)).pipe(Effect.ignore);
     if (result.deletedEventCount > 0 || result.deletedReceiptCount > 0) {
@@ -109,6 +125,34 @@ const make = Effect.gen(function* () {
       Effect.logWarning("Orchestration history compaction failed", { cause }),
     ),
   );
+  // Once: newer items already keep their images in files. A VACUUM is the only
+  // way to give the space back to a database without incremental auto_vacuum,
+  // and it cannot run beside a live server, so it waits for the next start.
+  const imagesExternalizedPath = path.join(
+    path.dirname(config.dbPath),
+    TOOL_OUTPUT_IMAGES_EXTERNALIZED_FILE,
+  );
+  const externalizeImages = Effect.gen(function* () {
+    if (yield* fs.exists(imagesExternalizedPath)) return;
+    const images = yield* ToolOutputImageStore.make(config.attachmentsDir);
+    const { rewrittenRows } = yield* ToolOutputImageBackfill.externalizeStoredImages(
+      images,
+      yield* startPacing,
+    );
+    if (rewrittenRows > 0) {
+      yield* Effect.logInfo("Moved stored tool output images into files", { rewrittenRows });
+      const mode = yield* sql<{ readonly auto_vacuum: number }>`PRAGMA auto_vacuum`;
+      if (mode[0]?.auto_vacuum !== 2) {
+        yield* fs.writeFileString(path.join(path.dirname(config.dbPath), VACUUM_ON_START_FILE), "");
+      }
+    }
+    yield* fs.writeFileString(imagesExternalizedPath, String(yield* Clock.currentTimeMillis));
+  }).pipe(
+    Effect.catch((cause) =>
+      Effect.logWarning("Moving stored tool output images into files failed", { cause }),
+    ),
+  );
+
   const lastCompactedAt = yield* fs.readFileString(compactedAtPath).pipe(
     Effect.map(Number),
     Effect.orElseSucceed(() => Number.NaN),
@@ -131,6 +175,7 @@ const make = Effect.gen(function* () {
       ),
     ),
   );
+  yield* forkParked(Effect.sleep("1 minute").pipe(Effect.andThen(externalizeImages)));
   yield* forkParked(
     publishStatus.pipe(
       Effect.andThen(Effect.sleep("1 minute")),

@@ -647,7 +647,15 @@ const make = Effect.gen(function* () {
     return { importedThreadCount, importedMessageCount };
   });
 
+  // Reconciliation gives every V1 thread an import row, so after it a thread
+  // without one was born in V2 and has nothing to import.
+  let shellsReconciled = false;
   const reconcileShells = reconcileShellsBase.pipe(
+    Effect.tap(() =>
+      Effect.sync(() => {
+        shellsReconciled = true;
+      }),
+    ),
     Effect.mapError((cause) => new LegacyV1ThreadImportError({ operation: "import", cause })),
   );
 
@@ -687,6 +695,8 @@ const make = Effect.gen(function* () {
     transcriptImports.withLock(
       threadId,
       Effect.gen(function* () {
+        // Read before the lookup: a reconciliation finishing after it may have added the row.
+        const reconciledBeforeLookup = shellsReconciled;
         const imports = yield* sql<LegacyImportRow>`
           SELECT thread_id, transcript_imported_at
           FROM orchestration_v2_legacy_imports
@@ -695,7 +705,7 @@ const make = Effect.gen(function* () {
         `.pipe(NodeSqliteClient.readOnly);
         const imported = imports[0];
         if (imported === undefined || imported.transcript_imported_at !== null) {
-          if (imported !== undefined) {
+          if (imported !== undefined || reconciledBeforeLookup) {
             confirmedTranscriptThreadIds.add(threadId);
           }
           return { importedThreadCount: 0, importedMessageCount: 0 };

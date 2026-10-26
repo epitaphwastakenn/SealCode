@@ -5332,7 +5332,7 @@ it.layer(Layer.fresh(layerSharedApplicationDataPlaneTest))("compact PR events", 
         });
       }
       const latest = yield* orchestrator.getThreadShell(threadId);
-      yield* maintenance.compactEventStore;
+      yield* maintenance.compactEventStore();
       const linkEvents = yield* sql<{ command_id: string }>`
         SELECT command_id FROM orchestration_events
         WHERE stream_id = ${threadId} AND event_type = 'thread.pull-request-link-updated'
@@ -5374,7 +5374,7 @@ it.layer(Layer.fresh(layerSharedApplicationDataPlaneTest))("compact PR events", 
           visitedAt,
         });
       }
-      yield* maintenance.compactEventStore;
+      yield* maintenance.compactEventStore();
       assert.deepEqual(
         (yield* threadEvents()).map((row) => row.event_type),
         ["thread.metadata-updated", "thread.visited"],
@@ -5385,7 +5385,7 @@ it.layer(Layer.fresh(layerSharedApplicationDataPlaneTest))("compact PR events", 
         threadId,
         title: "Renamed after visit",
       });
-      yield* maintenance.compactEventStore;
+      yield* maintenance.compactEventStore();
       assert.deepEqual(
         (yield* threadEvents()).map((row) => row.event_type),
         ["thread.metadata-updated"],

@@ -7,7 +7,14 @@ import {
   ThreadId,
 } from "@t3tools/contracts";
 import type { LegendListRef } from "@legendapp/list/react";
-import { createRef, Profiler, useRef, useState, type ComponentProps, type ReactElement } from "react";
+import {
+  createRef,
+  Profiler,
+  useRef,
+  useState,
+  type ComponentProps,
+  type ReactElement,
+} from "react";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import "~/index.css";

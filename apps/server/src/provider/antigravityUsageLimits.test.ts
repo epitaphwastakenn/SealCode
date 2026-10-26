@@ -4,6 +4,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as TestClock from "effect/testing/TestClock";
 import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http";
 
 import { makeAntigravityUsageProbe } from "./antigravityUsageLimits.ts";
@@ -265,6 +266,69 @@ describe("Antigravity subscription limits", () => {
       expect(
         requests.filter((request) => request.url.endsWith(":retrieveUserQuotaSummary")),
       ).toHaveLength(4);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
+
+  // #22815: a bucket nobody used reports "now + window" as its reset, so the countdown never moves.
+  it.effect("shows no reset for untouched buckets whose reset rolls with every request", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(Date.parse("2026-10-21T10:16:04Z"));
+      const { probe } = yield* fixture({
+        summary: {
+          groups: [
+            {
+              displayName: "Gemini Models",
+              buckets: [
+                {
+                  bucketId: "gemini-5h",
+                  window: "5h",
+                  remainingFraction: 0.848104,
+                  resetTime: "2026-10-21T13:29:53Z",
+                  description: "You have used some of your 5-hour limit.",
+                },
+                {
+                  bucketId: "gemini-weekly",
+                  window: "weekly",
+                  remainingFraction: 1,
+                  resetTime: "2026-10-28T10:16:05Z",
+                  description: "You have used some of your weekly limit.",
+                },
+              ],
+            },
+            {
+              displayName: "Claude and GPT",
+              buckets: [
+                {
+                  bucketId: "3p-5h",
+                  window: "5h",
+                  remainingFraction: 1,
+                  resetTime: "2026-10-21T15:16:05Z",
+                },
+                {
+                  bucketId: "3p-weekly",
+                  window: "weekly",
+                  remainingFraction: 1,
+                  resetTime: "2026-10-28T10:16:05Z",
+                },
+                // A full bucket whose reset is not a rolling window is a real reset.
+                {
+                  bucketId: "3p-other",
+                  window: "5h",
+                  remainingFraction: 1,
+                  resetTime: "2026-10-21T12:00:00Z",
+                },
+              ],
+            },
+          ],
+        },
+      });
+      const byId = new Map((yield* probe).windows.map((window) => [window.id, window]));
+      expect(byId.get("3p-5h")).toMatchObject({ usedPercent: 0, windowDurationMins: 300 });
+      expect(byId.get("3p-5h")?.resetsAt).toBeUndefined();
+      expect(byId.get("3p-weekly")?.resetsAt).toBeUndefined();
+      expect(byId.get("3p-other")?.resetsAt).toBe("2026-10-21T12:00:00.000Z");
+      expect(byId.get("gemini-5h")?.resetsAt).toBe("2026-10-21T13:29:53.000Z");
+      expect(byId.get("gemini-weekly")?.resetsAt).toBe("2026-10-28T10:16:05.000Z");
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
 

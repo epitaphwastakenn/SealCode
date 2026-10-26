@@ -38,6 +38,7 @@ import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import {
   ANTIGRAVITY_SILENT_TURN_MESSAGE,
+  ANTIGRAVITY_STALLED_TURN_MESSAGE,
   makeAntigravityAcpAdapterFlavor,
   makeAntigravityAdapterV2,
 } from "./AntigravityAdapterV2.ts";
@@ -710,6 +711,50 @@ describe("AntigravityAdapterV2 silent turns", () => {
       );
       assert.equal(answer.type, "turn_item.updated");
       yield* TestClock.adjust("30 seconds");
+      assert.deepEqual(silentTurnNotices(yield* Queue.clear(turn.turnItems)), []);
+    }).pipe(Effect.provide(layerSession), Effect.scoped),
+  );
+
+  // #14619: the model call dies mid-answer and the agent never ends the prompt.
+  it.effect("tells the user when the agent stops mid-answer for five minutes", () =>
+    Effect.gen(function* () {
+      const turn = yield* startHangingTurn("stalled", {
+        T3_ACP_HANG_PROMPT_FOREVER: "0",
+        T3_ACP_EMIT_CONTENT_THEN_HANG: "1",
+      });
+      yield* Queue.take(turn.turnItems).pipe(
+        Effect.repeat({
+          until: (event) =>
+            event.type === "turn_item.updated" && event.turnItem.type === "assistant_message",
+        }),
+      );
+      yield* TestClock.adjust("299 seconds");
+      assert.deepEqual(silentTurnNotices(yield* Queue.clear(turn.turnItems)), []);
+
+      yield* TestClock.adjust("1 second");
+      const notice = yield* Queue.take(turn.turnItems).pipe(
+        Effect.repeat({
+          until: (event) =>
+            event.type === "turn_item.updated" && event.turnItem.type === "system_notice",
+        }),
+      );
+      assert.deepEqual(silentTurnNotices([notice]), [ANTIGRAVITY_STALLED_TURN_MESSAGE]);
+    }).pipe(Effect.provide(layerSession), Effect.scoped),
+  );
+
+  it.effect("stays quiet while a command the agent started is still running", () =>
+    Effect.gen(function* () {
+      const turn = yield* startHangingTurn("running-command", {
+        T3_ACP_HANG_PROMPT_FOREVER: "0",
+        T3_ACP_EMIT_RUNNING_COMMAND_THEN_HANG: "1",
+      });
+      yield* Queue.take(turn.turnItems).pipe(
+        Effect.repeat({
+          until: (event) =>
+            event.type === "turn_item.updated" && event.turnItem.type === "command_execution",
+        }),
+      );
+      yield* TestClock.adjust("20 minutes");
       assert.deepEqual(silentTurnNotices(yield* Queue.clear(turn.turnItems)), []);
     }).pipe(Effect.provide(layerSession), Effect.scoped),
   );

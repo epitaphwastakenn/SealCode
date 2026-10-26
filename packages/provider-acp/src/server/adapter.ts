@@ -327,6 +327,12 @@ export interface AcpAdapterV2Flavor {
    * their model service.
    */
   readonly silentTurnNotice?: { readonly afterMs: number; readonly message: string };
+  /**
+   * Posts a warning when an agent that has started answering sends nothing for
+   * this long while no tool is open, for agents whose prompt never ends once
+   * their model call dies.
+   */
+  readonly stalledTurnNotice?: { readonly afterMs: number; readonly message: string };
   readonly onSessionEvent?: (
     event: AcpSessionRuntime.AcpSessionRuntimeEvent,
   ) => Effect.Effect<void>;
@@ -1131,6 +1137,7 @@ interface ActiveAcpTurn {
   promptSettledStatus: "completed" | "interrupted" | "failed" | "cancelled" | null;
   workAccepted: boolean;
   agentOutputSeen: boolean;
+  lastAgentOutputAtMillis: number;
   readonly promptWireSettled: Deferred.Deferred<void, never>;
   backgroundFinalizeGeneration: number;
 }
@@ -2215,18 +2222,19 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
           yield* emitProviderRetry(context, "running");
         });
 
-        const emitSilentTurnNotice = Effect.fnUntraced(function* (
+        const emitTurnNotice = Effect.fnUntraced(function* (
           context: ActiveAcpTurn,
-          message: string,
+          notice: { readonly kind: "silent" | "stalled"; readonly message: string },
         ) {
           if (
             context.finalized ||
             context.interrupted ||
-            context.agentOutputSeen ||
+            (notice.kind === "silent" && context.agentOutputSeen) ||
             (yield* Ref.get(activeTurn)) !== context
           )
             return;
-          const nativeItemId = `${context.nativeTurnId}:silent-turn-notice`;
+          const nativeItemId = `${context.nativeTurnId}:${notice.kind}-turn-notice`;
+          const message = notice.message;
           const now = yield* DateTime.now;
           yield* emitProviderEvent({
             type: "turn_item.updated",
@@ -4955,7 +4963,10 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
             }
             return;
           }
-          if (acpRootSessionUpdateIngestsOutput(notification)) context.agentOutputSeen = true;
+          if (acpRootSessionUpdateIngestsOutput(notification)) {
+            context.agentOutputSeen = true;
+            context.lastAgentOutputAtMillis = DateTime.toEpochMillis(yield* DateTime.now);
+          }
           if (
             update.sessionUpdate !== "tool_call_update" &&
             update.sessionUpdate !== "plan" &&
@@ -7492,6 +7503,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               promptSettledStatus: null,
               workAccepted: false,
               agentOutputSeen: false,
+              lastAgentOutputAtMillis: DateTime.toEpochMillis(startedAt),
               promptWireSettled,
               backgroundFinalizeGeneration: 0,
             };
@@ -7638,11 +7650,39 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
                   orElse: () =>
                     runRuntimeCallbackAtGeneration(
                       promptGeneration,
-                      emitSilentTurnNotice(context, notice.message),
+                      emitTurnNotice(context, { kind: "silent", message: notice.message }),
                     ).pipe(Effect.asVoid),
                 }),
                 Effect.forkIn(sessionScope),
               );
+            }
+            if (flavor.stalledTurnNotice !== undefined) {
+              const notice = flavor.stalledTurnNotice;
+              // Rechecks once per window; an open tool (a running command, an
+              // approval) is the agent waiting, not stalling.
+              const watch: Effect.Effect<void> = Effect.gen(function* () {
+                const quietMillis =
+                  DateTime.toEpochMillis(yield* DateTime.now) - context.lastAgentOutputAtMillis;
+                const toolOpen = [...context.tools.values()].some(
+                  (tool) => tool.status !== "completed" && tool.status !== "failed",
+                );
+                if (!context.agentOutputSeen || toolOpen || quietMillis < notice.afterMs) {
+                  const finished = yield* Deferred.await(context.completed).pipe(
+                    Effect.as(true),
+                    Effect.timeoutOrElse({
+                      duration: Math.max(notice.afterMs - Math.max(quietMillis, 0), 1_000),
+                      orElse: () => Effect.succeed(false),
+                    }),
+                  );
+                  if (!finished) yield* watch;
+                  return;
+                }
+                yield* runRuntimeCallbackAtGeneration(
+                  promptGeneration,
+                  emitTurnNotice(context, { kind: "stalled", message: notice.message }),
+                );
+              });
+              yield* watch.pipe(Effect.forkIn(sessionScope));
             }
             yield* runtime.prompt({ prompt: promptParts!.prompt }).pipe(
               Effect.tap(() =>

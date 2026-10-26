@@ -147,5 +147,8 @@ network connection. Broken IPv6 is a common cause: when SealCode finds that IPv6
 Google fails while IPv4 works, it connects Antigravity over IPv4 by itself. A proxy
 set in `HTTPS_PROXY` is used as is.
 
+If a turn says Antigravity has sent nothing for 5 minutes, press **Stop**. Stop restarts
+Antigravity, and your next message continues the same conversation.
+
 [registry]: https://github.com/agentclientprotocol/registry/blob/main/antigravity-acp/agent.json
 [plans]: https://antigravity.google/docs/plans

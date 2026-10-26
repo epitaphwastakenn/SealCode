@@ -50,6 +50,10 @@ const ANTIGRAVITY_PROVIDER = ProviderDriverKind.make("antigravity");
 export const ANTIGRAVITY_SILENT_TURN_NOTICE_MS = 30_000;
 export const ANTIGRAVITY_SILENT_TURN_MESSAGE =
   "Antigravity has not responded after 30 seconds and may not be reaching Google. Check this machine's network connection. Broken IPv6 is a common cause.";
+// Its prompt stays open after a model call dies mid-answer, so the turn would look busy forever.
+export const ANTIGRAVITY_STALLED_TURN_NOTICE_MS = 5 * 60_000;
+export const ANTIGRAVITY_STALLED_TURN_MESSAGE =
+  "Antigravity has sent nothing for 5 minutes and may be stuck. Press Stop to restart it; your next message continues this conversation.";
 
 const AntigravityProviderCapabilitiesV2 = {
   ...AcpProviderCapabilitiesV2,
@@ -182,6 +186,10 @@ export function makeAntigravityAcpAdapterFlavor(
     silentTurnNotice: {
       afterMs: ANTIGRAVITY_SILENT_TURN_NOTICE_MS,
       message: ANTIGRAVITY_SILENT_TURN_MESSAGE,
+    },
+    stalledTurnNotice: {
+      afterMs: ANTIGRAVITY_STALLED_TURN_NOTICE_MS,
+      message: ANTIGRAVITY_STALLED_TURN_MESSAGE,
     },
     // Antigravity applies session/cancel only once its current step ends, and a
     // stalled model call never ends, so Stop and steering restart the runtime

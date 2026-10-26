@@ -49,6 +49,8 @@ function renderContent(content: ReactNode) {
         onReviewTurnDiff: () => {},
         diffPresentation: "inline",
         diffIgnoreWhitespace: false,
+        renderHtmlRender: undefined,
+        turnItemSource: undefined,
         onOpenThread: () => {},
         workflowOpening: null,
         onForkFromRun: async () => {},

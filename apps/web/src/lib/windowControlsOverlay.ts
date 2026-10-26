@@ -9,8 +9,7 @@ const WCO_CLASS_NAME = "wco";
 const APP_CAPTION_BUTTONS_CLASS_NAME = "app-caption-buttons";
 const ELECTRON_CLASS_NAME = "electron";
 const ELECTRON_WINDOWS_CLASS_NAME = "electron-windows";
-// The workspace topbar the desktop app centers the traffic lights in. macOS has
-// no overlay API to measure, and the lights stay inside it at any zoom level.
+// macOS has no overlay API; traffic lights stay inside this topbar at every zoom level.
 const MACOS_TITLEBAR_HEIGHT = 52;
 // The overlay height the desktop app gives Windows windows (TITLEBAR_HEIGHT in
 // DesktopWindow.ts), kept when the app draws the caption buttons itself.
@@ -46,7 +45,6 @@ export function windowControlsOverlayHeight(): number {
   return overlay?.visible ? overlay.getTitlebarAreaRect().height : 0;
 }
 
-/** Calls `listener` when the native caption strip appears, disappears, or changes size. */
 export function onWindowControlsOverlayGeometryChange(listener: () => void): () => void {
   const overlay = getWindowControlsOverlay();
   if (!overlay) {

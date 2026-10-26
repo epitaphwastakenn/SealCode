@@ -196,9 +196,7 @@ export const layer: Layer.Layer<
           Effect.mapError((cause) => new ProjectionMaintenanceError({ operation, cause })),
         );
 
-    // thread.created stays out — verify derives the expected thread set from
-    // it, and it anchors replay ordering. thread.deleted stays out too: clients
-    // and waitForThread switch on the event type, not just the payload.
+    // Keep thread.created as the verification and replay anchor; clients recognize deletion by thread.deleted event type.
     const SUPERSEDABLE_THREAD_EVENT_TYPES = [
       "thread.archived",
       "thread.unarchived",
@@ -217,11 +215,9 @@ export const layer: Layer.Layer<
       "thread.interaction-mode-updated",
       "thread.model-selection-updated",
       "thread.provider-switched",
+      "thread.guest-share-updated",
     ];
-    // Read-state events carry the whole thread too, but client reducers apply
-    // them without bumping updatedAt. They supersede only each other: a newer
-    // visit must not delete the rename that carries the activity timestamp,
-    // while any newer activity-bearing event supersedes both groups.
+    // Read-state events preserve updatedAt and supersede only each other. Activity events supersede both groups.
     const READ_STATE_THREAD_EVENT_TYPES = ["thread.visited", "thread.marked-unread"];
 
     const supersedableThreadEventTypes = new Set(SUPERSEDABLE_THREAD_EVENT_TYPES);
@@ -247,8 +243,7 @@ export const layer: Layer.Layer<
       let throughReceiptRowId = bounds[0]?.receipt_row_id ?? 0;
       const retainedThreadIds = new Set<string>();
       const retainedReadStateThreadIds = new Set<string>();
-      // Per key: the lowest sequence seen so far after the newest. It is
-      // deleted once an even older event turns up and kept otherwise.
+      // Retain each key's oldest candidate, deleting it only when an older event appears.
       const oldestCandidateByEntityKey = new Map<string, number | null>();
       let deletedEventCount = 0;
       let deletedReceiptCount = 0;

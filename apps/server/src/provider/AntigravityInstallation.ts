@@ -390,7 +390,6 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
             { flag: "wx", mode: 0o600 },
           );
           yield* fs.rename(pointerPath, activePath);
-          // The pointer commits the install. Later temp cleanup cannot undo it.
           yield* SubscriptionRef.update(
             state,
             (current) =>
@@ -452,9 +451,7 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
         const response = yield* http
           .execute(HttpClientRequest.get(asset.url))
           .pipe(Effect.flatMap(HttpClientResponse.filterStatusOk));
-        // dl.google.com gzips the zip when the client accepts it, so
-        // `content-length` is the encoded size. The decoded stream is still
-        // checked against the pinned byte count and hash below.
+        // dl.google.com may gzip the zip: content-length is encoded, while byte/hash checks use decoded data.
         const contentLength = response.headers["content-length"];
         const contentEncoding = response.headers["content-encoding"]?.trim().toLowerCase();
         const identityBody = contentEncoding === undefined || contentEncoding === "identity";

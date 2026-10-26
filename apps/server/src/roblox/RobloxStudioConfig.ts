@@ -191,6 +191,7 @@ export const RobloxStudioConfig = Context.Reference<RobloxStudioConfigShape>(
       managedServers: () => ({}),
       appliesTo: () => Effect.succeed(false),
       hiddenServerIds: () => Effect.succeed(new Set<string>()),
+      // @effect-diagnostics-next-line effectSucceedWithVoid:off - No instructions is a value, not a void step.
       instructions: () => Effect.succeed(undefined),
     }),
   },

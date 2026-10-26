@@ -52,6 +52,7 @@ const flavor = makeAntigravityAcpAdapterFlavor({
   selfInvocation: undefined as never,
   makeRuntime: () => Effect.die("not spawned in this test"),
   withProcess: (_stop, task) => task,
+  // @effect-diagnostics-next-line effectSucceedWithVoid:off - This optional result requires undefined, not the wider void type.
   defaultModel: Effect.succeed(undefined),
 });
 
@@ -224,6 +225,7 @@ describe("AntigravityAdapterV2 client file system", () => {
             })),
           ),
         withProcess: (_stop, task) => task,
+        // @effect-diagnostics-next-line effectSucceedWithVoid:off - This optional result requires undefined, not the wider void type.
         defaultModel: Effect.succeed(undefined),
       });
       const workspace = yield* fileSystem.makeTempDirectoryScoped({
@@ -392,6 +394,7 @@ describe("AntigravityAdapterV2 workspace changes", () => {
             })),
           ),
         withProcess: (_stop, task) => task,
+        // @effect-diagnostics-next-line effectSucceedWithVoid:off - This optional result requires undefined, not the wider void type.
         defaultModel: Effect.succeed(undefined),
       });
       const workspaceA = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3-ag-a-" });
@@ -535,6 +538,7 @@ const startHangingTurn = Effect.fn("test.startHangingTurn")(function* (
         })),
       ),
     withProcess: (_stop, task) => task,
+    // @effect-diagnostics-next-line effectSucceedWithVoid:off - No default model is a value, not a void step.
     defaultModel: Effect.succeed(undefined),
   });
   const workspace = yield* fileSystem.makeTempDirectoryScoped({ prefix: `t3-ag-${name}-` });
@@ -905,6 +909,7 @@ describe("AntigravityAdapterV2 html_render pages", () => {
             })),
           ),
         withProcess: (_stop, task) => task,
+        // @effect-diagnostics-next-line effectSucceedWithVoid:off - This optional result requires undefined, not the wider void type.
         defaultModel: Effect.succeed(undefined),
       });
       const runtimePolicy = ProviderAdapter.ProviderAdapterV2RuntimePolicy.make({

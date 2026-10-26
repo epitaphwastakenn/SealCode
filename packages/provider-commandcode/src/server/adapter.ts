@@ -846,10 +846,11 @@ export const makeCommandCodeAdapterV2 = Effect.fn("makeCommandCodeAdapterV2")(fu
                 `CommandCode provider thread ${turnInput.providerThread.id} already has an active turn`,
               );
             }
-            const prompt = providerMessageTextWithAttachmentPaths({
+            const prompt = yield* providerMessageTextWithAttachmentPaths({
               text: turnInput.message.text,
               attachments: turnInput.message.attachments,
               resolveAttachmentPath: (attachment) => host.resolveAttachmentPath(attachment),
+              resolveExtractedTextPath: host.resolveExtractedTextPath,
             });
             if (prompt.trim().length === 0) {
               return yield* protocolError("CommandCode needs a non-empty prompt");

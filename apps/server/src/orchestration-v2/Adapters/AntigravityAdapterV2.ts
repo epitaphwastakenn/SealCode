@@ -93,10 +93,7 @@ export interface AntigravityAdapterV2Options {
   readonly continuationRequests?: Parameters<typeof makeAcpAdapterV2>[0]["continuationRequests"];
 }
 
-/**
- * ACP 1.1.1 exposes subagent invocations as ordinary `start_subagent` tools without child
- * session ids.
- */
+/** ACP 1.1.1 reports `start_subagent` tools without child session ids. */
 const extractAntigravitySubagentUpdate: NonNullable<AcpAdapterV2Flavor["extractSubagentUpdate"]> = (
   toolCall,
 ) => {
@@ -180,8 +177,7 @@ export function makeAntigravityAcpAdapterFlavor(
         Effect.provideService(FileSystem.FileSystem, options.fileSystem),
         Effect.provideService(Path.Path, options.path),
       ),
-    // Loading history replays every tool call; resume restores the session
-    // without the replay and is what the official client does.
+    // Loading history replays tool calls; resume avoids replay.
     preferResumeSession: true,
     silentTurnNotice: {
       afterMs: ANTIGRAVITY_SILENT_TURN_NOTICE_MS,

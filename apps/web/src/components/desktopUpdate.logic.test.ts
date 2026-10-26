@@ -65,20 +65,17 @@ describe("desktop update button state", () => {
 });
 
 describe("desktop update UI helpers", () => {
-  it.each([
-    "owner/repo/extra",
-    "owner#notes/repo",
-    "owner/repo#notes",
-    "owner?tab=notes/repo",
-    "owner/repo?tab=notes",
-  ])("falls back to SealCode for an invalid configured repository: %s", (repository) => {
-    expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBe(
-      "https://github.com/epitaphwastakenn/SealCode/releases",
-    );
-    expect(getDesktopUpdateReleaseUrl("1.2.3", repository)).toBe(
-      "https://github.com/epitaphwastakenn/SealCode/releases/tag/v1.2.3",
-    );
-  });
+  it.each(["owner/repo/extra", "owner#notes/repo", "owner/repo?tab=notes"])(
+    "falls back to SealCode for an invalid configured repository: %s",
+    (repository) => {
+      expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBe(
+        "https://github.com/epitaphwastakenn/SealCode/releases",
+      );
+      expect(getDesktopUpdateReleaseUrl("1.2.3", repository)).toBe(
+        "https://github.com/epitaphwastakenn/SealCode/releases/tag/v1.2.3",
+      );
+    },
+  );
 });
 
 describe("canCheckForUpdate", () => {

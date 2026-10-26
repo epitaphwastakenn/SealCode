@@ -737,6 +737,7 @@ it.layer(layerTest)("orchestration V2 foundation persistence", (it) => {
       });
 
       let afterSequence = created[0]!.sequence;
+      // oxlint-disable-next-line t3code/no-polling-loop-in-tests -- Fixed-count writes exercise the catch-up/live handoff; each iteration awaits its event rather than polling.
       for (let index = 1; index <= 32; index += 1) {
         const nextEvent = {
           id: EventId.make(`event:foundation-stream-race:${index}`),
@@ -1960,17 +1961,15 @@ it.layer(layerTest)("orchestration V2 foundation persistence", (it) => {
       };
       const executionCount = yield* Ref.make(0);
       const layerOutbox = Layer.mock(EffectOutbox.EffectOutboxV2)({
-        claimNext: () => Effect.succeed(Option.some(claimedEffect)),
+        claimNext: () => Effect.succeedSome(claimedEffect),
         get: () =>
-          Effect.succeed(
-            Option.some({
-              ...claimedEffect,
-              status: "cancelled" as const,
-              leaseOwner: null,
-              leaseExpiresAt: null,
-              completedAt: now,
-            }),
-          ),
+          Effect.succeedSome({
+            ...claimedEffect,
+            status: "cancelled" as const,
+            leaseOwner: null,
+            leaseExpiresAt: null,
+            completedAt: now,
+          }),
         clearCancellation: () => Effect.void,
         awaitCancellation: () => Effect.never,
       });
@@ -2428,6 +2427,8 @@ it.layer(layerTest)("orchestration V2 foundation persistence", (it) => {
       const releaseA1 = yield* Deferred.make<void>();
       const releaseA2 = yield* Deferred.make<void>();
       const releaseB1 = yield* Deferred.make<void>();
+      const settled = yield* Deferred.make<void>();
+      const completed = yield* Ref.make(0);
       const gates = new Map([
         [effectA1, { started: startedA1, release: releaseA1 }],
         [effectA2, { started: startedA2, release: releaseA2 }],
@@ -2449,7 +2450,24 @@ it.layer(layerTest)("orchestration V2 foundation persistence", (it) => {
         workerId: "concurrency-worker",
       }).pipe(
         Layer.provide(
-          Layer.merge(Layer.succeed(EffectOutbox.EffectOutboxV2, outbox), layerExecutor),
+          Layer.merge(
+            Layer.succeed(EffectOutbox.EffectOutboxV2, {
+              ...outbox,
+              succeed: (input) =>
+                outbox
+                  .succeed(input)
+                  .pipe(
+                    Effect.tap(() =>
+                      Ref.updateAndGet(completed, (count) => count + 1).pipe(
+                        Effect.flatMap((count) =>
+                          count === 3 ? Deferred.succeed(settled, undefined) : Effect.void,
+                        ),
+                      ),
+                    ),
+                  ),
+            }),
+            layerExecutor,
+          ),
         ),
       );
 
@@ -2495,13 +2513,12 @@ it.layer(layerTest)("orchestration V2 foundation persistence", (it) => {
         yield* Deferred.succeed(releaseB1, undefined);
         yield* Deferred.await(startedA2);
         yield* Deferred.succeed(releaseA2, undefined);
-        let settled = false;
-        while (!settled) {
-          settled = (yield* outbox.listByCommandId(commandId)).every(
+        yield* Deferred.await(settled);
+        assert.isTrue(
+          (yield* outbox.listByCommandId(commandId)).every(
             (effect) => effect.status === "succeeded",
-          );
-          if (!settled) yield* Effect.yieldNow;
-        }
+          ),
+        );
       }).pipe(Effect.provide(layerWorker), Effect.scoped);
     }),
   );
@@ -2832,7 +2849,7 @@ it.layer(layerTest)("orchestration V2 foundation persistence", (it) => {
             awaitWork: Effect.void,
             runRecoveryOnce: Effect.succeed(false),
             runOnce: Effect.succeed(false),
-            nextClaimableAt: Effect.succeed(Option.none()),
+            nextClaimableAt: Effect.succeedNone,
             drain: () => Effect.succeed(0),
           }),
         ),
@@ -3049,7 +3066,7 @@ it.layer(layerTest)("orchestration V2 foundation persistence", (it) => {
             awaitWork: Effect.void,
             runRecoveryOnce: Effect.succeed(false),
             runOnce: Effect.succeed(false),
-            nextClaimableAt: Effect.succeed(Option.none()),
+            nextClaimableAt: Effect.succeedNone,
             drain: () => Effect.succeed(0),
           }),
         ),
@@ -3491,4 +3508,108 @@ it.effect("loads a shell snapshot while the writer connection is occupied", () =
       assert.deepEqual(snapshot.threads, []);
     }).pipe(Effect.provide(projectionLayer));
   }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
+
+it.effect.each(["cancel transaction", "fail transaction", "cancel publication"] as const)(
+  "preserves event consistency and allows later writes after %s",
+  (scenario) =>
+    Effect.gen(function* () {
+      const paused = yield* Deferred.make<void>();
+      const release = yield* Deferred.make<void>();
+      const committed = scenario === "cancel publication";
+      const pause = Deferred.succeed(paused, undefined).pipe(
+        Effect.andThen(Deferred.await(release)),
+      );
+      const layerPausingOutbox = Layer.effect(
+        EffectOutbox.EffectOutboxV2,
+        Effect.gen(function* () {
+          const delegate = yield* EffectOutbox.EffectOutboxV2;
+          return EffectOutbox.EffectOutboxV2.of({
+            ...delegate,
+            enqueue: (effects) =>
+              delegate
+                .enqueue(effects)
+                .pipe(
+                  Effect.andThen(!committed && effects.length > 0 ? pause : Effect.void),
+                  Effect.andThen(
+                    scenario === "fail transaction" && effects.length > 0
+                      ? Effect.die("Injected transaction failure")
+                      : Effect.void,
+                  ),
+                ),
+            notifyAvailable: (count) =>
+              (committed ? pause : Effect.void).pipe(
+                Effect.andThen(delegate.notifyAvailable(count)),
+              ),
+          });
+        }),
+      ).pipe(Layer.provide(layerEffectOutboxProvided));
+      const layerEventSink = EventSink.layerFromStores.pipe(
+        Layer.provide(
+          Layer.mergeAll(
+            layerStoresProvided,
+            layerPausingOutbox,
+            layerCommandReceiptStoreProvided,
+            ProjectStore.layer.pipe(Layer.provide(layerDatabase)),
+            TurnItemPositionStore.layer.pipe(Layer.provide(layerDatabase)),
+          ),
+        ),
+      );
+
+      yield* Effect.gen(function* () {
+        const eventSink = yield* EventSink.EventSinkV2;
+        const projections = yield* ProjectionStore.ProjectionStoreV2;
+        const outbox = yield* EffectOutbox.EffectOutboxV2;
+        const now = yield* DateTime.now;
+        const first = makeThread(ThreadId.make("thread:interrupted-publish:first"), now);
+        const marker = makeThread(ThreadId.make("thread:interrupted-publish:marker"), now);
+        const published = yield* eventSink
+          .stream({ afterSequence: yield* eventSink.latestSequence() })
+          .pipe(
+            Stream.takeUntil((stored) => stored.event.threadId === marker.id),
+            Stream.runCollect,
+            Effect.forkScoped({ startImmediately: true }),
+          );
+        const writer = yield* eventSink
+          .writeWithEffects({
+            events: [
+              threadCreatedEvent({ id: "event:interrupted-publish:first", thread: first, now }),
+            ],
+            effects: [
+              {
+                id: "effect:interrupted-publish:first",
+                commandId: CommandId.make("command:interrupted-publish:first"),
+                threadId: first.id,
+                request: { type: "terminal.cleanup" },
+              },
+            ],
+          })
+          .pipe(Effect.forkScoped);
+        yield* Deferred.await(paused);
+        if (scenario !== "fail transaction") writer.interruptUnsafe();
+        if (scenario !== "cancel transaction") yield* Deferred.succeed(release, undefined);
+        assert.equal((yield* Fiber.await(writer))._tag, "Failure");
+        assert.equal(
+          (yield* projections.getThreadShell(first.id))?.id ?? null,
+          committed ? first.id : null,
+        );
+        assert.equal(
+          Option.isSome(yield* outbox.get("effect:interrupted-publish:first")),
+          committed,
+        );
+        yield* eventSink.write({
+          events: [
+            threadCreatedEvent({ id: "event:interrupted-publish:marker", thread: marker, now }),
+          ],
+        });
+        assert.deepEqual(
+          Array.from(yield* Fiber.join(published), (stored) => stored.event.threadId),
+          committed ? [first.id, marker.id] : [marker.id],
+        );
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(layerEventSink, layerStoresProvided, layerEffectOutboxProvided),
+        ),
+      );
+    }).pipe(Effect.provide(layerDatabase)),
 );

@@ -252,6 +252,7 @@ describe("SealTurnInput", () => {
               } as never),
             }),
             Layer.mock(ProviderInstanceRegistry.ProviderInstanceRegistry)({
+              // @effect-diagnostics-next-line effectSucceedWithVoid:off - A missing instance is a value, not a void step.
               getInstance: () => Effect.succeed(undefined),
             }),
             Layer.mock(TextGeneration.TextGeneration)({}),

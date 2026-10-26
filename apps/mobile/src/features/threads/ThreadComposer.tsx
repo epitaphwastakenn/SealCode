@@ -147,7 +147,8 @@ export function useCompactComposerEditor(text: ScaledTextRole, value: string) {
   const rowWidth = useSharedValue(0);
   const editorX = useSharedValue(0);
   const editorWidth = useSharedValue(0);
-  const inset = Platform.OS === "android" ? 0 : collapsedEditorInset(text);
+  const inset =
+    Platform.OS === "android" ? COLLAPSED_EDITOR_DEFAULT_INSET : collapsedEditorInset(text);
   const minimum = Math.max(INLINE_EDITOR_HEIGHT, Math.ceil(text.lineHeight) + 2 * inset);
   const height = Math.max(
     minimum,
@@ -216,7 +217,7 @@ export function useCompactComposerEditor(text: ScaledTextRole, value: string) {
       }
     },
     editorProps: {
-      singleLineCentered: false,
+      singleLineCentered: !isExpanded,
       scrollEnabled: Platform.OS === "android" || contentHeight >= text.lineHeight * 4,
       contentInsetVertical: inset,
       onContentSizeChange: (size: { width: number; height: number }) => {
@@ -232,6 +233,7 @@ export interface ThreadComposerProps {
   readonly canOperateThread: boolean;
   readonly placeholder: string;
   readonly contentMaxWidth?: number;
+  readonly draftControls?: ReactNode;
   readonly bottomInset?: number;
   readonly connectionState: RemoteClientConnectionState;
   readonly environmentLabel: string | null;
@@ -280,12 +282,9 @@ export interface ThreadComposerProps {
   readonly onEditorFocusChange?: (focused: boolean) => void;
 }
 
-// Android gets NO layout transition: the composer rides the keyboard via KeyboardStickyView
-// (frame-synced to the IME), and a time-based morph running alongside that translate reads as
-// jitter.
+// Android KeyboardStickyView tracks the IME; concurrent timed layout morphs cause jitter.
 export const COMPOSER_TRANSITION_DURATION_MS = 220;
-// Side panes already animate the dock's width. Nested horizontal layout
-// transitions would leave the surface trailing its toolbar's new position.
+// Side panes animate dock width; nested horizontal transitions would make the surface trail the toolbar.
 const composerHeightTransition: LayoutAnimationFunction = (values) => {
   "worklet";
   const timing = {
@@ -386,12 +385,14 @@ export function ComposerSurface(props: {
   const animatedBorderRadius = useSharedValue(targetBorderRadius);
   const shouldAnimate = props.animateLayout !== false && Platform.OS !== "android";
   useLayoutEffect(() => {
-    animatedBorderRadius.value = shouldAnimate
-      ? withTiming(targetBorderRadius, {
-          duration: COMPOSER_TRANSITION_DURATION_MS,
-          reduceMotion: ReduceMotion.System,
-        })
-      : targetBorderRadius;
+    animatedBorderRadius.set(
+      shouldAnimate
+        ? withTiming(targetBorderRadius, {
+            duration: COMPOSER_TRANSITION_DURATION_MS,
+            reduceMotion: ReduceMotion.System,
+          })
+        : targetBorderRadius,
+    );
   }, [animatedBorderRadius, shouldAnimate, targetBorderRadius]);
   const borderCurve = props.style.borderCurve;
   const animatedShapeStyle = useAnimatedStyle(() => ({
@@ -400,8 +401,7 @@ export function ComposerSurface(props: {
   }));
   const layoutTransition = shouldAnimate ? COMPOSER_LAYOUT_TRANSITION : undefined;
 
-  // Each native frame follows the same transition. Animating only the outer
-  // clip leaves the glass and content at their final height on the first frame.
+  // Animate every native frame or glass and content jump to final height inside the clip.
   return (
     <Animated.View
       className={
@@ -700,13 +700,11 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
     const sent = await settlePromise(() => onSendMessage(followUp, stillSendable));
     inFlightThreadIdsRef.current.delete(threadKey);
     if (AsyncResult.isFailure(sent)) {
-      // The composer state already surfaces send errors; only the lock needed releasing.
       console.error("[composer] send failed", squashAtomCommandFailure(sent));
       return;
     }
     if (sent.value === null) return;
-    // Armed after the send so its preference read and native Activity start don't contend
-    // with the queued-message feedback on the tap frame.
+    // Arm after send so preference reads and native Activity startup do not delay tap-frame feedback.
     armAgentAwarenessLiveActivityForLocalWork({
       environmentId: props.environmentId,
       threadTitle: props.selectedThread.title,
@@ -766,11 +764,12 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
     settingsSheetPresentation.open();
   };
 
+  const { present: presentSettingsRoute } = settingsRoutePresentation;
   useEffect(() => {
     if (settingsSheetPresentation.isActive) {
-      settingsRoutePresentation.present(settingsRouteSession);
+      presentSettingsRoute(settingsRouteSession);
     }
-  }, [settingsRoutePresentation.present, settingsRouteSession, settingsSheetPresentation.isActive]);
+  }, [presentSettingsRoute, settingsRouteSession, settingsSheetPresentation.isActive]);
 
   useEffect(() => {
     if (!settingsSheetPresentation.isVisible || settingsRoutePresentedRef.current) {
@@ -793,8 +792,7 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
 
   useEffect(
     () =>
-      // UIKit's completion callback for the sheet dismissal, surfaced by the
-      // native-stack patch. This is when the queued keyboard restore runs.
+      // The native-stack patch exposes UIKit dismissal completion; restore the keyboard then.
       (navigation as unknown as NavigationWithFinishTransitioning).addListener(
         "finishTransitioning",
         settingsSheetPresentation.onStackTransitionsFinished,
@@ -848,8 +846,6 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
     </>
   ) : null;
 
-  // The row and the card's toolbar share this picker. It shrinks to the provider
-  // icon in the row once the draft has text, so the draft keeps the width.
   const modelControl = (
     <View className="min-w-0 shrink">
       <ComposerModelControl
@@ -860,9 +856,7 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
         reportedSelection={props.reportedModelSelection}
         prompt={draftMessage}
         surfaceColor={composerPanel}
-        iconOnly={
-          (draftMessage.length > 0 || stripAttachments.length > 0) && !compactEditor.isExpanded
-        }
+        iconOnly={!compactEditor.isExpanded}
         onPress={openSettings}
       />
     </View>
@@ -879,9 +873,7 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
           Platform.OS === "android" ? themeColorWithAlpha(composerPanel, 1) : undefined,
       }}
     >
-      {/* The backdrop gradient lives on a plain View: Reanimated's Animated.View
-          silently drops experimental_backgroundImage on Android, which left this
-          strip fully transparent and the feed text legible through the composer. */}
+      {/* Use a plain View: Reanimated Animated.View drops experimental_backgroundImage on Android. */}
       <View
         className={
           Platform.OS === "android"
@@ -894,6 +886,7 @@ export const ThreadComposer = function ThreadComposer(props: ThreadComposerProps
         className="relative w-full self-center"
         style={{ maxWidth: props.contentMaxWidth }}
       >
+        {props.draftControls}
         {!isSubmissionLocked &&
         composerMenu.trigger &&
         (composerMenu.items.length > 0 || composerMenu.trigger.kind === "pull-request") ? (

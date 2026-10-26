@@ -21,12 +21,9 @@ const STATS_METRICS = [
 ] as const;
 
 function stripAnsiAndBoxDrawing(value: string): string {
-  return (
-    value
-      // eslint-disable-next-line no-control-regex -- ANSI escape sequences start with ESC.
-      .replace(/\u001B(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001B\\)|[()][0-2A-Z])/g, "")
-      .replace(/[─-╿]/gu, " ")
-  );
+  return value
+    .replace(/\u001B(?:\[[0-?]*[ -/]*[@-~]|\][^\u0007]*(?:\u0007|\u001B\\)|[()][0-2A-Z])/g, "")
+    .replace(/[─-╿]/gu, " ");
 }
 
 function metricValue(lines: ReadonlyArray<string>, label: string): string | undefined {

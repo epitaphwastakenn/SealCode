@@ -52,8 +52,7 @@ function IndexDraftLanding() {
   const bootstrapped = useAllEnvironmentShellsBootstrapped();
   const handleNewThread = useNewThreadHandler();
   const router = useRouter();
-  // Read at effect time: this page stays mounted while a navigation away from
-  // "/" is still loading, but the router already points at the new location.
+  // Read at effect time; this page can stay mounted while the router is already navigating away.
   const isStillOnIndex = useEffectEvent(() => router.state.location.pathname === "/");
   const lastOpenThreadRoute = useUiStateStore((state) => state.lastOpenThreadRoute);
   const draftThreadsByThreadKey = useComposerDraftStore((store) => store.draftThreadsByThreadKey);

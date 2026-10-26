@@ -202,7 +202,9 @@ export const ModelListRow = memo(function ModelListRow(props: {
                 <StarIcon
                   className={cn(
                     "size-3.5 sm:size-3",
-                    props.isFavorite && "fill-current text-warning",
+                    props.isFavorite
+                      ? "fill-current text-warning"
+                      : "redesign:opacity-0 redesign:group-hover:opacity-100 redesign:group-data-highlighted:opacity-100 redesign:in-focus-visible:opacity-100 redesign:pointer-coarse:opacity-100",
                   )}
                 />
               </Button>

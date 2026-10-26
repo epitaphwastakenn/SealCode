@@ -10,6 +10,19 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.17.8 · 2026-10-26
+
+> Much faster: threads open with far less data, and streaming and connecting do less work.
+
+### Improved
+
+- **Faster threads** — Opening a thread loads about 85% less data, and live updates send each message once instead of repeating it.
+- **Faster connect** — Connecting skips idle subagent threads and older settled threads, so the first load is much smaller.
+- **Lighter streaming** — Replaced streaming text is merged before it is sent, and code highlighting is lighter.
+- **Big files and PRs** — Large file previews scroll smoothly, and pull request timelines, code tabs and diffs load faster.
+- **Less background work** — Hidden preview tabs slow down instead of running at full speed, and unchanged settings are no longer rewritten.
+- **Settings and Usage in a window** — Settings and Usage open in a window over your work, with SealCode's look and panels.
+
 ## 2.17.7 · 2026-10-26
 
 > Gemini 4 Argon in Antigravity, every usage limit, and an app that no longer freezes on its database.

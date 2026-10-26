@@ -379,3 +379,70 @@ export function antigravitySubagentOutput(toolCall: AcpToolCallState): string | 
   const output = toolCall.data.rawOutput;
   return typeof output === "string" && output.trim() ? boundText(output.trim()) : undefined;
 }
+
+// The agent wakes the model with background-task results as harness input, and sometimes
+// appends that input to the reply that is still streaming instead of sending it as its own
+// step. The preamble and `[Message]` header are the agent's own wording, so a reply that only
+// mentions the tag is left alone.
+const HARNESS_NOTICE =
+  /(?:!\]\s*)?(?:(?:^|\n)[ \t]*user[ \t]*\n\s*)?(?:The following is a <SYSTEM_MESSAGE> not actually sent by the user|<SYSTEM_MESSAGE>\s*\[Message\]|<system_message>\s*Background task)/i;
+const HARNESS_NOTICE_END = /<\/SYSTEM_MESSAGE>/i;
+const HARNESS_NOTICE_TAIL = 256;
+const REPLY_MOVED_ON = new Set(["agent_thought_chunk", "plan", "tool_call", "tool_call_update"]);
+
+export interface AntigravityHarnessNoticeFilter {
+  readonly transform: (
+    notification: EffectAcpSchema.SessionNotification,
+  ) => EffectAcpSchema.SessionNotification;
+  /** A new prompt starts a new reply, so a notice left open by the last one ends there. */
+  readonly reset: () => void;
+}
+
+export function makeAntigravityHarnessNoticeFilter(): AntigravityHarnessNoticeFilter {
+  const replies = new Map<string, { shown: string; hiding: boolean }>();
+  const filterText = (sessionId: string, text: string) => {
+    const reply = replies.get(sessionId) ?? { shown: "", hiding: false };
+    replies.set(sessionId, reply);
+    let rest = text;
+    let shown = "";
+    while (rest.length > 0) {
+      if (reply.hiding) {
+        const end = HARNESS_NOTICE_END.exec(rest);
+        if (end === null) break;
+        reply.hiding = false;
+        rest = rest.slice(end.index + end[0].length).trimStart();
+        continue;
+      }
+      // Matching against what was already shown catches a marker split across chunks.
+      const recent = reply.shown + shown;
+      const match = HARNESS_NOTICE.exec(recent + rest);
+      if (match === null) {
+        shown += rest;
+        break;
+      }
+      const start = Math.max(0, match.index - recent.length);
+      shown = (shown + rest.slice(0, start)).trimEnd();
+      reply.hiding = true;
+      rest = rest.slice(Math.max(start, match.index + match[0].length - recent.length));
+    }
+    reply.shown = (reply.shown + shown).slice(-HARNESS_NOTICE_TAIL);
+    return shown;
+  };
+  return {
+    transform: (notification) => {
+      const update = notification.update;
+      if (REPLY_MOVED_ON.has(update.sessionUpdate)) {
+        replies.delete(notification.sessionId);
+        return notification;
+      }
+      if (update.sessionUpdate !== "agent_message_chunk" || update.content.type !== "text") {
+        return notification;
+      }
+      const text = filterText(notification.sessionId, update.content.text);
+      return text === update.content.text
+        ? notification
+        : { ...notification, update: { ...update, content: { ...update.content, text } } };
+    },
+    reset: () => replies.clear(),
+  };
+}

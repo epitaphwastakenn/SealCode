@@ -61,6 +61,61 @@ describe("applyAntigravityAcpModelSelection", () => {
     }),
   );
 
+  it.effect("picks the base model and its level on runtimes with a separate level select", () =>
+    Effect.gen(function* () {
+      // Antigravity ACP 1.4.3's selects.
+      const configOptions = [
+        {
+          id: "model",
+          name: "Model",
+          category: "model",
+          type: "select",
+          currentValue: "gemini-3.8-flash",
+          options: [
+            { value: "gemini-4-argon", name: "Gemini 4 Argon" },
+            { value: "gemini-3.8-flash", name: "Gemini 3.8 Flash" },
+          ],
+        },
+        {
+          id: "thinking_level",
+          name: "Thinking Level",
+          category: "thought_level",
+          type: "select",
+          currentValue: "high",
+          options: [
+            { value: "low", name: "Low" },
+            { value: "medium", name: "Medium" },
+            { value: "high", name: "High" },
+          ],
+        },
+      ] satisfies ReadonlyArray<EffectAcpSchema.SessionConfigOption>;
+      const configured: Array<[string, string | boolean]> = [];
+      const { runtime, selections } = makeModelRuntime(configOptions);
+      const setConfigOption = (configId: string, value: string | boolean) =>
+        Effect.sync(() => {
+          configured.push([configId, value]);
+          return { configOptions };
+        });
+      const model = yield* applyAntigravityAcpModelSelection({
+        runtime: { ...runtime, setConfigOption },
+        model: "gemini-4-argon",
+        options: [{ id: "reasoningEffort", value: "low" }],
+        mapError: (cause) => cause,
+      });
+      expect(model).toBe("gemini-4-argon-low");
+      expect(selections).toEqual(["gemini-4-argon"]);
+      expect(configured).toEqual([["thinking_level", "low"]]);
+
+      // A thread saved with a per-level id keeps that level.
+      const kept = yield* applyAntigravityAcpModelSelection({
+        runtime: { ...runtime, setConfigOption },
+        model: "gemini-3.8-flash-high",
+        mapError: (cause) => cause,
+      });
+      expect(kept).toBe("gemini-3.8-flash-high");
+    }),
+  );
+
   it.effect.each([undefined, null, ANTIGRAVITY_DEFAULT_MODEL])(
     "uses the native default for %s without sending an internal model ID",
     (requestedModel) =>

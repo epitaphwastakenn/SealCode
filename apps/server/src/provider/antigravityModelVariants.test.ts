@@ -236,6 +236,82 @@ describe("antigravitySessionModels", () => {
     expect(session.currentValue).toBe("a-high");
   });
 
+  // Antigravity ACP 1.4.3: the select offers base models and the level is its own select.
+  const runtime143 = {
+    configOptions: [
+      {
+        id: "model",
+        name: "Model",
+        category: "model",
+        type: "select",
+        currentValue: "gemini-3.8-flash",
+        options: [
+          { value: "gemini-4-argon", name: "Gemini 4 Argon" },
+          { value: "gemini-3.8-flash", name: "Gemini 3.8 Flash" },
+        ],
+      },
+      {
+        id: "thinking_level",
+        name: "Thinking Level",
+        category: "thought_level",
+        type: "select",
+        currentValue: "high",
+        options: [
+          { value: "low", name: "Low" },
+          { value: "medium", name: "Medium" },
+          { value: "high", name: "High" },
+        ],
+      },
+    ],
+    models: {
+      currentModelId: "gemini-3.8-flash-high",
+      availableModels: [
+        { modelId: "gemini-4-argon-medium", name: "Gemini 4 Argon (Medium)" },
+        { modelId: "gemini-4-argon-high", name: "Gemini 4 Argon (High)" },
+        { modelId: "gemini-4-argon-low", name: "Gemini 4 Argon (Low)" },
+        { modelId: "gemini-3.8-flash-high", name: "Gemini 3.8 Flash (High)" },
+        { modelId: "gemini-3.8-flash-medium", name: "Gemini 3.8 Flash (Medium)" },
+        { modelId: "gemini-3.8-flash-low", name: "Gemini 3.8 Flash (Low)" },
+      ],
+    },
+  } satisfies Parameters<typeof antigravitySessionModels>[0];
+
+  it("offers one model per level when the level is a separate select", () => {
+    for (const setup of [runtime143, { configOptions: runtime143.configOptions }]) {
+      const session = antigravitySessionModels(setup);
+      expect(session.currentValue).toBe("gemini-3.8-flash-high");
+      expect(session.configIds.has("gemini-4-argon-low")).toBe(true);
+      expect(
+        buildAntigravityServerModels(session.entries, { currentValue: session.currentValue }).map(
+          (model) => [
+            model.slug,
+            model.name,
+            model.capabilities?.optionDescriptors?.[0]?.currentValue,
+            model.aliases,
+          ],
+        ),
+      ).toEqual([
+        [
+          "gemini-4-argon",
+          "Gemini 4 Argon",
+          "medium",
+          ["gemini-4-argon-low", "gemini-4-argon-medium", "gemini-4-argon-high"],
+        ],
+        [
+          "gemini-3.8-flash",
+          "Gemini 3.8 Flash",
+          "high",
+          [
+            ANTIGRAVITY_DEFAULT_MODEL,
+            "gemini-3.8-flash-low",
+            "gemini-3.8-flash-medium",
+            "gemini-3.8-flash-high",
+          ],
+        ],
+      ]);
+    }
+  });
+
   it("reads the legacy list alone when the session has no model select", () => {
     const session = antigravitySessionModels({
       models: { currentModelId: "b", availableModels: [{ modelId: "b", name: "B" }] },

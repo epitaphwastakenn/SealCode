@@ -31,7 +31,10 @@ import {
   groupAntigravityModels,
   resolveAntigravityModelId,
 } from "../antigravityModelVariants.ts";
-import { normalizeAntigravitySessionUpdate } from "./AntigravityProtocol.ts";
+import {
+  makeAntigravityHarnessNoticeFilter,
+  normalizeAntigravitySessionUpdate,
+} from "./AntigravityProtocol.ts";
 
 export interface AntigravityAcpRuntimeInput extends Omit<
   AcpSessionRuntime.AcpSessionRuntimeOptions,
@@ -58,6 +61,7 @@ export const makeAntigravityAcpRuntime = Effect.fn("makeAntigravityAcpRuntime")(
   EffectAcpErrors.AcpError,
   Crypto.Crypto | Scope.Scope
 > {
+  const harnessNotices = makeAntigravityHarnessNoticeFilter();
   const context = yield* Layer.build(
     AcpSessionRuntime.layer({
       ...input,
@@ -82,14 +86,22 @@ export const makeAntigravityAcpRuntime = Effect.fn("makeAntigravityAcpRuntime")(
       onStderr: makeAntigravityStderrHandler(
         input.onAuthorizationUrl ? { onAuthorizationUrl: input.onAuthorizationUrl } : {},
       ),
-      transformSessionUpdate: normalizeAntigravitySessionUpdate,
+      transformSessionUpdate: (notification) =>
+        harnessNotices.transform(normalizeAntigravitySessionUpdate(notification)),
     }).pipe(
       Layer.provide(
         Layer.succeed(ChildProcessSpawner.ChildProcessSpawner, input.childProcessSpawner),
       ),
     ),
   );
-  return yield* Effect.service(AcpSessionRuntime.AcpSessionRuntime).pipe(Effect.provide(context));
+  const runtime = yield* Effect.service(AcpSessionRuntime.AcpSessionRuntime).pipe(
+    Effect.provide(context),
+  );
+  return {
+    ...runtime,
+    prompt: (payload, options) =>
+      Effect.sync(harnessNotices.reset).pipe(Effect.andThen(runtime.prompt(payload, options))),
+  };
 });
 
 export function antigravityPermissionMode(runtimeMode: RuntimeMode): string {
@@ -115,7 +127,9 @@ export const applyAntigravityAcpModelSelection = Effect.fn("applyAntigravityAcpM
       AcpSessionRuntime.AcpSessionRuntime["Service"],
       "getConfigOptions" | "setModel"
     > &
-      Partial<Pick<AcpSessionRuntime.AcpSessionRuntime["Service"], "setSessionModel">>;
+      Partial<
+        Pick<AcpSessionRuntime.AcpSessionRuntime["Service"], "setConfigOption" | "setSessionModel">
+      >;
     readonly model: string | null | undefined;
     readonly options?: ReadonlyArray<ProviderOptionSelection> | null | undefined;
     /** The setup response's legacy model list; it can offer models the config select omits. */
@@ -145,8 +159,14 @@ export const applyAntigravityAcpModelSelection = Effect.fn("applyAntigravityAcpM
     const select = Effect.fn("applyAntigravityAcpModelSelection.select")(function* (
       modelId: string,
     ) {
-      if (session.configIds.has(modelId)) {
-        yield* input.runtime.setModel(modelId).pipe(Effect.mapError(input.mapError));
+      const configSelection = session.configSelections.get(modelId);
+      const level = configSelection?.level;
+      const setConfigOption = input.runtime.setConfigOption;
+      if (configSelection !== undefined && (level === undefined || setConfigOption !== undefined)) {
+        yield* input.runtime.setModel(configSelection.model).pipe(Effect.mapError(input.mapError));
+        if (level !== undefined && setConfigOption !== undefined) {
+          yield* setConfigOption(level.configId, level.value).pipe(Effect.mapError(input.mapError));
+        }
       } else if (input.runtime.setSessionModel !== undefined) {
         yield* input.runtime.setSessionModel(modelId).pipe(Effect.mapError(input.mapError));
       } else {

@@ -278,11 +278,17 @@ export function buildAntigravityServerModels(
   });
 }
 
+export interface AntigravityConfigSelection {
+  readonly model: string;
+  readonly level?: { readonly configId: string; readonly value: string };
+}
+
 export interface AntigravitySessionModels {
   /** The model select first, then models that only the legacy `models` list offers. */
   readonly entries: ReadonlyArray<AntigravityModelEntry>;
-  /** Ids the model config select accepts; the rest need `session/set_model`. */
+  /** Ids the config selects accept; the rest need `session/set_model`. */
   readonly configIds: ReadonlySet<string>;
+  readonly configSelections: ReadonlyMap<string, AntigravityConfigSelection>;
   readonly currentValue: string | undefined;
 }
 
@@ -290,6 +296,11 @@ interface SessionModelSetup {
   readonly configOptions?: ReadonlyArray<EffectAcpSchema.SessionConfigOption> | null | undefined;
   readonly models?: EffectAcpSchema.SessionModelState | null | undefined;
 }
+
+const selectEntries = (option: EffectAcpSchema.SessionConfigOption | undefined) =>
+  option?.type === "select"
+    ? option.options.flatMap((entry) => ("value" in entry ? [entry] : entry.options))
+    : [];
 
 /**
  * The session can describe its models twice: a `model` config select and the
@@ -299,11 +310,29 @@ export function antigravitySessionModels(setup: SessionModelSetup): AntigravityS
   const config = setup.configOptions?.find(
     (option) => option.id === "model" || option.category === "model",
   );
-  const configEntries =
-    config?.type === "select"
-      ? config.options.flatMap((entry) => ("value" in entry ? [entry] : entry.options))
-      : [];
-  const configIds = new Set(configEntries.map((entry) => entry.value));
+  // ACP 1.4 offers base models and puts the level in its own select. Each pair reads as
+  // the per-level id the earlier runtimes listed, so threads keep their ids.
+  const levelConfig = setup.configOptions?.find((option) => option.category === "thought_level");
+  const levels = selectEntries(levelConfig).filter(
+    (level) => levelFromWord(level.value) !== undefined,
+  );
+  const configSelections = new Map<string, AntigravityConfigSelection>();
+  const configEntries = selectEntries(config).flatMap((entry) => {
+    if (levelConfig === undefined || levels.length === 0) {
+      configSelections.set(entry.value, { model: entry.value });
+      return [entry];
+    }
+    return levels.map((level) => {
+      const value = `${entry.value}-${level.value}`;
+      configSelections.set(value, {
+        model: entry.value,
+        level: { configId: levelConfig.id, value: level.value },
+      });
+      return { value, name: `${entry.name} (${level.name})` };
+    });
+  });
+  const currentLevel =
+    levels.length > 0 && levelConfig?.type === "select" ? levelConfig.currentValue : undefined;
   const legacyEntries =
     setup.models?.availableModels.map((model) => ({ value: model.modelId, name: model.name })) ??
     [];
@@ -312,8 +341,14 @@ export function antigravitySessionModels(setup: SessionModelSetup): AntigravityS
       value: entry.value,
       name: entry.name,
     })),
-    configIds,
-    currentValue: config?.type === "select" ? config.currentValue : setup.models?.currentModelId,
+    configIds: new Set(configSelections.keys()),
+    configSelections,
+    currentValue:
+      config?.type !== "select"
+        ? setup.models?.currentModelId
+        : currentLevel === undefined
+          ? config.currentValue
+          : `${config.currentValue}-${currentLevel}`,
   };
 }
 

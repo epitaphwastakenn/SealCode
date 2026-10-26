@@ -11,6 +11,7 @@ import {
   isAntigravitySubagentReplayStart,
   classifyAntigravitySubagentToolCall,
   isAntigravityUserInputRequest,
+  makeAntigravityHarnessNoticeFilter,
   makeAntigravityUserInputResponse,
   normalizeAntigravitySessionUpdate,
   normalizeAntigravityToolCall,
@@ -463,5 +464,67 @@ describe("Antigravity tool results", () => {
       mergeToolCallState(running, parseToolUpdate(commandCompleted).toolCall),
     );
     expect(isAntigravityOpenCommand(completed)).toBe(false);
+  });
+});
+
+describe("Antigravity harness notices in assistant text", () => {
+  const SESSION = "session-1";
+  const messageChunk = (text: string): EffectAcpSchema.SessionNotification => ({
+    sessionId: SESSION,
+    update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text } },
+  });
+  const shownText = (
+    filter: ReturnType<typeof makeAntigravityHarnessNoticeFilter>,
+    chunks: ReadonlyArray<string | EffectAcpSchema.SessionNotification>,
+  ) =>
+    chunks
+      .map((chunk) => filter.transform(typeof chunk === "string" ? messageChunk(chunk) : chunk))
+      .flatMap(({ update }) =>
+        update.sessionUpdate === "agent_message_chunk" && update.content.type === "text"
+          ? [update.content.text]
+          : [],
+      )
+      .join("");
+  // Shape of the leak in #23730: the agent appends a background-task notice to the
+  // reply that is already streaming, behind a broken turn delimiter.
+  const notice =
+    '!]\nuser\nThe following is a <SYSTEM_MESSAGE> not actually sent by the user. It is provided by the system as important information to pay attention to.\n\n<SYSTEM_MESSAGE>\n[Message] timestamp=2026-10-22T16:40:59Z sender=conv/task-243 priority=MESSAGE_PRIORITY_HIGH content=Task id "conv/task-243" finished with result:\n\nThe command exited with code 0.\nOutput:\nok\n';
+
+  it("drops a background-task notice the agent appends to its reply", () => {
+    const filter = makeAntigravityHarnessNoticeFilter();
+    expect(
+      shownText(filter, ["Waiting for the check ", `to finish.${notice}`, "more output\n"]),
+    ).toBe("Waiting for the check to finish.");
+  });
+
+  it("finds a notice whose marker is split across chunks", () => {
+    const filter = makeAntigravityHarnessNoticeFilter();
+    const splitAt = notice.indexOf("[Message]") + 3;
+    expect(
+      shownText(filter, ["Waiting.", notice.slice(0, splitAt), notice.slice(splitAt), "tail"]),
+    ).not.toContain("SYSTEM_MESSAGE");
+  });
+
+  it("shows the reply again after the notice closes or the agent moves on", () => {
+    const closed = makeAntigravityHarnessNoticeFilter();
+    expect(shownText(closed, [`Before.${notice}</SYSTEM_MESSAGE>\n`, "After."])).toBe(
+      "Before.After.",
+    );
+    const movedOn = makeAntigravityHarnessNoticeFilter();
+    const toolCall: EffectAcpSchema.SessionNotification = {
+      sessionId: SESSION,
+      update: { sessionUpdate: "tool_call", toolCallId: "tool-1", title: "Running" },
+    };
+    expect(shownText(movedOn, [`Before.${notice}`, toolCall, "After."])).toBe("Before.After.");
+    const nextPrompt = makeAntigravityHarnessNoticeFilter();
+    shownText(nextPrompt, [`Before.${notice}`]);
+    nextPrompt.reset();
+    expect(shownText(nextPrompt, ["Next turn."])).toBe("Next turn.");
+  });
+
+  it("keeps a reply that only mentions the tag", () => {
+    const filter = makeAntigravityHarnessNoticeFilter();
+    const reply = "Antigravity wraps harness input in <SYSTEM_MESSAGE> tags, so filter those.";
+    expect(shownText(filter, [reply, " Done."])).toBe(`${reply} Done.`);
   });
 });

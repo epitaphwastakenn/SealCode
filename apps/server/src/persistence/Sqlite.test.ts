@@ -2,6 +2,7 @@
 import * as NodeFS from "node:fs";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
+import * as NodeSqlite from "node:sqlite";
 
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, it } from "@effect/vitest";
@@ -49,6 +50,34 @@ it.effect("drops planner statistics a database already has", () => {
       );
     }).pipe(Effect.provide(persistence()));
   }).pipe(
+    Effect.ensuring(Effect.sync(() => NodeFS.rmSync(tempDir, { recursive: true, force: true }))),
+  );
+});
+
+it.effect("compacts a database once on the start after it asked for it", () => {
+  const tempDir = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-sqlite-vacuum-"));
+  const dbPath = NodePath.join(tempDir, "state.sqlite");
+  const marker = NodePath.join(tempDir, SqlitePersistence.VACUUM_ON_START_FILE);
+  // Created before incremental auto_vacuum was the default, with space freed since.
+  const existing = new NodeSqlite.DatabaseSync(dbPath);
+  existing.exec(`
+    CREATE TABLE kept (value TEXT);
+    INSERT INTO kept VALUES ('keep');
+    CREATE TABLE freed (value BLOB);
+    INSERT INTO freed VALUES (zeroblob(1048576));
+    DROP TABLE freed;
+  `);
+  existing.close();
+  NodeFS.writeFileSync(marker, "");
+
+  return Effect.gen(function* () {
+    const sql = yield* SqlClient.SqlClient;
+    assert.deepEqual(yield* sql`PRAGMA auto_vacuum`, [{ auto_vacuum: 2 }]);
+    assert.deepEqual(yield* sql`PRAGMA freelist_count`, [{ freelist_count: 0 }]);
+    assert.deepEqual(yield* sql`SELECT value FROM kept`, [{ value: "keep" }]);
+    assert.isFalse(NodeFS.existsSync(marker));
+  }).pipe(
+    Effect.provide(SqlitePersistence.layerFromPath(dbPath).pipe(Layer.provide(NodeServices.layer))),
     Effect.ensuring(Effect.sync(() => NodeFS.rmSync(tempDir, { recursive: true, force: true }))),
   );
 });

@@ -3,12 +3,14 @@ import { assert, describe, it } from "@effect/vitest";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 
 import type * as Electron from "electron";
 
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronMenu from "../electron/ElectronMenu.ts";
+import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import * as DesktopApplicationMenu from "./DesktopApplicationMenu.ts";
 import * as DesktopConfig from "../app/DesktopConfig.ts";
 import * as DesktopEnvironment from "../app/DesktopEnvironment.ts";
@@ -50,12 +52,22 @@ const layerElectronApp = Layer.succeed(ElectronApp.ElectronApp, {
   on: () => Effect.void,
 } satisfies ElectronApp.ElectronApp["Service"]);
 
-const layerElectronDialog = Layer.succeed(ElectronDialog.ElectronDialog, {
-  pickFolder: () => Effect.succeedNone,
-  pickFiles: () => Effect.succeed([]),
-  showMessageBox: () => Effect.succeed({ response: 0, checkboxChecked: false }),
-  showErrorBox: () => Effect.void,
-} satisfies ElectronDialog.ElectronDialog["Service"]);
+const makeLayerElectronDialog = (
+  showMessageBox: ElectronDialog.ElectronDialog["Service"]["showMessageBox"] = () =>
+    Effect.succeed({ response: 0, checkboxChecked: false }),
+) =>
+  Layer.succeed(ElectronDialog.ElectronDialog, {
+    pickFolder: () => Effect.succeedNone,
+    pickFiles: () => Effect.succeed([]),
+    showMessageBox,
+    showErrorBox: () => Effect.void,
+  } satisfies ElectronDialog.ElectronDialog["Service"]);
+
+// The menu only asks which window is the main one.
+const layerElectronWindow = (main: Option.Option<Electron.BrowserWindow>) =>
+  Layer.succeed(ElectronWindow.ElectronWindow, {
+    main: Effect.succeed(main),
+  } as unknown as ElectronWindow.ElectronWindow["Service"]);
 
 const layerDesktopUpdates = Layer.succeed(DesktopUpdates.DesktopUpdates, {
   getState: Effect.die("unexpected getState"),
@@ -107,6 +119,10 @@ const configureMenu = (
   selectedAction: Deferred.Deferred<string>,
   applicationMenuTemplate: Deferred.Deferred<readonly Electron.MenuItemConstructorOptions[]>,
   environment: Partial<DesktopEnvironment.MakeDesktopEnvironmentInput> = {},
+  options: {
+    readonly mainWindow?: Electron.BrowserWindow;
+    readonly showMessageBox?: ElectronDialog.ElectronDialog["Service"]["showMessageBox"];
+  } = {},
 ) =>
   Effect.gen(function* () {
     const menu = yield* DesktopApplicationMenu.DesktopApplicationMenu;
@@ -117,7 +133,8 @@ const configureMenu = (
         Layer.provideMerge(layerElectronMenu(applicationMenuTemplate)),
         Layer.provideMerge(layerDesktopWindow(selectedAction)),
         Layer.provideMerge(layerDesktopUpdates),
-        Layer.provideMerge(layerElectronDialog),
+        Layer.provideMerge(makeLayerElectronDialog(options.showMessageBox)),
+        Layer.provideMerge(layerElectronWindow(Option.fromNullishOr(options.mainWindow))),
         Layer.provideMerge(layerElectronApp),
         Layer.provideMerge(
           DesktopEnvironment.layer({ ...environmentInput, ...environment }).pipe(
@@ -220,6 +237,115 @@ describe("DesktopApplicationMenu", () => {
 
       reload.click({} as Electron.MenuItem, {} as Electron.BrowserWindow, {} as KeyboardEvent);
       assert.equal(yield* Deferred.await(selectedAction), "main-reload");
+    }),
+  );
+  const fakeWindow = () => {
+    const window = { closed: 0, isDestroyed: () => false, close: () => (window.closed += 1) };
+    return window;
+  };
+
+  const closeWindowItem = (template: readonly Electron.MenuItemConstructorOptions[]) => {
+    const windowMenu = template.find((item) => item.label === "Window");
+    if (!Array.isArray(windowMenu?.submenu)) {
+      throw new Error("Expected Window menu submenu to be an array.");
+    }
+    const close = windowMenu.submenu.find((item) => item.accelerator === "CmdOrCtrl+W");
+    if (typeof close?.click !== "function") {
+      throw new Error("Expected a Close Window item that owns CmdOrCtrl+W.");
+    }
+    return close.click;
+  };
+
+  it.effect("asks before Ctrl+W closes the last window on Windows", () =>
+    Effect.gen(function* () {
+      const applicationMenuTemplate =
+        yield* Deferred.make<readonly Electron.MenuItemConstructorOptions[]>();
+      const main = fakeWindow();
+      let asked = 0;
+
+      yield* configureMenu(
+        yield* Deferred.make<string>(),
+        applicationMenuTemplate,
+        { platform: "win32" },
+        {
+          mainWindow: main as unknown as Electron.BrowserWindow,
+          showMessageBox: (options) => {
+            asked += 1;
+            // Cancel is the default, so an accidental Enter keeps the app open.
+            assert.equal(options.defaultId, options.cancelId);
+            return Effect.succeed({ response: options.cancelId ?? 1, checkboxChecked: false });
+          },
+        },
+      );
+
+      const close = closeWindowItem(yield* Deferred.await(applicationMenuTemplate));
+      close(
+        {} as Electron.MenuItem,
+        main as unknown as Electron.BrowserWindow,
+        { triggeredByAccelerator: true } as unknown as KeyboardEvent,
+      );
+
+      assert.equal(asked, 1);
+      assert.equal(main.closed, 0);
+    }),
+  );
+
+  it.effect("closes the last window once the user confirms", () =>
+    Effect.gen(function* () {
+      const applicationMenuTemplate =
+        yield* Deferred.make<readonly Electron.MenuItemConstructorOptions[]>();
+      const main = fakeWindow();
+
+      yield* configureMenu(
+        yield* Deferred.make<string>(),
+        applicationMenuTemplate,
+        { platform: "linux" },
+        {
+          mainWindow: main as unknown as Electron.BrowserWindow,
+          showMessageBox: () => Effect.succeed({ response: 0, checkboxChecked: false }),
+        },
+      );
+
+      const close = closeWindowItem(yield* Deferred.await(applicationMenuTemplate));
+      close(
+        {} as Electron.MenuItem,
+        main as unknown as Electron.BrowserWindow,
+        { triggeredByAccelerator: true } as unknown as KeyboardEvent,
+      );
+
+      assert.equal(main.closed, 1);
+    }),
+  );
+
+  it.effect("closes other windows without asking", () =>
+    Effect.gen(function* () {
+      const applicationMenuTemplate =
+        yield* Deferred.make<readonly Electron.MenuItemConstructorOptions[]>();
+      const popout = fakeWindow();
+      let asked = 0;
+
+      yield* configureMenu(
+        yield* Deferred.make<string>(),
+        applicationMenuTemplate,
+        { platform: "win32" },
+        {
+          mainWindow: fakeWindow() as unknown as Electron.BrowserWindow,
+          showMessageBox: () => {
+            asked += 1;
+            return Effect.succeed({ response: 0, checkboxChecked: false });
+          },
+        },
+      );
+
+      const close = closeWindowItem(yield* Deferred.await(applicationMenuTemplate));
+      close(
+        {} as Electron.MenuItem,
+        popout as unknown as Electron.BrowserWindow,
+        { triggeredByAccelerator: true } as unknown as KeyboardEvent,
+      );
+
+      assert.equal(asked, 0);
+      assert.equal(popout.closed, 1);
     }),
   );
 });

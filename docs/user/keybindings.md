@@ -190,3 +190,6 @@ keyboard repeat; if repeat is disabled, use two presses or the application menu.
 Change **Settings → General → Confirmations → Quit shortcut** to **Direct** for a
 single press or **Double press** for two presses only. Choosing **Quit** from the
 application menu always quits immediately.
+
+On Windows and Linux, closing the main window quits SealCode. When `Ctrl+W` has
+nothing left to close, SealCode asks before closing the window.

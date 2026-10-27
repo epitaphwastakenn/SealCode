@@ -10,6 +10,14 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.17.9 · 2026-10-27
+
+> Antigravity works on networks with broken IPv6.
+
+### Fixed
+
+- **Antigravity on broken IPv6** — Antigravity now always connects through SealCode, which tries IPv4 first and falls back to IPv6 only when IPv4 fails. Sign-in, sign-out and turns no longer hang on networks where IPv6 half-works. If the agent still goes quiet, SealCode restarts it once on its own before showing an error. A proxy you set yourself is still used.
+
 ## 2.17.8 · 2026-10-26
 
 > Much faster: threads open with far less data, and streaming and connecting do less work.

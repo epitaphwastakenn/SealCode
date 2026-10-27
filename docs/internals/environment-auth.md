@@ -1,8 +1,6 @@
 # Environment authentication
 
-The environment issues its own sessions and enforces their capabilities. Cloud
-identity and relay credentials belong to a separate trust boundary, described in
-[T3 Connect](./t3-connect.md). A relay token is never an environment login.
+The environment issues its own sessions and enforces their capabilities.
 
 ## Authority survives transport changes
 
@@ -26,18 +24,6 @@ Browser cookies, bearer tokens, and DPoP tokens adapt the same scoped session
 model. DPoP binds a token to a client's proof key; an invalid proof must fail
 rather than fall back to bearer authentication. The OAuth token-exchange
 vocabulary gives these grants a familiar meaning.
-
-### Guest links are not sessions
-
-A [guest link](../user/guest-links.md) gives one browser read access to one
-thread and a way to propose messages. Its tokens are HMACs of the thread and
-share id under a server key ([GuestShareService](../../apps/server/src/guest/GuestShareService.ts)),
-so nothing secret is stored. The share in the thread projection is the only
-state: replacing, closing, or archiving it revokes every token, and the
-orchestrator's serial commands make redeeming and sending happen once. Guest
-tokens never enter `SessionStore`, so no RPC, WebSocket, or MCP path can accept
-one. Guest routes also require T3 Connect to still serve the link's hostname;
-the request's Host header is not checked, because a LAN client can forge it.
 
 ### MCP clients are a separate audience
 

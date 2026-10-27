@@ -144,16 +144,6 @@ async function quiet() {
   );
 }
 
-// Off the guest page the connection runtime retries a missing environment on timers, and
-// its atom updates commit at varying times. On it, the runtime fails once and stays quiet.
-function onGuestPage(): Disposable {
-  const previous = `${window.location.pathname}${window.location.search}`;
-  window.history.replaceState(window.history.state, "", "/guest?share=render-scenarios");
-  return {
-    [Symbol.dispose]: () => window.history.replaceState(window.history.state, "", previous),
-  };
-}
-
 // A first mount loads lazy modules, web fonts and syntax highlighting at varying times.
 // Each scenario mounts its tree once uncounted, so the counted run starts warm.
 async function warmUp(ui: ReactNode, container?: HTMLElement) {
@@ -170,7 +160,6 @@ async function report(scenario: string) {
 }
 
 it("mount-thread", async () => {
-  using _guest = onGuestPage();
   const timeline = timelineFor();
   await warmUp(timelineFor()("thread-warm", history("thread-warm")), sizedContainer());
   startCounting();
@@ -182,7 +171,6 @@ it("mount-thread", async () => {
 });
 
 it("stream-assistant-turn", async () => {
-  using _guest = onGuestPage();
   const timeline = timelineFor();
   const base = history("thread-a");
   const streamed = (text: string) => [
@@ -213,7 +201,6 @@ it("stream-assistant-turn", async () => {
 // are not reported: the minimap's follow-up renders sometimes split across two frames,
 // so the commit count varies by one while the renders stay identical.
 it("switch-thread", async () => {
-  using _guest = onGuestPage();
   const timeline = timelineFor();
   const a = history("thread-a");
   const b = history("thread-b");
@@ -269,7 +256,6 @@ function Composer() {
 }
 
 it("type-in-composer", async () => {
-  using _guest = onGuestPage();
   await warmUp(<Composer />);
   await using screen = await render(<Composer />);
   const editor = screen.getByRole("textbox");

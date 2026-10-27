@@ -50,7 +50,7 @@ export class RemoteEnvironmentAuthUndeclaredStatusError extends Data.TaggedError
   }
 }
 
-export class RemoteEnvironmentAuthTimeoutError extends Data.TaggedError(
+class RemoteEnvironmentAuthTimeoutError extends Data.TaggedError(
   "RemoteEnvironmentAuthTimeoutError",
 )<{
   readonly message: string;

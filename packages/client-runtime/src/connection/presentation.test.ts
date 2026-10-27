@@ -10,7 +10,6 @@ import {
 import {
   BearerConnectionTarget,
   ConnectionTransientError,
-  RelayConnectionTarget,
   type SupervisorConnectionState,
 } from "./model.ts";
 import {
@@ -87,29 +86,6 @@ describe("connection presentation", () => {
   });
 
   // regression: #16909 Copy MCP URL falls back to an alternate route when the relay route has no address
-  it("passes over routes without an address of their own", () => {
-    const relay = new RelayConnectionTarget({
-      environmentId: TARGET.environmentId,
-      label: TARGET.label,
-    });
-    const entry: ConnectionCatalogEntry = {
-      ...ENTRY,
-      target: relay,
-      profile: Option.none(),
-      alternateRoutes: [{ target: ENTRY.target, profile: ENTRY.profile }],
-    };
-
-    expect(environmentMcpUrl({ entry, connectedTarget: relay })).toBe(
-      "https://environment.example.test/mcp",
-    );
-    expect(
-      environmentMcpUrl({
-        entry,
-        connectedTarget: relay,
-        relayHttpBaseUrl: "https://tunnel.example.test",
-      }),
-    ).toBe("https://tunnel.example.test/mcp");
-  });
 
   it("distinguishes initial connection, reconnect, and retry errors", () => {
     expect(presentConnectionState(supervisorState({ phase: "connecting", attempt: 1 }))).toEqual({

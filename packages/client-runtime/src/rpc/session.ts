@@ -16,7 +16,6 @@ import * as Option from "effect/Option";
 import * as PubSub from "effect/PubSub";
 import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
-import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type * as Rpc from "effect/rpc/Rpc";
@@ -26,7 +25,7 @@ import * as RpcSerialization from "effect/rpc/RpcSerialization";
 import * as Socket from "effect/socket/Socket";
 
 import { makeWsRpcProtocolClient, PING_TIMEOUT, type WsRpcProtocolClient } from "./protocol.ts";
-import { NETWORK_BLOCKING_HINT, UNRESPONSIVE_HOST_HINT } from "../errors/network.ts";
+import { UNRESPONSIVE_HOST_HINT } from "../errors/network.ts";
 import type {
   ConnectionAttemptError,
   ConnectionTransientError,
@@ -122,13 +121,10 @@ function serverConfigReplayEvents(
   ];
 }
 
-const isSocketErrorReason = Schema.is(Socket.SocketErrorReason);
 const PING_TIMEOUT_SECONDS = Duration.toSeconds(PING_TIMEOUT);
 
 function mapSessionRpcError(
   error: InitialConfigError | ProbeError | ServerConfigSubscriptionError,
-  networkHint: string,
-  via: "relay" | "direct",
 ): ConnectionAttemptError {
   switch (error._tag) {
     case "EnvironmentAuthorizationError":
@@ -136,7 +132,6 @@ function mapSessionRpcError(
         reason: "permission",
         detail: error.message,
         hop: "server",
-        via,
       });
     case "KeybindingsConfigParseError":
     case "ServerSettingsError":
@@ -144,20 +139,14 @@ function mapSessionRpcError(
         reason: "remote-unavailable",
         detail: error.message,
         hop: "server",
-        via,
       });
     case "RpcClientError":
       return new ConnectionTransientErrorClass({
         reason: "transport",
-        detail: `${error.message}${isSocketErrorReason(error.reason) ? networkHint : ""}`,
-        ...socketFailureLocation(via),
+        detail: error.message,
+        hop: "server",
       });
   }
-}
-
-/** Over T3 Connect the relay already reached the host, so a socket that drops failed between this device and the tunnel. */
-function socketFailureLocation(via: "relay" | "direct") {
-  return { hop: via === "relay" ? "tunnel" : "server", via } as const;
 }
 
 /** @public */
@@ -177,10 +166,8 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
   });
 
   const connect = Effect.fnUntraced(function* (connection: PreparedConnection) {
-    const via = connection.target._tag === "RelayConnectionTarget" ? "relay" : "direct";
-    const networkHint = via === "relay" ? ` ${NETWORK_BLOCKING_HINT}` : "";
     const mapRpcError = (error: Parameters<typeof mapSessionRpcError>[0]) =>
-      mapSessionRpcError(error, networkHint, via);
+      mapSessionRpcError(error);
     yield* Effect.annotateCurrentSpan({
       "connection.environment.id": connection.environmentId,
     });
@@ -200,11 +187,11 @@ export const make = Effect.fn("RpcSessionFactory.make")(function* (
               // opened, the path worked, and a host that goes quiet is more
               // often overloaded or asleep than blocked.
               detail: !wasConnected
-                ? `${connection.label} could not establish a WebSocket connection.${networkHint}`
+                ? `${connection.label} could not establish a WebSocket connection.`
                 : timedOut
                   ? `${connection.label} stopped responding for ${PING_TIMEOUT_SECONDS}s. ${UNRESPONSIVE_HOST_HINT}`
                   : `${connection.label} disconnected.`,
-              ...socketFailureLocation(via),
+              hop: "server",
             }),
           ),
         ),

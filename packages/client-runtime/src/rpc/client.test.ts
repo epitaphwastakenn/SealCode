@@ -1,9 +1,4 @@
-import {
-  EnvironmentId,
-  type RelayClientInstallProgressEvent,
-  type ServerLifecycleStreamEvent,
-  WS_METHODS,
-} from "@t3tools/contracts";
+import { EnvironmentId, type ServerLifecycleStreamEvent, WS_METHODS } from "@t3tools/contracts";
 import { describe, expect, it } from "@effect/vitest";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
@@ -26,7 +21,7 @@ import {
 import * as EnvironmentSupervisor from "../connection/supervisor.ts";
 import * as RpcSession from "../rpc/session.ts";
 import type { WsRpcProtocolClient } from "../rpc/protocol.ts";
-import { runStream, subscribe, subscribeDynamicWithSession } from "./client.ts";
+import { subscribe, subscribeDynamicWithSession } from "./client.ts";
 
 const TARGET = new PrimaryConnectionTarget({
   environmentId: EnvironmentId.make("environment-1"),
@@ -34,15 +29,6 @@ const TARGET = new PrimaryConnectionTarget({
   httpBaseUrl: "https://environment.example.test",
   wsBaseUrl: "wss://environment.example.test",
 });
-
-const INSTALL_CHECKING: RelayClientInstallProgressEvent = {
-  type: "progress",
-  stage: "checking",
-};
-const INSTALL_DOWNLOADING: RelayClientInstallProgressEvent = {
-  type: "progress",
-  stage: "downloading",
-};
 
 function session(client: WsRpcProtocolClient): RpcSession.RpcSession {
   return {
@@ -79,36 +65,6 @@ const makeHarness = Effect.fn("TestEnvironmentRpc.makeHarness")(function* () {
 });
 
 describe("environment RPC", () => {
-  it.effect("binds finite streaming commands to one active session", () =>
-    Effect.gen(function* () {
-      const firstEvents = yield* Queue.unbounded<RelayClientInstallProgressEvent>();
-      const secondEvents = yield* Queue.unbounded<RelayClientInstallProgressEvent>();
-      const firstClient = {
-        [WS_METHODS.cloudInstallRelayClient]: () => Stream.fromQueue(firstEvents),
-      } as unknown as WsRpcProtocolClient;
-      const secondClient = {
-        [WS_METHODS.cloudInstallRelayClient]: () => Stream.fromQueue(secondEvents),
-      } as unknown as WsRpcProtocolClient;
-      const { activeSession, supervisor } = yield* makeHarness();
-
-      yield* SubscriptionRef.set(activeSession, Option.some(session(firstClient)));
-      const resultFiber = yield* runStream(WS_METHODS.cloudInstallRelayClient, {}).pipe(
-        Stream.take(2),
-        Stream.runCollect,
-        Effect.provideService(EnvironmentSupervisor.EnvironmentSupervisor, supervisor),
-        Effect.forkChild,
-      );
-      yield* Effect.yieldNow;
-
-      yield* Queue.offer(firstEvents, INSTALL_CHECKING);
-      yield* SubscriptionRef.set(activeSession, Option.some(session(secondClient)));
-      yield* Queue.offer(secondEvents, INSTALL_DOWNLOADING);
-      yield* Queue.offer(firstEvents, INSTALL_DOWNLOADING);
-
-      expect(yield* Fiber.join(resultFiber)).toEqual([INSTALL_CHECKING, INSTALL_DOWNLOADING]);
-    }),
-  );
-
   it.effect("switches durable subscriptions when the supervisor replaces the session", () =>
     Effect.gen(function* () {
       const subscriptions: string[] = [];

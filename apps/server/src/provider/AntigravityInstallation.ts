@@ -21,8 +21,10 @@ import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http";
+import * as NodeChildProcess from "node:child_process";
 import * as NodeCrypto from "node:crypto";
 import * as NodeFSP from "node:fs/promises";
+import * as NodeUtil from "node:util";
 
 import * as ServerConfig from "../config.ts";
 import { openZipArchive } from "../zipArchive.ts";
@@ -30,6 +32,11 @@ import {
   resolveAntigravityReleaseAsset,
   type AntigravityReleaseAsset,
 } from "./antigravityRelease.ts";
+import {
+  antigravityUnpackedDirectory,
+  readAntigravityUnpacked,
+  unpackAntigravityRuntime,
+} from "./antigravityUnpacked.ts";
 
 const DRIVER = ProviderDriverKind.make("antigravity");
 const DOWNLOAD_TIMEOUT = "45 minutes";
@@ -69,6 +76,8 @@ export interface AntigravityExecutable {
   readonly source: "override" | "managed" | "path";
   readonly version: string | null;
   readonly managedVersionDirectory: string | null;
+  /** Windows only: the release unpacked once, so launches skip PyInstaller's per-run unpack. */
+  readonly unpackedDirectory?: string;
 }
 
 interface AntigravityInstallationService {
@@ -109,7 +118,23 @@ export class AntigravityInstallation extends Context.Service<
 export interface AntigravityInstallationOptions {
   readonly baseDir: string;
   readonly releaseAsset?: AntigravityReleaseAsset | null;
+  readonly isElevated?: Effect.Effect<boolean>;
 }
+
+const HIGH_INTEGRITY_SIDS = ["S-1-16-12288", "S-1-16-16384"];
+
+// PyInstaller re-verifies the onefile parent under UAC elevation, which an unpacked launch cannot pass.
+const isWindowsProcessElevated = (environment: NodeJS.ProcessEnv) =>
+  Effect.tryPromise(() =>
+    NodeUtil.promisify(NodeChildProcess.execFile)(
+      `${environment.SystemRoot ?? environment.SYSTEMROOT ?? "C:\\Windows"}\\System32\\whoami.exe`,
+      ["/groups"],
+      { windowsHide: true, timeout: 15_000 },
+    ),
+  ).pipe(
+    Effect.map(({ stdout }) => HIGH_INTEGRITY_SIDS.some((sid) => stdout.includes(sid))),
+    Effect.orElseSucceed(() => true),
+  );
 
 const installationError = (operation: string, detail: string, cause?: unknown) =>
   new AntigravityInstallationError({
@@ -159,6 +184,13 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
   const activePath = path.join(managedDirectory, "active.json");
   const gate = yield* Semaphore.make(1);
   const leases = new Map<string, number>();
+  const isElevated = yield* Effect.cached(
+    options.isElevated ?? isWindowsProcessElevated(environment),
+  );
+  const unpacks = new Map<string, Fiber.Fiber<Option.Option<string>>>();
+  const unpackedDirectory = (releaseId: string) =>
+    antigravityUnpackedDirectory(path, managedDirectory, releaseId);
+  const unpackedRoot = path.dirname(unpackedDirectory(""));
   let running: { readonly operationId: string; readonly fiber: Fiber.Fiber<void> } | undefined;
   const state = yield* SubscriptionRef.make<ProviderInstallState>({
     driver: DRIVER,
@@ -312,11 +344,54 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
     ),
   );
 
+  // Never fails: without the unpacked copy the agent still starts, unpacking on every launch.
+  // The unpack runs in the service scope, so a sign-in that gives up does not discard a slow one.
+  const prepareUnpacked = Effect.fn("AntigravityInstallation.prepareUnpacked")(function* (
+    executable: AntigravityExecutable,
+  ) {
+    const directory = executable.managedVersionDirectory;
+    if (platform !== "win32" || executable.source !== "managed" || directory === null) {
+      return executable;
+    }
+    if (yield* isElevated) return executable;
+    const target = unpackedDirectory(path.basename(directory));
+    let unpacking = unpacks.get(target);
+    if (unpacking === undefined) {
+      unpacking = yield* unpackAntigravityRuntime({
+        executablePath: executable.executablePath,
+        directory: target,
+      }).pipe(
+        Effect.provideService(FileSystem.FileSystem, fs),
+        Effect.provideService(Path.Path, path),
+        Effect.tapError((cause) =>
+          Effect.logWarning("Antigravity will unpack itself on every launch.", cause),
+        ),
+        Effect.option,
+        Effect.forkIn(serviceScope),
+      );
+      unpacks.set(target, unpacking);
+    }
+    const unpacked = yield* Fiber.join(unpacking);
+    if (Option.isNone(unpacked)) return executable;
+    const intact = yield* readAntigravityUnpacked(unpacked.value).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+    );
+    // Security software removed part of it; this launch unpacks itself and the next one redoes it.
+    if (intact === null) {
+      unpacks.delete(target);
+      return executable;
+    }
+    return { ...executable, unpackedDirectory: unpacked.value };
+  });
+
   const acquire = (binaryPath?: string, processEnvironment?: NodeJS.ProcessEnv) =>
     Effect.acquireRelease(
       gate.withPermit(
         Effect.gen(function* () {
-          const executable = yield* resolve(binaryPath, processEnvironment);
+          const executable = yield* resolve(binaryPath, processEnvironment).pipe(
+            Effect.flatMap(prepareUnpacked),
+          );
           const directory = executable.managedVersionDirectory;
           if (directory) leases.set(directory, (leases.get(directory) ?? 0) + 1);
           return executable;
@@ -356,6 +431,19 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
           for (const entry of yield* fs.readDirectory(versionsDirectory)) {
             const directory = path.join(versionsDirectory, entry);
             if (keep.has(directory) || leases.has(directory)) continue;
+            yield* removeDirectory(directory).pipe(Effect.ignore);
+          }
+          const kept = new Set(
+            [...keep, ...leases.keys()].map((directory) =>
+              unpackedDirectory(path.basename(directory)),
+            ),
+          );
+          for (const entry of yield* fs
+            .readDirectory(unpackedRoot)
+            .pipe(Effect.orElseSucceed((): ReadonlyArray<string> => []))) {
+            const directory = path.join(unpackedRoot, entry);
+            // A running unpack owns its staging directory.
+            if (kept.has(directory) || entry.includes("unpacking-")) continue;
             yield* removeDirectory(directory).pipe(Effect.ignore);
           }
         }),
@@ -605,6 +693,8 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
           ),
         ),
       );
+      yield* report("verifying", "Preparing Antigravity so it starts quickly.");
+      yield* prepareUnpacked(yield* completedRelease(asset.sha256));
       yield* activate();
       yield* pruneReleases(new Set([destination, staging]));
     },
@@ -772,6 +862,15 @@ export const makeAntigravityInstallation = Effect.fn("AntigravityInstallation.ma
       ),
     ),
   );
+
+  // Unpack an existing install ahead of the first launch instead of during its sign-in.
+  if (platform === "win32") {
+    yield* resolve().pipe(
+      Effect.flatMap(prepareUnpacked),
+      Effect.ignore,
+      Effect.forkIn(serviceScope),
+    );
+  }
 
   return AntigravityInstallation.of({
     managedDirectory,

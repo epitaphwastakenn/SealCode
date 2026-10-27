@@ -9,9 +9,9 @@ import * as Path from "effect/Path";
 import * as Runtime from "effect/Runtime";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
-import { renderBootServicePlist, renderBootServiceUnit } from "./cloud/bootService.ts";
-import { ServiceLauncherHostProcess } from "./cloud/serviceLauncherClient.ts";
-import { SERVICE_LAUNCHER_CONTEXT_ENV } from "./cloud/serviceProtocol.ts";
+import { renderBootServicePlist, renderBootServiceUnit } from "./service/bootService.ts";
+import { ServiceLauncherHostProcess } from "./service/serviceLauncherClient.ts";
+import { SERVICE_LAUNCHER_CONTEXT_ENV } from "./service/serviceProtocol.ts";
 import * as ProcessRunner from "./processRunner.ts";
 import * as ServerOwnership from "./serverOwnership.ts";
 import * as ServerRuntimeState from "./serverRuntimeState.ts";

@@ -27,11 +27,6 @@ allowBuilds:
   workerd: false
 
 catalog:
-  "@clerk/backend": 3.25.0
-  "@clerk/clerk-js": 6.40.0
-  "@clerk/electron": 0.1.3
-  "@clerk/electron-passkeys": 0.0.3
-  "@clerk/react": 6.18.0
   "@clerk/shared": 4.41.0
   # Must match the version alchemy depends on: the relay overrides its
   # Cloudflare retry policy through this package's Retry service.
@@ -41,8 +36,6 @@ catalog:
   "@effect/openapi-generator": 4.0.5
   "@effect/platform-node": 4.0.5
   "@effect/platform-node-shared": 4.0.5
-  "@effect/sql-pg": 4.0.5
-  "@effect/sql-sqlite-do": 4.0.5
   "@effect/vitest": 4.0.5
   "@electron-webauthn/macos": 1.3.1
   "@legendapp/list": 3.3.5
@@ -90,10 +83,6 @@ catalog:
 
 minimumReleaseAgeExclude:
   - "@tsc-rs/*"
-  - "@clerk/backend@3.25.0"
-  - "@clerk/clerk-js@6.40.0"
-  - "@clerk/electron@0.1.3"
-  - "@clerk/react@6.18.0"
   - "@clerk/shared@4.41.0"
   - "@distilled.cloud/aws@1.0.0-rc.13"
   - "@distilled.cloud/axiom@1.0.0-rc.13"
@@ -106,8 +95,6 @@ minimumReleaseAgeExclude:
   - "@effect/openapi-generator@4.0.5"
   - "@effect/platform-node-shared@4.0.5"
   - "@effect/platform-node@4.0.5"
-  - "@effect/sql-pg@4.0.5"
-  - "@effect/sql-sqlite-do@4.0.5"
   - "@effect/vitest@4.0.5"
   - alchemy@2.0.0-beta.80
   - effect@4.0.5
@@ -172,22 +159,10 @@ overrides:
   # database provider, which the relay never deploys. Its exact hono/valibot
   # pins are also the bulk of our open dependency advisories.
   "alchemy>@prisma/dev": "-"
-  "@clerk/backend": "catalog:"
-  "@clerk/clerk-js": "catalog:"
-  "@clerk/clerk-js>@base-org/account": "-"
-  "@clerk/clerk-js>@coinbase/wallet-sdk": "-"
-  "@clerk/clerk-js>@solana/wallet-adapter-base": "-"
-  "@clerk/clerk-js>@solana/wallet-adapter-react": "-"
-  "@clerk/clerk-js>@solana/wallet-standard": "-"
-  "@clerk/clerk-js>@wallet-standard/core": "-"
-  "@clerk/electron": "catalog:"
-  "@clerk/electron-passkeys": "catalog:"
-  "@clerk/react": "catalog:"
   "@clerk/shared": "catalog:"
   "@effect/atom-react": "catalog:"
   "@effect/platform-node": "catalog:"
   "@effect/platform-node-shared": "catalog:"
-  "@effect/sql-pg": "catalog:"
   "@effect/vitest": "catalog:"
   "@effect/vitest>vitest": "-"
   "@pierre/diffs>@shikijs/transformers": ^4.2.0
@@ -257,8 +232,6 @@ peerDependencyRules:
 # approved. We curate our own skills, so deny these to keep installs quiet.
 permissions:
   "@tanstack/router-plugin":
-    skills: false
-  drizzle-kit:
     skills: false
 
 # @cursor/sdk finds its platform package (sandbox helper, rg, tree-sitter) by

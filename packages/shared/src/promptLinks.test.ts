@@ -89,6 +89,8 @@ describe("thread links", () => {
   });
 });
 
+const HOSTED_APP_URL = "https://hosted.example.test";
+
 describe("link round trips", () => {
   it("builds a link that parses back to the same prompt", () => {
     const link = buildNewThreadLink({
@@ -96,8 +98,9 @@ describe("link round trips", () => {
       repository: { owner: "pingdotgg", name: "t3code" },
       provider: "claudeAgent",
       model: "opus",
+      origin: HOSTED_APP_URL,
     });
-    const path = promptLinkAppPath(link);
+    const path = promptLinkAppPath(link, HOSTED_APP_URL);
     expect(path).toBe(new URL(link).pathname + new URL(link).search);
     const parsed = parseNewThreadLink(new URL(link).search);
     expect(parsed.ok && parsed.value.kind === "new" && parsed.value.prompt.text).toBe(
@@ -108,11 +111,12 @@ describe("link round trips", () => {
   it("maps app scheme and hosted links to in-app paths, and nothing else", () => {
     expect(promptLinkAppPath("t3code://new?prompt=hi")).toBe("/new?prompt=hi");
     expect(promptLinkAppPath("t3code-dev://threads/env-1/thread-1")).toBe("/env-1/thread-1");
-    expect(promptLinkAppPath("https://app.t3.codes/env-1/thread-1?prompt=go")).toBe(
+    expect(promptLinkAppPath(`${HOSTED_APP_URL}/env-1/thread-1?prompt=go`, HOSTED_APP_URL)).toBe(
       "/env-1/thread-1?prompt=go",
     );
-    expect(promptLinkAppPath("https://app.t3.codes/settings/general")).toBeNull();
-    expect(promptLinkAppPath("https://evil.test/new?prompt=hi")).toBeNull();
+    expect(promptLinkAppPath(`${HOSTED_APP_URL}/settings/general`, HOSTED_APP_URL)).toBeNull();
+    expect(promptLinkAppPath(`${HOSTED_APP_URL}/new?prompt=hi`)).toBeNull();
+    expect(promptLinkAppPath("https://evil.test/new?prompt=hi", HOSTED_APP_URL)).toBeNull();
     expect(promptLinkAppPath("t3code://app/index.html")).toBeNull();
   });
 });

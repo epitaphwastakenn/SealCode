@@ -17,5 +17,6 @@ describe("provider auth return destinations", () => {
     "t3code://attacker/welcome",
     "t3code://app/welcome/../evil",
     "https://attacker.example/welcome",
+    "https://hosted.example.test/welcome",
   ])("rejects %s", (url) => expect(providerAuthReturnUrl(url)).toBeUndefined());
 });

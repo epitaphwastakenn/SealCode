@@ -50,6 +50,8 @@ const ANTIGRAVITY_PROVIDER = ProviderDriverKind.make("antigravity");
 export const ANTIGRAVITY_SILENT_TURN_NOTICE_MS = 30_000;
 export const ANTIGRAVITY_SILENT_TURN_MESSAGE =
   "Antigravity has not responded after 30 seconds and may not be reaching Google. Check this machine's network connection. Broken IPv6 is a common cause.";
+export const ANTIGRAVITY_IPV4_RESTART_MESSAGE =
+  "Antigravity could not reach Google over IPv6, so SealCode stopped this turn and will connect it over IPv4. Send your message again.";
 // Its prompt stays open after a model call dies mid-answer, so the turn would look busy forever.
 export const ANTIGRAVITY_STALLED_TURN_NOTICE_MS = 5 * 60_000;
 export const ANTIGRAVITY_STALLED_TURN_MESSAGE =
@@ -83,6 +85,10 @@ export interface AntigravityAdapterV2Options {
     Scope.Scope
   >;
   readonly withProcess: AntigravityAuth["withProcess"];
+  /** Runs when a turn goes silent; true when the driver just switched the agent to IPv4. */
+  readonly recoverUnreachable?: Effect.Effect<boolean>;
+  /** Live tests that restart a real process shorten the 30 second wait. */
+  readonly silentTurnNoticeMs?: number;
   readonly defaultModel: Effect.Effect<string | undefined>;
   readonly onSessionStarted?: (
     started: AcpSessionRuntime.AcpSessionRuntimeStartResult,
@@ -180,8 +186,15 @@ export function makeAntigravityAcpAdapterFlavor(
     // Loading history replays tool calls; resume avoids replay.
     preferResumeSession: true,
     silentTurnNotice: {
-      afterMs: ANTIGRAVITY_SILENT_TURN_NOTICE_MS,
+      afterMs: options.silentTurnNoticeMs ?? ANTIGRAVITY_SILENT_TURN_NOTICE_MS,
       message: ANTIGRAVITY_SILENT_TURN_MESSAGE,
+      ...(options.recoverUnreachable === undefined
+        ? {}
+        : {
+            recover: options.recoverUnreachable.pipe(
+              Effect.map((recovered) => (recovered ? ANTIGRAVITY_IPV4_RESTART_MESSAGE : undefined)),
+            ),
+          }),
     },
     stalledTurnNotice: {
       afterMs: ANTIGRAVITY_STALLED_TURN_NOTICE_MS,

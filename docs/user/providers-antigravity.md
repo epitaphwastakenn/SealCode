@@ -144,8 +144,10 @@ for eligibility.
 
 If sign-in or a turn says Antigravity has not reached Google, check the machine's
 network connection. Broken IPv6 is a common cause: when SealCode finds that IPv6 to
-Google fails while IPv4 works, it connects Antigravity over IPv4 by itself. A proxy
-set in `HTTPS_PROXY` is used as is.
+Google fails while IPv4 works, it connects Antigravity over IPv4 by itself. If that
+is only found after a turn went quiet, SealCode stops the turn and asks you to send
+your message again; sign-in retries on its own. A proxy set in `HTTPS_PROXY` is used
+as is.
 
 If a turn says Antigravity has sent nothing for 5 minutes, press **Stop**. Stop restarts
 Antigravity, and your next message continues the same conversation.

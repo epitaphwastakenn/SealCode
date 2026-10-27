@@ -38,6 +38,8 @@ const NO_RESPONSE_MESSAGE =
   "Antigravity has not reached Google after 30 seconds. Check this machine's network connection. Broken IPv6 is a common cause.";
 const UNREACHABLE_MESSAGE =
   "Antigravity could not reach Google. Check this machine's network connection, then start sign-in again.";
+const RETRYING_OVER_IPV4_MESSAGE =
+  "Antigravity could not reach Google over IPv6. Retrying sign-in over IPv4.";
 const FORWARDING_FAILED_MESSAGE = "Could not deliver the sign-in response. Start sign-in again.";
 const isSetupError = Schema.is(ProviderSetupError);
 const isAcpRequestError = Schema.is(AcpErrors.AcpRequestError);
@@ -90,6 +92,8 @@ export interface AntigravityAuthOptions<
   readonly onSignedOut: Effect.Effect<void>;
   readonly forwardCallback?: (callback: URL) => Effect.Effect<void, ProviderSetupError>;
   readonly usesBrowser?: boolean;
+  /** Runs after the no-response hint; true when the driver just switched the agent to IPv4. */
+  readonly recoverUnreachable?: Effect.Effect<boolean>;
 }
 
 function visibleSnapshot(snapshot: AuthSnapshot, ownerSessionId: string): ProviderAuthState {
@@ -271,21 +275,52 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
   const runSignIn = Effect.fn("AntigravityAuth.runSignIn")(
     function* (flow: AuthFlow, stopSessions: Effect.Effect<void, ProviderSetupError>) {
       yield* stopSessions.pipe(Effect.ensuring(stopOwnedProcesses));
-      yield* Effect.sleep(NO_RESPONSE_HINT_MS).pipe(
+      const startRuntime = Effect.gen(function* () {
+        const runtime = yield* options.makeRuntime({
+          onAuthorizationUrl: (url) => receiveAuthorizationUrl(flow, url),
+        });
+        return { runtime, started: yield* runtime.start() };
+      });
+      const recoverStall = Effect.sleep(NO_RESPONSE_HINT_MS).pipe(
         Effect.andThen(
           lock.withPermits(1)(
             Effect.gen(function* () {
-              if (activeFlow !== flow || flow.state.phase !== "starting") return;
+              if (activeFlow !== flow || flow.state.phase !== "starting") return false;
               yield* publishFlow(flow, { ...flow.state, message: NO_RESPONSE_MESSAGE });
+              return true;
             }),
           ),
         ),
+        Effect.flatMap((stalled) =>
+          stalled && options.recoverUnreachable !== undefined
+            ? options.recoverUnreachable
+            : Effect.succeed(false),
+        ),
+        Effect.flatMap((recovered) => (recovered ? Effect.void : Effect.never)),
+      );
+      const firstScope = yield* Scope.fork(yield* Effect.scope);
+      const first = yield* startRuntime.pipe(
+        Effect.provideService(Scope.Scope, firstScope),
         Effect.forkScoped,
       );
-      const runtime = yield* options.makeRuntime({
-        onAuthorizationUrl: (url) => receiveAuthorizationUrl(flow, url),
-      });
-      const started = yield* runtime.start();
+      const firstAttempt = yield* Effect.raceFirst(
+        Fiber.join(first).pipe(Effect.asSome),
+        recoverStall.pipe(Effect.as(Option.none())),
+      );
+      const { runtime, started } = Option.isSome(firstAttempt)
+        ? firstAttempt.value
+        : yield* Effect.gen(function* () {
+            // The stalled agent never gets its answer; a new one starts on the working path.
+            yield* Fiber.interrupt(first);
+            yield* Scope.close(firstScope, Exit.void);
+            yield* lock.withPermits(1)(
+              Effect.gen(function* () {
+                if (activeFlow !== flow) return;
+                yield* publishFlow(flow, { ...flow.state, message: RETRYING_OVER_IPV4_MESSAGE });
+              }),
+            );
+            return yield* startRuntime;
+          });
       yield* lock.withPermits(1)(
         Effect.gen(function* () {
           if (activeFlow !== flow) return;

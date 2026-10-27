@@ -1,20 +1,19 @@
-// @effect-diagnostics nodeBuiltinImport:off - the probe pins a TCP connect to one address family and the proxy relays raw CONNECT tunnels.
+// @effect-diagnostics nodeBuiltinImport:off - the probe pins a TLS connection to one address family and the proxy relays raw CONNECT tunnels.
 import * as NodeHttp from "node:http";
 import * as NodeNet from "node:net";
+import * as NodeTls from "node:tls";
 
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 
-// The agent's bundled Python tries a host's addresses one by one with no IPv4 fallback race,
-// so a machine whose IPv6 route to Google is broken waits about two minutes per request.
-// The agent sends every Google request (sign-in, token refresh, model calls) through
-// HTTPS_PROXY, so a loopback proxy that only dials IPv4 sidesteps the broken route without
-// touching the machine's network settings.
+// The agent's bundled Python has no IPv4 fallback race, so broken IPv6 stalls each Google call
+// for minutes. It sends every Google request through HTTPS_PROXY, so a loopback proxy that only
+// dials IPv4 sidesteps the broken route without touching the machine's network settings.
 const GOOGLE_PROBE_HOST = "oauth2.googleapis.com";
 const GOOGLE_PROBE_PORT = 443;
-const PROBE_TIMEOUT_MS = 3_000;
+const PROBE_TIMEOUT_MS = 4_000;
 // Laptops change networks; a later runtime start checks again.
 const PROBE_TTL_MS = 5 * 60_000;
 const USER_PROXY_KEYS = new Set(["HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "GRPC_PROXY"]);
@@ -25,38 +24,64 @@ export interface IpFamilyReachability {
   readonly ipv4: boolean;
 }
 
-export const canOpenTcpOverFamily = (input: {
+// A half-broken IPv6 path (a PMTU black hole, for one) accepts TCP and then drops the large
+// TLS and HTTP replies, so only a full handshake and a response prove the family works. The
+// certificate is not checked: this measures reachability, and TLS-inspecting networks re-sign.
+export const canReachHttpsOverFamily = (input: {
   readonly host: string;
   readonly port: number;
   readonly family: 4 | 6;
   readonly timeoutMs: number;
 }) =>
   Effect.callback<boolean>((resume) => {
-    const socket = NodeNet.connect({
+    const tcp = NodeNet.connect({
       host: input.host,
       port: input.port,
       family: input.family,
       autoSelectFamily: false,
     });
-    const finish = (connected: boolean) => {
+    const socket = NodeTls.connect({
+      socket: tcp,
+      servername: input.host,
+      rejectUnauthorized: false,
+      ALPNProtocols: ["http/1.1"],
+    });
+    let reply = "";
+    let finished = false;
+    const finish = (reached: boolean) => {
+      if (finished) return;
+      finished = true;
       socket.destroy();
-      resume(Effect.succeed(connected));
+      tcp.destroy();
+      resume(Effect.succeed(reached));
     };
-    socket.setTimeout(input.timeoutMs, () => finish(false));
-    socket.once("connect", () => finish(true));
+    socket.once("secureConnect", () => {
+      socket.write(`HEAD / HTTP/1.1\r\nHost: ${input.host}\r\nConnection: close\r\n\r\n`);
+    });
+    socket.on("data", (chunk: Buffer) => {
+      reply += chunk.toString("latin1");
+      if (reply.length >= 5) finish(reply.startsWith("HTTP/"));
+    });
+    tcp.once("error", () => finish(false));
     socket.once("error", () => finish(false));
-    return Effect.sync(() => socket.destroy());
-  });
+    socket.once("close", () => finish(false));
+    return Effect.sync(() => {
+      socket.destroy();
+      tcp.destroy();
+    });
+  }).pipe(Effect.timeoutOrElse({ duration: input.timeoutMs, orElse: () => Effect.succeed(false) }));
 
 export const probeIpFamilies = Effect.fn("probeIpFamilies")(function* (
-  host: string = GOOGLE_PROBE_HOST,
-  port: number = GOOGLE_PROBE_PORT,
-  timeoutMs: number = PROBE_TIMEOUT_MS,
+  target: { readonly host: string; readonly port: number; readonly timeoutMs: number } = {
+    host: GOOGLE_PROBE_HOST,
+    port: GOOGLE_PROBE_PORT,
+    timeoutMs: PROBE_TIMEOUT_MS,
+  },
 ) {
   const [ipv6, ipv4] = yield* Effect.all(
     [
-      canOpenTcpOverFamily({ host, port, family: 6, timeoutMs }),
-      canOpenTcpOverFamily({ host, port, family: 4, timeoutMs }),
+      canReachHttpsOverFamily({ ...target, family: 6 }),
+      canReachHttpsOverFamily({ ...target, family: 4 }),
     ],
     { concurrency: 2 },
   );
@@ -168,21 +193,28 @@ export const makeAntigravityIpv4Fallback = Effect.fn("makeAntigravityIpv4Fallbac
   let checked: { readonly at: number; readonly useIpv4: boolean } | undefined;
   let proxyUrl: string | undefined;
 
+  const decide = Effect.gen(function* () {
+    const at = yield* Clock.currentTimeMillis;
+    const useIpv4 = needsIpv4Fallback(yield* probe);
+    if (useIpv4 && checked?.useIpv4 !== true) {
+      yield* Effect.logWarning(
+        "IPv6 to Google is unreachable while IPv4 works; Antigravity will connect over IPv4.",
+      );
+    }
+    checked = { at, useIpv4 };
+    return useIpv4;
+  });
+
   const environment = (base: NodeJS.ProcessEnv) =>
     lock.withPermit(
       Effect.gen(function* () {
         if (hasUserProxy(base)) return base;
         const now = yield* Clock.currentTimeMillis;
-        if (checked === undefined || now - checked.at >= PROBE_TTL_MS) {
-          const reachability = yield* probe;
-          checked = { at: now, useIpv4: needsIpv4Fallback(reachability) };
-          if (checked.useIpv4) {
-            yield* Effect.logWarning(
-              "IPv6 to Google is unreachable while IPv4 works; Antigravity will connect over IPv4.",
-            );
-          }
-        }
-        if (!checked.useIpv4) return base;
+        const useIpv4 =
+          checked === undefined || now - checked.at >= PROBE_TTL_MS
+            ? yield* decide
+            : checked.useIpv4;
+        if (!useIpv4) return base;
         if (proxyUrl === undefined) {
           const started = yield* startIpv4ConnectProxy.pipe(
             Effect.provideService(Scope.Scope, scope),
@@ -198,5 +230,18 @@ export const makeAntigravityIpv4Fallback = Effect.fn("makeAntigravityIpv4Fallbac
       }),
     );
 
-  return { environment };
+  /**
+   * Probes again, ignoring the cache, after the agent went silent. True when IPv4 has just
+   * become the way through, so a runtime started from now on would get the proxy.
+   */
+  const recheck = (base: NodeJS.ProcessEnv) =>
+    lock.withPermit(
+      Effect.gen(function* () {
+        if (hasUserProxy(base)) return false;
+        const wasUsingIpv4 = checked?.useIpv4 === true;
+        return (yield* decide) && !wasUsingIpv4;
+      }),
+    );
+
+  return { environment, recheck };
 });

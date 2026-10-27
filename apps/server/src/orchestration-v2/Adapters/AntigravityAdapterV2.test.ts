@@ -37,6 +37,7 @@ import { normalizeAntigravitySessionUpdate } from "../../provider/acp/Antigravit
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import {
+  ANTIGRAVITY_IPV4_RESTART_MESSAGE,
   ANTIGRAVITY_SILENT_TURN_MESSAGE,
   ANTIGRAVITY_STALLED_TURN_MESSAGE,
   makeAntigravityAcpAdapterFlavor,
@@ -506,6 +507,7 @@ describe("AntigravityAdapterV2 workspace changes", () => {
 const startHangingTurn = Effect.fn("test.startHangingTurn")(function* (
   name: string,
   env: Record<string, string>,
+  recovery?: { readonly recoverUnreachable: Effect.Effect<boolean>; readonly afterMs?: number },
 ) {
   const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fileSystem = yield* FileSystem.FileSystem;
@@ -516,28 +518,34 @@ const startHangingTurn = Effect.fn("test.startHangingTurn")(function* (
   );
   const instanceId = ProviderInstanceId.make(`antigravity-${name}-test`);
   const promptSent = yield* Deferred.make<void>();
+  let spawns = 0;
   const adapter = yield* makeAntigravityAdapterV2({
     instanceId,
     selfInvocation: yield* resolveSelfInvocation(),
     makeRuntime: (input) =>
-      makeAntigravityAcpRuntime({
-        ...input,
-        childProcessSpawner,
-        spawn: {
-          command: process.execPath,
-          args: [mockAgentPath],
-          cwd: input.cwd,
-          env: { T3_ACP_ANTIGRAVITY: "1", T3_ACP_HANG_PROMPT_FOREVER: "1", ...env },
-        },
-      }).pipe(
-        Effect.provideService(Crypto.Crypto, crypto),
-        Effect.map((runtime): AcpSessionRuntime.AcpSessionRuntime["Service"] => ({
-          ...runtime,
-          prompt: (request) =>
-            Deferred.succeed(promptSent, undefined).pipe(Effect.andThen(runtime.prompt(request))),
-        })),
-      ),
+      Effect.suspend(() => {
+        spawns += 1;
+        return makeAntigravityAcpRuntime({
+          ...input,
+          childProcessSpawner,
+          spawn: {
+            command: process.execPath,
+            args: [mockAgentPath],
+            cwd: input.cwd,
+            env: { T3_ACP_ANTIGRAVITY: "1", T3_ACP_HANG_PROMPT_FOREVER: "1", ...env },
+          },
+        }).pipe(
+          Effect.provideService(Crypto.Crypto, crypto),
+          Effect.map((runtime): AcpSessionRuntime.AcpSessionRuntime["Service"] => ({
+            ...runtime,
+            prompt: (request) =>
+              Deferred.succeed(promptSent, undefined).pipe(Effect.andThen(runtime.prompt(request))),
+          })),
+        );
+      }),
     withProcess: (_stop, task) => task,
+    ...(recovery === undefined ? {} : { recoverUnreachable: recovery.recoverUnreachable }),
+    ...(recovery?.afterMs === undefined ? {} : { silentTurnNoticeMs: recovery.afterMs }),
     // @effect-diagnostics-next-line effectSucceedWithVoid:off - No default model is a value, not a void step.
     defaultModel: Effect.succeed(undefined),
   });
@@ -573,49 +581,51 @@ const startHangingTurn = Effect.fn("test.startHangingTurn")(function* (
     runtimePolicy,
   });
   const now = yield* DateTime.now;
-  yield* session
-    .startTurn({
-      appThread: {
-        createdBy: "user",
-        creationSource: "web",
-        id: threadId,
-        projectId: ProjectId.make(`project-antigravity-${name}`),
-        title: `Antigravity ${name}`,
-        providerInstanceId: instanceId,
+  const startTurn = (ordinal: number) =>
+    session
+      .startTurn({
+        appThread: {
+          createdBy: "user",
+          creationSource: "web",
+          id: threadId,
+          projectId: ProjectId.make(`project-antigravity-${name}`),
+          title: `Antigravity ${name}`,
+          providerInstanceId: instanceId,
+          modelSelection,
+          runtimeMode: "full-access",
+          interactionMode: "default",
+          branch: null,
+          worktreePath: workspace,
+          activeProviderThreadId: providerThread.id,
+          lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId },
+          forkedFrom: null,
+          createdAt: now,
+          updatedAt: now,
+          archivedAt: null,
+          settledOverride: null,
+          settledAt: null,
+          lastVisitedAt: null,
+          deletedAt: null,
+        },
+        threadId,
+        runId: RunId.make(`run-antigravity-${name}-${ordinal}`),
+        runOrdinal: ordinal,
+        providerTurnOrdinal: ordinal,
+        attemptId: RunAttemptId.make(`attempt-antigravity-${name}-${ordinal}`),
+        rootNodeId: NodeId.make(`node-antigravity-${name}`),
+        providerThread,
+        message: {
+          createdBy: "user",
+          creationSource: "web",
+          messageId: MessageId.make(`message-antigravity-${name}-${ordinal}`),
+          text: "work forever",
+          attachments: [],
+        },
         modelSelection,
-        runtimeMode: "full-access",
-        interactionMode: "default",
-        branch: null,
-        worktreePath: workspace,
-        activeProviderThreadId: providerThread.id,
-        lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: threadId },
-        forkedFrom: null,
-        createdAt: now,
-        updatedAt: now,
-        archivedAt: null,
-        settledOverride: null,
-        settledAt: null,
-        lastVisitedAt: null,
-        deletedAt: null,
-      },
-      threadId,
-      runId: RunId.make(`run-antigravity-${name}`),
-      runOrdinal: 1,
-      providerTurnOrdinal: 1,
-      attemptId: RunAttemptId.make(`attempt-antigravity-${name}`),
-      rootNodeId: NodeId.make(`node-antigravity-${name}`),
-      providerThread,
-      message: {
-        createdBy: "user",
-        creationSource: "web",
-        messageId: MessageId.make(`message-antigravity-${name}`),
-        text: "work forever",
-        attachments: [],
-      },
-      modelSelection,
-      runtimePolicy,
-    })
-    .pipe(Effect.forkScoped);
+        runtimePolicy,
+      })
+      .pipe(Effect.forkScoped);
+  yield* startTurn(1);
   const started = yield* Queue.take(turnUpdates);
   if (started.type !== "provider_turn.updated") return yield* Effect.die("unreachable");
   const stop = Effect.gen(function* () {
@@ -634,7 +644,14 @@ const startHangingTurn = Effect.fn("test.startHangingTurn")(function* (
     }
     return status;
   });
-  return { stop, promptSent, turnItems };
+  return {
+    stop,
+    promptSent,
+    turnItems,
+    turnUpdates,
+    startNextTurn: startTurn(2),
+    spawns: () => spawns,
+  };
 });
 
 function processExists(pid: number): boolean {
@@ -701,6 +718,56 @@ describe("AntigravityAdapterV2 silent turns", () => {
     }).pipe(Effect.provide(layerSession), Effect.scoped),
   );
 
+  // Live: stopping the runtime waits on the real process exiting.
+  it.live("stops a silent turn and restarts the agent once it was switched to IPv4", () =>
+    Effect.gen(function* () {
+      let rechecks = 0;
+      const turn = yield* startHangingTurn(
+        "ipv4-restart",
+        {},
+        // Only the first recheck finds a change; the restarted agent already has the proxy.
+        { recoverUnreachable: Effect.sync(() => rechecks++ === 0), afterMs: 100 },
+      );
+      const ended = yield* Queue.take(turn.turnUpdates).pipe(
+        Effect.repeat({
+          until: (event) =>
+            event.type === "provider_turn.updated" && event.providerTurn.status !== "running",
+        }),
+      );
+      assert.equal(
+        ended.type === "provider_turn.updated" && ended.providerTurn.status,
+        "interrupted",
+      );
+      assert.deepEqual(silentTurnNotices(yield* Queue.clear(turn.turnItems)), [
+        ANTIGRAVITY_SILENT_TURN_MESSAGE,
+        ANTIGRAVITY_IPV4_RESTART_MESSAGE,
+      ]);
+
+      // The next message gets a fresh agent, which the driver starts with the IPv4 proxy.
+      assert.equal(turn.spawns(), 1);
+      yield* turn.startNextTurn;
+      yield* Queue.take(turn.turnUpdates);
+      assert.equal(turn.spawns(), 2);
+    }).pipe(Effect.provide(layerSession), Effect.scoped),
+  );
+
+  it.effect("keeps waiting when switching networks would not help", () =>
+    Effect.gen(function* () {
+      const turn = yield* startHangingTurn(
+        "no-ipv4-restart",
+        {},
+        {
+          recoverUnreachable: Effect.succeed(false),
+        },
+      );
+      yield* Deferred.await(turn.promptSent);
+      yield* TestClock.adjust("30 seconds");
+      const notice = yield* Queue.take(turn.turnItems);
+      assert.deepEqual(silentTurnNotices([notice]), [ANTIGRAVITY_SILENT_TURN_MESSAGE]);
+      assert.deepEqual(silentTurnNotices(yield* Queue.clear(turn.turnItems)), []);
+    }).pipe(Effect.provide(layerSession), Effect.scoped),
+  );
+
   it.effect("stays quiet when the agent has started answering", () =>
     Effect.gen(function* () {
       const turn = yield* startHangingTurn("answering", {
@@ -719,7 +786,7 @@ describe("AntigravityAdapterV2 silent turns", () => {
     }).pipe(Effect.provide(layerSession), Effect.scoped),
   );
 
-  // #14619: the model call dies mid-answer and the agent never ends the prompt.
+  // The model call dies mid-answer and the agent never ends the prompt.
   it.effect("tells the user when the agent stops mid-answer for five minutes", () =>
     Effect.gen(function* () {
       const turn = yield* startHangingTurn("stalled", {

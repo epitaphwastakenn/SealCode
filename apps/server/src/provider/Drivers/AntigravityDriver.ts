@@ -378,6 +378,7 @@ export const AntigravityDriver: ProviderDriver<
       onAuthenticated: publishCatalog,
       onSignedOut: Effect.suspend(() => provider.onSignedOut),
       usesBrowser: antigravityAuthUsesBrowser(auth.authMethod),
+      recoverUnreachable: ipv4Fallback.recheck(processEnvironment),
     });
 
     // The probe must not spawn. The agent is a PyInstaller one-file bundle
@@ -456,6 +457,7 @@ export const AntigravityDriver: ProviderDriver<
       selfInvocation,
       makeRuntime,
       withProcess: authFlow.withProcess,
+      recoverUnreachable: ipv4Fallback.recheck(processEnvironment),
       defaultModel,
       onSessionStarted: provider.onSessionStarted,
       onSessionEvent: (event) => {

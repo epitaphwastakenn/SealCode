@@ -321,7 +321,15 @@ export interface AcpAdapterV2Flavor {
    * after its prompt, for agents whose silence usually means they cannot reach
    * their model service.
    */
-  readonly silentTurnNotice?: { readonly afterMs: number; readonly message: string };
+  readonly silentTurnNotice?: {
+    readonly afterMs: number;
+    readonly message: string;
+    /**
+     * Runs after the warning; a message means a new runtime would get through, so the
+     * turn stops with that message and the runtime restarts.
+     */
+    readonly recover?: Effect.Effect<string | undefined>;
+  };
   /**
    * Posts a warning when an agent that has started answering sends nothing for
    * this long while no tool is open, for agents whose prompt never ends once
@@ -2176,15 +2184,15 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
 
         const emitTurnNotice = Effect.fnUntraced(function* (
           context: ActiveAcpTurn,
-          notice: { readonly kind: "silent" | "stalled"; readonly message: string },
+          notice: { readonly kind: "silent" | "recovery" | "stalled"; readonly message: string },
         ) {
           if (
             context.finalized ||
             context.interrupted ||
-            (notice.kind === "silent" && context.agentOutputSeen) ||
+            (notice.kind !== "stalled" && context.agentOutputSeen) ||
             (yield* Ref.get(activeTurn)) !== context
           )
-            return;
+            return false;
           const nativeItemId = `${context.nativeTurnId}:${notice.kind}-turn-notice`;
           const message = notice.message;
           const now = yield* DateTime.now;
@@ -2210,6 +2218,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
               updatedAt: now,
             },
           });
+          return true;
         });
 
         const lastCapturedProposedPlan = yield* Ref.make<{
@@ -7298,6 +7307,36 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
           return true;
         });
 
+        // Stop with a restart is the one path that reliably ends a prompt the agent never answers.
+        const recoverSilentTurn = Effect.fnUntraced(function* (
+          context: ActiveAcpTurn,
+          generation: number,
+          recover: Effect.Effect<string | undefined>,
+        ) {
+          const message = yield* recover;
+          if (message === undefined) return;
+          const posted = yield* runRuntimeCallbackAtGeneration(
+            generation,
+            emitTurnNotice(context, { kind: "recovery", message }),
+          );
+          if (!Option.getOrElse(posted, () => false)) return;
+          yield* sessionRuntime
+            .interruptTurn({
+              providerThread: context.input.providerThread,
+              providerTurnId: context.providerTurnId,
+              requestRuntimeRestart: true,
+            })
+            .pipe(
+              Effect.catchCause((cause) =>
+                Effect.logWarning("orchestration-v2.acp-silent-turn-restart-failed", {
+                  driver,
+                  providerTurnId: context.providerTurnId,
+                  cause,
+                }),
+              ),
+            );
+        });
+
         const startTurnUnlocked = Effect.fn("AcpAdapterV2.startTurn")(
           function* (turnInput: ProviderAdapter.ProviderAdapterV2TurnInput) {
             yield* awaitRuntimeTeardown();
@@ -7587,7 +7626,13 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
                     runRuntimeCallbackAtGeneration(
                       promptGeneration,
                       emitTurnNotice(context, { kind: "silent", message: notice.message }),
-                    ).pipe(Effect.asVoid),
+                    ).pipe(
+                      Effect.flatMap((warned) =>
+                        notice.recover !== undefined && Option.getOrElse(warned, () => false)
+                          ? recoverSilentTurn(context, promptGeneration, notice.recover)
+                          : Effect.void,
+                      ),
+                    ),
                 }),
                 Effect.forkIn(sessionScope),
               );

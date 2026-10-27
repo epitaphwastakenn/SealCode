@@ -59,6 +59,7 @@ const makeHarness = Effect.fn("makeAuthTestHarness")(function* (
     readonly supportsLogout?: boolean;
     readonly beforeInitialize?: Effect.Effect<void>;
     readonly forwardCallback?: Effect.Effect<void, ProviderSetupError>;
+    readonly recoverUnreachable?: Effect.Effect<boolean>;
   } = {},
 ) {
   const authenticated = yield* Deferred.make<void, AcpErrors.AcpError>();
@@ -122,6 +123,9 @@ const makeHarness = Effect.fn("makeAuthTestHarness")(function* (
       catalog = [];
       events.push("catalog-cleared");
     }),
+    ...(options.recoverUnreachable === undefined
+      ? {}
+      : { recoverUnreachable: options.recoverUnreachable }),
     forwardCallback: () =>
       options.forwardCallback ??
       Effect.sync(() => {
@@ -276,6 +280,36 @@ it.layer(NodeServices.layer)("AntigravityAuth", (it) => {
       yield* TestClock.adjust("270 seconds");
       const failed = yield* phase(harness.auth, "failed");
       assert.include(failed.message ?? "", "could not reach Google");
+    }),
+  );
+
+  it.effect("restarts a stalled sign-in once the agent was switched to IPv4", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({
+        interactive: false,
+        recoverUnreachable: Effect.succeed(true),
+      });
+      yield* harness.auth.controller.start(owner);
+      yield* Deferred.await(harness.authenticateCalled);
+
+      yield* TestClock.adjust("30 seconds");
+      const retrying = yield* harness.auth.controller.subscribe(owner).pipe(
+        Stream.filter((state) => state.message?.includes("over IPv4") === true),
+        Stream.runHead,
+        Effect.map(Option.getOrThrow),
+      );
+      assert.equal(retrying.phase, "starting");
+
+      yield* Deferred.succeed(harness.authenticated, undefined);
+      yield* Deferred.succeed(harness.discovered, undefined);
+      yield* phase(harness.auth, "succeeded");
+      assert.deepEqual(harness.events.slice(0, 5), [
+        "process-open",
+        "authenticate",
+        "process-close",
+        "process-open",
+        "authenticate",
+      ]);
     }),
   );
 

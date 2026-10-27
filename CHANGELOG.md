@@ -10,6 +10,20 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.17.10 · 2026-10-27
+
+> Antigravity starts on slow machines and tells you exactly why it cannot connect.
+
+### New
+
+- **Antigravity diagnostics** — A Diagnostics button next to the Antigravity account (and `t3 antigravity diagnose`) builds a report you can copy and send: versions, proxy and VPN, DNS, HTTPS over IPv4 and IPv6, the clock, and a real sign-in test. Tokens, emails and your user folder are left out.
+
+### Fixed
+
+- **Slow first start** — On slower laptops, where Antigravity can take a while to unpack, SealCode no longer restarts it halfway through. It shows that it is still starting, often because of antivirus scanning.
+- **Security software and filtered networks** — On Windows, Antigravity trusts the same certificates Windows does, so networks or software that inspect HTTPS no longer block it.
+- **Clear sign-in errors** — When sign-in cannot connect, the message names the cause: inspected HTTPS, a wrong clock, DNS, or an unreachable proxy.
+
 ## 2.17.9 · 2026-10-27
 
 > Antigravity works on networks with broken IPv6.

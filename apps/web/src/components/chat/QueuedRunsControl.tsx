@@ -116,15 +116,12 @@ export function QueuedRunsControl({
     (message) => message.inputIntent === "queued_turn" && !acknowledgedMessageIds.has(message.id),
   );
   const items = [
-    ...queued.map(({ run, text, attachments, context }, serverIndex) => ({
+    ...queued.map(({ run, text, attachments }, serverIndex) => ({
       key: run.id,
       runId: run.id,
       messageId: run.userMessageId,
       serverIndex,
       text,
-      // A guest's message keeps the guest's words; the owner can cancel it, not rewrite it.
-      editable: context?.guest === undefined,
-      guestName: context?.guest?.name,
       attachments,
       thumbnails: attachments
         .filter((attachment) => attachment.type === "image")
@@ -141,8 +138,6 @@ export function QueuedRunsControl({
       messageId: null,
       serverIndex: null,
       text: message.text,
-      editable: true,
-      guestName: undefined,
       attachments: [] as ReadonlyArray<ContractChatAttachment>,
       thumbnails: (message.attachments ?? [])
         .filter(isImageAttachment)
@@ -203,12 +198,7 @@ export function QueuedRunsControl({
     // Leave the key to caret navigation while editing.
     editLatest(repeat) {
       const latest = queued.at(-1);
-      if (
-        !latest ||
-        latest.context?.guest !== undefined ||
-        props.editingRunId !== null ||
-        busyRunId !== null
-      ) {
+      if (!latest || props.editingRunId !== null || busyRunId !== null) {
         return false;
       }
       if (!repeat) {
@@ -388,9 +378,6 @@ export function QueuedRunsControl({
                         ))}
                       </span>
                     ) : null}
-                    {item.guestName === undefined ? null : (
-                      <span className="shrink-0 text-guest-foreground">{item.guestName}</span>
-                    )}
                     <Tooltip>
                       <TooltipTrigger render={<span className="min-w-0 flex-1 truncate" />}>
                         {previewText}
@@ -419,9 +406,7 @@ export function QueuedRunsControl({
                                 size="icon-xs"
                                 variant="ghost-muted"
                                 aria-label="Edit queued message"
-                                disabled={
-                                  item.runId === null || !item.editable || busyRunId !== null
-                                }
+                                disabled={item.runId === null || busyRunId !== null}
                                 onClick={() => {
                                   if (item.runId !== null && item.messageId !== null) {
                                     props.onEditQueuedRun({

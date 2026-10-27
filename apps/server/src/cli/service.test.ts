@@ -12,7 +12,7 @@ import { Command } from "effect/cli";
 import { afterEach, vi } from "vite-plus/test";
 
 import packageJson from "../../package.json" with { type: "json" };
-import * as BootService from "../cloud/bootService.ts";
+import * as BootService from "../service/bootService.ts";
 import {
   offerServiceDuringOnboarding,
   recoverServiceOnboardingOffer,

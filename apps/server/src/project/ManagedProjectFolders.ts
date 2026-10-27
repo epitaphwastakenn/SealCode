@@ -177,7 +177,7 @@ function namedProjectReadme(name: string): string {
     "",
     `# ${name}`,
     "",
-    "Created in [SealCode](https://t3.codes).",
+    "Created in SealCode.",
     "",
   ].join("\n");
 }

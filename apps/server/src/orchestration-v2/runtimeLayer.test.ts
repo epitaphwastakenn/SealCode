@@ -401,13 +401,13 @@ it.layer(layerProjectDeletionTest)("project deletion during thread commands", (i
             worktreePath: null,
           });
         }
-        const save = (name: string, target: ThreadId | null, webhook = false) =>
+        const save = (name: string, target: ThreadId | null) =>
           tasks.upsert({
             id: ScheduledTaskId.make(`automation:${deletion}:${name}`),
             title: name,
             prompt: "Check orchestration progress",
-            enabled: !webhook,
-            schedule: webhook ? { type: "webhook" } : { type: "interval", everyMs: 60_000 },
+            enabled: true,
+            schedule: { type: "interval", everyMs: 60_000 },
             projectId,
             threadId: target,
             workspaceStrategy: { type: "root" },
@@ -418,25 +418,12 @@ it.layer(layerProjectDeletionTest)("project deletion during thread commands", (i
             creationSource: "mcp",
           });
         const { task: bound } = yield* save("bound", threadId);
-        const { task: webhook } = yield* save("webhook", threadId, true);
         const { task: independent } = yield* save("independent", null);
         yield* save("detached", threadId);
         const { task: detached } = yield* save("detached", null);
         yield* save("moved", threadId);
         const { task: moved } = yield* save("moved", otherThreadId);
         const { task: other } = yield* save("other", otherThreadId);
-        yield* tasks.triggerWebhook({
-          hookId: webhook.id,
-          token: webhook.webhook!.path.split("/").at(-1)!,
-          method: "POST",
-          path: webhook.webhook!.path,
-          query: "",
-          headers: {},
-          body: new Uint8Array(),
-          bodyText: "",
-        });
-        assert.lengthOf((yield* tasks.listWebhookDeliveries({ id: webhook.id })).deliveries, 1);
-
         yield* orchestrator.dispatch({
           type: "thread.archive",
           commandId: CommandId.make(`automation-archive:${deletion}`),
@@ -464,24 +451,9 @@ it.layer(layerProjectDeletionTest)("project deletion during thread commands", (i
         yield* worker.drain();
         const remainingIds = (yield* tasks.list()).tasks.map((task) => task.id);
         assert.notInclude(remainingIds, bound.id);
-        assert.notInclude(remainingIds, webhook.id);
         assert.includeMembers(remainingIds, [independent.id, detached.id, moved.id, other.id]);
-        assert.lengthOf((yield* tasks.listWebhookDeliveries({ id: webhook.id })).deliveries, 0);
         const rejected = yield* tasks.runNow({ id: bound.id }).pipe(Effect.flip);
         assert.equal(rejected.message, "Schedule task not found.");
-        assert.equal(
-          (yield* tasks.triggerWebhook({
-            hookId: webhook.id,
-            token: webhook.webhook!.path.split("/").at(-1)!,
-            method: "POST",
-            path: webhook.webhook!.path,
-            query: "",
-            headers: {},
-            body: new Uint8Array(),
-            bodyText: "",
-          }))._tag,
-          "not_found",
-        );
         // Retried cleanup is harmless and cannot affect unrelated tasks.
         yield* tasks.deleteForThread(threadId);
         assert.sameMembers(

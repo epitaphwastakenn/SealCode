@@ -211,7 +211,7 @@ export function ThreadAutomationsPanel(props: {
               />
               <TooltipPopup>Edit automation</TooltipPopup>
             </Tooltip>
-            {/* Webhook tasks need a request from their URL. */}
+            {/* A saved webhook task has no supported trigger left, so it cannot run. */}
             {task.schedule.type === "webhook" ? null : (
               <Tooltip>
                 <TooltipTrigger

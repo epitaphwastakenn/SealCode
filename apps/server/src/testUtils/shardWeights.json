@@ -174,8 +174,6 @@
   "src/resourceTelemetry/ResourceTelemetry.test.ts": 0.5,
   "src/scheduledTasks/ScheduledTaskService.schedule.test.ts": 1.5,
   "src/scheduledTasks/ScheduledTaskService.test.ts": 1.5,
-  "src/scheduledTasks/ScheduledTaskService.webhook.test.ts": 1.5,
-  "src/scheduledTasks/webhookRoute.test.ts": 1.4,
   "src/secrets/SecretRequests.test.ts": 2.6,
   "src/serverRuntimeStartup.autoPull.test.ts": 1.3,
   "src/serverRuntimeStartup.test.ts": 1.3,

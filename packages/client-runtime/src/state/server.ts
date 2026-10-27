@@ -1254,14 +1254,6 @@ export function createServerEnvironmentAtoms<R, E>(
       label: "environment-data:server:process-resource-history",
       tag: WS_METHODS.serverGetProcessResourceHistory,
     }),
-    scheduledTaskWebhookDeliveries: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:server:scheduled-task:webhook-deliveries",
-      tag: WS_METHODS.scheduledTasksListWebhookDeliveries,
-    }),
-    scheduledTaskWebhookDelivery: createEnvironmentRpcQueryAtomFamily(runtime, {
-      label: "environment-data:server:scheduled-task:webhook-delivery",
-      tag: WS_METHODS.scheduledTasksGetWebhookDelivery,
-    }),
     scheduledTasksLive: createEnvironmentRpcSubscriptionAtomFamily(runtime, {
       label: "environment-data:server:scheduled-tasks:live",
       tag: WS_METHODS.scheduledTasksSubscribe,
@@ -1541,12 +1533,6 @@ export function createServerEnvironmentAtoms<R, E>(
     runScheduledTaskNow: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:scheduled-task:run-now",
       tag: WS_METHODS.scheduledTasksRunNow,
-    }),
-    rotateScheduledTaskWebhookToken: createEnvironmentRpcCommand(runtime, {
-      label: "environment-data:server:scheduled-task:rotate-webhook-token",
-      tag: WS_METHODS.scheduledTasksRotateWebhookToken,
-      scheduler: configScheduler,
-      concurrency: configConcurrency,
     }),
     createGuestShare: createEnvironmentRpcCommand(runtime, {
       label: "environment-data:server:guest-share:create",

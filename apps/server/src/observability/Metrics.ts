@@ -99,23 +99,6 @@ export const terminalRestartsTotal = Metric.counter("t3_terminal_restarts_total"
   description: "Total terminal restart requests handled.",
 });
 
-export const webhookDeliveriesTotal = Metric.counter("t3_webhook_deliveries_total", {
-  description: "Webhook requests handled, by outcome and source.",
-});
-
-export const webhookDeliveryDuration = Metric.timer("t3_webhook_delivery_duration", {
-  description: "Time to verify, log, and enqueue one webhook request.",
-});
-
-export const webhookHeldDelay = Metric.timer("t3_webhook_held_delay", {
-  description:
-    "Time between the relay receiving a webhook request and the environment handling it.",
-});
-
-export const webhookRunsTotal = Metric.counter("t3_webhook_runs_total", {
-  description: "Runs started from webhook deliveries, by outcome.",
-});
-
 export const secretRequestsTotal = Metric.counter("t3_secret_requests_total", {
   description: "Secrets agents asked users for, by how each request ended.",
 });

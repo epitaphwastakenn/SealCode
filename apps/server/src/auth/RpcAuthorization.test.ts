@@ -29,16 +29,6 @@ describe("RPC authorization scopes", () => {
     expect(new Set(Object.keys(RPC_REQUIRED_SCOPES))).toEqual(new Set(WsRpcGroup.requests.keys()));
   });
 
-  it("keeps webhook delivery logs, which hold request bodies, behind operate scope", () => {
-    for (const method of [
-      WS_METHODS.scheduledTasksListWebhookDeliveries,
-      WS_METHODS.scheduledTasksGetWebhookDelivery,
-      WS_METHODS.scheduledTasksRotateWebhookToken,
-    ]) {
-      expect(requiredScopeForRpcMethod(method)).toBe(AuthOrchestrationOperateScope);
-    }
-  });
-
   it("separates passive terminal observation from operations that can change a shell", () => {
     for (const method of [
       WS_METHODS.terminalObserve,

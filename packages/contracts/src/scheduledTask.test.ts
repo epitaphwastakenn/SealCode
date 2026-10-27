@@ -22,39 +22,20 @@ describe("ScheduledTaskSchedule", () => {
       everyMs: MIN_SCHEDULED_TASK_INTERVAL_MS - 1,
     });
   });
-});
 
-it.each(["literal", " ", "\t\n", "{{body.bad", "{{unknown.field}}"])(
-  "rejects invalid dedupe template %s",
-  (replayKey) => {
-    expect(() => decodeUpsertSchedule({ type: "webhook", dedupe: { replayKey } })).toThrow();
-    expect(() =>
-      decodeUpsertSchedule({ type: "webhook", dedupe: { coalesceKey: replayKey } }),
-    ).toThrow();
-  },
-);
-describe("webhook filters", () => {
-  const accepts = (filters: unknown) => {
-    try {
-      decodeUpsertSchedule({ type: "webhook", filters });
-      return true;
-    } catch {
-      return false;
-    }
-  };
+  it("still reads a saved webhook schedule, ignoring its removed settings", () => {
+    expect(
+      decodeSchedule({
+        type: "webhook",
+        signature: { header: "x-hub-signature-256", encoding: "hex", prefix: "sha256=" },
+        maxDeliveryAgeMinutes: 30,
+        dedupe: { replayKey: "{{headers.x-id}}" },
+        filters: [{ path: "body.action", op: "equals", value: "opened" }],
+      }),
+    ).toEqual({ type: "webhook" });
+  });
 
-  it("rejects empty or unknown paths, unknown ops, and values that do not fit the op", () => {
-    expect(accepts([{ path: "", op: "exists" }])).toBe(false);
-    expect(accepts([{ path: "  ", op: "exists" }])).toBe(false);
-    expect(accepts([{ path: "request", op: "exists" }])).toBe(false);
-    expect(accepts([{ path: "header.x-github-event", op: "exists" }])).toBe(false);
-    expect(accepts([{ path: "body.action", op: "in", value: "opened" }])).toBe(false);
-    expect(accepts([{ path: "body.action", op: "in", value: [] }])).toBe(false);
-    for (const value of ["", " opened", "opened ", "a,b"]) {
-      expect(accepts([{ path: "body.action", op: "in", value: [value] }])).toBe(false);
-    }
-    expect(accepts([{ path: "body.label.name", op: "in", value: ["needs review"] }])).toBe(true);
-    expect(accepts([{ path: "body.action", op: "equals" }])).toBe(false);
-    expect(accepts([{ path: "body.action", op: "matches", value: "^opened$" }])).toBe(false);
+  it("does not accept a webhook schedule on save", () => {
+    expect(() => decodeUpsertSchedule({ type: "webhook" })).toThrow();
   });
 });

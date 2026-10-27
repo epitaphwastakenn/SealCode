@@ -1,7 +1,5 @@
-import { isWebhookDedupeTemplate } from "@t3tools/contracts";
 import {
   EnvironmentId,
-  MAX_WEBHOOK_DELIVERY_AGE_MINUTES,
   type ProjectId,
   ScheduledTaskId,
   type ScheduledTask,
@@ -11,13 +9,6 @@ import {
   type ProviderInteractionMode,
   type ServerSettings,
 } from "@t3tools/contracts";
-import {
-  parseMaxDeliveryAge,
-  parseWebhookFilterDrafts,
-  webhookFilterDrafts,
-  webhookFilterDraftsChanged,
-  type WebhookFilterDraft,
-} from "@t3tools/client-runtime/scheduled-task-webhook";
 
 import {
   resolveProjectSettings,
@@ -52,7 +43,7 @@ export function validateScheduledTasksSearch(raw: Record<string, unknown>) {
   };
 }
 
-export type ScheduleMode = "fixed" | "interval" | "webhook";
+export type ScheduleMode = "fixed" | "interval";
 export type WorkspaceMode = "root" | "worktree" | "existing_worktree";
 
 export interface DraftState {
@@ -75,113 +66,9 @@ export interface DraftState {
   readonly interactionMode: ProviderInteractionMode;
   /** Retain the source selection's provider options when the picker leaves instanceId:model unchanged. */
   readonly baseModelSelection: ModelSelection | null;
-  readonly signatureEnabled: boolean;
-  readonly signatureHeader: string;
-  readonly signatureEncoding: "hex" | "base64";
-  readonly signaturePrefix: string;
-  /** Write-only: empty keeps the secret already stored on the server. */
-  readonly signatureSecret: string;
-  readonly maxDeliveryAgeMinutes: string;
-  readonly replayKey: string;
-  readonly coalesceKey: string;
-  readonly coalesceWindowSeconds: string;
-  readonly filters: ReadonlyArray<WebhookFilterDraft>;
-  /** The filter rows the form opened with. */
-  readonly savedFilters: ReadonlyArray<WebhookFilterDraft>;
 }
 
-export const WEBHOOK_SIGNATURE_DEFAULTS = {
-  signatureHeader: "x-hub-signature-256",
-  signatureEncoding: "hex",
-  signaturePrefix: "sha256=",
-} as const;
-
-export function webhookDraftErrors(draft: DraftState) {
-  if (draft.scheduleMode !== "webhook") return [];
-  if (parseMaxDeliveryAge(draft.maxDeliveryAgeMinutes) === undefined)
-    return [
-      {
-        title: "Invalid age limit",
-        description: `Enter whole minutes from 1 to ${MAX_WEBHOOK_DELIVERY_AGE_MINUTES}, or leave it blank.`,
-      },
-    ];
-  const errors: Array<{ title: string; description: string }> = [];
-  for (const [label, value] of [
-    ["Replay key", draft.replayKey],
-    ["Coalesce key", draft.coalesceKey],
-  ] as const) {
-    if (value.trim() && !isWebhookDedupeTemplate(value.trim()))
-      errors.push({
-        title: "Invalid webhook settings",
-        description: `${label} must contain a valid request placeholder.`,
-      });
-  }
-  const window = draft.coalesceWindowSeconds.trim();
-  if (window && (!Number.isInteger(Number(window)) || Number(window) < 10 || Number(window) > 3600))
-    errors.push({
-      title: "Invalid webhook settings",
-      description: "Coalesce window must be whole seconds from 10 to 3600.",
-    });
-  return errors;
-}
-
-export function webhookDeliveryLabel(delivery: {
-  readonly outcome: string;
-  readonly pendingWindow?: boolean | undefined;
-}) {
-  if (delivery.outcome === "accepted") return delivery.pendingWindow ? "Opened window" : "Ran";
-  const labels: Record<string, string> = {
-    dispatch_failed: "Run failed",
-    duplicate: "Duplicate",
-    coalesced: "Coalesced",
-    filtered: "Filtered",
-    rejected_signature: "Bad signature",
-    disabled: "Task paused",
-    rate_limited: "Rate limited",
-    expired: "Too old",
-  };
-  return labels[delivery.outcome] ?? delivery.outcome.replaceAll("_", " ");
-}
-
-export function scheduleFromDraft(draft: DraftState): ScheduledTaskUpsertSchedule | null {
-  if (draft.scheduleMode === "webhook") {
-    if (webhookDraftErrors(draft).length > 0) return null;
-    const maxDeliveryAgeMinutes = parseMaxDeliveryAge(draft.maxDeliveryAgeMinutes);
-    const replayKey = draft.replayKey.trim();
-    const coalesceKey = draft.coalesceKey.trim();
-    const coalesceWindowSeconds = draft.coalesceWindowSeconds.trim()
-      ? Number(draft.coalesceWindowSeconds)
-      : undefined;
-    if (maxDeliveryAgeMinutes === undefined) return null;
-    const parsedFilters = parseWebhookFilterDrafts(draft.filters);
-    if (!("filters" in parsedFilters)) return null;
-    const secret = draft.signatureSecret.trim();
-    return {
-      type: "webhook",
-      signature: draft.signatureEnabled
-        ? {
-            header: draft.signatureHeader.trim(),
-            encoding: draft.signatureEncoding,
-            prefix: draft.signaturePrefix,
-            ...(secret ? { secret } : {}),
-          }
-        : null,
-      maxDeliveryAgeMinutes,
-      ...(replayKey || coalesceKey || coalesceWindowSeconds !== undefined
-        ? {
-            dedupe: {
-              ...(replayKey ? { replayKey } : {}),
-              ...(coalesceKey ? { coalesceKey } : {}),
-              ...(coalesceWindowSeconds === undefined ? {} : { coalesceWindowSeconds }),
-            },
-          }
-        : { dedupe: {} }),
-      // Only edited filters are sent; the server keeps the stored ones otherwise.
-      ...(webhookFilterDraftsChanged(draft.savedFilters, draft.filters)
-        ? { filters: parsedFilters.filters }
-        : {}),
-    };
-  }
+export function scheduleFromDraft(draft: DraftState): ScheduledTaskUpsertSchedule {
   if (draft.scheduleMode === "interval") {
     const everyMs = Math.round(Number(draft.intervalMinutes) * 60_000);
     return { type: "interval", everyMs };
@@ -196,7 +83,6 @@ export function scheduleFromDraft(draft: DraftState): ScheduledTaskUpsertSchedul
 
 export function taskToDraft(task: ScheduledTask): DraftState {
   const schedule = task.schedule;
-  const filters = webhookFilterDrafts(schedule.type === "webhook" ? schedule.filters : undefined);
   const weekdays =
     schedule.type === "fixed_time" && schedule.weekdays && schedule.weekdays.length > 0
       ? new Set(schedule.weekdays)
@@ -206,8 +92,8 @@ export function taskToDraft(task: ScheduledTask): DraftState {
     title: task.title,
     prompt: task.prompt,
     enabled: task.enabled,
-    scheduleMode:
-      schedule.type === "interval" ? "interval" : schedule.type === "webhook" ? "webhook" : "fixed",
+    // A saved webhook task opens as a daily schedule, so saving it moves it to a supported trigger.
+    scheduleMode: schedule.type === "interval" ? "interval" : "fixed",
     intervalMinutes:
       schedule.type === "interval" ? String(Math.max(1, schedule.everyMs / 60_000)) : "15",
     timeOfDay: schedule.type === "fixed_time" ? schedule.timeOfDay : "09:00",
@@ -228,27 +114,6 @@ export function taskToDraft(task: ScheduledTask): DraftState {
     runtimeMode: task.runtimeMode,
     interactionMode: task.interactionMode,
     baseModelSelection: task.modelSelection,
-    ...(schedule.type === "webhook" && schedule.signature !== null
-      ? {
-          signatureEnabled: true,
-          signatureHeader: schedule.signature.header,
-          signatureEncoding: schedule.signature.encoding,
-          signaturePrefix: schedule.signature.prefix,
-        }
-      : { signatureEnabled: false, ...WEBHOOK_SIGNATURE_DEFAULTS }),
-    signatureSecret: "",
-    replayKey: schedule.type === "webhook" ? (schedule.dedupe?.replayKey ?? "") : "",
-    coalesceKey: schedule.type === "webhook" ? (schedule.dedupe?.coalesceKey ?? "") : "",
-    coalesceWindowSeconds:
-      schedule.type === "webhook" && schedule.dedupe?.coalesceWindowSeconds !== undefined
-        ? String(schedule.dedupe.coalesceWindowSeconds)
-        : "",
-    maxDeliveryAgeMinutes:
-      schedule.type === "webhook" && schedule.maxDeliveryAgeMinutes != null
-        ? String(schedule.maxDeliveryAgeMinutes)
-        : "",
-    filters,
-    savedFilters: filters,
   };
 }
 

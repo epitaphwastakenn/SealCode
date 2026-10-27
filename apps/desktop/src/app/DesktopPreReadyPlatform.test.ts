@@ -16,11 +16,11 @@ import * as DesktopPreReadyPlatform from "./DesktopPreReadyPlatform.ts";
 
 describe("DesktopPreReadyPlatform", () => {
   it.effect(
-    "acquires a synchronous pre-ready layer before an asynchronous Clerk-shaped layer",
+    "acquires a synchronous pre-ready layer before an asynchronous app-links-shaped layer",
     () =>
       Effect.gen(function* () {
-        class ClerkShaped extends Context.Service<ClerkShaped, { readonly ready: true }>()(
-          "@t3tools/desktop/app/DesktopPreReadyPlatform.test/ClerkShaped",
+        class AppLinksShaped extends Context.Service<AppLinksShaped, { readonly ready: true }>()(
+          "@t3tools/desktop/app/DesktopPreReadyPlatform.test/AppLinksShaped",
         ) {}
 
         const events: Array<string> = [];
@@ -29,25 +29,25 @@ describe("DesktopPreReadyPlatform", () => {
           events.push("pre-ready");
         });
 
-        const layerClerkShaped = Layer.effect(
-          ClerkShaped,
+        const layerAppLinksShaped = Layer.effect(
+          AppLinksShaped,
           Effect.promise(() => Promise.resolve()).pipe(
             Effect.map(() => {
-              events.push("clerk");
+              events.push("app-links");
               return { ready: true as const };
             }),
           ),
         );
 
-        const layerRuntime = layerClerkShaped.pipe(
-          Layer.flatMap((clerkContext) => Layer.succeedContext(clerkContext)),
+        const layerRuntime = layerAppLinksShaped.pipe(
+          Layer.flatMap((appLinksContext) => Layer.succeedContext(appLinksContext)),
           Layer.provideMerge(DesktopPreReadyPlatform.layer),
         );
 
-        const result = yield* ClerkShaped.pipe(Effect.provide(layerRuntime));
+        const result = yield* AppLinksShaped.pipe(Effect.provide(layerRuntime));
 
         assert.deepEqual(result, { ready: true });
-        assert.deepEqual(events, ["pre-ready", "clerk"]);
+        assert.deepEqual(events, ["pre-ready", "app-links"]);
         assert.equal(registerSchemesMock.mock.calls.length, 1);
       }),
   );

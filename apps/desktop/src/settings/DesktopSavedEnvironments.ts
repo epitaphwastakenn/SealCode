@@ -158,6 +158,7 @@ function toPersistedSavedEnvironmentRecord(
   return {
     ...nextRecord,
     ...(record.desktopSsh ? { desktopSsh: record.desktopSsh } : {}),
+    // Legacy T3 Connect records are kept only so the catalog migration can drop them.
     ...(record.relayManaged ? { relayManaged: record.relayManaged } : {}),
   };
 }

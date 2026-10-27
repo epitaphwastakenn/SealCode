@@ -97,12 +97,8 @@ export function filterThirdPartyLicenseEntries(
 }
 
 const BUNDLE_LABELS: Readonly<Record<string, string>> = {
-  android: "Android",
   assets: "Assets",
   desktop: "Desktop",
-  "device-tools": "Device tools",
-  ios: "iOS",
-  mobile: "Mobile",
   server: "Server",
   web: "Web",
 };
@@ -117,11 +113,4 @@ export function formatLicenseBundles(bundles: ReadonlyArray<string>): string {
 
 export function thirdPartyLicenseEntryKey(entry: ThirdPartyLicenseEntry): string {
   return encodeURIComponent(JSON.stringify([entry.kind, entry.name, entry.version]));
-}
-
-export function findThirdPartyLicenseEntry(
-  entries: ReadonlyArray<ThirdPartyLicenseEntry>,
-  key: string,
-): ThirdPartyLicenseEntry | undefined {
-  return entries.find((entry) => thirdPartyLicenseEntryKey(entry) === key);
 }

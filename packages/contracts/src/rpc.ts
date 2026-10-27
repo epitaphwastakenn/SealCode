@@ -294,24 +294,6 @@ import {
   PreviewSessionSnapshot,
 } from "./preview.ts";
 import {
-  DeviceActionInput,
-  DeviceCloseInput,
-  DeviceConfigureInput,
-  DeviceDetail,
-  DeviceDetailInput,
-  DeviceError,
-  DeviceListInput,
-  SshDeviceHostConfig,
-  DeviceEasAccount,
-  DeviceEasAccountError,
-  DeviceEasAccountInput,
-  DeviceHostSummary,
-  DeviceOpenInput,
-  DeviceServiceState,
-  DeviceSession,
-  DeviceShutdownInput,
-} from "./device.ts";
-import {
   ServerConfigStreamEvent,
   DesktopUpdateCommitInput,
   OtlpEndpointCheckInput,
@@ -480,16 +462,6 @@ export const WS_METHODS = {
   previewReportProfiles: "preview.reportProfiles",
   previewReportStatus: "preview.reportStatus",
 
-  deviceConfigure: "device.configure",
-  deviceList: "device.list",
-  deviceTestHost: "device.testHost",
-  deviceEasAccount: "device.easAccount",
-  deviceOpen: "device.open",
-  deviceClose: "device.close",
-  deviceShutdown: "device.shutdown",
-  deviceDetail: "device.detail",
-  deviceAction: "device.action",
-
   serverProbe: "server.probe",
   serverGetConfig: "server.getConfig",
   serverRefreshProviders: "server.refreshProviders",
@@ -598,7 +570,6 @@ export const WS_METHODS = {
   subscribeTerminalMetadata: "subscribeTerminalMetadata",
   subscribePreviewEvents: "subscribePreviewEvents",
   subscribeDiscoveredLocalServers: "subscribeDiscoveredLocalServers",
-  subscribeDeviceState: "subscribeDeviceState",
   subscribeServerConfig: "subscribeServerConfig",
   subscribeMcpStatus: "subscribeMcpStatus",
   subscribeRobloxStudioAlerts: "subscribeRobloxStudioAlerts",
@@ -1638,65 +1609,6 @@ const WsSubscribeDiscoveredLocalServersRpc = Rpc.make(WS_METHODS.subscribeDiscov
   stream: true,
 });
 
-const WsDeviceTestHostRpc = Rpc.make(WS_METHODS.deviceTestHost, {
-  payload: SshDeviceHostConfig,
-  success: DeviceHostSummary,
-  error: Schema.Union([DeviceError, EnvironmentAuthorizationError]),
-});
-
-const WsDeviceEasAccountRpc = Rpc.make(WS_METHODS.deviceEasAccount, {
-  payload: DeviceEasAccountInput,
-  success: DeviceEasAccount,
-  error: Schema.Union([DeviceEasAccountError, EnvironmentAuthorizationError]),
-});
-
-const WsDeviceListRpc = Rpc.make(WS_METHODS.deviceList, {
-  payload: DeviceListInput,
-  success: DeviceServiceState,
-  error: Schema.Union([DeviceError, EnvironmentAuthorizationError]),
-});
-
-const WsDeviceConfigureRpc = Rpc.make(WS_METHODS.deviceConfigure, {
-  payload: DeviceConfigureInput,
-  success: DeviceServiceState,
-  error: Schema.Union([DeviceError, EnvironmentAuthorizationError]),
-});
-
-const WsDeviceOpenRpc = Rpc.make(WS_METHODS.deviceOpen, {
-  payload: DeviceOpenInput,
-  success: DeviceSession,
-  error: Schema.Union([DeviceError, EnvironmentAuthorizationError]),
-});
-
-const WsDeviceCloseRpc = Rpc.make(WS_METHODS.deviceClose, {
-  payload: DeviceCloseInput,
-  error: Schema.Union([DeviceError, EnvironmentAuthorizationError]),
-});
-
-const WsDeviceShutdownRpc = Rpc.make(WS_METHODS.deviceShutdown, {
-  payload: DeviceShutdownInput,
-  error: Schema.Union([DeviceError, EnvironmentAuthorizationError]),
-});
-
-const WsDeviceDetailRpc = Rpc.make(WS_METHODS.deviceDetail, {
-  payload: DeviceDetailInput,
-  success: DeviceDetail,
-  error: Schema.Union([DeviceError, EnvironmentAuthorizationError]),
-});
-
-const WsDeviceActionRpc = Rpc.make(WS_METHODS.deviceAction, {
-  payload: DeviceActionInput,
-  success: DeviceDetail,
-  error: Schema.Union([DeviceError, EnvironmentAuthorizationError]),
-});
-
-const WsSubscribeDeviceStateRpc = Rpc.make(WS_METHODS.subscribeDeviceState, {
-  payload: Schema.Struct({}),
-  success: DeviceServiceState,
-  error: EnvironmentAuthorizationError,
-  stream: true,
-});
-
 const WsOrchestrationV2DispatchCommandRpc = Rpc.make(ORCHESTRATION_V2_WS_METHODS.dispatchCommand, {
   payload: OrchestrationV2RpcSchemas.dispatchCommand.input,
   success: OrchestrationV2RpcSchemas.dispatchCommand.output,
@@ -2175,16 +2087,6 @@ export const WsCoreRpcGroup = RpcGroup.make(
   WsPreviewReportStatusRpc,
   WsSubscribePreviewEventsRpc,
   WsSubscribeDiscoveredLocalServersRpc,
-  WsDeviceConfigureRpc,
-  WsDeviceListRpc,
-  WsDeviceTestHostRpc,
-  WsDeviceEasAccountRpc,
-  WsDeviceOpenRpc,
-  WsDeviceCloseRpc,
-  WsDeviceShutdownRpc,
-  WsDeviceDetailRpc,
-  WsDeviceActionRpc,
-  WsSubscribeDeviceStateRpc,
   WsSubscribeServerConfigRpc,
   WsSubscribeServerLifecycleRpc,
   WsSubscribeAuthAccessRpc,

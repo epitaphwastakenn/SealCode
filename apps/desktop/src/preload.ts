@@ -14,13 +14,7 @@ import { contextBridge, ipcRenderer, webFrame, webUtils } from "electron";
 import * as IpcChannels from "./ipc/channels.ts";
 import { mergeLegacyLocalStorage } from "./legacyLocalStorageMerge.ts";
 
-const SNAP_SHOT_EVENT_TYPES = new Set([
-  "requested",
-  "started",
-  "ready",
-  "failed",
-  "shortcut-changed",
-]);
+const SNAP_SHOT_EVENT_TYPES = new Set(["requested", "started", "ready", "failed"]);
 function isWindowControlsState(value: unknown): value is DesktopWindowControlsState {
   if (typeof value !== "object" || value === null) return false;
   const { maximized, fullscreen } = value as { maximized?: unknown; fullscreen?: unknown };
@@ -128,9 +122,6 @@ contextBridge.exposeInMainWorld("desktopBridge", {
     ipcRenderer.invoke(IpcChannels.REQUEST_SNAP_SHOT_PERMISSIONS_CHANNEL, includeAccessibility),
   getSnapShotState: () => ipcRenderer.invoke(IpcChannels.GET_SNAP_SHOT_STATE_CHANNEL),
   setupSnapShot: (action) => ipcRenderer.invoke(IpcChannels.SETUP_SNAP_SHOT_CHANNEL, action),
-  previewSnapShotConfig: (request) =>
-    ipcRenderer.invoke(IpcChannels.PREVIEW_SNAP_SHOT_CONFIG_CHANNEL, request),
-  applySnapShotConfig: (id) => ipcRenderer.invoke(IpcChannels.APPLY_SNAP_SHOT_CONFIG_CHANNEL, id),
   checkSnapShotShortcut: (shortcut) =>
     ipcRenderer.invoke(IpcChannels.CHECK_SNAP_SHOT_SHORTCUT_CHANNEL, shortcut),
   setSnapShotShortcutSuppressed: (suppressed) =>

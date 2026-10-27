@@ -1,4 +1,4 @@
-import type { DevicePlatform, PreviewViewportSetting } from "@t3tools/contracts";
+import type { PreviewViewportSetting } from "@t3tools/contracts";
 
 import type { BrowserSurfaceContentPresentation } from "~/browser/browserSurfaceStore";
 import {
@@ -6,8 +6,6 @@ import {
   type BrowserViewportResizeDirection,
 } from "~/browser/browserViewportLayout";
 import type { PreviewMiniPlayerPosition, PreviewMiniPlayerSize } from "~/previewMiniPlayerStore";
-
-import type { DeviceScreenSize } from "@t3tools/client-runtime/device/stream";
 
 export const PREVIEW_MINI_PLAYER_EDGE_GAP = 12;
 export const PREVIEW_MINI_PLAYER_CORNER_RADIUS = 12;
@@ -29,34 +27,6 @@ export function resolvePreviewMiniPlayerSourceSize(
     width: fitted.width * normalizedZoomFactor,
     height: fitted.height * normalizedZoomFactor,
   };
-}
-
-export function resolveDeviceMiniPlayerSourceSize(
-  platform: DevicePlatform,
-  screen: DeviceScreenSize | null,
-): PreviewMiniPlayerSize {
-  if (!screen) {
-    const width = 1_000;
-    return { width, height: width / (platform === "ios" ? 9 / 19.5 : 9 / 20) };
-  }
-  const landscape =
-    screen.orientation === "landscape_left" || screen.orientation === "landscape_right";
-  const long = Math.max(screen.width, screen.height);
-  const short = Math.min(screen.width, screen.height);
-  return landscape ? { width: long, height: short } : { width: short, height: long };
-}
-
-/** Android frames include black corner wedges; clip at a matching radius. iOS streams rectangles and
- * retains the frame radius. */
-export function resolveDeviceMiniPlayerCornerRadius(
-  platform: DevicePlatform,
-  player: PreviewMiniPlayerSize,
-): number {
-  if (platform !== "android") return PREVIEW_MINI_PLAYER_CORNER_RADIUS;
-  return Math.max(
-    PREVIEW_MINI_PLAYER_CORNER_RADIUS,
-    Math.round(Math.min(player.width, player.height) * 0.14),
-  );
 }
 
 interface HorizontalSpan {

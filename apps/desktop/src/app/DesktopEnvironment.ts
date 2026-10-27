@@ -13,7 +13,6 @@ import * as Path from "effect/Path";
 
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
 import * as DesktopConfig from "./DesktopConfig.ts";
-import { resolveLinuxDesktopEntryName } from "./DesktopEarlyElectronStartup.ts";
 import { resolveDesktopBaseDir, resolveDesktopStateDir } from "./DesktopStatePaths.ts";
 import { isNightlyDesktopVersion } from "../updates/updateChannels.ts";
 import type { OtlpProtocol } from "@t3tools/shared/observability";
@@ -74,11 +73,7 @@ export class DesktopEnvironment extends Context.Service<
     readonly branding: DesktopAppBranding;
     readonly displayName: string;
     readonly appUserModelId: string;
-    readonly linuxDesktopEntryName: string;
-    readonly linuxWmClass: string;
-    readonly linuxApplicationsDir: string;
     readonly desktopLauncherPath: Option.Option<string>;
-    readonly appImagePath: Option.Option<string>;
     readonly defaultDesktopSettings: DesktopAppSettings.DesktopSettings;
     readonly runtimeInfo: DesktopRuntimeInfo;
     readonly resolvePickFolderDefaultPath: (rawOptions: unknown) => Option.Option<string>;
@@ -99,7 +94,7 @@ function resolveDesktopAppStageLabel(input: {
   return isNightlyDesktopVersion(input.appVersion) ? "Nightly" : "Beta";
 }
 
-export function resolveDesktopAppBranding(input: {
+function resolveDesktopAppBranding(input: {
   readonly isDevelopment: boolean;
   readonly appVersion: string;
 }): DesktopAppBranding {
@@ -179,10 +174,6 @@ const make = Effect.fn("desktop.environment.make")(function* (
     joinPath: path.join,
     t3Home: config.t3Home,
   });
-  const linuxApplicationsDir = path.join(
-    Option.getOrElse(config.xdgDataHome, () => path.join(homeDirectory, ".local", "share")),
-    "applications",
-  );
   const resourcesPath = input.resourcesPath;
 
   return DesktopEnvironment.of({
@@ -231,11 +222,7 @@ const make = Effect.fn("desktop.environment.make")(function* (
     appUserModelId: Option.getOrElse(config.appUserModelIdOverride, () =>
       isDevelopment ? "com.sealcode.app.dev" : "com.sealcode.app",
     ),
-    linuxDesktopEntryName: resolveLinuxDesktopEntryName(isDevelopment),
-    linuxWmClass: isDevelopment ? "sealcode-dev" : "sealcode",
-    linuxApplicationsDir,
     desktopLauncherPath: config.desktopLauncherPath,
-    appImagePath: config.appImagePath,
     defaultDesktopSettings: DesktopAppSettings.resolveDefaultDesktopSettings(input.appVersion),
     runtimeInfo: resolveDesktopRuntimeInfo({
       platform: input.platform,

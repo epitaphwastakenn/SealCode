@@ -15,7 +15,7 @@ export function snapShotSetupError(title: string, error: unknown): SnapShotSetup
 
 export interface DesktopSnapShotLoad {
   readonly state: DesktopSnapShotState | null;
-  /** Why the last background read (load, focus, shortcut change) failed; a later success clears it. */
+  /** Why the last background read (load, focus) failed; a later success clears it. */
   readonly refreshError: SnapShotSetupError | null;
 }
 
@@ -27,7 +27,7 @@ let stateRequestId = 0;
 
 /**
  * The desktop capture state. Reading it starts a load, then re-reads on window focus (the user
- * may have changed OS permissions) and when the desktop reports a shortcut change.
+ * may have changed OS permissions).
  */
 export const desktopSnapShotAtom = Atom.writable(
   (get): DesktopSnapShotLoad => {
@@ -45,11 +45,6 @@ export const desktopSnapShotAtom = Atom.writable(
       });
     window.addEventListener("focus", refresh);
     get.addFinalizer(() => window.removeEventListener("focus", refresh));
-    get.addFinalizer(
-      bridge.onSnapShotEvent((event) => {
-        if (event.type === "shortcut-changed") refresh();
-      }),
-    );
     refresh();
     return EMPTY_LOAD;
   },

@@ -56,7 +56,6 @@ const COMMAND_FEATURES: {
 const METHOD_FEATURES: Readonly<Record<string, (payload: Payload) => FeatureUsage>> = {
   [WS_METHODS.terminalOpen]: () => ({ feature: "terminal.open" }),
   [WS_METHODS.previewOpen]: () => ({ feature: "preview.open" }),
-  [WS_METHODS.deviceOpen]: () => ({ feature: "device.open" }),
   [WS_METHODS.shellOpenInEditor]: (payload) => use("editor.open", literal(payload, "editor")),
   [WS_METHODS.vcsCreateWorktree]: () => ({ feature: "worktree.create" }),
   [WS_METHODS.gitRunStackedAction]: (payload) =>

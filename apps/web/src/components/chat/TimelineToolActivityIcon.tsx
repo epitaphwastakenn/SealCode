@@ -13,7 +13,6 @@ import {
   GlobeIcon,
   MessageCircleIcon,
   SearchIcon,
-  SmartphoneIcon,
   SquarePenIcon,
   TerminalIcon,
   HammerIcon,
@@ -40,7 +39,6 @@ export type WorkEntryIconName =
   | "circle-alert"
   | "computer"
   | "code"
-  | "device"
   | "eye"
   | "globe"
   | "hammer"
@@ -240,8 +238,6 @@ function WorkEntryIcon({ name, className }: { name: WorkEntryIconName; className
       return <BrowserAppIcon className={className} />;
     case "code":
       return <Code2Icon className={className} aria-hidden />;
-    case "device":
-      return <SmartphoneIcon className={className} aria-hidden />;
     case "t3-code":
       return <SealCodeMark className={cn(className, "object-contain")} aria-hidden />;
     case "check":

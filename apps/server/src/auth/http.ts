@@ -156,7 +156,7 @@ export function failEnvironmentNotFound(reason: EnvironmentResourceNotFoundReaso
 }
 
 /**
- * `<img>` and WebSocket cannot set headers, so media routes (device hub, preview stream)
+ * `<img>` and WebSocket cannot set headers, so media routes (preview stream)
  * authenticate the way the `/ws` upgrade does: a cookie for browser sessions, or a short-lived
  * `wsTicket` minted over authenticated HTTP for bearer and DPoP clients.
  */

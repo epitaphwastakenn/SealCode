@@ -2,7 +2,6 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { afterEach, beforeEach, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
-import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
@@ -24,7 +23,6 @@ const environmentFor = (
     baseDir: input.baseDir,
     stateDir: path.join(input.baseDir, "userdata"),
     serverRoot: "/opt/SealCode/resources/app.asar",
-    appImagePath: Option.none(),
   } as unknown as DesktopEnvironment.DesktopEnvironment["Service"]);
 
 const commandIn = (

@@ -22,11 +22,9 @@ function deferred<T>() {
 const recorded = vi.fn();
 const error = vi.fn();
 
-function Recorder(props: { allowModifierPairs?: boolean; shortcutLabel?: string }) {
+function Recorder() {
   const recorder = useSnapShotShortcutRecorder({
     shortcut: DEFAULT_CLIENT_SETTINGS.snapShotShortcut,
-    shortcutLabel: props.shortcutLabel,
-    allowModifierPairs: props.allowModifierPairs ?? false,
     onRecord: recorded,
     onError: error,
   });
@@ -38,8 +36,8 @@ function setup() {
   recorded.mockReset();
   error.mockReset();
 }
-async function renderRecorder(props: Parameters<typeof Recorder>[0] = {}) {
-  const screen = await render(<Recorder {...props} />);
+async function renderRecorder() {
+  const screen = await render(<Recorder />);
   const button = () =>
     screen.container.querySelector<HTMLButtonElement>("[data-keybinding-capture]")!;
   // aria-pressed mirrors the hook's recording state, which flips once suppression resolves.
@@ -58,7 +56,6 @@ async function renderRecorder(props: Parameters<typeof Recorder>[0] = {}) {
 
 it("ignores late suppression acknowledgements after cancellation", async () => {
   setup();
-  using _platform = vi.spyOn(navigator, "platform", "get").mockReturnValue("Linux x86_64");
   const pending = deferred<void>();
   suppress.mockImplementation((enabled) => (enabled ? pending.promise : Promise.resolve()));
   await using screen = await renderRecorder();

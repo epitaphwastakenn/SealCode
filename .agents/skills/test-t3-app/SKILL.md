@@ -1,14 +1,13 @@
 ---
 name: test-t3-app
-description: Test T3 Code's web and desktop UI through its built-in Browser panel against isolated development state. Use for browser verification, browser pairing recovery, and test fixtures. Use test-t3-mobile for native mobile verification.
+description: Test T3 Code's web and desktop UI through its built-in Browser panel against isolated development state. Use for browser verification, browser pairing recovery, and test fixtures.
 ---
 
 # Test T3 web and desktop
 
 Use T3's built-in Browser panel for verification. If its tools are absent or
 the panel reports unavailable, explain the blocker and stop verification.
-Do not install or switch to another automation system. For native mobile
-testing, use [test-t3-mobile](../test-t3-mobile/SKILL.md).
+Do not install or switch to another automation system.
 
 ## Start the app
 

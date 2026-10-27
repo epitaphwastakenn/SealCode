@@ -1,6 +1,5 @@
 import { describe, expect, it } from "@effect/vitest";
 import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Sink from "effect/Sink";
@@ -10,13 +9,10 @@ import { ChildProcessSpawner } from "effect/process";
 import { beforeEach, vi } from "vite-plus/test";
 
 import {
-  ChromiumKeyError,
   decodeWindowsWrappedKey,
-  readLinuxSecret,
   resolveChromiumKeys,
   unwrapWindowsDpapiKey,
 } from "./ChromiumKeys.ts";
-import { LinuxBrowserSecretPath } from "./LinuxBrowserSecret.ts";
 
 const { getPassword } = vi.hoisted(() => ({ getPassword: vi.fn<() => string | null>() }));
 
@@ -48,8 +44,7 @@ const layerHelper = (input: {
   readonly spawnError?: PlatformError.PlatformError;
   readonly capture?: (command: CapturedCommand) => void;
 }) =>
-  Layer.merge(
-    Layer.succeed(LinuxBrowserSecretPath, "/bundled/browser-secret/t3-browser-secret"),
+  Layer.mergeAll(
     Layer.succeed(
       ChildProcessSpawner.ChildProcessSpawner,
       ChildProcessSpawner.make((command) =>
@@ -81,7 +76,6 @@ describe("macOS Chromium secrets", () => {
     platform: "darwin",
     keychainService: "Chrome Safe Storage",
     keychainAccount: "Chrome",
-    linuxSecretApplication: undefined,
   } as const;
   const layerNoProcesses = Layer.succeed(
     ChildProcessSpawner.ChildProcessSpawner,
@@ -106,97 +100,6 @@ describe("macOS Chromium secrets", () => {
       expect(error.reason).toBe("needsKeychainApproval");
       expect(error.cause).toBe(denied);
     }).pipe(Effect.provide(layerNoProcesses)),
-  );
-});
-
-describe("Linux Chromium secrets", () => {
-  it.effect("retains a missing helper failure alongside the keyring-free fallback", () =>
-    Effect.gen(function* () {
-      const keys = yield* resolveChromiumKeys({
-        platform: "linux",
-        keychainService: undefined,
-        keychainAccount: undefined,
-        linuxSecretApplication: "chromium",
-      });
-      expect(keys.cbcV10).toHaveLength(16);
-      expect(keys.cbcV11).toBeUndefined();
-      expect(keys.cbcV11Error?.reason).toBe("keychainUnavailable");
-    }).pipe(
-      Effect.provide(
-        layerHelper({
-          spawnError: PlatformError.systemError({
-            _tag: "NotFound",
-            module: "ChildProcess",
-            method: "spawn",
-          }),
-        }),
-      ),
-    ),
-  );
-
-  it.effect("reports an unconfigured helper without searching PATH", () =>
-    readLinuxSecret("chromium").pipe(
-      Effect.flip,
-      Effect.tap((error) => Effect.sync(() => expect(error.reason).toBe("keychainUnavailable"))),
-      Effect.provideService(
-        ChildProcessSpawner.ChildProcessSpawner,
-        ChildProcessSpawner.make(() => Effect.die("must not spawn")),
-      ),
-      Effect.provideService(LinuxBrowserSecretPath, undefined),
-    ),
-  );
-
-  it.effect("preserves trailing whitespace in the stored secret", () =>
-    Effect.gen(function* () {
-      const secret = yield* readLinuxSecret("chrome");
-      expect(secret).toBe("linux-secret \t\n");
-    }).pipe(Effect.provide(layerHelper({ stdout: "linux-secret \t\n" }))),
-  );
-
-  it.effect("drains stdout and stderr concurrently", () =>
-    Effect.gen(function* () {
-      const stderrDrainStarted = yield* Deferred.make<void>();
-      const stdout = Stream.fromEffect(Deferred.await(stderrDrainStarted)).pipe(
-        Stream.flatMap(() => Stream.encodeText(Stream.make("linux-secret"))),
-      );
-      const stderr = Stream.fromEffect(Deferred.succeed(stderrDrainStarted, undefined)).pipe(
-        Stream.drain,
-      );
-
-      const secret = yield* readLinuxSecret("chrome").pipe(
-        Effect.provide(layerHelper({ stdoutStream: stdout, stderrStream: stderr })),
-      );
-
-      expect(secret).toBe("linux-secret");
-    }),
-  );
-
-  it.effect(
-    "preserves the desktop environment and identifies denial without parsing stderr",
-    () => {
-      let captured: CapturedCommand | undefined;
-      return Effect.gen(function* () {
-        const error = yield* readLinuxSecret("brave").pipe(Effect.flip);
-        expect(error).toBeInstanceOf(ChromiumKeyError);
-        expect(error.reason).toBe("needsKeychainApproval");
-        expect(captured?.options.env?.LC_ALL).toBe("localized");
-        expect(captured?.options.env?.PATH).toBe("/synthetic/bin");
-        expect(captured?.options.env?.SESSION_MARKER).toBe("kept");
-      }).pipe(
-        Effect.provide(
-          layerHelper({
-            stderr: "Zugriff verweigert",
-            exitCode: 3,
-            capture: (value) => (captured = value),
-          }),
-        ),
-        Effect.provideService(HostProcess.Environment, {
-          PATH: "/synthetic/bin",
-          SESSION_MARKER: "kept",
-          LC_ALL: "localized",
-        }),
-      );
-    },
   );
 });
 

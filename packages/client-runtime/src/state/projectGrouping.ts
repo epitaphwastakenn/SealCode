@@ -198,7 +198,7 @@ export function resolveScratchProjectScopeKey(
     : key;
 }
 
-export function deriveProjectGroupLabel(input: {
+function deriveProjectGroupLabel(input: {
   readonly representative: Pick<EnvironmentProject, "title" | "repositoryIdentity">;
   readonly members: ReadonlyArray<Pick<EnvironmentProject, "title" | "repositoryIdentity">>;
 }): string {

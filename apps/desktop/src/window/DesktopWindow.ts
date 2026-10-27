@@ -851,9 +851,6 @@ export const make = Effect.gen(function* () {
     });
 
     const revealSubscribers: RevealSubscription[] = [(fire) => window.once("ready-to-show", fire)];
-    if (environment.platform === "linux") {
-      revealSubscribers.push((fire) => window.webContents.once("did-finish-load", fire));
-    }
     bindFirstRevealTrigger(revealSubscribers, () => {
       if (!window.isDestroyed()) {
         window.webContents.setBackgroundThrottling(true);

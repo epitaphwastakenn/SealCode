@@ -46,7 +46,7 @@ describe("Node runtime selection", () => {
     Effect.gen(function* () {
       for (const executable of ["/runtime/node", "/Applications/SealCode.app/Electron"]) {
         expect(
-          yield* resolveNodeExecutable("Local device support", { PATH: "" }).pipe(
+          yield* resolveNodeExecutable("Roblox Studio", { PATH: "" }).pipe(
             Effect.provideService(HostProcess.ExecutablePath, executable),
             Effect.provideService(HostProcess.IsExecutable, false),
           ),
@@ -59,7 +59,7 @@ describe("Node runtime selection", () => {
     Effect.gen(function* () {
       const path = yield* Path.Path;
       expect(
-        yield* resolveNodeExecutable("Local device support", {
+        yield* resolveNodeExecutable("Roblox Studio", {
           PATH: path.dirname(process.execPath),
         }),
       ).toBe(process.execPath);
@@ -79,13 +79,11 @@ describe("Node runtime selection", () => {
       const node = path.join(directory, platform === "win32" ? "node.exe" : "node");
       const env = { PATH: directory };
       expect(
-        Result.isFailure(
-          yield* resolveNodeExecutable("Local device support", env).pipe(Effect.result),
-        ),
+        Result.isFailure(yield* resolveNodeExecutable("Roblox Studio", env).pipe(Effect.result)),
       ).toBe(true);
       yield* fs.copyFile(process.execPath, node);
       yield* fs.chmod(node, 0o755);
-      expect(yield* resolveNodeExecutable("Local device support", env)).toBe(node);
+      expect(yield* resolveNodeExecutable("Roblox Studio", env)).toBe(node);
     }).pipe(
       Effect.scoped,
       Effect.provideService(HostProcess.ExecutablePath, "/packaged/t3"),
@@ -108,7 +106,7 @@ describe("Node runtime selection", () => {
       const node = path.join(runtime, "node.exe");
       yield* fs.copyFile(process.execPath, node);
       expect(
-        yield* resolveNodeExecutable("Local device support", {
+        yield* resolveNodeExecutable("Roblox Studio", {
           PATH: `${wrappers};${runtime}`,
           PATHEXT: ".CMD;.BAT",
         }),
@@ -129,7 +127,7 @@ describe("Node runtime selection", () => {
       const directory = yield* fs.makeTempDirectoryScoped();
       yield* fs.writeFileString(path.join(directory, "node.cmd"), "@echo off");
       yield* fs.writeFileString(path.join(directory, "node.bat"), "@echo off");
-      const error = yield* resolveNodeExecutable("Local device support", {
+      const error = yield* resolveNodeExecutable("Roblox Studio", {
         PATH: directory,
         PATHEXT: ".CMD;.BAT;.EXE",
       }).pipe(Effect.flip);
@@ -154,7 +152,7 @@ describe("Node runtime selection", () => {
       yield* fs.writeFileString(executable, "standalone executable fixture");
       yield* fs.chmod(executable, 0o755);
       yield* fs.link(executable, node);
-      const error = yield* resolveNodeExecutable("Local device support", { PATH: directory }).pipe(
+      const error = yield* resolveNodeExecutable("Roblox Studio", { PATH: directory }).pipe(
         Effect.provideService(HostProcess.ExecutablePath, executable),
         Effect.flip,
       );
@@ -175,7 +173,7 @@ describe("Node runtime selection", () => {
       const platform = yield* HostProcess.Platform;
       const node = path.join(directory, platform === "win32" ? "node.exe" : "node");
       yield* fs.symlink(process.execPath, node);
-      expect(yield* resolveNodeExecutable("Local device support", { PATH: directory })).toBe(node);
+      expect(yield* resolveNodeExecutable("Roblox Studio", { PATH: directory })).toBe(node);
     }).pipe(
       Effect.scoped,
       Effect.provideService(HostProcess.ExecutablePath, "/packaged/t3"),
@@ -194,7 +192,7 @@ describe("Node runtime selection", () => {
         const platform = yield* HostProcess.Platform;
         const node = path.join(directory, platform === "win32" ? "node.exe" : "node");
         yield* fs.symlink(process.execPath, node);
-        const error = yield* resolveNodeExecutable("Local device support", {
+        const error = yield* resolveNodeExecutable("Roblox Studio", {
           PATH: directory,
         }).pipe(Effect.flip);
         expect(error.message).toContain("Install Node.js");

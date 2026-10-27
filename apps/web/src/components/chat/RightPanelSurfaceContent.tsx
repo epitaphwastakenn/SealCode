@@ -28,9 +28,6 @@ const PreviewPanel = lazy(() =>
 );
 const DiffPanel = lazy(() => import("../DiffPanel"));
 const ProjectDiffCenter = lazy(() => import("../ProjectDiffCenter"));
-const DevicePanel = lazy(() =>
-  import("../device/DevicePanel").then((module) => ({ default: module.DevicePanel })),
-);
 const FilePreviewPanel = lazy(() => import("../files/FilePreviewPanel"));
 
 export type RightPanelTerminalProps = Omit<
@@ -173,22 +170,6 @@ export function RightPanelSurfaceContent(props: {
     }
     case "pull-requests":
       return <ThreadPullRequestsPanel threadRef={threadRef} />;
-    case "device":
-      return (
-        <Suspense fallback={null}>
-          <DevicePanel
-            mode="embedded"
-            threadRef={threadRef}
-            key={surface.id}
-            surface={surface}
-            visible={visible}
-            onDismissSetup={() => {
-              props.onCloseSurface(surface);
-              useRightPanelStore.getState().show(threadRef);
-            }}
-          />
-        </Suspense>
-      );
     case "files":
     case "file": {
       const files = props.files;

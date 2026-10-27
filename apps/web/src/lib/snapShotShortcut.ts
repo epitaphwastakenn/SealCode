@@ -6,46 +6,9 @@ import {
   type SnapShotModifier,
   type SnapShotShortcut,
 } from "@t3tools/contracts";
-import { parseKeybindingShortcut } from "@t3tools/shared/keybindings";
 
 import { formatShortcutKeyLabel, formatShortcutLabel, shortcutConflictKey } from "../keybindings";
 import { isMacPlatform, isWindowsPlatform } from "./utils";
-
-const DESKTOP_KEY_ALIASES: Readonly<Record<string, string>> = {
-  return: "enter",
-  page_up: "pageup",
-  page_down: "pagedown",
-  left: "arrowleft",
-  right: "arrowright",
-  up: "arrowup",
-  down: "arrowdown",
-  plus: "+",
-  minus: "-",
-};
-
-export function parseDesktopSnapShotShortcut(label: string): KeybindingShortcut | null {
-  const text = label.trim().replace(/^Press\s+/i, "");
-  if (!text) return null;
-  const gtk = text.match(/^((?:<[^<>]+>)+)([^<>]+)$/);
-  const input = (gtk ? gtk[1]!.replace(/<([^<>]+)>/g, "$1+") + gtk[2]! : text).replace(
-    /\b(super|win|primary)\b/gi,
-    (modifier) => (modifier.toLowerCase() === "primary" ? "ctrl" : "meta"),
-  );
-  if (input !== "+" && input.endsWith("+") && !input.endsWith("++")) return null;
-  const shortcut = parseKeybindingShortcut(input);
-  if (!shortcut) return null;
-  const key = DESKTOP_KEY_ALIASES[shortcut.key] ?? shortcut.key;
-  if (
-    key !== " " &&
-    !/^[^\s<>]$/u.test(key) &&
-    !/^(?:f(?:[1-9]|1\d|2[0-4])|enter|tab|escape|backspace|delete|insert|home|end|pageup|pagedown|arrow(?:left|right|up|down)|pause|printscreen)$/i.test(
-      key,
-    )
-  ) {
-    return null;
-  }
-  return { ...shortcut, key };
-}
 
 export function formatSnapShotShortcutLabel(
   shortcut: SnapShotShortcut,

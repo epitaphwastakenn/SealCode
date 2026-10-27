@@ -19,14 +19,6 @@
       "types": "./src/handoff.ts",
       "default": "./src/handoff.ts"
     },
-    "./device/stream": {
-      "types": "./src/device/stream.ts",
-      "default": "./src/device/stream.ts"
-    },
-    "./device/hub-access": {
-      "types": "./src/device/hubAccess.ts",
-      "default": "./src/device/hubAccess.ts"
-    },
     "./preview/server-browser-stream": {
       "types": "./src/preview/serverBrowserStream.ts",
       "default": "./src/preview/serverBrowserStream.ts"
@@ -115,10 +107,6 @@
       "types": "./src/providerUpdateRequiredModels.ts",
       "default": "./src/providerUpdateRequiredModels.ts"
     },
-    "./voice-input": {
-      "types": "./src/voice-input/index.ts",
-      "default": "./src/voice-input/index.ts"
-    },
     "./t3ToolSummary": {
       "types": "./src/t3ToolSummary.ts",
       "default": "./src/t3ToolSummary.ts"
@@ -198,14 +186,6 @@
     "./state/presentation": {
       "types": "./src/state/presentation.ts",
       "default": "./src/state/presentation.ts"
-    },
-    "./state/device": {
-      "types": "./src/state/device.ts",
-      "default": "./src/state/device.ts"
-    },
-    "./state/deviceHubAccess": {
-      "types": "./src/state/deviceHubAccess.ts",
-      "default": "./src/state/deviceHubAccess.ts"
     },
     "./state/preview": {
       "types": "./src/state/preview.ts",
@@ -403,38 +383,6 @@
       "types": "./src/filePreview.ts",
       "default": "./src/filePreview.ts"
     },
-    "./device/frame": {
-      "types": "./src/device/frame.ts",
-      "default": "./src/device/frame.ts"
-    },
-    "./device/phone-viewer": {
-      "types": "./src/device/phoneViewer.ts",
-      "default": "./src/device/phoneViewer.ts"
-    },
-    "./device/phone-interaction": {
-      "types": "./src/device/phoneInteraction.ts",
-      "default": "./src/device/phoneInteraction.ts"
-    },
-    "./device/shape-profile": {
-      "types": "./src/device/shapeProfile.ts",
-      "default": "./src/device/shapeProfile.ts"
-    },
-    "./device/screenshot": {
-      "types": "./src/device/screenshot.ts",
-      "default": "./src/device/screenshot.ts"
-    },
-    "./device/model": {
-      "types": "./src/device/model.ts",
-      "default": "./src/device/model.ts"
-    },
-    "./device/duo-viewer": {
-      "types": "./src/device/duoViewer.ts",
-      "default": "./src/device/duoViewer.ts"
-    },
-    "./device/duo-control": {
-      "types": "./src/device/duoControl.ts",
-      "default": "./src/device/duoControl.ts"
-    },
     "./diff-count": {
       "types": "./src/diffCount.ts",
       "default": "./src/diffCount.ts"
@@ -482,6 +430,10 @@
     "./model-traits": {
       "types": "./src/modelTraits.ts",
       "default": "./src/modelTraits.ts"
+    },
+    "./state/previewStreamAccess": {
+      "types": "./src/state/previewStreamAccess.ts",
+      "default": "./src/state/previewStreamAccess.ts"
     }
   },
   "scripts": {
@@ -494,12 +446,10 @@
     "@t3tools/shared": "workspace:*",
     "@t3tools/source-control-core": "workspace:*",
     "@t3tools/source-control-definitions": "workspace:*",
-    "effect": "catalog:",
-    "three": "0.180.0"
+    "effect": "catalog:"
   },
   "devDependencies": {
     "@effect/vitest": "catalog:",
-    "@types/three": "0.180.0",
     "vite-plus": "catalog:"
   }
 }

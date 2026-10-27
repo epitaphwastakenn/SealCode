@@ -3,24 +3,12 @@
 import * as NodeFSP from "node:fs/promises";
 import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
-import * as NodeURL from "node:url";
 
 import { afterEach, describe, expect, it } from "vite-plus/test";
 
 import { generateThirdPartyLicenseManifest } from "./third-party-licenses.js";
 
 const tempDirectories: string[] = [];
-const REPOSITORY_ROOT = NodePath.resolve(
-  NodePath.dirname(NodeURL.fileURLToPath(import.meta.url)),
-  "../..",
-);
-const DEVICE_TOOL_VERSIONS = JSON.parse(
-  await NodeFSP.readFile(
-    NodePath.join(REPOSITORY_ROOT, "apps/server/src/device/deviceToolVersions.json"),
-    "utf8",
-  ),
-) as { readonly "agent-device": string; readonly "expo-device-hub": string };
-
 async function writeJson(path: string, value: unknown): Promise<void> {
   await NodeFSP.mkdir(NodePath.dirname(path), { recursive: true });
   await NodeFSP.writeFile(path, `${JSON.stringify(value)}\n`, "utf8");
@@ -79,56 +67,6 @@ afterEach(async () => {
 });
 
 describe("third-party license generation", () => {
-  it.each(["web", "mobile"])(
-    "uses installer pins for device tool notices in the %s manifest",
-    async (bundle) => {
-      const fixture = await createFixture();
-      await writeJson(fixture.configFile, {
-        customNotices: [
-          {
-            name: "agent-device",
-            license: "MIT",
-            noticeFile: "asset-notice.txt",
-            bundles: ["device-tools"],
-            includeInBundles: ["web", "mobile"],
-          },
-          {
-            name: "expo-device-hub",
-            license: "MIT",
-            noticeFile: "asset-notice.txt",
-            version: "0.0.0",
-            bundles: ["device-tools"],
-            includeInBundles: ["web", "mobile"],
-          },
-          {
-            name: "vendored-asset",
-            license: "MIT",
-            noticeFile: "asset-notice.txt",
-            version: "1.2.3",
-            bundles: ["web", "mobile"],
-          },
-        ],
-      });
-
-      const manifest = await generateThirdPartyLicenseManifest({
-        configFile: fixture.configFile,
-        packageManifests: [{ bundle, path: fixture.appManifest }],
-      });
-
-      expect(manifest.entries.find((entry) => entry.name === "agent-device")).toMatchObject({
-        version: DEVICE_TOOL_VERSIONS["agent-device"],
-        bundles: ["device-tools"],
-      });
-      expect(manifest.entries.find((entry) => entry.name === "expo-device-hub")).toMatchObject({
-        version: DEVICE_TOOL_VERSIONS["expo-device-hub"],
-        bundles: ["device-tools"],
-      });
-      expect(manifest.entries.find((entry) => entry.name === "vendored-asset")?.version).toBe(
-        "1.2.3",
-      );
-    },
-  );
-
   it("collects production packages and custom asset notices", async () => {
     const fixture = await createFixture();
     const manifest = await generateThirdPartyLicenseManifest({
@@ -486,7 +424,7 @@ describe("third-party license generation", () => {
           name: "optional-tool",
           license: "MIT AND Apache-2.0",
           noticeFiles: ["tool-license.txt", "vendor-notice.txt"],
-          bundles: ["device-tools"],
+          bundles: ["optional-tools"],
           includeInBundles: ["mobile", "web"],
         },
       ],
@@ -499,7 +437,7 @@ describe("third-party license generation", () => {
     });
 
     expect(manifest.entries.find((entry) => entry.name === "optional-tool")).toMatchObject({
-      bundles: ["device-tools"],
+      bundles: ["optional-tools"],
       noticeText: "Tool license\n\n---\n\nVendor notice",
     });
   });

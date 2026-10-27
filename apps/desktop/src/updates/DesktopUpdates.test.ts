@@ -21,25 +21,6 @@ import * as DesktopUpdates from "./DesktopUpdates.ts";
 import { flushCallbacks, makeHarness } from "./updatesTestHarness.ts";
 
 describe("DesktopUpdates", () => {
-  it.effect("updates Linux .deb installs and leaves other non-AppImage installs off", () =>
-    Effect.gen(function* () {
-      const linuxState = (packageType: string | undefined) =>
-        Effect.scoped(
-          Effect.gen(function* () {
-            const updates = yield* DesktopUpdates.DesktopUpdates;
-            yield* updates.configure;
-            return yield* updates.getState;
-          }),
-        ).pipe(Effect.provide(makeHarness({ platform: "linux", packageType }).layer));
-
-      const deb = yield* linuxState("deb\n");
-      assert.equal(deb.status, "idle");
-
-      const unmarked = yield* linuxState(undefined);
-      assert.equal(unmarked.status, "disabled");
-    }),
-  );
-
   it.effect("keeps the disabled reason available after configuration and channel changes", () => {
     const harness = makeHarness({ env: { T3CODE_DISABLE_AUTO_UPDATE: "true" } });
     const reason = "Automatic updates are disabled by the T3CODE_DISABLE_AUTO_UPDATE setting.";

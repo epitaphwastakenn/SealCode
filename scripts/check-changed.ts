@@ -159,19 +159,17 @@ const knipPasses = knipCheck.split(" && ").map((command, index, all) => {
 });
 
 // A version bump can leave a patch unused, causing pnpm to reject the install
-// with ERR_PNPM_UNUSED_PATCH. Check it here as Release Smoke does in CI.
+// with ERR_PNPM_UNUSED_PATCH.
 const runPatchCheck = files.some(
   (file) =>
     file === "pnpm-workspace.yaml" ||
     file === "pnpm-lock.yaml" ||
     file === ".pnpmfile.cjs" ||
     file.startsWith("patches/") ||
-    file.startsWith("apps/mobile/deps/") ||
     NodePath.basename(file) === "package.json",
 );
 
 // Resolve without the lockfile in a temp copy to preserve the working tree and lockfile.
-// Copy mobile modules too: they are file: dependencies, not workspace packages.
 // Cached registry metadata limits this to patches stranded by local changes, not registry drift.
 const checkPatches = (): boolean => {
   const temp = NodeFS.mkdtempSync(NodePath.join(NodeOS.tmpdir(), "t3-patch-check-"));
@@ -184,14 +182,7 @@ const checkPatches = (): boolean => {
     copy("package.json");
     copy("pnpm-workspace.yaml");
     for (const pkg of packages) copy(`${pkg.dir}/package.json`);
-    const modulesDir = NodePath.join(root, "apps/mobile/modules");
-    if (NodeFS.existsSync(modulesDir)) {
-      for (const entry of NodeFS.readdirSync(modulesDir)) {
-        const manifest = `apps/mobile/modules/${entry}/package.json`;
-        if (NodeFS.existsSync(NodePath.join(root, manifest))) copy(manifest);
-      }
-    }
-    for (const extra of ["apps/mobile/deps", "patches", ".pnpmfile.cjs"]) {
+    for (const extra of ["patches", ".pnpmfile.cjs"]) {
       if (NodeFS.existsSync(NodePath.join(root, extra))) copy(extra);
     }
     const { status, stdout, stderr, error } = NodeChildProcess.spawnSync(
@@ -292,8 +283,6 @@ const ciOnly = Object.entries({
   "full test suites": outputs.test || outputs.test_web || outputs.test_server,
   build: outputs.build,
   rust: outputs.rust,
-  "mobile native lint": outputs.mobile_native,
-  "release smoke": outputs.release_smoke,
 }).flatMap(([job, runs]) => (runs ? [job] : []));
 if (ciOnly.length > 0) summary.push(`  CI also runs: ${ciOnly.join(", ")}`);
 if (!runPatchCheck) summary.push("  unused patch check skipped: no dependency files changed");

@@ -1,6 +1,3 @@
-import { it as effectIt } from "@effect/vitest";
-import * as HostProcess from "@t3tools/shared/HostProcess";
-import * as Effect from "effect/Effect";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -10,7 +7,6 @@ import {
   findAccessibleWindow,
   findCaptureSource,
   hideAndWaitForBlur,
-  isWaylandSession,
 } from "./snapShot.ts";
 
 describe("accessibleWindowText", () => {
@@ -85,72 +81,6 @@ describe("accessibleWindowElementTree", () => {
         ],
       },
     });
-  });
-
-  it("uses null child bounds when a Wayland provider reports only the root origin", async () => {
-    const tree = await accessibleWindowElementTree(
-      {
-        role: "window",
-        bounds: { x: 0, y: 0, width: 800, height: 600 },
-        children: async () => [
-          {
-            role: "button",
-            name: "Save",
-            bounds: { x: 0, y: 0, width: 100, height: 50 },
-            children: async () => [],
-          },
-        ],
-      },
-      { x: 0, y: 0, width: 800, height: 600 },
-      { width: 1_600, height: 1_200 },
-      { locationsReliable: true, verifyDescendantLocations: true },
-    );
-
-    expect(tree?.root.bounds).toEqual({ x: 0, y: 0, width: 1_600, height: 1_200 });
-    expect(tree?.root.children[0]?.bounds).toBeNull();
-  });
-
-  it("keeps Wayland child bounds after observing real position variation", async () => {
-    const tree = await accessibleWindowElementTree(
-      {
-        role: "window",
-        bounds: { x: 0, y: 0, width: 800, height: 600 },
-        children: async () => [
-          {
-            role: "button",
-            name: "Save",
-            bounds: { x: 20, y: 30, width: 100, height: 50 },
-            children: async () => [],
-          },
-        ],
-      },
-      { x: 0, y: 0, width: 800, height: 600 },
-      { width: 1_600, height: 1_200 },
-      { locationsReliable: true, verifyDescendantLocations: true },
-    );
-
-    expect(tree?.root.children[0]?.bounds).toEqual({ x: 40, y: 60, width: 200, height: 100 });
-  });
-
-  it("does not mistake a title-bar offset for varying descendant positions", async () => {
-    const tree = await accessibleWindowElementTree(
-      {
-        role: "window",
-        bounds: { x: 100, y: 229, width: 800, height: 571 },
-        children: async () => [
-          {
-            role: "button",
-            name: "Save",
-            bounds: { x: 100, y: 229, width: 100, height: 50 },
-            children: async () => [],
-          },
-        ],
-      },
-      { x: 100, y: 200, width: 800, height: 600 },
-      { width: 1_600, height: 1_200 },
-      { locationsReliable: true, verifyDescendantLocations: true },
-    );
-    expect(tree?.root.children[0]?.bounds).toBeNull();
   });
 
   it("collapses anonymous wrapper chains and removes duplicate text fields", async () => {
@@ -295,7 +225,6 @@ describe("findAccessibleWindow", () => {
 
   it("keeps strict titles outside macOS Chrome and Chromium", () => {
     for (const identity of [
-      { platform: "linux" as const, bundleId: "com.google.Chrome" },
       { platform: "win32" as const, bundleId: "com.google.Chrome" },
       { platform: "darwin" as const, bundleId: "com.example.Editor" },
       { platform: "darwin" as const, bundleId: undefined },
@@ -345,107 +274,37 @@ describe("findAccessibleWindow", () => {
     ).toBeUndefined();
   });
 
-  it("matches a Wayland window whose accessibility provider omits its screen position", () => {
-    const captured = {
-      title: "hello world (Draft) - Text Editor",
-      bounds: { x: 479, y: 342, width: 700, height: 520 },
-    };
-    const windows = [{ name: captured.title, bounds: { x: 0, y: 0, width: 700, height: 520 } }];
-
-    expect(findAccessibleWindow(windows, captured, "wayland")).toBe(windows[0]);
-    expect(findAccessibleWindow(windows, captured)).toBeUndefined();
-  });
-
-  it("matches a decorated Wayland window by its verified client size", () => {
-    const clientBounds = { x: 100, y: 229, width: 800, height: 571 };
-    const windows = [{ name: captured.title, bounds: { ...clientBounds, x: 0, y: 0 } }];
-    expect(findAccessibleWindow(windows, { ...captured, clientBounds }, "wayland")).toBe(
-      windows[0],
-    );
-    expect(findAccessibleWindow(windows, { ...captured, clientBounds })).toBeUndefined();
-    expect(findAccessibleWindow(windows, captured, "wayland")).toBeUndefined();
-  });
-
-  it("does not guess between client-size and frame-size matches", () => {
-    const clientBounds = { x: 100, y: 229, width: 800, height: 571 };
-    const windows = [
-      { name: captured.title, bounds: clientBounds },
-      { name: captured.title, bounds: captured.bounds },
-    ];
-    expect(findAccessibleWindow(windows, { ...captured, clientBounds }, "wayland")).toBeUndefined();
-    expect(
-      findAccessibleWindow(
-        [
-          { name: "Private", bounds: clientBounds },
-          { name: captured.title, bounds: { ...clientBounds, height: 550 } },
-        ],
-        { ...captured, clientBounds },
-        "wayland",
-      ),
-    ).toBeUndefined();
-  });
-
-  it("distinguishes same-title Wayland windows by size", () => {
-    const windows = [
-      { name: "Editor", bounds: { x: 0, y: 0, width: 400, height: 300 } },
-      { name: "Editor", bounds: { x: 0, y: 0, width: 801, height: 599 } },
-    ];
-
-    expect(findAccessibleWindow(windows, captured, "wayland")).toBe(windows[1]);
-  });
-
-  it("does not match an untitled Wayland window by size alone", () => {
+  it("does not match an untitled window by bounds alone", () => {
     const windows = [{ name: "", bounds: captured.bounds }];
 
-    expect(findAccessibleWindow(windows, { ...captured, title: "" }, "wayland")).toBeUndefined();
+    expect(findAccessibleWindow(windows, { ...captured, title: "" })).toBeUndefined();
   });
 
   it("accepts one PID-scoped untitled window whose bounds match", () => {
     const windows = [{ name: null, bounds: captured.bounds }];
 
-    expect(
-      findAccessibleWindow(windows, captured, "wayland", { allowUntitledUniqueBounds: true }),
-    ).toBe(windows[0]);
-    expect(findAccessibleWindow(windows, captured, "wayland")).toBeUndefined();
+    expect(findAccessibleWindow(windows, captured, { allowUntitledUniqueBounds: true })).toBe(
+      windows[0],
+    );
+    expect(findAccessibleWindow(windows, captured)).toBeUndefined();
   });
 
   it("does not fall back to a differently titled PID-scoped window with matching bounds", () => {
     const windows = [{ name: "Preferences", bounds: captured.bounds }];
 
     expect(
-      findAccessibleWindow(windows, captured, "wayland", { allowUntitledUniqueBounds: true }),
+      findAccessibleWindow(windows, captured, { allowUntitledUniqueBounds: true }),
     ).toBeUndefined();
   });
 
   it("does not use unique bounds when a titled match is already ambiguous", () => {
     const windows = [
       { name: "Editor", bounds: captured.bounds },
-      { name: "Editor", bounds: { ...captured.bounds, x: 0, y: 0 } },
+      { name: "Editor", bounds: { ...captured.bounds } },
     ];
 
     expect(
-      findAccessibleWindow(windows, captured, "wayland", { allowUntitledUniqueBounds: true }),
-    ).toBeUndefined();
-  });
-
-  it.each([
-    ["⠋ t3code", "t3code"],
-    ["t3code", "⠙ t3code"],
-  ])("matches a Wayland spinner starting or stopping: %s → %s", (title, name) => {
-    const windows = [{ name, bounds: captured.bounds }];
-
-    expect(findAccessibleWindow(windows, { ...captured, title }, "wayland")).toBe(windows[0]);
-  });
-
-  it.each([
-    ["⠋ t3code", "⠙ private"],
-    ["t3code ⠋", "t3code ⠙"],
-    ["⠋t3code", "⠙t3code"],
-    ["⠁ t3code", "⠙ t3code"],
-    ["⠋", "⠋"],
-  ])("does not guess a Wayland title match: %s → %s", (title, name) => {
-    expect(
-      findAccessibleWindow([{ name, bounds: captured.bounds }], { ...captured, title }, "wayland"),
+      findAccessibleWindow(windows, captured, { allowUntitledUniqueBounds: true }),
     ).toBeUndefined();
   });
 });
@@ -510,50 +369,4 @@ describe("findCaptureSource", () => {
       ),
     ).toBeUndefined();
   });
-});
-
-describe("isWaylandSession", () => {
-  effectIt.effect(
-    "falls back to a live runtime directory socket when session variables are stripped",
-    () =>
-      Effect.gen(function* () {
-        if ((yield* HostProcess.Platform) !== "linux") return;
-        yield* Effect.promise(async () => {
-          const { mkdtemp, rm, writeFile } = await import("node:fs/promises");
-          const { createServer } = await import("node:net");
-          const { tmpdir } = await import("node:os");
-          const { join } = await import("node:path");
-          const runtimeDirectory = await mkdtemp(join(tmpdir(), "t3-wayland-"));
-          const socketPath = join(runtimeDirectory, "wayland-0");
-          const server = createServer();
-          try {
-            expect(isWaylandSession("linux", { XDG_RUNTIME_DIR: runtimeDirectory })).toBe(false);
-            await writeFile(socketPath, "");
-            expect(isWaylandSession("linux", { XDG_RUNTIME_DIR: runtimeDirectory })).toBe(false);
-            await rm(socketPath);
-            await new Promise<void>((resolve, reject) => {
-              server.once("error", reject);
-              server.listen(socketPath, resolve);
-            });
-            expect(isWaylandSession("linux", { XDG_RUNTIME_DIR: runtimeDirectory })).toBe(true);
-            expect(
-              isWaylandSession("linux", {
-                XDG_RUNTIME_DIR: runtimeDirectory,
-                XDG_SESSION_TYPE: "x11",
-              }),
-            ).toBe(false);
-            expect(isWaylandSession("linux", { XDG_RUNTIME_DIR: "/nonexistent-t3-test" })).toBe(
-              false,
-            );
-          } finally {
-            if (server.listening) {
-              await new Promise<void>((resolve, reject) => {
-                server.close((error) => (error ? reject(error) : resolve()));
-              });
-            }
-            await rm(runtimeDirectory, { recursive: true, force: true });
-          }
-        });
-      }),
-  );
 });

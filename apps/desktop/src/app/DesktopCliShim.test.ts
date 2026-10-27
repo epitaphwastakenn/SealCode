@@ -41,38 +41,7 @@ const run = (shim: string, args: ReadonlyArray<string>, env: NodeJS.ProcessEnv =
 const REPORTER =
   '#!/bin/sh\necho "node=$ELECTRON_RUN_AS_NODE cli=$T3CODE_CLI_PATH home=$T3CODE_HOME"\nprintf "%s\\n" "$@"\nexit 3\n';
 
-const fakeAppImage = (canMount = true) => {
-  const root = tempRoot();
-  const image = NodePath.join(root, "image");
-  writeExecutable(NodePath.join(image, "t3code"), REPORTER);
-  const appImage = NodePath.join(root, "SealCode.AppImage");
-  writeExecutable(
-    appImage,
-    [
-      "#!/bin/sh",
-      `if [ "$1" = --appimage-extract ]; then cp -R '${image}' squashfs-root; exit 0; fi`,
-      '[ "$1" = --appimage-mount ] || exit 9',
-      '[ -n "$APPIMAGE_EXTRACT_AND_RUN" ] && exit 8',
-      canMount ? `echo '${image}'` : 'echo "Cannot mount AppImage"; exit 1',
-      `trap 'touch "${root}/unmounted"; exit 0' TERM`,
-      "while :; do sleep 0.05; done",
-      "",
-    ].join("\n"),
-  );
-  const shim = writeShim(root, { kind: "appimage", appImage, executableName: "t3code" });
-  return { root, image, appImage, shim };
-};
-
 describe("renderCliShim", () => {
-  it("extracts the AppImage where it cannot be mounted", () => {
-    const { shim } = fakeAppImage(false);
-    const result = run(shim, ["--version"], { APPIMAGE_EXTRACT_AND_RUN: "1" });
-    expect(result.status).toBe(3);
-    expect(result.stdout).toMatch(
-      /squashfs-root\/resources\/app\.asar\/apps\/server\/dist\/bin\.mjs/,
-    );
-  });
-
   it("keeps the install's T3 home under sudo, unless one is set", () => {
     const root = tempRoot();
     writeExecutable(NodePath.join(root, "app"), REPORTER);

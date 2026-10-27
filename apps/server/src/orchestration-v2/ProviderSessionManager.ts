@@ -326,7 +326,7 @@ export const layerWithOptions = (
       const agentAccessSettings = Effect.fn("ProviderSessionManagerV2.agentAccessSettings")(
         function* (threadId: ThreadId) {
           if (Option.isNone(serverSettings)) {
-            return { browser: true, device: false, computer: false };
+            return { browser: true, computer: false };
           }
           return yield* Effect.gen(function* () {
             const settings = yield* serverSettings.value.getSettings;
@@ -336,32 +336,27 @@ export const layerWithOptions = (
             const browserOverridden = entries.some(
               (entry) => entry.enableAgentBrowserAccess !== undefined,
             );
-            const deviceOverridden = entries.some(
-              (entry) => entry.enableAgentDeviceAccess !== undefined,
-            );
-            if (browserOverridden || deviceOverridden) {
+            if (browserOverridden) {
               const project = Option.isSome(projectService)
                 ? yield* projectService.value.getById(thread.projectId)
                 : Option.none();
               if (Option.isNone(project))
                 return {
-                  browser: browserOverridden ? false : settings.enableAgentBrowserAccess,
-                  device: deviceOverridden ? false : settings.enableAgentDeviceAccess,
+                  browser: false,
                   computer,
                 };
             }
             const effective = resolveProjectSettings(settings, thread.projectId).settings;
             return {
               browser: effective.enableAgentBrowserAccess,
-              device: effective.enableAgentDeviceAccess,
               computer,
             };
           }).pipe(
             Effect.catch((cause) =>
-              Effect.logWarning(
-                "Could not resolve agent access; withholding browser and device tools.",
-                { threadId, cause },
-              ).pipe(Effect.as({ browser: false, device: false, computer: false })),
+              Effect.logWarning("Could not resolve agent access; withholding browser tools.", {
+                threadId,
+                cause,
+              }).pipe(Effect.as({ browser: false, computer: false })),
             ),
           );
         },
@@ -432,16 +427,12 @@ export const layerWithOptions = (
               threadId,
               Effect.gen(function* () {
                 // Live providers build MCP clients once; reuse credentials across workspace handoffs.
-                const {
-                  browser: browserToolsAvailable,
-                  device: deviceToolsAvailable,
-                  computer: computerToolsAvailable,
-                } = yield* agentAccessSettings(threadId);
+                const { browser: browserToolsAvailable, computer: computerToolsAvailable } =
+                  yield* agentAccessSettings(threadId);
                 const capabilities = new Set<
                   import("../mcp/McpInvocationContext.ts").McpCapability
                 >(["orchestration", "worktree", "pull-requests"]);
                 if (browserToolsAvailable) capabilities.add("preview");
-                if (deviceToolsAvailable) capabilities.add("device");
                 if (computerToolsAvailable) capabilities.add("computer-use");
                 const subagent = yield* projectionStore.getThread(threadId).pipe(
                   Effect.map((thread) => thread.lineage.relationshipToParent === "subagent"),
@@ -467,7 +458,6 @@ export const layerWithOptions = (
                     resolved.thread.threadId === threadId &&
                     resolved.thread.providerInstanceId === providerInstanceId &&
                     resolved.capabilities.has("preview") === browserToolsAvailable &&
-                    resolved.capabilities.has("device") === deviceToolsAvailable &&
                     resolved.capabilities.has("computer-use") === computerToolsAvailable &&
                     // A credential issued while the lineage read failed is replaced once it works.
                     (resolved.thread.subagent === true) === subagent

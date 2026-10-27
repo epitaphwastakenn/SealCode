@@ -1,9 +1,9 @@
 import { useAtomValue } from "@effect/atom-react";
 import { PREVIEW_STREAM_BASE_PATH } from "@t3tools/client-runtime/preview/server-browser-stream";
 import {
-  type DeviceHubAccess,
-  resolveDeviceHubAccess,
-} from "@t3tools/client-runtime/state/deviceHubAccess";
+  type PreviewStreamAccess,
+  resolvePreviewStreamAccess,
+} from "@t3tools/client-runtime/state/previewStreamAccess";
 import type { EnvironmentId } from "@t3tools/contracts";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -20,12 +20,12 @@ const previewStreamAccessAtom = Atom.family((environmentId: EnvironmentId) =>
         get(environmentSession.preparedConnectionValueAtom(environmentId)),
       );
       if (prepared === null) return Effect.never;
-      return resolveDeviceHubAccess({ prepared, hubBasePath: PREVIEW_STREAM_BASE_PATH });
+      return resolvePreviewStreamAccess({ prepared, streamBasePath: PREVIEW_STREAM_BASE_PATH });
     })
     .pipe(Atom.setIdleTTL(60_000), Atom.withLabel(`preview-stream-access:${environmentId}`)),
 );
 
-export function usePreviewStreamAccess(environmentId: EnvironmentId): DeviceHubAccess | null {
+export function usePreviewStreamAccess(environmentId: EnvironmentId): PreviewStreamAccess | null {
   const result = useAtomValue(previewStreamAccessAtom(environmentId));
   return AsyncResult.isSuccess(result) ? result.value : null;
 }
@@ -37,7 +37,7 @@ export function refreshPreviewStreamAccess(environmentId: EnvironmentId): void {
 export function readPreviewStreamAccess(
   environmentId: EnvironmentId,
   refresh: boolean,
-): Promise<DeviceHubAccess | null> {
+): Promise<PreviewStreamAccess | null> {
   const atom = previewStreamAccessAtom(environmentId);
   if (refresh) appAtomRegistry.refresh(atom);
   return Effect.runPromise(

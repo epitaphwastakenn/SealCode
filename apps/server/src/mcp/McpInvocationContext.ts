@@ -16,7 +16,6 @@ const ALL_MCP_CAPABILITIES = [
   "preview",
   "orchestration",
   "worktree",
-  "device",
   "pull-requests",
   "computer-use",
 ] as const;
@@ -99,7 +98,7 @@ export const requireMcpCapability = <const C extends McpCapability>(
     Effect.withSpan("mcp.requireCapability"),
   );
 
-export const requireThreadMcpCapability = <const C extends "preview" | "device">(
+export const requireThreadMcpCapability = <const C extends "preview">(
   capability: C,
 ): Effect.Effect<McpThreadInvocationScope, McpCapabilityError<C>, McpInvocationContext> =>
   McpInvocationContext.pipe(

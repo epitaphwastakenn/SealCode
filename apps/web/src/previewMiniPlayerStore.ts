@@ -1,5 +1,5 @@
 import { scopedThreadKey } from "@t3tools/client-runtime/environment";
-import type { DevicePlatform, ScopedThreadRef } from "@t3tools/contracts";
+import type { ScopedThreadRef } from "@t3tools/contracts";
 import { create } from "zustand";
 
 export interface PreviewMiniPlayerPosition {
@@ -12,15 +12,7 @@ export interface PreviewMiniPlayerSize {
   readonly height: number;
 }
 
-export type PreviewMiniPlayerSource =
-  | { readonly kind: "browser"; readonly tabId: string }
-  | {
-      readonly kind: "device";
-      readonly hostId: string;
-      readonly deviceId: string;
-      readonly platform: DevicePlatform;
-      readonly name: string;
-    };
+export type PreviewMiniPlayerSource = { readonly kind: "browser"; readonly tabId: string };
 
 export interface PreviewMiniPlayerState {
   readonly source: PreviewMiniPlayerSource;
@@ -49,9 +41,7 @@ interface PreviewMiniPlayerStoreState {
 }
 
 export function previewMiniPlayerSourceKey(source: PreviewMiniPlayerSource): string {
-  return source.kind === "browser"
-    ? `browser:${source.tabId}`
-    : `device:${encodeURIComponent(source.hostId)}:${encodeURIComponent(source.deviceId)}`;
+  return `browser:${source.tabId}`;
 }
 
 export const browserMiniPlayerSource = (tabId: string): PreviewMiniPlayerSource => ({

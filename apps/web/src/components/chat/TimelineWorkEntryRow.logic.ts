@@ -27,8 +27,6 @@ export function toolGroupSummaryIconName(
       return "t3-code";
     case "browser":
       return "browser";
-    case "device":
-      return "device";
     case "search":
       return "globe";
     case "code-search":

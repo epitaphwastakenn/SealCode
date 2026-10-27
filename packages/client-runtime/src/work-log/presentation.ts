@@ -111,7 +111,6 @@ export type ToolGroupAction =
   | "command"
   | "thread-create"
   | "browser"
-  | "device"
   | "code-search"
   | "search"
   | "other"
@@ -309,7 +308,6 @@ export function toolGroupAction(entry: WorkLogPresentationEntry): ToolGroupActio
   const presentation = resolveWorkEntryToolPresentation(entry);
   if (presentation?.action !== undefined) return presentation.action;
   if (presentation?.icon === "browser") return "browser";
-  if (presentation?.icon === "device") return "device";
   if (entry.requestKind === "file-read" || entry.viewedImagePath !== undefined) return "read";
   if (entry.itemType === "approval_request" || entry.itemType === "user_input_request") {
     return workLogEntryIsToolLike(entry) ? "other" : "update";
@@ -438,8 +436,6 @@ function toolGroupActionLabel(action: ToolGroupAction, count: number): string {
       return `Ran ${count} ${count === 1 ? "command" : "commands"}`;
     case "thread-create":
       return `Created ${count} ${count === 1 ? "thread" : "threads"}`;
-    case "device":
-      return `Used device controls ${count} ${count === 1 ? "time" : "times"}`;
     case "browser":
       return `Used browser ${count} ${count === 1 ? "time" : "times"}`;
     case "search":

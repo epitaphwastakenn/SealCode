@@ -1,4 +1,3 @@
-import { withAgentDeviceEnvironment } from "@t3tools/provider-core/server/mcpSession";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import { AntigravitySettings, ProviderDriverKind, ProviderSetupError } from "@t3tools/contracts";
 import * as HostProcess from "@t3tools/shared/HostProcess";
@@ -274,9 +273,7 @@ export const AntigravityDriver: ProviderDriver<
           installation: executable,
           profile,
           cwd: input.cwd,
-          baseEnv: yield* connectProxy.environment(
-            withAgentDeviceEnvironment(processEnvironment, input),
-          ),
+          baseEnv: yield* connectProxy.environment(processEnvironment),
           auth,
           runtimeTempDirectory,
         }),

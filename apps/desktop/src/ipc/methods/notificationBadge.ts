@@ -33,7 +33,7 @@ function applyNotificationBadge(
           );
         }
       }
-    } else if (platform === "darwin" || platform === "linux") {
+    } else if (platform === "darwin") {
       Electron.app.setBadgeCount(count);
     }
   } catch (error) {

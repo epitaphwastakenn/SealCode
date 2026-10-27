@@ -26,10 +26,8 @@ export interface BrowserImportSourceDefinition {
   readonly engine: BrowserImportEngine;
   readonly platforms: ReadonlyArray<NodeJS.Platform>;
   readonly userDataDirectory: (context: BrowserImportPathContext) => string | undefined;
-  readonly alternateLinuxRoots?: (context: BrowserImportPathContext) => ReadonlyArray<string>;
   readonly keychainService?: string;
   readonly keychainAccount?: string;
-  readonly linuxSecretApplication?: string;
 }
 
 const macApplicationSupport = (
@@ -43,8 +41,6 @@ const chromiumSource = (input: {
   readonly keychainService: string;
   readonly keychainAccount: string;
   readonly macSegments: ReadonlyArray<string>;
-  readonly linuxSegments?: ReadonlyArray<string>;
-  readonly linuxSecretApplication?: string;
   readonly windowsSegments?: ReadonlyArray<string>;
 }): BrowserImportSourceDefinition => ({
   id: input.id,
@@ -52,23 +48,14 @@ const chromiumSource = (input: {
   engine: "chromium",
   platforms: [
     "darwin" as NodeJS.Platform,
-    ...(input.linuxSegments ? ["linux" as NodeJS.Platform] : []),
     ...(input.windowsSegments ? ["win32" as NodeJS.Platform] : []),
   ],
   keychainService: input.keychainService,
   keychainAccount: input.keychainAccount,
-  ...(input.linuxSecretApplication === undefined
-    ? {}
-    : { linuxSecretApplication: input.linuxSecretApplication }),
   userDataDirectory: (context) => {
     if (context.platform === "darwin") return macApplicationSupport(context, ...input.macSegments);
-    if (context.platform === "win32") {
-      return input.windowsSegments && context.localAppData
-        ? context.path.join(context.localAppData, ...input.windowsSegments)
-        : undefined;
-    }
-    return input.linuxSegments
-      ? context.path.join(context.home, ".config", ...input.linuxSegments)
+    return input.windowsSegments && context.localAppData
+      ? context.path.join(context.localAppData, ...input.windowsSegments)
       : undefined;
   },
 });
@@ -81,8 +68,6 @@ export const BROWSER_IMPORT_SOURCES: ReadonlyArray<BrowserImportSourceDefinition
     keychainService: "Chrome Safe Storage",
     keychainAccount: "Chrome",
     macSegments: ["Google", "Chrome"],
-    linuxSegments: ["google-chrome"],
-    linuxSecretApplication: "chrome",
   }),
   chromiumSource({
     id: "edge",
@@ -90,8 +75,6 @@ export const BROWSER_IMPORT_SOURCES: ReadonlyArray<BrowserImportSourceDefinition
     keychainService: "Microsoft Edge Safe Storage",
     keychainAccount: "Microsoft Edge",
     macSegments: ["Microsoft Edge"],
-    linuxSegments: ["microsoft-edge"],
-    linuxSecretApplication: "msedge",
   }),
   chromiumSource({
     id: "brave",
@@ -99,8 +82,6 @@ export const BROWSER_IMPORT_SOURCES: ReadonlyArray<BrowserImportSourceDefinition
     keychainService: "Brave Safe Storage",
     keychainAccount: "Brave",
     macSegments: ["BraveSoftware", "Brave-Browser"],
-    linuxSegments: ["BraveSoftware", "Brave-Browser"],
-    linuxSecretApplication: "brave",
   }),
   chromiumSource({
     id: "vivaldi",
@@ -108,8 +89,6 @@ export const BROWSER_IMPORT_SOURCES: ReadonlyArray<BrowserImportSourceDefinition
     keychainService: "Vivaldi Safe Storage",
     keychainAccount: "Vivaldi",
     macSegments: ["Vivaldi"],
-    linuxSegments: ["vivaldi"],
-    linuxSecretApplication: "vivaldi",
   }),
   chromiumSource({
     id: "opera",
@@ -117,8 +96,6 @@ export const BROWSER_IMPORT_SOURCES: ReadonlyArray<BrowserImportSourceDefinition
     keychainService: "Opera Safe Storage",
     keychainAccount: "Opera",
     macSegments: ["com.operasoftware.Opera"],
-    linuxSegments: ["opera"],
-    linuxSecretApplication: "opera",
   }),
   chromiumSource({
     id: "arc",
@@ -133,10 +110,7 @@ export const BROWSER_IMPORT_SOURCES: ReadonlyArray<BrowserImportSourceDefinition
     keychainService: "Helium Storage Key",
     keychainAccount: "Helium",
     macSegments: ["net.imput.helium"],
-    linuxSegments: ["net.imput.helium"],
     windowsSegments: ["imput", "Helium", "User Data"],
-    // Helium retains Chromium's libsecret application name on Linux.
-    linuxSecretApplication: "chromium",
   }),
   {
     id: "safari",
@@ -160,36 +134,21 @@ export const BROWSER_IMPORT_SOURCES: ReadonlyArray<BrowserImportSourceDefinition
     id: "firefox",
     name: "Firefox",
     engine: "firefox",
-    platforms: ["darwin", "win32", "linux"],
+    platforms: ["darwin", "win32"],
     userDataDirectory: (context) => {
       if (context.platform === "darwin") return macApplicationSupport(context, "Firefox");
-      if (context.platform === "win32") {
-        return context.appData
-          ? context.path.join(context.appData, "Mozilla", "Firefox")
-          : undefined;
-      }
-      return context.path.join(context.home, ".mozilla", "firefox");
+      return context.appData ? context.path.join(context.appData, "Mozilla", "Firefox") : undefined;
     },
-    alternateLinuxRoots: (context) => [
-      context.path.join(context.home, "snap", "firefox", "common", ".mozilla", "firefox"),
-    ],
   },
   {
     id: "zen",
     name: "Zen",
     engine: "firefox",
-    platforms: ["darwin", "win32", "linux"],
+    platforms: ["darwin", "win32"],
     userDataDirectory: (context) => {
       if (context.platform === "darwin") return macApplicationSupport(context, "zen");
-      if (context.platform === "win32") {
-        return context.appData ? context.path.join(context.appData, "zen") : undefined;
-      }
-      return context.path.join(context.home, ".config", "zen");
+      return context.appData ? context.path.join(context.appData, "zen") : undefined;
     },
-    alternateLinuxRoots: (context) => [
-      context.path.join(context.home, ".zen"),
-      context.path.join(context.home, ".var", "app", "app.zen_browser.zen", "zen"),
-    ],
   },
 ];
 
@@ -413,7 +372,7 @@ const listSafariProfiles = Effect.fnUntraced(function* (
   return profiles;
 });
 
-const listSourceProfilesInDirectory = Effect.fnUntraced(function* (
+export const listSourceProfiles = Effect.fn("BrowserImportSources.listSourceProfiles")(function* (
   definition: BrowserImportSourceDefinition,
   context: BrowserImportPathContext,
 ): Effect.fn.Return<ReadonlyArray<BrowserImportSourceProfile>, never, FileSystem.FileSystem> {
@@ -444,13 +403,12 @@ const listSourceProfilesInDirectory = Effect.fnUntraced(function* (
       }
     }
 
-    const fallbackDirectory =
-      context.platform === "linux" ? root : context.path.join(root, "Profiles");
+    const fallbackDirectory = context.path.join(root, "Profiles");
     const scanned = yield* fileSystem
       .readDirectory(fallbackDirectory)
       .pipe(Effect.orElseSucceed(() => [] as ReadonlyArray<string>));
     const found = yield* Effect.forEach(scanned, (entry) => {
-      const directory = context.platform === "linux" ? entry : context.path.join("Profiles", entry);
+      const directory = context.path.join("Profiles", entry);
       return resolveCookieDatabase(definition, context, directory).pipe(
         Effect.map((database) => (database === undefined ? undefined : { directory, name: entry })),
       );
@@ -489,34 +447,6 @@ const listSourceProfilesInDirectory = Effect.fnUntraced(function* (
     context,
     found.filter((profile) => profile !== undefined),
   );
-});
-
-/** Keep alternate-root profile paths absolute so cookie reads and locks use the correct installation. */
-export const listSourceProfiles = Effect.fn("BrowserImportSources.listSourceProfiles")(function* (
-  definition: BrowserImportSourceDefinition,
-  context: BrowserImportPathContext,
-): Effect.fn.Return<ReadonlyArray<BrowserImportSourceProfile>, never, FileSystem.FileSystem> {
-  if (definition.engine !== "firefox" || context.platform !== "linux") {
-    return yield* listSourceProfilesInDirectory(definition, context);
-  }
-
-  const root = definition.userDataDirectory(context);
-  if (root === undefined) return [];
-  const roots = [root, ...(definition.alternateLinuxRoots?.(context) ?? [])];
-  const profiles = new Map<string, BrowserImportSourceProfile>();
-  for (const directory of roots) {
-    const found = yield* listSourceProfilesInDirectory(
-      { ...definition, userDataDirectory: () => directory },
-      context,
-    );
-    for (const profile of found) {
-      const absolute = context.path.resolve(directory, profile.directory);
-      if (!profiles.has(absolute)) {
-        profiles.set(absolute, directory === root ? profile : { ...profile, directory: absolute });
-      }
-    }
-  }
-  return [...profiles.values()];
 });
 
 const databaseFileExists = Effect.fnUntraced(function* (path: string) {

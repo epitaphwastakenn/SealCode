@@ -17,7 +17,6 @@ type SnapShotAnimationDetails = {
 
 export type SnapShotAnimationDestination = {
   readonly frame: Electron.Rectangle;
-  readonly relativeFrame?: Electron.Rectangle | undefined;
   readonly backgroundColor: string;
   readonly borderColor: string;
   readonly borderWidth: number;

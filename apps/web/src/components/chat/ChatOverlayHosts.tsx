@@ -1,16 +1,8 @@
-import type {
-  DeviceServiceState,
-  EnvironmentId,
-  MessageId,
-  ScopedThreadRef,
-  ThreadId,
-} from "@t3tools/contracts";
+import type { EnvironmentId, MessageId, ThreadId } from "@t3tools/contracts";
 import { useAtomValue } from "@effect/atom-react";
 import { Atom } from "effect/reactivity";
 
 import { appAtomRegistry } from "~/rpc/atomRegistry";
-import { useRightPanelStore } from "~/rightPanelStore";
-import { DeviceSetup } from "../device/DeviceSetup";
 import { PullRequestThreadDialog } from "../PullRequestThreadDialog";
 import {
   AlertDialog,
@@ -22,8 +14,6 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { Button } from "../ui/button";
-import { Dialog } from "../ui/dialog";
-import { WizardPopup } from "../ui/wizard";
 import { registerThreadOverlay } from "./threadOverlayRetention";
 
 /**
@@ -92,42 +82,6 @@ export function PullRequestThreadDialogHost(props: {
       }}
       onPrepared={props.onPrepared}
     />
-  );
-}
-
-const deviceSetupDialogAtom = makeThreadOverlayAtom<true>("device-setup-dialog");
-
-export function openDeviceSetupDialog(threadKey: string): void {
-  appAtomRegistry.set(deviceSetupDialogAtom, { threadKey, value: true });
-}
-
-export function DeviceSetupDialogHost(props: {
-  readonly threadKey: string | null;
-  readonly threadRef: ScopedThreadRef | null;
-  readonly state: DeviceServiceState;
-}) {
-  const open = useThreadOverlay(deviceSetupDialogAtom, props.threadKey) !== null;
-  const { threadRef } = props;
-  return (
-    <Dialog
-      open={open}
-      onOpenChange={(nextOpen) => {
-        if (!nextOpen) closeThreadOverlay(deviceSetupDialogAtom);
-      }}
-    >
-      <WizardPopup>
-        {threadRef ? (
-          <DeviceSetup
-            environmentId={threadRef.environmentId}
-            state={props.state}
-            onComplete={() => {
-              useRightPanelStore.getState().open(threadRef, "device");
-              closeThreadOverlay(deviceSetupDialogAtom);
-            }}
-          />
-        ) : null}
-      </WizardPopup>
-    </Dialog>
   );
 }
 

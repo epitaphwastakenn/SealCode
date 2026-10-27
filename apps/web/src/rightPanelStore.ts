@@ -18,7 +18,6 @@ const RIGHT_PANEL_KINDS = [
   "files",
   "file",
   "preview",
-  "device",
   "terminal",
   "pull-request",
   "pull-requests",
@@ -27,17 +26,9 @@ export type RightPanelKind = (typeof RIGHT_PANEL_KINDS)[number];
 
 export type PullRequestDetailTab = "summary" | "guide" | "timeline" | "code";
 
-export interface DeviceTabTarget {
-  hostId: string;
-  deviceId: string;
-  platform: "ios" | "android";
-  name: string;
-}
-
 export type RightPanelSurface =
   | { id: `browser:${string}`; kind: "preview"; resourceId: string }
   | { id: "browser:new"; kind: "preview"; resourceId: null }
-  | { id: "device" | `device:${string}`; kind: "device"; target?: DeviceTabTarget; title?: string }
   | {
       id: `terminal:${string}`;
       kind: "terminal";
@@ -79,7 +70,7 @@ export type RightPanelSurface =
   | { id: "pull-requests"; kind: "pull-requests" };
 
 const RIGHT_PANEL_STORAGE_KEY = "t3code:right-panel-state:v2";
-const RIGHT_PANEL_STORAGE_VERSION = 14;
+const RIGHT_PANEL_STORAGE_VERSION = 15;
 
 export const PULL_REQUESTS_PANEL_REF = scopeThreadRef(
   EnvironmentId.make("pull-requests-panel"),
@@ -92,7 +83,6 @@ export interface ThreadRightPanelState {
   isOpen: boolean;
   activeSurfaceId: string | null;
   surfaces: RightPanelSurface[];
-  dismissedDeviceSurfaceIds?: string[];
   maximized?: true;
   proactiveDiffTurnId?: RunId;
 }
@@ -124,8 +114,6 @@ interface RightPanelStoreState {
     ref: ScopedThreadRef,
     kind: Exclude<RightPanelKind, "file" | "terminal" | "pull-request">,
   ) => void;
-  openDevice: (ref: ScopedThreadRef, target: DeviceTabTarget, automatic?: boolean) => void;
-  renameDevice: (ref: ScopedThreadRef, surfaceId: string, title: string) => void;
   openBrowser: (ref: ScopedThreadRef, tabId: string | null) => void;
   openFile: (ref: ScopedThreadRef, relativePath: string, line?: number) => void;
   /** Moves in place; "" opens the root explorer. folderTrail keeps the return path; keepSource opens beside the source. */
@@ -215,8 +203,6 @@ const singletonSurface = (
       return { id: "files", kind };
     case "pull-requests":
       return { id: "pull-requests", kind };
-    case "device":
-      return { id: "device", kind };
   }
 };
 
@@ -315,7 +301,6 @@ const updateThreadStateMap = (
     !next.isOpen &&
     next.activeSurfaceId === null &&
     next.surfaces.length === 0 &&
-    !next.dismissedDeviceSurfaceIds?.length &&
     next.proactiveDiffTurnId === undefined
   ) {
     if (!(threadKey in byThreadKey)) return byThreadKey;
@@ -393,21 +378,7 @@ const userAction = (
 ): Partial<RightPanelStoreState> => ({
   ...updateThread(state, threadKey, (current) => {
     const next = updater(current);
-    if (next === current) return current;
-    const removedDevices = current.surfaces.filter(
-      (surface) =>
-        surface.kind === "device" && !next.surfaces.some((entry) => entry.id === surface.id),
-    );
-    if (removedDevices.length === 0) return next;
-    return {
-      ...next,
-      dismissedDeviceSurfaceIds: [
-        ...new Set([
-          ...(next.dismissedDeviceSurfaceIds ?? []),
-          ...removedDevices.map((surface) => surface.id),
-        ]),
-      ],
-    };
+    return next === current ? current : next;
   }),
   userActionRevisionByThreadKey: {
     ...state.userActionRevisionByThreadKey,
@@ -454,7 +425,7 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
               const surfaces = Array.isArray(validThreadState?.surfaces)
                 ? validThreadState.surfaces.flatMap<RightPanelSurface>((surface) => {
                     const kind = (surface as { kind?: string }).kind;
-                    if (kind === "plan" || kind === "agents") return [];
+                    if (kind === "plan" || kind === "agents" || kind === "device") return [];
                     if (
                       (surface.kind === "file" || surface.kind === "files") &&
                       "folderTrail" in surface &&
@@ -554,14 +525,6 @@ export function migratePersistedRightPanelState(persistedState: unknown): {
                   ...(typeof validThreadState?.proactiveDiffTurnId === "string"
                     ? { proactiveDiffTurnId: RunId.make(validThreadState.proactiveDiffTurnId) }
                     : {}),
-                  ...(Array.isArray(validThreadState?.dismissedDeviceSurfaceIds)
-                    ? {
-                        dismissedDeviceSurfaceIds:
-                          validThreadState.dismissedDeviceSurfaceIds.filter(
-                            (id): id is string => typeof id === "string",
-                          ),
-                      }
-                    : {}),
                   ...(validThreadState?.maximized === true ? { maximized: true as const } : {}),
                 },
               ];
@@ -651,40 +614,6 @@ export const useRightPanelStore = create<RightPanelStoreState>()(
             }
             return upsertSurface(current, singletonSurface(kind));
           }),
-        ),
-      openDevice: (ref, target, automatic = false) =>
-        set((state) =>
-          (automatic ? automaticUpdate : userAction)(state, scopedThreadKey(ref), (current) => {
-            const id =
-              `device:${encodeURIComponent(target.hostId)}:${encodeURIComponent(target.deviceId)}` as const;
-            if (automatic && current.dismissedDeviceSurfaceIds?.includes(id)) return current;
-            const surface: RightPanelSurface = { id, kind: "device", target };
-            const existing = current.surfaces.find((entry) => entry.id === id);
-            const surfaces = existing
-              ? current.surfaces.filter((entry) => entry.id !== "device")
-              : current.surfaces.map((entry) => (entry.id === "device" ? surface : entry));
-            return upsertSurface(
-              {
-                ...current,
-                surfaces,
-                dismissedDeviceSurfaceIds: (current.dismissedDeviceSurfaceIds ?? []).filter(
-                  (entry) => entry !== id,
-                ),
-              },
-              existing ?? surface,
-            );
-          }),
-        ),
-      renameDevice: (ref, surfaceId, title) =>
-        set((state) =>
-          userAction(state, scopedThreadKey(ref), (current) => ({
-            ...current,
-            surfaces: current.surfaces.map((surface) =>
-              surface.id === surfaceId && surface.kind === "device"
-                ? { ...surface, title: title.trim() || surface.target?.name || "Device" }
-                : surface,
-            ),
-          })),
         ),
       openBrowser: (ref, tabId) =>
         set((state) =>

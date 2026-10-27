@@ -465,8 +465,6 @@ export function SnapShotCoordinator() {
           });
           return;
         }
-        case "shortcut-changed":
-          return;
       }
     },
   );

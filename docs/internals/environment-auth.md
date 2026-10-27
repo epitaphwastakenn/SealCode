@@ -72,7 +72,7 @@ breaks sign-in.
 
 Bearer and DPoP clients obtain short-lived WebSocket tickets through authenticated
 HTTP so long-lived tokens stay out of socket URLs. A ticket names the route it
-opens: the RPC socket, or the media routes (device hub, preview stream), which
+opens: the RPC socket, or the media routes (preview stream), which
 share one ticket across `<img>`, `EventSource` and several sockets. A DPoP
 client's RPC ticket is bound to its proof key and the upgrade carries a fresh
 proof in the `dpop` query parameter, since a WebSocket cannot set headers; a

@@ -44,8 +44,6 @@ import {
   stageWslRuntimeArchive,
   ancestorNodeModulesPaths,
   copyDirectoryPreservingSymlinks,
-  LinuxBrowserSecretHostError,
-  stageBrowserSecret,
   validateWindowsPackagedPayload,
   verifyPackagedBundleIsSelfContained,
   WindowsPrimaryNativeProbeError,
@@ -570,23 +568,6 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
         "@ff-labs/fff-bin-darwin-arm64": "0.9.4",
       },
     );
-
-    assert.deepStrictEqual(
-      resolveMergedStageDependencies({
-        platform: "linux",
-        serverDependencies: { "@ff-labs/fff-node": "0.9.4", "node-pty": "1.1.0", effect: "4.0.0" },
-        desktopDependencies: { "@crowecawcaw/xa11y": "0.13.0" },
-        arch: "x64",
-        fffNodeVersion: "0.9.4",
-      }),
-      {
-        "@ff-labs/fff-node": "0.9.4",
-        "node-pty": "1.1.0",
-        "@crowecawcaw/xa11y": "0.13.0",
-        "@ff-labs/fff-bin-linux-x64-gnu": "0.9.4",
-        "@ff-labs/fff-bin-linux-x64-musl": "0.9.4",
-      },
-    );
   });
 
   it.effect("ships Cursor platform assets outside asar for spawning and native loading", () =>
@@ -1068,39 +1049,6 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     );
   });
 
-  it.effect("refuses a Linux build on a host that cannot build the browser secret helper", () => {
-    const commands: Array<{ readonly command: string }> = [];
-    const spawnerLayer = Layer.succeed(
-      ChildProcessSpawner.ChildProcessSpawner,
-      ChildProcessSpawner.make((command) => {
-        commands.push(command as unknown as (typeof commands)[number]);
-        return Effect.succeed(mockProcess(0));
-      }),
-    );
-
-    return Effect.gen(function* () {
-      const error = yield* stageBrowserSecret({
-        repoRoot: "/repo",
-        stageResourcesDir: "/stage/resources",
-        platform: "linux",
-        arch: "x64",
-        verbose: false,
-      }).pipe(Effect.flip);
-      assert.instanceOf(error, LinuxBrowserSecretHostError);
-      assert.equal(error.hostPlatform, "darwin");
-      assert.include(error.message, "Linux host");
-      assert.lengthOf(commands, 0);
-    }).pipe(
-      Effect.provide(
-        Layer.mergeAll(
-          spawnerLayer,
-          Layer.succeed(HostProcess.Platform, "darwin"),
-          Layer.succeed(HostProcess.Architecture, "arm64"),
-        ),
-      ),
-    );
-  });
-
   it.effect("skips the primary native probe for cross-architecture Windows payloads", () => {
     const commands: Array<{
       readonly command: string;
@@ -1553,9 +1501,9 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     ),
   );
 
-  it.effect("rejects universal builds on Linux and Windows before staging binaries", () =>
+  it.effect("rejects universal builds on Windows before staging binaries", () =>
     Effect.gen(function* () {
-      for (const platform of ["linux", "win"] as const) {
+      for (const platform of ["win"] as const) {
         const error = yield* Effect.flip(
           resolveBuildOptions({
             platform: Option.some(platform),

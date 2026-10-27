@@ -1,30 +1,31 @@
+import { DEFAULT_CLIENT_SETTINGS, type SnapShotKeyChord } from "@t3tools/contracts";
 import { describe, expect, it } from "vite-plus/test";
 
-import { parseDesktopSnapShotShortcut, snapShotShortcutKeyLabels } from "./snapShotShortcut";
+import { snapShotShortcutKeyLabels } from "./snapShotShortcut";
 
-describe("desktop-approved window capture shortcut labels", () => {
-  it.each([
-    ["Press <Shift><Control>2", ["Ctrl", "⇧", "2"]],
-    ["Ctrl+Shift+8", ["Ctrl", "⇧", "8"]],
-    ["Meta+F12", ["Super", "F12"]],
-    ["<Primary><Alt>Return", ["Ctrl", "Alt", "Enter"]],
-    ["<Super>Left", ["Super", "Left"]],
-    ["<Control>space", ["Ctrl", "Space"]],
-    ["<Control>plus", ["Ctrl", "+"]],
-    ["Ctrl++", ["Ctrl", "+"]],
-  ])("formats %s using the shared keycap labels", (label, expected) => {
-    const shortcut = parseDesktopSnapShotShortcut(label);
-    expect(shortcut).not.toBeNull();
-    expect(snapShotShortcutKeyLabels(shortcut!, "Linux")).toEqual(expected);
+describe("window capture shortcut labels", () => {
+  const chord = (overrides: Partial<SnapShotKeyChord>): SnapShotKeyChord => ({
+    key: "2",
+    metaKey: false,
+    ctrlKey: false,
+    shiftKey: false,
+    altKey: false,
+    modKey: false,
+    ...overrides,
   });
 
   it.each([
-    "",
-    "Ctrl+",
-    "Press the shortcut configured in your desktop",
-    "<Unknown>2",
-    "<Control>UnknownKey",
-  ])("does not guess keys from an unrecognized description: %s", (label) => {
-    expect(parseDesktopSnapShotShortcut(label)).toBeNull();
+    [chord({ ctrlKey: true, shiftKey: true }), "Win32", ["Ctrl", "⇧", "2"]],
+    [chord({ metaKey: true, key: "f12" }), "Win32", ["⊞", "F12"]],
+    [chord({ modKey: true, altKey: true, key: "enter" }), "MacIntel", ["⌥", "⌘", "Enter"]],
+  ])("formats %j on %s using the shared keycap labels", (shortcut, platform, expected) => {
+    expect(snapShotShortcutKeyLabels(shortcut, platform)).toEqual(expected);
+  });
+
+  it("labels the default modifier pair by its key", () => {
+    expect(snapShotShortcutKeyLabels(DEFAULT_CLIENT_SETTINGS.snapShotShortcut, "Win32")).toEqual([
+      "⇧",
+      "⇧",
+    ]);
   });
 });

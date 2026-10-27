@@ -77,7 +77,7 @@ it.effect("validates IPC and clears on native focus, quit, and disposal", () =>
         expect(native.setBadgeCount).toHaveBeenLastCalledWith(0);
       }),
     ).pipe(
-      Effect.provideService(HostProcess.Platform, "linux"),
+      Effect.provideService(HostProcess.Platform, "darwin"),
       Effect.provide([
         ElectronApp.layer,
         DesktopIpc.layer({

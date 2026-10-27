@@ -48,7 +48,6 @@ import * as DesktopLocalEnvironmentAuth from "./backend/DesktopLocalEnvironmentA
 import * as DesktopNetworkInterfaces from "./backend/DesktopNetworkInterfaces.ts";
 import * as DesktopEnvironment from "./app/DesktopEnvironment.ts";
 import * as DesktopLifecycle from "./app/DesktopLifecycle.ts";
-import * as DesktopLinuxUrlHandler from "./app/DesktopLinuxUrlHandler.ts";
 import * as DesktopShutdown from "./app/DesktopShutdown.ts";
 import * as DesktopObservability from "./app/DesktopObservability.ts";
 import * as DesktopServerExposure from "./backend/DesktopServerExposure.ts";
@@ -67,7 +66,6 @@ import * as DesktopTelemetryPublisher from "./telemetry/DesktopTelemetryPublishe
 import * as DesktopRendererHistory from "./telemetry/DesktopRendererHistory.ts";
 import * as DesktopUpdates from "./updates/DesktopUpdates.ts";
 import * as BrowserImport from "./preview/BrowserImport/BrowserImport.ts";
-import * as LinuxBrowserSecret from "./preview/BrowserImport/LinuxBrowserSecret.ts";
 import * as BrowserSession from "./preview/BrowserSession.ts";
 import * as DesktopBrowserHost from "./preview/DesktopBrowserHost.ts";
 import * as ComputerUseHost from "./computerUse/ComputerUseHost.ts";
@@ -165,7 +163,7 @@ const layerDesktopServerExposure = DesktopServerExposure.layer.pipe(
 const layerDesktopPreview = PreviewManager.layer.pipe(
   Layer.provideMerge(DesktopBrowserHost.layer),
   // IPC needs both services on the same BrowserSession.
-  Layer.provideMerge(BrowserImport.layer.pipe(Layer.provide(LinuxBrowserSecret.layer))),
+  Layer.provideMerge(BrowserImport.layer),
   Layer.provideMerge(BrowserSession.layer),
   Layer.provideMerge(PreviewPasskeys.layer),
   Layer.provideMerge(layerDesktopFoundation),
@@ -208,7 +206,6 @@ const layerDesktopApplication = Layer.mergeAll(
   layerDesktopAppActivation,
   DesktopWebLinks.layer,
   DesktopApplicationMenu.layer,
-  DesktopLinuxUrlHandler.layer,
   DesktopCliCommand.layer,
   layerDesktopSsh,
 ).pipe(

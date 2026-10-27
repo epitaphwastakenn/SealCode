@@ -10,7 +10,6 @@ import * as Crypto from "effect/Crypto";
 import * as ElectronApp from "../electron/ElectronApp.ts";
 import * as ElectronDialog from "../electron/ElectronDialog.ts";
 import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
-import * as ElectronSafeStorage from "../electron/ElectronSafeStorage.ts";
 import { installDesktopIpcHandlers } from "../ipc/DesktopIpcHandlers.ts";
 import * as DesktopAppActivation from "./DesktopAppActivation.ts";
 import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
@@ -22,9 +21,7 @@ import * as DesktopBackendPool from "../backend/DesktopBackendPool.ts";
 import * as DesktopEnvironment from "./DesktopEnvironment.ts";
 import * as DesktopLegacyLocalStorage from "./DesktopLegacyLocalStorage.ts";
 import * as DesktopLifecycle from "./DesktopLifecycle.ts";
-import * as DesktopLinuxUrlHandler from "./DesktopLinuxUrlHandler.ts";
 import * as DesktopObservability from "./DesktopObservability.ts";
-import * as DesktopPreReadyPlatform from "./DesktopPreReadyPlatform.ts";
 import * as DesktopShutdown from "./DesktopShutdown.ts";
 import * as DesktopServerExposure from "../backend/DesktopServerExposure.ts";
 import * as DesktopAppSettings from "../settings/DesktopAppSettings.ts";
@@ -35,7 +32,6 @@ import * as DesktopUpdates from "../updates/DesktopUpdates.ts";
 import * as DesktopSnapShot from "../snapShot/DesktopSnapShot.ts";
 import * as DesktopWslBackend from "../wsl/DesktopWslBackend.ts";
 import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts";
-import * as HostProcess from "@t3tools/shared/HostProcess";
 
 const DEFAULT_DESKTOP_BACKEND_PORT = 3773;
 const MAX_TCP_PORT = 65_535;
@@ -257,53 +253,18 @@ const startup = Effect.gen(function* () {
   const applicationMenu = yield* DesktopApplicationMenu.DesktopApplicationMenu;
   const electronApp = yield* ElectronApp.ElectronApp;
   const lifecycle = yield* DesktopLifecycle.DesktopLifecycle;
-  const linuxUrlHandler = yield* DesktopLinuxUrlHandler.DesktopLinuxUrlHandler;
   const clerk = yield* DesktopClerk.DesktopClerk;
   const shellEnvironment = yield* DesktopShellEnvironment.DesktopShellEnvironment;
   const desktopSettings = yield* DesktopAppSettings.DesktopAppSettings;
-  const preReadyElectronOptions = yield* DesktopPreReadyPlatform.DesktopPreReadyElectronOptions;
-  const safeStorage = yield* ElectronSafeStorage.ElectronSafeStorage;
   const updates = yield* DesktopUpdates.DesktopUpdates;
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const previewPasskeys = yield* PreviewPasskeys.PreviewPasskeys;
 
   yield* shellEnvironment.installIntoProcess;
-  const hasCommandLinePasswordStore =
-    preReadyElectronOptions.linuxPasswordStoreCommandLine !== null;
-  const linuxElectronOptions =
-    environment.platform === "linux" && !hasCommandLinePasswordStore
-      ? DesktopPreReadyPlatform.resolveEarlyLinuxElectronOptionsFromProcess(
-          yield* HostProcess.HomeDirectory,
-        )
-      : preReadyElectronOptions.linux;
-  if (linuxElectronOptions !== null && !hasCommandLinePasswordStore) {
-    if (
-      linuxElectronOptions.passwordStore !== null ||
-      preReadyElectronOptions.linux?.passwordStore !== null
-    ) {
-      yield* electronApp.removeCommandLineSwitch("password-store");
-    }
-    if (linuxElectronOptions.passwordStore !== null) {
-      yield* electronApp.appendCommandLineSwitch(
-        "password-store",
-        linuxElectronOptions.passwordStore,
-      );
-    }
-  }
   const userDataPath = yield* appIdentity.resolveUserDataPath;
   yield* electronApp.setPath("userData", userDataPath);
   yield* logStartupInfo("runtime logging configured", { logDir: environment.logDir });
   yield* desktopSettings.load;
-
-  if (linuxElectronOptions !== null) {
-    yield* logStartupInfo("linux password store configured", {
-      passwordStore: hasCommandLinePasswordStore
-        ? "command-line"
-        : (linuxElectronOptions.passwordStore ?? "electron-default"),
-      xdgCurrentDesktop: process.env.XDG_CURRENT_DESKTOP ?? null,
-      xdgSessionDesktop: process.env.XDG_SESSION_DESKTOP ?? null,
-    });
-  }
 
   yield* appIdentity.configure;
   yield* lifecycle.register;
@@ -314,18 +275,11 @@ const startup = Effect.gen(function* () {
     Effect.catchCause((cause) => fatalStartupCause("whenReady", cause)),
   );
   yield* logStartupInfo("app ready");
-  if (environment.platform === "linux") {
-    const selectedBackend = yield* safeStorage.selectedStorageBackend;
-    yield* logStartupInfo("safe storage ready", {
-      backend: Option.getOrElse(selectedBackend, () => "unknown"),
-    });
-  }
   yield* appIdentity.configure;
   yield* previewPasskeys.configure;
   yield* applicationMenu.configure;
   yield* updates.configure;
   yield* DesktopRemoteUpdates.listen;
-  yield* linuxUrlHandler.register;
   yield* bootstrap.pipe(Effect.catchCause((cause) => fatalStartupCause("bootstrap", cause)));
 }).pipe(Effect.withSpan("desktop.startup"));
 

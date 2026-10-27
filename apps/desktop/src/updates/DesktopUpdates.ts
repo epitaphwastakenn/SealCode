@@ -309,8 +309,6 @@ function getAutoUpdateDisabledReason(args: {
   isDevelopment: boolean;
   isPackaged: boolean;
   platform: NodeJS.Platform;
-  appImage?: string | undefined;
-  isDebPackage: boolean;
   disabledByEnv: boolean;
   hasUpdateFeedConfig: boolean;
 }): string | null {
@@ -322,9 +320,6 @@ function getAutoUpdateDisabledReason(args: {
   }
   if (args.disabledByEnv) {
     return "Automatic updates are disabled by the T3CODE_DISABLE_AUTO_UPDATE setting.";
-  }
-  if (args.platform === "linux" && !args.appImage && !args.isDebPackage) {
-    return "Automatic updates on Linux require the AppImage or the .deb package.";
   }
   return null;
 }
@@ -396,17 +391,6 @@ export const make = Effect.gen(function* () {
     ),
   );
 
-  // electron-updater uses this marker to install .deb updates with dpkg.
-  const isDebPackage =
-    environment.platform === "linux" && environment.isPackaged
-      ? yield* fileSystem
-          .readFileString(environment.path.join(environment.resourcesPath, "package-type"))
-          .pipe(
-            Effect.map((packageType) => packageType.trim() === "deb"),
-            Effect.orElseSucceed(() => false),
-          )
-      : false;
-
   const hasUpdateFeedConfig = Ref.get(appUpdateYmlConfigRef).pipe(
     Effect.map((appUpdateYmlConfig) => Option.isSome(appUpdateYmlConfig) || config.mockUpdates),
   );
@@ -418,8 +402,6 @@ export const make = Effect.gen(function* () {
         isDevelopment: environment.isDevelopment,
         isPackaged: environment.isPackaged,
         platform: environment.platform,
-        appImage: Option.getOrUndefined(config.appImagePath),
-        isDebPackage,
         disabledByEnv: config.disableAutoUpdate,
         hasUpdateFeedConfig: hasFeedConfig,
       }),

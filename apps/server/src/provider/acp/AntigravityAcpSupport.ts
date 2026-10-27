@@ -47,7 +47,6 @@ export interface AntigravityAcpRuntimeInput extends Omit<
   | "transformSessionUpdate"
   | "transformStdout"
 > {
-  readonly agentDeviceEnvironment?: Readonly<Record<string, string>>;
   readonly childProcessSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly onAuthorizationUrl?: (url: string) => Effect.Effect<void, EffectAcpErrors.AcpError>;
   /** Sees raw stderr; the caller must redact before keeping it. */

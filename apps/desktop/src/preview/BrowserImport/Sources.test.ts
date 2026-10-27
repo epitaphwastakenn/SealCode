@@ -335,14 +335,10 @@ describe("Zen", () => {
           }),
           Effect.provideService(HostProcess.Platform, "win32"),
         );
-        const linuxContext = yield* sourcePathContext.pipe(
-          Effect.provideService(HostProcess.Environment, { HOME: "/home/zen-user" }),
-          Effect.provideService(HostProcess.Platform, "linux"),
-        );
 
         assert.equal(zen.name, "Zen");
         assert.equal(zen.engine, "firefox");
-        assert.deepEqual([...zen.platforms], ["darwin", "win32", "linux"]);
+        assert.deepEqual([...zen.platforms], ["darwin", "win32"]);
         assert.equal(
           zen.userDataDirectory(darwinContext),
           darwinContext.path.join("/Users/zen-user", "Library", "Application Support", "zen"),
@@ -351,14 +347,6 @@ describe("Zen", () => {
           zen.userDataDirectory(windowsContext),
           windowsContext.path.join("C:\\Users\\zen-user\\AppData\\Roaming", "zen"),
         );
-        assert.equal(
-          zen.userDataDirectory(linuxContext),
-          linuxContext.path.join("/home/zen-user", ".config", "zen"),
-        );
-        assert.deepEqual(zen.alternateLinuxRoots?.(linuxContext), [
-          linuxContext.path.join("/home/zen-user", ".zen"),
-          linuxContext.path.join("/home/zen-user", ".var", "app", "app.zen_browser.zen", "zen"),
-        ]);
       }),
     ),
   );
@@ -414,227 +402,10 @@ describe("Zen", () => {
       }),
     ),
   );
-
-  it.effect("discovers Zen profiles in both current and legacy Linux roots", () =>
-    run(
-      Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const home = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3code-zen-linux-" });
-        const context = yield* sourcePathContext.pipe(
-          Effect.provideService(HostProcess.Environment, { HOME: home }),
-          Effect.provideService(HostProcess.Platform, "linux"),
-        );
-        const currentRoot = context.path.join(home, ".config", "zen");
-        const legacyRoot = context.path.join(home, ".zen");
-        const currentProfile = context.path.join(currentRoot, "current.default");
-        const legacyProfile = context.path.join(legacyRoot, "legacy.default");
-
-        for (const [root, profile, name] of [
-          [currentRoot, currentProfile, "Current"],
-          [legacyRoot, legacyProfile, "Legacy"],
-        ] as const) {
-          yield* fileSystem.makeDirectory(profile, { recursive: true });
-          yield* writeFirefoxCookieDatabase(context.path.join(profile, "cookies.sqlite"), 1, 0);
-          yield* fileSystem.writeFileString(
-            context.path.join(root, "profiles.ini"),
-            [
-              "[Profile0]",
-              `Name=${name}`,
-              "IsRelative=1",
-              `Path=${context.path.basename(profile)}`,
-            ].join("\n"),
-          );
-        }
-
-        assert.deepEqual(yield* listSourceProfiles(zen, context), [
-          { directory: "current.default", name: "Current", cookieCount: 1 },
-          { directory: legacyProfile, name: "Legacy", cookieCount: 1 },
-        ]);
-        assert.isTrue(yield* isSourceInstalled(zen, context));
-        assert.equal(
-          yield* resolveCookieDatabase(zen, context, legacyProfile),
-          context.path.join(legacyProfile, "cookies.sqlite"),
-        );
-
-        yield* fileSystem.writeFileString(
-          context.path.join(currentRoot, "profiles.ini"),
-          `[Profile0]\nName=Shared\nIsRelative=0\nPath=${legacyProfile}\n`,
-        );
-        assert.deepEqual(yield* listSourceProfiles(zen, context), [
-          { directory: legacyProfile, name: "Shared", cookieCount: 1 },
-        ]);
-
-        yield* fileSystem.remove(currentRoot, { recursive: true });
-        assert.isTrue(yield* isSourceInstalled(zen, context));
-        assert.deepEqual(yield* listSourceProfiles(zen, context), [
-          { directory: legacyProfile, name: "Legacy", cookieCount: 1 },
-        ]);
-      }),
-    ),
-  );
-
-  it.effect("discovers a Flatpak-only Zen installation and resolves its cookies", () =>
-    run(
-      Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const home = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3code-zen-flatpak-" });
-        const context = yield* sourcePathContext.pipe(
-          Effect.provideService(HostProcess.Environment, { HOME: home }),
-          Effect.provideService(HostProcess.Platform, "linux"),
-        );
-        const root = context.path.join(home, ".var", "app", "app.zen_browser.zen", "zen");
-        const profile = context.path.join(root, "flatpak.default");
-        yield* fileSystem.makeDirectory(profile, { recursive: true });
-        yield* writeFirefoxCookieDatabase(context.path.join(profile, "cookies.sqlite"), 2, 1);
-        yield* fileSystem.writeFileString(
-          context.path.join(root, "profiles.ini"),
-          "[Profile0]\nName=Flatpak\nIsRelative=1\nPath=flatpak.default\n",
-        );
-
-        assert.deepEqual(yield* listSourceProfiles(zen, context), [
-          { directory: profile, name: "Flatpak", cookieCount: 2 },
-        ]);
-        assert.isTrue(yield* isSourceInstalled(zen, context));
-        assert.equal(
-          yield* resolveCookieDatabase(zen, context, profile),
-          context.path.join(profile, "cookies.sqlite"),
-        );
-      }),
-    ),
-  );
-
-  it.effect("does not mistake Firefox Snap installs for Zen profiles", () =>
-    run(
-      Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const home = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3code-zen-snap-" });
-        const context = yield* sourcePathContext.pipe(
-          Effect.provideService(HostProcess.Environment, { HOME: home }),
-          Effect.provideService(HostProcess.Platform, "linux"),
-        );
-        const zenRoot = context.path.join(home, ".config", "zen");
-        const snapRoot = context.path.join(
-          home,
-          "snap",
-          "firefox",
-          "common",
-          ".mozilla",
-          "firefox",
-        );
-        const zenProfile = context.path.join(zenRoot, "zen.default");
-        const snapProfile = context.path.join(snapRoot, "snap.default");
-        for (const root of [zenRoot, snapRoot]) {
-          const profile = root === zenRoot ? zenProfile : snapProfile;
-          yield* fileSystem.makeDirectory(profile, { recursive: true });
-          yield* writeFirefoxCookieDatabase(context.path.join(profile, "cookies.sqlite"), 1, 0);
-          yield* fileSystem.writeFileString(
-            context.path.join(root, "profiles.ini"),
-            [
-              "[Profile0]",
-              "Name=Personal",
-              "IsRelative=1",
-              `Path=${profile === zenProfile ? "zen.default" : "snap.default"}`,
-            ].join("\n"),
-          );
-        }
-
-        const profiles = yield* listSourceProfiles(zen, context);
-        assert.deepEqual(
-          profiles.map((profile) => profile.directory),
-          ["zen.default"],
-        );
-        assert.isTrue(yield* isSourceInstalled(zen, context));
-      }),
-    ),
-  );
-});
-
-describe("Firefox Snap profiles", () => {
-  it.effect.skipIf(!symlinksSupported)(
-    "finds Snap profiles with or without profiles.ini and checks their locks",
-    () =>
-      run(
-        Effect.gen(function* () {
-          const fileSystem = yield* FileSystem.FileSystem;
-          const home = yield* fileSystem.makeTempDirectoryScoped({
-            prefix: "t3code-firefox-snap-",
-          });
-          const context = yield* sourcePathContext.pipe(
-            Effect.provideService(HostProcess.Environment, { HOME: home }),
-            Effect.provideService(HostProcess.Platform, "linux"),
-          );
-          const root = context.path.join(home, "snap", "firefox", "common", ".mozilla", "firefox");
-          const directory = context.path.join(root, "abcd.default");
-          yield* fileSystem.makeDirectory(directory, { recursive: true });
-          yield* writeFirefoxCookieDatabase(`${directory}/cookies.sqlite`, 2, 1);
-          yield* fileSystem.writeFileString(
-            `${root}/profiles.ini`,
-            "[Profile0]\nName=Personal\nIsRelative=1\nPath=abcd.default\n",
-          );
-
-          assert.isTrue(yield* isSourceInstalled(firefox, context));
-          assert.deepEqual(yield* listSourceProfiles(firefox, context), [
-            { directory, name: "Personal", cookieCount: 2 },
-          ]);
-          assert.equal(
-            yield* resolveCookieDatabase(firefox, context, directory),
-            context.path.join(directory, "cookies.sqlite"),
-          );
-          assert.isFalse(yield* isSourceRunning(firefox, context));
-          yield* fileSystem.symlink("foreign-host:+4242", `${directory}/lock`);
-          assert.isTrue(yield* isSourceRunning(firefox, context));
-          yield* fileSystem.remove(`${directory}/lock`);
-          assert.isFalse(yield* isSourceRunning(firefox, context));
-
-          yield* fileSystem.remove(`${root}/profiles.ini`);
-          assert.deepEqual(yield* listSourceProfiles(firefox, context), [
-            { directory, name: "abcd.default", cookieCount: 2 },
-          ]);
-        }),
-      ),
-  );
-
-  it.effect("keeps matching profile names in native and Snap installs distinct", () =>
-    run(
-      Effect.gen(function* () {
-        const fileSystem = yield* FileSystem.FileSystem;
-        const home = yield* fileSystem.makeTempDirectoryScoped({ prefix: "t3code-firefox-snap-" });
-        const context = yield* sourcePathContext.pipe(
-          Effect.provideService(HostProcess.Environment, { HOME: home }),
-          Effect.provideService(HostProcess.Platform, "linux"),
-        );
-        const native = context.path.join(home, ".mozilla", "firefox");
-        const snap = context.path.join(home, "snap", "firefox", "common", ".mozilla", "firefox");
-        for (const root of [native, snap]) {
-          yield* fileSystem.makeDirectory(`${root}/abcd.default`, { recursive: true });
-          yield* writeFirefoxCookieDatabase(`${root}/abcd.default/cookies.sqlite`, 1, 0);
-          yield* fileSystem.writeFileString(
-            `${root}/profiles.ini`,
-            "[Profile0]\nName=Personal\nIsRelative=1\nPath=abcd.default\n" +
-              `[Profile1]\nName=Shared\nIsRelative=0\nPath=${snap}/abcd.default\n`,
-          );
-        }
-
-        const profiles = yield* listSourceProfiles(firefox, context);
-        assert.deepEqual(
-          profiles.map((profile) => profile.directory),
-          ["abcd.default", context.path.join(snap, "abcd.default")],
-        );
-        const databases = yield* Effect.forEach(profiles, (profile) =>
-          resolveCookieDatabase(firefox, context, profile.directory),
-        );
-        assert.deepEqual(databases, [
-          context.path.join(native, "abcd.default", "cookies.sqlite"),
-          context.path.join(snap, "abcd.default", "cookies.sqlite"),
-        ]);
-      }),
-    ),
-  );
 });
 
 describe("listSourceProfiles Firefox fallback", () => {
   const cases = [
-    { platform: "linux" as const, profileDirectory: "linux.default" },
     { platform: "darwin" as const, profileDirectory: NodePath.join("Profiles", "macos.default") },
     { platform: "win32" as const, profileDirectory: NodePath.join("Profiles", "windows.default") },
   ];
@@ -658,7 +429,7 @@ describe("listSourceProfiles Firefox fallback", () => {
             Effect.provideService(HostProcess.Platform, platform),
           );
           const root = firefox.userDataDirectory(context)!;
-          const scanRoot = platform === "linux" ? root : path.join(root, "Profiles");
+          const scanRoot = path.join(root, "Profiles");
           yield* fileSystem.makeDirectory(path.join(root, profileDirectory), { recursive: true });
           yield* fileSystem.writeFileString(
             path.join(root, profileDirectory, "cookies.sqlite"),

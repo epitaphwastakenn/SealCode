@@ -4,7 +4,6 @@ import type {
   ProviderOptionDescriptor,
 } from "@t3tools/contracts";
 import {
-  buildProviderOptionSelectionsFromDescriptors,
   getProviderOptionCurrentLabel,
   getProviderOptionCurrentValue,
 } from "@t3tools/shared/model";
@@ -51,41 +50,6 @@ export function selectableProviderOptionChoices(
   descriptor: Extract<ProviderOptionDescriptor, { type: "select" }>,
 ) {
   return descriptor.options;
-}
-
-/**
- * SealCode has no prompt-controlled reasoning level: Ultrathink is not an effort,
- * and typing "ultrathink" is plain text. The prompt stays in the signature for
- * the shared callers.
- */
-export function getPromptControlledTraits(
-  descriptors: ReadonlyArray<ProviderOptionDescriptor>,
-  _prompt?: string,
-) {
-  const primarySelectDescriptor =
-    descriptors.find((descriptor) => descriptor.type === "select") ?? null;
-  return {
-    primarySelectDescriptor,
-    ultrathinkPromptControlled: false,
-    ultrathinkInBodyText: false,
-  };
-}
-
-export function getTraitSelectChange(
-  selected: ReturnType<typeof getPromptControlledTraits> & {
-    descriptors: ReadonlyArray<ProviderOptionDescriptor>;
-  },
-  descriptor: Extract<ProviderOptionDescriptor, { type: "select" }>,
-  prompt: string,
-  value: string,
-) {
-  if (!value) return null;
-  return {
-    prompt,
-    modelOptions: buildProviderOptionSelectionsFromDescriptors(
-      replaceDescriptorCurrentValue(selected.descriptors, descriptor.id, value),
-    ),
-  };
 }
 
 export function buildTraitsTriggerDisplay(input: {

@@ -1,8 +1,4 @@
 // @effect-diagnostics globalTimers:off -- The Electron window-blur handshake uses a native timeout outside any Effect fiber.
-// @effect-diagnostics nodeBuiltinImport:off -- This desktop-only platform check reads procfs and resolves Wayland socket paths with Node.
-
-import * as NodeFS from "node:fs";
-import * as NodePath from "node:path";
 
 import {
   SNAP_SHOT_ACCESSIBILITY_MAX_NODES,
@@ -207,7 +203,6 @@ function accessibilityNode(
   sourceBounds: WindowBounds,
   imageSize: CapturedImageSize,
   isRoot: boolean,
-  locationsReliable: boolean,
   onTruncated: () => void,
 ): MutableAccessibilityNode {
   const name = boundedSnapShotString(
@@ -256,9 +251,7 @@ function accessibilityNode(
     ...(description && description !== name && description !== value ? { description } : {}),
     bounds: isRoot
       ? { x: 0, y: 0, width: imageSize.width, height: imageSize.height }
-      : locationsReliable
-        ? capturedImageBounds(elementBounds, sourceBounds, imageSize)
-        : null,
+      : capturedImageBounds(elementBounds, sourceBounds, imageSize),
     ...(Object.keys(state).length > 0 ? { state } : {}),
     ...(actions.length > 0 ? { actions } : {}),
     children: [],
@@ -279,16 +272,9 @@ function isAnonymousGroup(node: SnapShotAccessibilityNode): boolean {
 function compactAccessibilityNodes(
   node: SnapShotAccessibilityNode,
   isRoot: boolean,
-  descendantLocationsReliable: boolean,
 ): Array<MutableAccessibilityNode> {
-  const children = node.children.flatMap((child) =>
-    compactAccessibilityNodes(child, false, descendantLocationsReliable),
-  );
-  const compacted: MutableAccessibilityNode = {
-    ...node,
-    ...(!isRoot && !descendantLocationsReliable ? { bounds: null } : {}),
-    children,
-  };
+  const children = node.children.flatMap((child) => compactAccessibilityNodes(child, false));
+  const compacted: MutableAccessibilityNode = { ...node, children };
   if (!isRoot && isAnonymousGroup(compacted)) {
     if (children.length === 0) return [];
     if (children.length === 1) return children;
@@ -296,18 +282,11 @@ function compactAccessibilityNodes(
   return [compacted];
 }
 
-export function compactAccessibilityTree(
-  root: SnapShotAccessibilityNode,
-  options: { readonly descendantLocationsReliable?: boolean } = {},
-): {
+export function compactAccessibilityTree(root: SnapShotAccessibilityNode): {
   readonly root: SnapShotAccessibilityNode;
   readonly truncated: boolean;
 } {
-  const compactedRoot = compactAccessibilityNodes(
-    root,
-    true,
-    options.descendantLocationsReliable !== false,
-  )[0]!;
+  const compactedRoot = compactAccessibilityNodes(root, true)[0]!;
   let nodes = 0;
   let serializedChars = 256;
   let truncated = false;
@@ -340,14 +319,8 @@ export function compactAccessibilityTree(
 }
 
 type AccessibleWindowElementTreeOptions = {
-  readonly locationsReliable?: boolean;
-  readonly onProgress?: (
-    root: SnapShotAccessibilityNode,
-    truncated: boolean,
-    descendantLocationsReliable: boolean,
-  ) => void;
+  readonly onProgress?: (root: SnapShotAccessibilityNode, truncated: boolean) => void;
   readonly shouldContinue?: () => boolean;
-  readonly verifyDescendantLocations?: boolean;
 };
 
 export async function accessibleWindowElementTree(
@@ -361,12 +334,6 @@ export async function accessibleWindowElementTree(
   let truncated = false;
   let root: MutableAccessibilityNode | undefined;
   const shouldContinue = options.shouldContinue ?? (() => true);
-  let descendantLocationVaries = false;
-  let rootBounds = sourceBounds;
-
-  const descendantLocationsReliable = () =>
-    options.locationsReliable !== false &&
-    (options.verifyDescendantLocations !== true || descendantLocationVaries);
 
   const visit = async (
     current: AccessibilityElement,
@@ -380,30 +347,19 @@ export async function accessibleWindowElementTree(
       truncated = true;
       return undefined;
     }
-    const elementBounds = safeProperty(() => current.bounds);
-    if (required && elementBounds) rootBounds = elementBounds;
-    if (
-      !required &&
-      elementBounds !== null &&
-      elementBounds !== undefined &&
-      (Math.abs(elementBounds.x - rootBounds.x) > 2 || Math.abs(elementBounds.y - rootBounds.y) > 2)
-    ) {
-      descendantLocationVaries = true;
-    }
     const node = accessibilityNode(
       current,
-      elementBounds,
+      safeProperty(() => current.bounds),
       sourceBounds,
       imageSize,
       required,
-      options.locationsReliable !== false,
       () => {
         truncated = true;
       },
     );
     nodes += 1;
     root ??= node;
-    options.onProgress?.(root, true, descendantLocationsReliable());
+    options.onProgress?.(root, true);
 
     const readChildren = safeProperty(() => current.children);
     if (typeof readChildren !== "function") return node;
@@ -422,19 +378,16 @@ export async function accessibleWindowElementTree(
       const childNode = await visit(child, false);
       if (!childNode) break;
       node.children.push(childNode);
-      options.onProgress?.(root, true, descendantLocationsReliable());
+      options.onProgress?.(root, true);
     }
     return node;
   };
 
   const completedRoot = await visit(element, true);
   if (!completedRoot) return undefined;
-  const locationsReliable = descendantLocationsReliable();
-  const compacted = compactAccessibilityTree(completedRoot, {
-    descendantLocationsReliable: locationsReliable,
-  });
+  const compacted = compactAccessibilityTree(completedRoot);
   const completedTruncated = truncated || compacted.truncated;
-  options.onProgress?.(compacted.root, completedTruncated, locationsReliable);
+  options.onProgress?.(compacted.root, completedTruncated);
   return { root: compacted.root, truncated: completedTruncated };
 }
 
@@ -476,36 +429,21 @@ export function findAccessibleWindow<
     readonly title: string;
     readonly sourceTitle?: string;
     readonly bounds: WindowBounds;
-    readonly clientBounds?: WindowBounds | undefined;
     readonly platform?: NodeJS.Platform;
     readonly bundleId?: string | undefined;
   },
-  matchMode: "screen-bounds" | "wayland" = "screen-bounds",
   options: { readonly allowUntitledUniqueBounds?: boolean } = {},
 ): T | undefined {
-  const normalizeTitle = (value: string) => {
-    const title = value.trim();
-    // Terminal apps can animate a leading CLI spinner between capture and AT-SPI lookup.
-    return matchMode === "wayland" ? title.replace(/^[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏](?:\s+|$)/u, "") : title;
-  };
+  const normalizeTitle = (value: string) => value.trim();
   const titles = new Set(
     [captured.title, captured.sourceTitle ?? ""].map(normalizeTitle).filter(Boolean),
   );
-  // Wayland accessibility providers can expose window size without a screen position.
-  const boundsKeys =
-    matchMode === "wayland"
-      ? (["width", "height"] as const)
-      : (["x", "y", "width", "height"] as const);
-  const candidateBounds =
-    matchMode === "wayland" && captured.clientBounds
-      ? [captured.bounds, captured.clientBounds]
-      : [captured.bounds];
   const matchesBounds = (window: T) => {
     const bounds = window.bounds;
     return (
       bounds !== null &&
-      candidateBounds.some((candidate) =>
-        boundsKeys.every((key) => Math.abs(bounds[key] - candidate[key]) <= 2),
+      (["x", "y", "width", "height"] as const).every(
+        (key) => Math.abs(bounds[key] - captured.bounds[key]) <= 2,
       )
     );
   };
@@ -517,7 +455,7 @@ export function findAccessibleWindow<
     const activeMatches = matches.filter((window) => safeProperty(() => window.active) === true);
     if (activeMatches.length === 1) return activeMatches[0];
     if (matches.length > 1) return undefined;
-    const browserMatch = findBrowserTitleMatch(windows, titles, captured, matchMode, matchesBounds);
+    const browserMatch = findBrowserTitleMatch(windows, titles, captured, matchesBounds);
     if (browserMatch) return browserMatch;
   }
   // GTK4 frames may be unnamed; accept only a PID-scoped unique bounds match, never size alone.
@@ -533,10 +471,9 @@ function findBrowserTitleMatch<T extends { readonly name?: string | null }>(
   windows: readonly T[],
   titles: ReadonlySet<string>,
   captured: { readonly platform?: NodeJS.Platform; readonly bundleId?: string | undefined },
-  matchMode: "screen-bounds" | "wayland",
   matchesBounds: (window: T) => boolean,
 ): T | undefined {
-  if (captured.platform !== "darwin" || matchMode !== "screen-bounds") return undefined;
+  if (captured.platform !== "darwin") return undefined;
   const browserName = /^com\.google\.Chrome(?:\.(?:beta|dev|canary))?$/.test(
     captured.bundleId ?? "",
   )
@@ -613,35 +550,4 @@ export function findCaptureSource<T extends CaptureSourceLike>(
   if (!title) return undefined;
   const titleMatches = sources.filter((source) => source.name.trim() === title);
   return titleMatches.length === 1 ? titleMatches[0] : undefined;
-}
-
-export function isWaylandSession(
-  platform: NodeJS.Platform,
-  environment: NodeJS.ProcessEnv,
-): boolean {
-  if (platform !== "linux") return false;
-  if (
-    environment.XDG_SESSION_TYPE?.toLowerCase() === "wayland" ||
-    Boolean(environment.WAYLAND_DISPLAY)
-  ) {
-    return true;
-  }
-  if (environment.XDG_SESSION_TYPE?.toLowerCase() === "x11") return false;
-  const runtimeDirectory = environment.XDG_RUNTIME_DIR;
-  if (!runtimeDirectory) return false;
-  try {
-    const liveSockets = new Set(
-      NodeFS.readFileSync("/proc/net/unix", "utf8")
-        .split("\n")
-        .flatMap((line) => line.match(/\s(\/.*)$/)?.[1] ?? []),
-    );
-    return NodeFS.readdirSync(runtimeDirectory, { withFileTypes: true }).some(
-      (entry) =>
-        /^wayland-\d+$/.test(entry.name) &&
-        entry.isSocket() &&
-        liveSockets.has(NodePath.join(runtimeDirectory, entry.name)),
-    );
-  } catch {
-    return false;
-  }
 }

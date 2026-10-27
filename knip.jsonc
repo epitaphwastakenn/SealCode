@@ -3,39 +3,31 @@
   // Exported types are part of our contracts even before they have consumers.
   "rules": { "types": "off", "nsTypes": "off" },
   // These executables are supplied by the OS or installed separately from npm.
-  "ignoreBinaries": ["eas", "file", "mkfifo", "pkill", "pkg-config", "plutil", "sips"],
+  "ignoreBinaries": ["file", "mkfifo", "pkill", "plutil", "sips"],
   "workspaces": {
     ".": {
       // Keep vendored reference repositories outside the root project.
       "project": ["*.{js,mjs,cjs,ts,mts,cts}", ".github/**/*.cjs"],
-      "entry": [
-        // CodeRabbit loads its configuration by filename.
-        ".coderabbit.config.ts",
-        ".github/scripts/thread-transfer-report.cjs",
-      ],
-      "vite": { "entry": [".github/**/*.test.cjs"] },
-      "vitest": { "entry": [".github/**/*.test.cjs"] },
+      // CodeRabbit loads its configuration by filename.
+      "entry": [".coderabbit.config.ts"],
     },
     "scripts": {
       // Knip loads its preprocessor through a CLI option; native verification and
-      // worktree setup (from t3.json) run directly. release-desktop.yml bundles the
-      // Windows verify script with esbuild through a path knip does not trace,
-      // electron-builder loads the macOS signer by path, and mobile-e2e.ts runs
-      // agent-device's CLI by path.
+      // worktree setup (from t3.json) run directly. The Windows verify script is
+      // bundled with esbuild through a path knip does not trace, and
+      // electron-builder loads the macOS signer by path.
       "entry": [
         // These fixture scripts are injected into a browser page by path.
         "fixtures/*/*.js",
         "knip-schemas.ts",
-        "mobile-native-client.ts",
         "setup-worktree.ts",
         "sign-macos.ts",
         "verify-windows-desktop-artifact.ts",
       ],
-      "ignoreDependencies": ["agent-device", "esbuild"],
-      // The `t3` npm package's files: copied into the package, never imported.
+      "ignoreDependencies": ["esbuild"],
       // knip-schemas.test.ts writes a throwaway project to .knip-test-*, which a
       // knip run beside it in check:changed must not report.
-      "ignore": ["npm-launcher/**", ".knip-test-*/**"],
+      "ignore": [".knip-test-*/**"],
     },
     "apps/server": {
       // Vite+ pack entries and the launcher used by installed background services.
@@ -44,16 +36,11 @@
         "src/claude-history-worker.ts!",
         "scripts/cli.ts",
         "scripts/evaluate-thread-titles.ts",
-        "scripts/fetch-expo-schema.ts",
         "scripts/probe-claude-fork-local-rollback-replay.ts",
         "scripts/update-test-shard-weights.ts",
         "scripts/verify-background-live.ts",
         "src/provider/testFixtures/*.mjs",
-        // graphqlgen reads its config.
-        "graphql.config.ts",
       ],
-      // The generated operations export every selection's class.
-      "ignoreIssues": { "**/*.graphql.ts": ["exports", "types", "namespaceMembers"] },
       // Keep the transitive Effect runtime pinned for standalone npm installs.
       // The Vite+ web build prerequisite.
       // Native and disk-loaded provider packages stay external to the bundle; the
@@ -63,7 +50,6 @@
     "apps/desktop": {
       // Electron loads these bundles by filename rather than importing them.
       "entry": [
-        "gnome-extension/extension.js!",
         "src/electron/WindowsForegroundFocusWorker.ts!",
         "src/snapShot/GlobalShiftShortcutWorker.ts!",
         "src/snapShot/RegionSnapShotWorker.ts!",
@@ -89,32 +75,6 @@
       // named subcomponents even before they have callers; the file audit still
       // reports an entire component module when nothing imports it.
       "ignoreIssues": { "src/components/ui/*.tsx": ["exports", "nsExports", "duplicates"] },
-    },
-    "apps/marketing": {
-      // `astro check` runs from the typecheck task in vite.config.ts, which knip does not read.
-      "ignoreDependencies": ["@astrojs/check"],
-    },
-    "apps/mobile": {
-      // Expo loads plugins and the fingerprint config by string; Metro embeds the browser entry in the native WebView.
-      "entry": [
-        "index.ts!",
-        "fingerprint.config.js",
-        "plugins/*.cjs",
-        "scripts/generate-device-stream.mts",
-        "src/features/devices/device-stream.browser.ts!",
-        "src/features/browser/preview-stream.browser.ts!",
-      ],
-      // Fonts are configured as asset paths; Expo autolinks the native packages.
-      "ignoreDependencies": [
-        "@expo-google-fonts/dm-sans",
-        "@t3tools/mobile-highlights-native",
-        "@t3tools/mobile-review-diff-native",
-        "@t3tools/mobile-terminal-native",
-      ],
-    },
-    "apps/mobile/modules/t3-source-text": {
-      // React Native codegen discovers component specifications by filename.
-      "entry": ["src/*NativeComponent.ts!"],
     },
     "infra/task-cache": {
       "ignore": ["vendor/**"],

@@ -24,125 +24,55 @@ it("ignores a stale request after a newer request starts", () => {
   expect(requests.tryBegin()).toBeNull();
 });
 
-it.each(["gnome-extension", "picker"] as const)(
-  "waits for opt-in before presenting %s setup requirements",
-  (linuxBackend) => {
-    const state: DesktopSnapShotState = {
-      mode: "portal",
-      linuxBackend,
-      shortcut: DEFAULT_CLIENT_SETTINGS.snapShotShortcut,
-      shortcutRegistered: false,
-      shortcutMessage: "Shortcut permission needed",
-      message: "Capture needs attention",
-      gnomeExtension: { status: "not-installed", message: "Install the extension" },
-    };
+const direct: DesktopSnapShotState = {
+  mode: "direct",
+  shortcut: DEFAULT_CLIENT_SETTINGS.snapShotShortcut,
+  shortcutRegistered: true,
+  shortcutMessage: null,
+  message: null,
+};
 
-    expect(DEFAULT_CLIENT_SETTINGS.snapShotEnabled).toBe(false);
-    expect(snapShotStatus(state, false)).toBe("Turn this on to set up snapshots.");
-    expect(snapShotStatus(state, true)).toBe("Capture needs attention");
-  },
-);
+it("waits for opt-in before presenting setup requirements", () => {
+  const state = { ...direct, message: "Capture needs attention" };
 
-it("distinguishes saved shortcuts from observed delivery without making users repeat setup", () => {
-  const state: DesktopSnapShotState = {
-    mode: "portal",
-    linuxBackend: "gnome-extension",
-    shortcut: DEFAULT_CLIENT_SETTINGS.snapShotShortcut,
-    shortcutRegistered: true,
-    shortcutMessage: "Requested",
-    message: null,
-    gnomeExtension: { status: "enabled", message: "Running" },
-  };
-  expect(snapShotSetupSummary(state, true)).toBe("Shortcut saved");
-  expect(snapShotSetupButtonLabel(state)).toBe("Manage capture");
-  expect(snapShotSetupSummary({ ...state, shortcutVerified: true }, true)).toBe("Ready to capture");
-  expect(snapShotSetupButtonLabel({ ...state, shortcutVerified: true })).toBe("Manage capture");
-  expect(snapShotSetupButtonLabel({ ...state, shortcutRegistered: false })).toBe("Manage capture");
-  expect(
-    snapShotSetupButtonLabel({
-      ...state,
-      gnomeExtension: { status: "disabled", message: "Enable the extension" },
-    }),
-  ).toBe("Set up GNOME capture");
-  expect(snapShotSetupSummary({ ...state, shortcutVerified: true }, false)).toContain(
-    "Enable capture",
+  expect(DEFAULT_CLIENT_SETTINGS.snapShotEnabled).toBe(false);
+  expect(snapShotStatus(state, false)).toBe("Turn this on to set up snapshots.");
+  expect(snapShotStatus(state, true)).toBe("Capture needs attention");
+  expect(snapShotStatus(null, true)).toBe("Checking snapshots…");
+  expect(snapShotStatus({ ...direct, mode: "unavailable", message: "Not here" }, true)).toBe(
+    "Not here",
   );
-  expect(
-    snapShotSetupSummary(
-      {
-        ...state,
-        gnomeExtension: { status: "restart-required", message: "Sign out" },
-        shortcutVerified: true,
-      },
-      true,
-    ),
-  ).toBe("Set up active-window snapshots");
-  expect(
-    snapShotSetupSummary(
-      { ...state, linuxBackend: "niri", gnomeExtension: undefined, shortcutRegistered: false },
-      true,
-    ),
-  ).toBe("Finish shortcut setup");
-  expect(
-    snapShotSetupSummary(
-      { ...state, linuxBackend: "picker", gnomeExtension: undefined, shortcutVerified: true },
-      true,
-    ),
-  ).toBe("Manual capture only. You'll choose a window each time");
-  expect(
-    snapShotSetupSummary(
-      {
-        ...state,
-        linuxBackend: "screenshot-portal",
-        gnomeExtension: { status: "not-installed", message: "Optional extension" },
-        shortcutVerified: true,
-      },
-      true,
-    ),
-  ).toBe("Ready to capture");
 });
 
-it("reports pending, denied, and assigned shortcuts without inferring consent from saved keys", () => {
-  const state: DesktopSnapShotState = {
-    mode: "portal",
-    linuxBackend: "screenshot-portal",
-    shortcut: DEFAULT_CLIENT_SETTINGS.snapShotShortcut,
-    shortcutRegistered: false,
-    shortcutPending: true,
-    shortcutMessage: null,
-    message: null,
-  };
-  expect(snapShotStatus(state, true)).toContain("Waiting for shortcut permission");
-  expect(snapShotShortcutStatus(state)).toContain("Approve the shortcut permission prompt");
-  const denied = { ...state, shortcutPending: false, shortcutMessage: "Permission wasn't granted" };
-  expect(snapShotShortcutStatus(denied)).toBe("Permission wasn't granted");
-  const approved = {
-    ...denied,
-    shortcutRegistered: true,
-    shortcutLabel: "Press <Shift><Control>2",
-    shortcutMessage: "Desktop shortcut: Press <Shift><Control>2",
-  };
-  expect(snapShotStatus(approved, true)).toBe("Ready to capture");
-  expect(snapShotShortcutStatus(approved)).toBeNull();
-  expect(snapShotShortcutStatus({ ...approved, shortcutPending: true })).toContain(
-    "Approve the shortcut permission prompt",
+it("distinguishes saved shortcuts from observed delivery without making users repeat setup", () => {
+  expect(snapShotSetupSummary(direct, true)).toBe("Shortcut saved");
+  expect(snapShotSetupButtonLabel(direct)).toBe("Manage capture");
+  expect(snapShotSetupSummary({ ...direct, shortcutVerified: true }, true)).toBe(
+    "Ready to capture",
   );
+  expect(snapShotSetupSummary({ ...direct, shortcutVerified: true }, false)).toContain(
+    "Enable capture",
+  );
+  expect(snapShotSetupSummary({ ...direct, shortcutRegistered: false }, true)).toBe(
+    "Finish shortcut setup",
+  );
+});
+
+it("reports a saved shortcut, or why none is registered", () => {
+  expect(snapShotShortcutStatus(null)).toBeNull();
+  expect(snapShotShortcutStatus(direct)).toBe("Shortcut saved.");
   expect(
     snapShotShortcutStatus({
-      ...approved,
+      ...direct,
       shortcutRegistered: false,
-      shortcutMessage: "Permission wasn't granted",
+      shortcutMessage: "This shortcut is already used by the system or another app.",
     }),
-  ).toBe("Permission wasn't granted");
+  ).toBe("This shortcut is already used by the system or another app.");
 });
 
 it("hides macOS setup only while permissions and the shortcut are all in place", () => {
   const ready: DesktopSnapShotState = {
-    mode: "direct",
-    shortcut: DEFAULT_CLIENT_SETTINGS.snapShotShortcut,
-    shortcutRegistered: true,
-    shortcutMessage: null,
-    message: null,
+    ...direct,
     macPermissions: { screenRecording: true, accessibility: true },
   };
   expect(snapShotSetupComplete(ready, true)).toBe(true);

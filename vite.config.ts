@@ -15,15 +15,8 @@ const TEST_EXCLUDE = [
   "**/.{idea,git,cache,output,temp}/**",
 ];
 
-// Directories whose tests belong to a package's own test config. desktop also
-// owns the kde-snap-shot tests through its `include`.
-const TEST_CONFIG_PACKAGES = [
-  "apps/desktop",
-  "apps/mobile",
-  "apps/server",
-  "apps/web",
-  "packages/client-runtime",
-];
+// Directories whose tests belong to a package's own test config.
+const TEST_CONFIG_PACKAGES = ["apps/desktop", "apps/server", "apps/web", "packages/client-runtime"];
 
 // `vp test run <file>` from the repo root hands each file to its package's
 // config. Packages that borrow this config (`--config ../../vite.config.ts`) run
@@ -139,11 +132,7 @@ export default defineConfig({
               extends: true,
               test: {
                 name: "root",
-                exclude: [
-                  ...TEST_EXCLUDE,
-                  ...TEST_CONFIG_PACKAGES.map((dir) => `${dir}/**`),
-                  "native/kde-snap-shot/**",
-                ],
+                exclude: [...TEST_EXCLUDE, ...TEST_CONFIG_PACKAGES.map((dir) => `${dir}/**`)],
               },
             },
           ],
@@ -168,13 +157,6 @@ export default defineConfig({
       "**/routeTree.gen.ts",
       "**/*.graphql.ts",
       "packages/source-control-github/schema/**",
-      "apps/server/schema/**",
-      "apps/mobile/android/**",
-      "apps/mobile/ios/**",
-      "apps/mobile/uniwind-types.d.ts",
-      // Vendored and generated C.
-      "apps/mobile/modules/t3-highlights/Vendor/**",
-      "apps/mobile/modules/t3-highlights/cpp/generated/**",
       "*.icon/**",
     ],
     sortPackageJson: {},
@@ -200,10 +182,6 @@ export default defineConfig({
       "**/routeTree.gen.ts",
       "**/*.graphql.ts",
       "packages/source-control-github/schema/**",
-      "apps/server/schema/**",
-      "apps/mobile/android/**",
-      "apps/mobile/ios/**",
-      "apps/mobile/uniwind-types.d.ts",
     ],
     plugins: ["eslint", "oxc", "react", "unicorn", "typescript"],
     jsPlugins: ["./oxlint-plugin-t3code/index.ts", "@shadcn/lint"],
@@ -321,7 +299,7 @@ export default defineConfig({
         rules: { "t3code/no-dom-test-environment": "error" },
       },
       {
-        files: ["packages/client-runtime/src/state/**", "apps/{web,mobile,desktop}/src/**"],
+        files: ["packages/client-runtime/src/state/**", "apps/{web,desktop}/src/**"],
         rules: { "t3code/no-rpc-permission-bypass": ["error", { allowRawClientAccess: false }] },
       },
       {
@@ -340,9 +318,6 @@ export default defineConfig({
         files: [
           "apps/web/src/components/settings/AuthorizedClientsSettings.tsx",
           "apps/web/src/components/settings/ConnectionsSettings.tsx",
-          "apps/mobile/src/features/updates/app-updates.ts",
-          "apps/web/src/components/device/DevicePhoneViewport.tsx",
-          "apps/web/src/components/device/DeviceDuoViewport.tsx",
         ],
         rules: { "t3code/no-rpc-permission-bypass": ["error", { allowRawClientAccess: true }] },
       },
@@ -405,8 +380,6 @@ export default defineConfig({
                     "react",
                     "react/*",
                     "react-*",
-                    "expo",
-                    "expo-*",
                     "lucide-react",
                     "@t3tools/client-runtime",
                     "@t3tools/client-runtime/*",
@@ -451,27 +424,6 @@ export default defineConfig({
         },
       },
       {
-        files: ["apps/mobile/src/**"],
-        rules: {
-          "t3code/no-mobile-uniwind-theme-escape-hatches": "error",
-          "t3code/require-registered-list-scroll": "error",
-        },
-      },
-      {
-        files: ["apps/mobile/src/**"],
-        excludeFiles: [
-          "apps/mobile/src/components/ui/AppSymbol.tsx",
-          "apps/mobile/src/components/ui/AppSymbol.ios.tsx",
-          "apps/mobile/src/features/pull-requests/pullRequestGlyphs.ts",
-        ],
-        rules: { "t3code/no-mobile-pull-request-glyph-literals": "error" },
-      },
-      {
-        files: ["apps/mobile/src/**"],
-        excludeFiles: ["**/*.test.{ts,tsx}"],
-        rules: { "t3code/no-ambiguous-detail-navigation": "error" },
-      },
-      {
         // Raw ResizeObserver state commits miss the paint; observeResize flushes derived layout together.
         files: ["apps/web/src/**"],
         excludeFiles: [
@@ -494,8 +446,6 @@ export default defineConfig({
           "**/*.{test,spec}.{ts,tsx,js,jsx,mts,cts,mjs,cjs}",
           "**/testkit/**",
           "**/_generated/**",
-          // Real user quotes stay verbatim.
-          "apps/marketing/src/lib/tweets.ts",
         ],
         rules: { "t3code/no-em-dash-copy": "error" },
       },
@@ -581,64 +531,14 @@ export default defineConfig({
         rules: { "shadcn/no-arbitrary-values": "off" },
       },
       {
-        // ESNext types allow APIs absent from Hermes; restrict shared client code, exempting Node tests.
-        files: [
-          "apps/mobile/src/**",
-          "packages/client-runtime/src/**",
-          "packages/contracts/src/**",
-          "packages/shared/src/**",
-        ],
-        excludeFiles: ["**/*.test.ts", "**/*.test.tsx"],
-        rules: { "t3code/no-hermes-unsupported-apis": "error" },
-      },
-      {
-        // Directives hide bailouts from mobile's compiler-coverage check; retain hooks until its allowlist is empty.
-        files: ["apps/mobile/src/**/*.{ts,tsx}"],
-        rules: { "t3code/no-manual-memo": ["error", { allowMemoHooks: true }] },
-      },
-      {
-        files: ["apps/web/src/**", "apps/mobile/src/**", "packages/*/src/**"],
+        files: ["apps/web/src/**", "packages/*/src/**"],
         rules: { "t3code/react-effect-budget": "error" },
       },
       {
         // React Compiler caches use* functions only if they call a hook.
-        files: ["apps/web/src/**/*.{ts,tsx}", "apps/mobile/src/**/*.{ts,tsx}"],
+        files: ["apps/web/src/**/*.{ts,tsx}"],
         excludeFiles: ["**/*.test.ts", "**/*.test.tsx"],
         rules: { "t3code/no-hookless-use-function": "error" },
-      },
-      {
-        files: [
-          "apps/mobile/src/features/archive/ArchivedThreadsScreen.tsx",
-          "apps/mobile/src/features/connection/ConnectionsNewRouteScreen.tsx",
-          "apps/mobile/src/features/files/FileMarkdownPreview.tsx",
-          "apps/mobile/src/features/files/SourceFileSurface.tsx",
-          "apps/mobile/src/features/files/AttachmentFileScreen.tsx",
-          "apps/mobile/src/features/files/ThreadFilesRouteScreen.tsx",
-          "apps/mobile/src/features/files/thread-file-navigator-pane.tsx",
-          "apps/mobile/src/features/home/HomeHeader.tsx",
-          "apps/mobile/src/features/review/ReviewSheet.tsx",
-          "apps/mobile/src/features/review/useNativeReviewDiffBridge.ts",
-          "apps/mobile/src/features/settings/SettingsEnvironmentsRouteScreen.tsx",
-          "apps/mobile/src/features/threads/GitActionProgressOverlay.tsx",
-          "apps/mobile/src/features/threads/NewTaskDraftScreen.tsx",
-          "apps/mobile/src/features/threads/ThreadComposer.tsx",
-          "apps/mobile/src/features/threads/ThreadFeed.tsx",
-          "apps/mobile/src/features/settings/appearance/components/FontSizeSliderRow.tsx",
-          "apps/mobile/src/features/threads/NewTaskContextPickerScreens.tsx",
-          "apps/mobile/src/features/threads/ThreadQueueControl.tsx",
-          "apps/mobile/src/features/review/ReviewCommentCard.tsx",
-          "apps/mobile/src/features/threads/ThreadSettingsSheet.tsx",
-          "apps/mobile/src/features/threads/thread-list-items.tsx",
-          "apps/mobile/src/features/threads/thread-list-v2-items.tsx",
-          "apps/mobile/src/lib/useMobileNavigationTheme.ts",
-          "apps/mobile/src/native/T3ComposerEditor.ios.tsx",
-          "apps/mobile/src/native/T3ComposerEditor.native.tsx",
-          "apps/mobile/src/native/SelectableMarkdownText.tsx",
-          "apps/mobile/src/native/useEnrichedLinkVariants.ts",
-        ],
-        rules: {
-          "t3code/no-mobile-uniwind-theme-escape-hatches": ["error", { allowUniwindTheme: true }],
-        },
       },
     ],
     options: {

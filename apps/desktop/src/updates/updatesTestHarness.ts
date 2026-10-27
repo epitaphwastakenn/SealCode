@@ -33,7 +33,6 @@ export interface UpdatesHarnessOptions {
   readonly backendInstances?: ReadonlyArray<DesktopBackendPool.DesktopBackendInstance>;
   readonly env?: Record<string, string | undefined>;
   readonly platform?: NodeJS.Platform;
-  readonly packageType?: string | undefined;
   readonly installRecord?: string | undefined;
 }
 
@@ -224,16 +223,14 @@ export function makeHarness(options: UpdatesHarnessOptions = {}) {
         ? (installRecords.get(path) ?? previousInstallRecord)
         : undefined;
       if (installRecord !== undefined) return Effect.succeed(installRecord);
-      return path === "/missing/resources/package-type" && options.packageType !== undefined
-        ? Effect.succeed(options.packageType)
-        : Effect.fail(
-            PlatformError.systemError({
-              module: "FileSystem",
-              method: "readFileString",
-              _tag: "NotFound",
-              pathOrDescriptor: path,
-            }),
-          );
+      return Effect.fail(
+        PlatformError.systemError({
+          module: "FileSystem",
+          method: "readFileString",
+          _tag: "NotFound",
+          pathOrDescriptor: path,
+        }),
+      );
     },
     makeDirectory: () => Effect.void,
     writeFileString: (path, data) =>

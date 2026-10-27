@@ -9,29 +9,19 @@ import {
 /** Codex silently truncates additionalContext values over 1,000 tokens, counted as UTF-8 bytes / 4. */
 export const CODEX_ADDITIONAL_CONTEXT_VALUE_MAX_BYTES = 4_000;
 
-const T3_CODE_DEVICE_TOOL_INSTRUCTIONS = `## SealCode devices
-
-For iOS Simulators and Android Emulators here, call \`device_list\`, then \`device_open\`. Drive the device with the exact \`agent-device\` launcher and flags it returns, on every command. Prefer \`agent-device snapshot -i\` refs over coordinates. Use \`device_screenshot\` to see the screen. Use \`xcrun simctl\` or \`adb\` only for builds, logs, and ports. If a platform is unavailable, say so.`;
-
 export interface T3CodeToolAvailability {
   readonly browser: boolean;
-  readonly device: boolean;
 }
 
 const normalizeAvailability = (
   availability: boolean | T3CodeToolAvailability,
 ): T3CodeToolAvailability =>
-  typeof availability === "boolean" ? { browser: availability, device: false } : availability;
+  typeof availability === "boolean" ? { browser: availability } : availability;
 
 /** Instructions for unavailable tools would steer the model away from its remaining automation. */
 const toolInstructions = (availability: boolean | T3CodeToolAvailability): string => {
   const tools = normalizeAvailability(availability);
-  return [
-    tools.browser ? T3_CODE_BROWSER_TOOL_INSTRUCTIONS : "",
-    tools.device ? T3_CODE_DEVICE_TOOL_INSTRUCTIONS : "",
-  ]
-    .filter(Boolean)
-    .join("\n\n");
+  return tools.browser ? T3_CODE_BROWSER_TOOL_INSTRUCTIONS : "";
 };
 
 export interface CodexRuntimeInfo {

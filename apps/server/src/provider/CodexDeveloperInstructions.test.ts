@@ -11,7 +11,7 @@ describe("buildCodexAdditionalContext", () => {
   describe.each([
     { model: "custom-model", modelName: "Custom 🦊 Model", reasoningEffort: "xhigh" },
   ])("with runtime $model", (runtime) => {
-    it.each([undefined, { browser: true, device: true }])(
+    it.each([undefined, { browser: true }])(
       "keeps every entry within Codex's per-entry cap with tools %j",
       (availability) => {
         const context = buildCodexAdditionalContext(runtime, availability);

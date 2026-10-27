@@ -63,14 +63,13 @@ export type T3McpToolSummaryAction =
   | "write-pr-guides"
   | "read-pr-guide"
   | "browser"
-  | "device"
   | "html-preview"
   | "html-render";
 
 export interface T3McpToolDefinition {
   readonly displayName: string;
   readonly labels: readonly [action: string, running: string, completed: string, detail: string];
-  readonly icon: "t3-code" | "browser" | "device" | "pull-request";
+  readonly icon: "t3-code" | "browser" | "pull-request";
   readonly summaryAction: T3McpToolSummaryAction;
 }
 
@@ -256,18 +255,6 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     "browser",
     "browser",
   ),
-  device_list: tool(["List", "Listing", "Listed", "simulators and emulators"], "device", "device"),
-  device_open: tool(
-    ["Open", "Opening", "Opened", "a device in the Device panel"],
-    "device",
-    "device",
-  ),
-  device_screenshot: tool(
-    ["Take a screenshot of", "Taking a screenshot of", "Took a screenshot of", "the device"],
-    "device",
-    "device",
-  ),
-  device_close: tool(["Close", "Closing", "Closed", "a device"], "device", "device"),
   run_scheduled_task_now: tool(
     ["Run", "Running", "Requested a run of", "a scheduled task"],
     "schedule-run",

@@ -139,16 +139,9 @@ export function shouldRenderPreviewMiniPlayer(
   renderedRightPanelSurface: RightPanelSurface | null,
 ): boolean {
   if (source === null) return false;
-  if (source.kind === "browser") {
-    return !(
-      renderedRightPanelSurface?.kind === "preview" &&
-      renderedRightPanelSurface.resourceId === source.tabId
-    );
-  }
   return !(
-    renderedRightPanelSurface?.kind === "device" &&
-    renderedRightPanelSurface.target?.hostId === source.hostId &&
-    renderedRightPanelSurface.target.deviceId === source.deviceId
+    renderedRightPanelSurface?.kind === "preview" &&
+    renderedRightPanelSurface.resourceId === source.tabId
   );
 }
 

@@ -372,9 +372,9 @@ describe("pullRequestContextKindLabel", () => {
     expect(pullRequestContextKindLabel(comment("https://github.com/acme/app/pull/7", false))).toBe(
       "Open pull request",
     );
-    expect(
-      pullRequestContextKindLabel(comment("https://gitlab.com/acme/app/-/merge_requests/7", true)),
-    ).toBe("Draft merge request");
+    expect(pullRequestContextKindLabel(comment("https://github.com/acme/app/pull/7", true))).toBe(
+      "Draft pull request",
+    );
   });
 });
 

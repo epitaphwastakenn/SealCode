@@ -897,7 +897,7 @@ describe("rightPanelStore", () => {
     const second = { projectId: "project-a", repository: "pingdotgg/t3code", number: 4910 };
     useRightPanelStore.getState().openPullRequest(refA, first);
     useRightPanelStore.getState().openPullRequest(refA, second);
-    const url = "https://gitlab.example.com/pingdotgg/t3code/-/merge_requests/4909";
+    const url = "https://github.example.com/pingdotgg/t3code/pull/4909";
     useRightPanelStore.getState().openPullRequest(refA, { ...first, url });
     useRightPanelStore.getState().openPullRequest(refA, first);
 

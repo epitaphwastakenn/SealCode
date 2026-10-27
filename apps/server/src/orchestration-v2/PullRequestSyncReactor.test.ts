@@ -724,31 +724,6 @@ describe("PullRequestSyncReactor", () => {
       ),
   );
 
-  it.effect("recovers the HTTP port when syncing an older Forgejo link", () =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        const fixture = yield* makeHarness({
-          snapshot: makeSnapshot([
-            makeThread("one", {
-              pullRequests: [
-                makeLink(42, null, {
-                  host: "forge.example",
-                  url: "http://forge.example:3000/owner/repository/pulls/42",
-                }),
-              ],
-            }),
-          ]),
-          summary: (input) => Effect.succeed(makeSummary(input)),
-        });
-        yield* Effect.gen(function* () {
-          yield* startAndSweep(fixture);
-          assert.strictEqual((yield* Ref.get(fixture.summaryCalls))[0]?.host, "forge.example:3000");
-          assert.strictEqual((yield* Ref.get(fixture.syncCommands))[0]?.host, "forge.example:3000");
-        }).pipe(Effect.provide(fixture.layer));
-      }),
-    ),
-  );
-
   it.effect("dispatches nothing when the host snapshot is unchanged", () =>
     Effect.scoped(
       Effect.gen(function* () {
@@ -1365,61 +1340,59 @@ describe("PullRequestSyncReactor", () => {
     ),
   );
 
-  it.effect.each([
-    "gh pr merge 7 --squash 2>&1 | tail -3",
-    "cafe pr merge 7 --squash",
-    "az repos pr update --id 7 --status completed",
-  ])("reads open links fresh only for a thread that ran `%s`", (mergeCommand) =>
-    Effect.scoped(
-      Effect.gen(function* () {
-        yield* TestClock.setTime(Date.parse(NOW));
-        const state = yield* Ref.make<PullRequestSummary["state"]>("open");
-        const invalidated = yield* Ref.make<ReadonlyArray<number>>([]);
-        const fixture = yield* makeHarness({
-          snapshot: makeSnapshot([
-            makeThread("agent", { pullRequests: [makeLink(7, { state: "open" })] }),
-            makeThread("other", { pullRequests: [makeLink(9, { state: "open" })] }),
-          ]),
-          summary: (input) =>
-            Ref.get(state).pipe(
-              Effect.map((current) =>
-                makeSummary(input, current === "merged" ? { state: current, mergedAt: NOW } : {}),
-              ),
-            ),
-          invalidate: ({ reference }) =>
-            Ref.update(invalidated, (numbers) => [...numbers, reference?.number ?? -1]),
-        });
-
-        yield* Effect.gen(function* () {
-          const reactor = yield* startAndSweep(fixture);
-          yield* Ref.set(state, "merged");
-          yield* Ref.set(fixture.summaryCalls, []);
-
-          yield* Queue.offerAll(fixture.domainEvents, [
-            commandRan(ThreadId.make("other"), "gh pr view 9"),
-            runUpdated(ThreadId.make("other"), "completed"),
-            commandRan(ThreadId.make("agent"), mergeCommand),
-            runUpdated(ThreadId.make("agent"), "completed"),
-          ]);
-          yield* Queue.take(fixture.snapshotReads);
-          yield* Queue.take(fixture.snapshotReads);
-          yield* reactor.drain;
-
-          assert.deepStrictEqual(yield* Ref.get(invalidated), [7]);
-          assert.deepStrictEqual(
-            (yield* Ref.get(fixture.summaryCalls)).map((call) => call.number),
-            [7],
-          );
-          assert.deepStrictEqual(
-            (yield* Ref.get(fixture.syncCommands)).map((command) => [
-              command.number,
-              command.snapshot.state,
+  it.effect.each(["gh pr merge 7 --squash 2>&1 | tail -3"])(
+    "reads open links fresh only for a thread that ran `%s`",
+    (mergeCommand) =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          yield* TestClock.setTime(Date.parse(NOW));
+          const state = yield* Ref.make<PullRequestSummary["state"]>("open");
+          const invalidated = yield* Ref.make<ReadonlyArray<number>>([]);
+          const fixture = yield* makeHarness({
+            snapshot: makeSnapshot([
+              makeThread("agent", { pullRequests: [makeLink(7, { state: "open" })] }),
+              makeThread("other", { pullRequests: [makeLink(9, { state: "open" })] }),
             ]),
-            [[7, "merged"]],
-          );
-        }).pipe(Effect.provide(fixture.layer));
-      }),
-    ),
+            summary: (input) =>
+              Ref.get(state).pipe(
+                Effect.map((current) =>
+                  makeSummary(input, current === "merged" ? { state: current, mergedAt: NOW } : {}),
+                ),
+              ),
+            invalidate: ({ reference }) =>
+              Ref.update(invalidated, (numbers) => [...numbers, reference?.number ?? -1]),
+          });
+
+          yield* Effect.gen(function* () {
+            const reactor = yield* startAndSweep(fixture);
+            yield* Ref.set(state, "merged");
+            yield* Ref.set(fixture.summaryCalls, []);
+
+            yield* Queue.offerAll(fixture.domainEvents, [
+              commandRan(ThreadId.make("other"), "gh pr view 9"),
+              runUpdated(ThreadId.make("other"), "completed"),
+              commandRan(ThreadId.make("agent"), mergeCommand),
+              runUpdated(ThreadId.make("agent"), "completed"),
+            ]);
+            yield* Queue.take(fixture.snapshotReads);
+            yield* Queue.take(fixture.snapshotReads);
+            yield* reactor.drain;
+
+            assert.deepStrictEqual(yield* Ref.get(invalidated), [7]);
+            assert.deepStrictEqual(
+              (yield* Ref.get(fixture.summaryCalls)).map((call) => call.number),
+              [7],
+            );
+            assert.deepStrictEqual(
+              (yield* Ref.get(fixture.syncCommands)).map((command) => [
+                command.number,
+                command.snapshot.state,
+              ]),
+              [[7, "merged"]],
+            );
+          }).pipe(Effect.provide(fixture.layer));
+        }),
+      ),
   );
 
   it.effect("reads open links again when the run ends, after `merge --auto` left them open", () =>
@@ -1554,13 +1527,6 @@ describe("PullRequestSyncReactor", () => {
       input: "cargo test 2>&1 | tail -1 && timeout 60 gh pr create -R owner/repository --fill",
       output: "test result: ok\nhttps://github.com/owner/repository/pull/1",
       linked: [1],
-    },
-    {
-      name: "a GitLab merge request",
-      input: "glab mr create --fill --yes",
-      output:
-        "!3 Fix the thing (feature)\n https://gitlab.com/owner/repository/-/merge_requests/3\n",
-      linked: [3],
     },
     {
       name: "a new pull request whose number appears in the create command",

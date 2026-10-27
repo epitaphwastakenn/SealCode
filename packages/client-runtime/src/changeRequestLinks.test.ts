@@ -18,7 +18,7 @@ describe("findProjectForChangeRequest", () => {
   const project = (identity: Record<string, unknown>) =>
     ({ id: "p1", repositoryIdentity: identity }) as never;
 
-  it("matches a nested GitLab group by the whole path below the host", () => {
+  it("matches a project of an unsupported host by the whole path below the host", () => {
     const projects = [
       project({
         canonicalKey: "gitlab.com/t3tools/platform/t3code",
@@ -102,13 +102,13 @@ describe("resolveChangeRequestLinkTarget", () => {
     repositoryIdentity: {
       canonicalKey,
       provider: SourceControlProviderKind.make(
-        canonicalKey.startsWith("git.cafe") ? "gitcafe" : "github",
+        canonicalKey.startsWith("mirror.example.test") ? "unknown" : "github",
       ),
       displayName: canonicalKey.split("/").slice(1).join("/"),
       locator: { source: "git-remote", remoteName: "origin", remoteUrl: `https://${canonicalKey}` },
     } satisfies RepositoryIdentity,
   });
-  const mirrored = project("mirrored", local, "git.cafe/acme/app");
+  const mirrored = project("mirrored", local, "mirror.example.test/acme/app");
   const sibling = project("sibling", local, "github.com/acme/tools");
   const elsewhere = project("elsewhere", remote, "github.com/acme/app");
   const projects = [mirrored, sibling, elsewhere];
@@ -205,23 +205,6 @@ describe("projectChangeRequestUrl", () => {
   it("builds the requested repository's URL on the project's host", () => {
     expect(projectChangeRequestUrl(identity("github"), "acme/other", 42)).toBe(
       "https://github.com/acme/other/pull/42",
-    );
-  });
-
-  it("builds the project's own Azure repository from its full path, not its short selector", () => {
-    const azure: RepositoryIdentity = {
-      canonicalKey: "dev.azure.com/org/project/_git/web",
-      provider: SourceControlProviderKind.make("azure-devops"),
-      owner: "org",
-      name: "web",
-      locator: {
-        source: "git-remote",
-        remoteName: "origin",
-        remoteUrl: "https://dev.azure.com/org/project/_git/web",
-      },
-    };
-    expect(projectChangeRequestUrl(azure, "web", 42)).toBe(
-      "https://dev.azure.com/org/project/_git/web/pullrequest/42",
     );
   });
 

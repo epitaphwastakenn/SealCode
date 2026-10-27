@@ -182,7 +182,6 @@
   "src/serverRuntimeState.test.ts": 1.1,
   "src/serverSettings.test.ts": 1.6,
   "src/serviceLauncher.test.ts": 11.2,
-  "src/sourceControl/BitbucketApi.test.ts": 0.6,
   "src/sourceControl/SourceControlProviderRegistry.test.ts": 0.5,
   "src/sourceControl/githubStackRebase.test.ts": 1.5,
   "src/startupAccess.test.ts": 0.5,

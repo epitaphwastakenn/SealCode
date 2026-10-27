@@ -274,13 +274,18 @@ it.layer(NodeServices.layer)("RepositoryIdentityResolverLive", (it) => {
       });
 
       yield* git(cwd, ["init"]);
-      yield* git(cwd, ["remote", "add", "origin", "git@gitlab.com:T3Tools/platform/t3code.git"]);
+      yield* git(cwd, [
+        "remote",
+        "add",
+        "origin",
+        "git@git.example.com:T3Tools/platform/t3code.git",
+      ]);
 
       const resolver = yield* RepositoryIdentityResolver.RepositoryIdentityResolver;
       const identity = yield* resolver.resolve(cwd);
 
       expect(identity).not.toBeNull();
-      expect(identity?.canonicalKey).toBe("gitlab.com/t3tools/platform/t3code");
+      expect(identity?.canonicalKey).toBe("git.example.com/t3tools/platform/t3code");
       expect(identity?.displayName).toBe("T3Tools/platform/t3code");
       expect(identity?.owner).toBe("T3Tools");
       expect(identity?.name).toBe("t3code");

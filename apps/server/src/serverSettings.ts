@@ -302,23 +302,17 @@ const decodeServerSettingsJsonExit = Schema.decodeUnknownExit(ServerSettingsJson
 const LegacyProviderSettingsJson = fromLenientJson(
   Schema.Struct({
     providers: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
-    bitbucket: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
     github: Schema.optionalKey(Schema.Record(Schema.String, Schema.Unknown)),
   }),
 );
 const decodeLegacyProviderSettingsJsonExit = Schema.decodeUnknownExit(LegacyProviderSettingsJson);
 
-const LEGACY_BITBUCKET_SECRET_NAMES: Readonly<Record<string, string>> = {
-  accessToken: "bitbucket-access-token",
-  apiToken: "bitbucket-api-token",
-};
 const legacyGitHubTokenSecretName = (host: string) =>
   `github-token-${Buffer.from(host.trim().toLowerCase(), "utf8").toString("base64url")}`;
 
 function migrateLegacySourceControlSettings(
   settings: ServerSettings,
   legacy: {
-    readonly bitbucket?: Readonly<Record<string, unknown>> | undefined;
     readonly github?: Readonly<Record<string, unknown>> | undefined;
   },
 ): {
@@ -327,16 +321,6 @@ function migrateLegacySourceControlSettings(
 } {
   const sourceControlHosts = { ...settings.sourceControlHosts };
   const secretMoves: Array<{ readonly from: string; readonly to: string }> = [];
-  if (legacy.bitbucket !== undefined && sourceControlHosts.bitbucket === undefined) {
-    sourceControlHosts.bitbucket = legacy.bitbucket;
-    for (const [field, from] of Object.entries(LEGACY_BITBUCKET_SECRET_NAMES)) {
-      if (legacy.bitbucket[field] !== SECRET_REDACTED) continue;
-      secretMoves.push({
-        from,
-        to: sourceControlHostSecretName({ kind: "bitbucket", field, serverHost: null }),
-      });
-    }
-  }
   if (legacy.github !== undefined && sourceControlHosts.github === undefined) {
     sourceControlHosts.github = legacy.github;
     for (const [serverHost, value] of readSecretFieldValues(legacy.github.tokens)) {
@@ -718,7 +702,6 @@ const make = Effect.gen(function* () {
       if (legacySettings._tag === "Success") {
         legacyProviders = legacySettings.value.providers;
         legacySourceControl = {
-          bitbucket: legacySettings.value.bitbucket,
           github: legacySettings.value.github,
         };
       }
@@ -835,9 +818,7 @@ const make = Effect.gen(function* () {
         ),
     ).pipe(Effect.map((copied) => copied.every(Boolean)));
     const hasLegacySourceControl =
-      settingsFileTrusted &&
-      legacySecretsCopied &&
-      (legacySourceControl.bitbucket !== undefined || legacySourceControl.github !== undefined);
+      settingsFileTrusted && legacySecretsCopied && legacySourceControl.github !== undefined;
     const sourceControlMigration = hasLegacySourceControl
       ? migrateLegacySourceControlSettings(folded, legacySourceControl)
       : { settings: folded, secretMoves: [] };

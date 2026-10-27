@@ -147,8 +147,7 @@ describe("pull request involvement filtering", () => {
       entry({ number: 1, author: { login: "Bilal", name: null, avatarUrl: null } }),
       entry({
         number: 2,
-        provider: SourceControlProviderKind.make("gitlab"),
-        host: "gitlab.com",
+        host: "ghe.example.com",
         author: { login: "Bilal", name: null, avatarUrl: null },
       }),
     ];
@@ -378,7 +377,7 @@ describe("the list snapshot across a reload", () => {
   it("caps the accumulated rows but keeps the whole host set", () => {
     const storage = makeStorage();
     const manyEntries = Array.from({ length: 120 }, (_, index) => entry({ number: index + 1 }));
-    const viewers = { "github.com": "Bilal", "gitlab.com": "Bilal" };
+    const viewers = { "github.com": "Bilal", "ghe.example.com": "Bilal" };
     const providers = [
       {
         host: "github.com",
@@ -389,8 +388,8 @@ describe("the list snapshot across a reload", () => {
         detail: null,
       },
       {
-        host: "gitlab.com",
-        kind: "gitlab",
+        host: "ghe.example.com",
+        kind: "github",
         searchesOnHost: true,
         projectCount: 1,
         configured: true,
@@ -703,15 +702,15 @@ describe("pull request quick actions", () => {
 
   it("offers what each host reports, and the host's own set when a server reports none", () => {
     const actionsOf = pullRequestHostActions([
-      summary("bitbucket.org", "bitbucket", ["merge", "close"]),
+      summary("ghe.example.com", "github", ["merge", "close"]),
       summary("github.com", "github"),
-      summary("gitlab.com", "gitlab"),
+      summary("scm.example.test", "unknown"),
     ]);
-    const bitbucket = actionsOf({
-      host: "bitbucket.org",
-      provider: SourceControlProviderKind.make("bitbucket"),
+    const reported = actionsOf({
+      host: "ghe.example.com",
+      provider: SourceControlProviderKind.make("github"),
     });
-    expect(pullRequestQuickActions({ state: "closed", isDraft: false }, bitbucket)).toEqual([]);
+    expect(pullRequestQuickActions({ state: "closed", isDraft: false }, reported)).toEqual([]);
     const github = actionsOf({
       host: "github.com",
       provider: SourceControlProviderKind.make("github"),
@@ -720,16 +719,16 @@ describe("pull request quick actions", () => {
       "close",
       "ready",
     ]);
-    const gitlab = actionsOf({
-      host: "gitlab.com",
-      provider: SourceControlProviderKind.make("gitlab"),
+    const unknown = actionsOf({
+      host: "scm.example.test",
+      provider: SourceControlProviderKind.make("unknown"),
     });
-    expect(pullRequestQuickActions({ state: "open", isDraft: false }, gitlab)).toEqual([]);
+    expect(pullRequestQuickActions({ state: "open", isDraft: false }, unknown)).toEqual([]);
   });
 });
 
 describe("refresh page size", () => {
-  const twoPagesAcrossFourRepositories = (provider: "github" | "gitlab") =>
+  const twoPagesAcrossFourRepositories = (provider: "github" | "unknown") =>
     ["a", "b", "c", "d"].flatMap((name) =>
       Array.from({ length: 198 }, (_, index) =>
         entry({
@@ -741,7 +740,7 @@ describe("refresh page size", () => {
     );
 
   it("asks each repository for its own rows where repositories are read one at a time", () => {
-    expect(largestPullRequestReadCount(twoPagesAcrossFourRepositories("gitlab"))).toBe(198);
+    expect(largestPullRequestReadCount(twoPagesAcrossFourRepositories("unknown"))).toBe(198);
   });
 
   // regression: #19403 refreshes were not bounded by each tracker read
@@ -751,42 +750,6 @@ describe("refresh page size", () => {
 });
 
 describe("findProjectForRepository", () => {
-  it("resolves Azure bare names using matching project and environment scope", () => {
-    const azure = (id: string, environmentId: string, path: string) => ({
-      id,
-      environmentId,
-      repositoryIdentity: {
-        canonicalKey: `dev.azure.com/${path}`,
-        locator: { source: "git-remote" as const, remoteName: "origin", remoteUrl: "" },
-        provider: SourceControlProviderKind.make("azure-devops"),
-        displayName: path,
-        owner: "contoso",
-        name: path.split("/").at(-1)!,
-      },
-    });
-    const payments = azure("p1", ENV_1, "contoso/payments/_git/api");
-    const billing = azure("p2", ENV_1, "contoso/billing/_git/api");
-    const remoteBilling = azure("p2", ENV_2, "contoso/billing/_git/api");
-    const unrelated = azure("p3", ENV_2, "contoso/billing/_git/web");
-    const projects = [payments, billing, remoteBilling, unrelated];
-
-    expect(findProjectForRepository(projects, { repository: "api" })).toBe(payments);
-    expect(
-      findProjectForRepository(projects, {
-        repository: "api",
-        scopedProjectId: "p2",
-        scopedEnvironmentId: ENV_2,
-      }),
-    ).toBe(remoteBilling);
-    expect(
-      findProjectForRepository(projects, {
-        repository: "api",
-        scopedProjectId: "p3",
-        scopedEnvironmentId: ENV_2,
-      }),
-    ).toBe(payments);
-  });
-
   it("keeps repository matches on the selected environment when project IDs overlap", () => {
     const project = (id: string, environmentId: string, repository: string) => ({
       id,

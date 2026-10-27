@@ -40,16 +40,13 @@ class NotAnswered extends Schema.TaggedError<NotAnswered>()("NotAnswered", {}) {
 const linkSubject = (host: string) => () =>
   Effect.succeed({ title: `${host} subject`, body: null });
 
-/** Only GitHub and GitLab read linked subjects, as in production. */
+/** Only GitHub reads linked subjects, as in production. */
 const PROVIDERS = [
   fakeSourceControlProvider("github", { resolveLink: linkSubject("github") }),
-  fakeSourceControlProvider("gitlab", { resolveLink: linkSubject("gitlab") }),
-  fakeSourceControlProvider("forgejo"),
-  fakeSourceControlProvider("bitbucket"),
-  fakeSourceControlProvider("azure-devops"),
+  fakeSourceControlProvider("fakeforge"),
 ];
 
-/** A host CLI that claims every server it is signed in to, as `glab` does. */
+/** A host CLI that claims every server it is signed in to, as a host CLI such as `gh` does. */
 const claimingCli = (claims: string): SourceControlCliDiscoverySpec => ({
   type: "cli",
   kind: kind(claims),
@@ -108,7 +105,7 @@ function makeRegistry(input: {
       }),
   } satisfies Partial<VcsDriver.VcsDriver["Service"]>;
 
-  const discovery = input.discovery ?? [claimingCli("gitlab")];
+  const discovery = input.discovery ?? [claimingCli("fakeforge")];
   return SourceControlProviderRegistry.makeWithProviders(
     PROVIDERS.map((provider) => ({
       kind: provider.kind,
@@ -173,13 +170,15 @@ it.effect("routes an unknown remote to the integration that claims its server", 
 
     const handle = yield* registry.resolveHandle({ cwd: "/repo" });
 
-    assert.strictEqual(handle.provider.kind, "gitlab");
+    assert.strictEqual(handle.provider.kind, "fakeforge");
     assert.deepStrictEqual(handle.context?.provider, {
-      kind: kind("gitlab"),
-      name: "gitlab Self-Hosted",
+      kind: kind("fakeforge"),
+      name: "fakeforge Self-Hosted",
       baseUrl: "https://self-hosted.example.test",
     });
-    assert.deepStrictEqual(asked, ["gitlab-cli auth status --hostname self-hosted.example.test"]);
+    assert.deepStrictEqual(asked, [
+      "fakeforge-cli auth status --hostname self-hosted.example.test",
+    ]);
   }),
 );
 
@@ -214,7 +213,7 @@ it.effect("refines the caller-selected remote instead of choosing another config
       },
     });
 
-    assert.strictEqual(handle.context?.provider.kind, "gitlab");
+    assert.strictEqual(handle.context?.provider.kind, "fakeforge");
     assert.strictEqual(handle.context?.remoteName, "upstream");
   }),
 );
@@ -222,12 +221,12 @@ it.effect("refines the caller-selected remote instead of choosing another config
 it.effect("falls back to a non-origin remote when origin is not configured", () =>
   Effect.gen(function* () {
     const registry = yield* makeRegistry({
-      remotes: [{ name: "upstream", url: "https://dev.azure.com/acme/project/_git/repo" }],
+      remotes: [{ name: "upstream", url: "https://github.com/acme/repo.git" }],
     });
 
     const provider = yield* registry.resolve({ cwd: "/repo" });
 
-    assert.strictEqual(provider.kind, "azure-devops");
+    assert.strictEqual(provider.kind, "github");
   }),
 );
 
@@ -238,19 +237,14 @@ it.effect(
       const registry = yield* makeRegistry({
         remotes: [{ name: "origin", url: "https://github.com/unrelated/checkout.git" }],
       });
-      for (const [url, host] of [
-        ["https://github.com/team/project/issues/1", "github"],
-        ["https://gitlab.com/team/sub/project/-/merge_requests/2", "gitlab"],
-      ] as const) {
+      for (const [url, host] of [["https://github.com/team/project/issues/1", "github"]] as const) {
         const lookup = registry.resolveLink({ cwd: "/unrelated", url: new URL(url) });
         assert.ok(lookup);
         assert.deepStrictEqual(yield* lookup, { title: `${host} subject`, body: null });
       }
       for (const url of [
         "https://example.test/team/project/issues/1",
-        "https://codeberg.org/team/project/issues/1",
-        "https://bitbucket.org/team/project/pull-requests/1",
-        "https://dev.azure.com/org/project/_git/repo/pullrequest/1",
+        "https://fakeforge.com/team/sub/project/-/merge_requests/2",
         "http://github.com/team/project/issues/1",
         "https://user:secret@github.com/team/project/issues/1",
       ]) {
@@ -332,7 +326,7 @@ it.effect("asks once for every checkout of a server no integration claims", () =
     const registry = yield* makeRegistry({
       remotes: [],
       discovery: [
-        claimingCli("gitlab"),
+        claimingCli("fakeforge"),
         managedCli("github", ({ context }) => {
           asked.push(`managed ${context.provider.name}`);
           return Effect.succeed(null);
@@ -364,7 +358,7 @@ it.effect("asks once for every checkout of a server no integration claims", () =
     const once = asked.slice();
     assert.sameMembers(once, [
       "managed git.example.internal",
-      "gitlab-cli auth status --hostname git.example.internal",
+      "fakeforge-cli auth status --hostname git.example.internal",
     ]);
 
     yield* TestClock.adjust("5 minutes");
@@ -380,7 +374,7 @@ it.effect("asks again after a check that could not answer", () =>
     const registry = yield* makeRegistry({
       remotes: [],
       discovery: [
-        claimingCli("gitlab"),
+        claimingCli("fakeforge"),
         managedCli("github", () => {
           managedAsks += 1;
           return Effect.fail(new NotAnswered());

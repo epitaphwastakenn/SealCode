@@ -16,36 +16,6 @@ it.effect(
       const createdAt = "2026-09-01T00:00:00.000Z";
       const archivedAt = "2026-09-03T00:00:00.000Z";
       const fixtures = [
-        {
-          id: "forgejo-old",
-          host: "forge.example",
-          repository: "acme/web",
-          number: 7,
-          source: "manual",
-          url: "http://forge.example:3000/acme/web/pulls/7",
-        },
-        {
-          id: "forgejo-other-port",
-          host: "forge.example:4000",
-          repository: "acme/web",
-          number: 7,
-          source: "manual",
-          url: "http://forge.example:4000/acme/web/pulls/7",
-        },
-        {
-          id: "azure",
-          host: "dev.azure.com",
-          repository: "org/project/_git/web",
-          number: 7,
-          source: "manual",
-        },
-        {
-          id: "other-org",
-          host: "dev.azure.com",
-          repository: "other/project/_git/web",
-          number: 7,
-          source: "manual",
-        },
         { id: "active", host: "github.com", repository: "acme/web", number: 7, source: "manual" },
         {
           id: "archived",
@@ -129,27 +99,6 @@ it.effect(
           'https://github.com/acme/web/pull/7', 'manual', ${createdAt})
       `;
 
-      expect(
-        (yield* listLinkedPullRequestThreads({
-          host: "forge.example:3000",
-          repository: "acme/web",
-          number: 7,
-        })).threads.map((thread) => thread.id),
-      ).toEqual(["forgejo-old"]);
-      expect(
-        (yield* listLinkedPullRequestThreads({
-          host: "forge.example:4000",
-          repository: "acme/web",
-          number: 7,
-        })).threads.map((thread) => thread.id),
-      ).toEqual(["forgejo-other-port"]);
-      expect(
-        (yield* listLinkedPullRequestThreads({
-          host: "org.visualstudio.com",
-          repository: "project/_git/web",
-          number: 7,
-        })).threads.map((thread) => thread.id),
-      ).toEqual(["azure"]);
       const result = yield* listLinkedPullRequestThreads({
         host: "GitHub.Com",
         repository: "ACME/WEB",

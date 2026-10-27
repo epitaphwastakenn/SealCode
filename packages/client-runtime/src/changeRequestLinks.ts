@@ -160,8 +160,8 @@ export function projectChangeRequestUrl(
   if (identity?.provider === undefined) return null;
   const [host, ...path] = identity.canonicalKey.split("/");
   if (!host) return null;
-  // The RPC selector can be shorter than the browser path (Azure's `web` for
-  // `org/project/_git/web`), so the project's own repository uses its full key.
+  // The RPC selector can be shorter than the browser path, so the project's own repository
+  // uses its full key.
   const ownRepository = sourceControlClients.repositorySelector(identity) === repository;
   return sourceControlClients.get(identity.provider).changeRequestUrl({
     host,

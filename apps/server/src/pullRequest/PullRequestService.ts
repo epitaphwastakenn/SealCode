@@ -114,7 +114,7 @@ function supersedesReading(current: PullRequestReading | undefined, next: PullRe
   return (next.observedAt ?? -Infinity) >= (current.observedAt ?? -Infinity);
 }
 
-// Providers request one extra row; 99 stays within GitHub/GitLab's 100-row API limit.
+// Providers request one extra row; 99 stays within GitHub's 100-row API limit.
 const DEFAULT_REPOSITORY_LIST_LIMIT = 99;
 const REPOSITORY_CONCURRENCY = 12;
 const REPOSITORY_SEARCH_CHUNK = 100;
@@ -320,7 +320,6 @@ export interface SupportedProject {
   readonly api: PullRequestProviderApi;
   readonly repository: string;
   readonly host: string;
-  /** Unlike Azure repository names, remotes are unique across an organization. */
   readonly remote: string;
   readonly repositoryKey: string | null;
 }
@@ -920,7 +919,6 @@ export const make = Effect.gen(function* () {
       }),
     );
 
-  // Azure derives organization from the checkout; require the matching repository.
   const requireProject = (ref: PullRequestRef): Effect.Effect<SupportedProject, PullRequestError> =>
     listWorkspaceProjects({ projectId: ref.projectId }).pipe(
       Effect.flatMap(({ supported }): Effect.Effect<SupportedProject, PullRequestError> => {
@@ -943,9 +941,8 @@ export const make = Effect.gen(function* () {
         }
         const referenceKey = `${host}/${repository}`.toLowerCase();
         const repositoryKey = sourceControlDefinitions.canonicalRepositoryKey(referenceKey);
-        // A host that spells one repository several ways (Azure's SSH and legacy clone hosts)
-        // can differ from the browser URL's host. Compare the complete repository identity
-        // before narrowing those checkouts by host.
+        // A host that spells one repository several ways can differ from the browser URL's host.
+        // Compare the complete repository identity before narrowing those checkouts by host.
         return listWorkspaceProjects(
           sourceControlDefinitions.findByRepositoryKey(referenceKey) ? {} : { host },
         ).pipe(

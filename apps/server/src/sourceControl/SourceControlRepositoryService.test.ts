@@ -105,7 +105,7 @@ const lookupFailingWith = (cause: unknown, detail: string) =>
   Effect.gen(function* () {
     const service = yield* SourceControlRepositoryService.SourceControlRepositoryService;
     return yield* service
-      .lookupRepository({ provider: SourceControlProviderKind.make("bitbucket"), repository: "x" })
+      .lookupRepository({ provider: SourceControlProviderKind.make("fakeforge"), repository: "x" })
       .pipe(Effect.flip);
   }).pipe(
     Effect.provide(
@@ -114,7 +114,7 @@ const lookupFailingWith = (cause: unknown, detail: string) =>
           getRepositoryCloneUrls: (input) =>
             Effect.fail(
               new SourceControlProviderError({
-                provider: SourceControlProviderKind.make("bitbucket"),
+                provider: SourceControlProviderKind.make("fakeforge"),
                 operation: "getRepositoryCloneUrls",
                 cwd: input.cwd,
                 detail,

@@ -701,7 +701,7 @@ function PullRequestCodeTab({
     setToggledFiles(new Set());
   };
 
-  const orderedCommits = // GitLab preserves UTC offsets, so compare instants.
+  const orderedCommits = // Commit dates keep their UTC offsets, so compare instants.
     detail.commits.toSorted(
       (left, right) => Date.parse(right.committedDate) - Date.parse(left.committedDate),
     );

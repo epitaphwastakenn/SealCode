@@ -131,8 +131,8 @@ describe("when: ref has no upstream configured", () => {
   });
 });
 
-describe("when: the ref is on GitLab", () => {
-  const gitLab = {
+describe("when: the ref is on a retired host", () => {
+  const retiredHost = {
     sourceControlProvider: {
       kind: SourceControlProviderKind.make("gitlab"),
       name: "GitLab",
@@ -140,23 +140,26 @@ describe("when: the ref is on GitLab", () => {
     },
   };
 
-  it("names merge requests in actions and the default-ref dialog", () => {
-    const ahead = status({ ...gitLab, hasUpstream: false, aheadCount: 2 });
-    assert.equal(resolveQuickAction(ahead, false).label, "Push & create MR");
+  it("names change requests in actions and the default-ref dialog", () => {
+    const ahead = status({ ...retiredHost, hasUpstream: false, aheadCount: 2 });
+    assert.equal(resolveQuickAction(ahead, false).label, "Push & create change request");
     assert.equal(
-      resolveQuickAction(status({ ...gitLab, hasWorkingTreeChanges: true }), false).label,
-      "Commit, push & MR",
+      resolveQuickAction(status({ ...retiredHost, hasWorkingTreeChanges: true }), false).label,
+      "Commit, push & change request",
     );
-    assert.equal(buildMenuItems(ahead, false).find((item) => item.id === "pr")?.label, "Create MR");
+    assert.equal(
+      buildMenuItems(ahead, false).find((item) => item.id === "pr")?.label,
+      "Create change request",
+    );
 
     const copy = resolveDefaultBranchActionDialogCopy({
       action: "create_pr",
       branchName: "main",
       includesCommit: false,
-      terminology: sourceControlClients.get("gitlab").changeRequest,
+      terminology: sourceControlClients.get("unknown").changeRequest,
     });
-    assert.equal(copy.title, "Push & create MR from default ref?");
-    assert.include(copy.description, "create a merge request on");
+    assert.equal(copy.title, "Push & create change request from default ref?");
+    assert.include(copy.description, "create a change request on");
   });
 });
 

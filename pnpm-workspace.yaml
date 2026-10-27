@@ -27,7 +27,6 @@ allowBuilds:
   workerd: false
 
 catalog:
-  "@clerk/shared": 4.41.0
   # Must match the version alchemy depends on: the relay overrides its
   # Cloudflare retry policy through this package's Retry service.
   "@distilled.cloud/cloudflare": 1.0.0-rc.13
@@ -83,7 +82,6 @@ catalog:
 
 minimumReleaseAgeExclude:
   - "@tsc-rs/*"
-  - "@clerk/shared@4.41.0"
   - "@distilled.cloud/aws@1.0.0-rc.13"
   - "@distilled.cloud/axiom@1.0.0-rc.13"
   - "@distilled.cloud/cloudflare@1.0.0-rc.13"
@@ -159,7 +157,6 @@ overrides:
   # database provider, which the relay never deploys. Its exact hono/valibot
   # pins are also the bulk of our open dependency advisories.
   "alchemy>@prisma/dev": "-"
-  "@clerk/shared": "catalog:"
   "@effect/atom-react": "catalog:"
   "@effect/platform-node": "catalog:"
   "@effect/platform-node-shared": "catalog:"

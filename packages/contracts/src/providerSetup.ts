@@ -107,6 +107,13 @@ export const ProviderAuthStartInput = Schema.Struct({
 });
 export type ProviderAuthStartInput = typeof ProviderAuthStartInput.Type;
 
+export const ProviderDiagnoseInput = Schema.Struct({ instanceId: ProviderInstanceId });
+export type ProviderDiagnoseInput = typeof ProviderDiagnoseInput.Type;
+
+/** Plain text meant to be copied into a support message; holds no credentials. */
+export const ProviderDiagnoseResult = Schema.Struct({ report: Schema.String });
+export type ProviderDiagnoseResult = typeof ProviderDiagnoseResult.Type;
+
 export const ProviderAuthRespondInput = Schema.Struct({
   instanceId: ProviderInstanceId,
   flowId: SetupOperationId,

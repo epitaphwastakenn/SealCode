@@ -1,3 +1,6 @@
+// @effect-diagnostics nodeBuiltinImport:off - the Windows test compares the bundle with node:tls roots.
+import * as NodeTls from "node:tls";
+
 import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodePath from "@effect/platform-node/NodePath";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -511,6 +514,30 @@ it.layer(NodeServices.layer)("Antigravity profile preparation", (it) => {
       expect(directoryEnv?.SSL_CERT_DIR).toBe("/custom/certs");
       expect(directoryEnv?.SSL_CERT_FILE).toBeUndefined();
     }),
+  );
+
+  it.effect.skipIf(HostProcess.Platform.defaultValue() !== "win32")(
+    "launches Windows agents trusting the Windows certificate store",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const env = yield* prepareSpawn([], { REQUESTS_CA_BUNDLE: "C:\\corp\\ca.pem" }, "win32");
+        const bundlePath = env?.SSL_CERT_FILE;
+        expect(bundlePath).toMatch(/ca-bundle\.pem$/);
+        expect(env?.HTTPLIB2_CA_CERTS).toBe(bundlePath);
+        expect(env?.GRPC_DEFAULT_SSL_ROOTS_FILE_PATH).toBe(bundlePath);
+        expect(env?.REQUESTS_CA_BUNDLE).toBe("C:\\corp\\ca.pem");
+        const bundle = yield* fs.readFileString(bundlePath!);
+        for (const certificate of [
+          NodeTls.rootCertificates[0]!,
+          ...NodeTls.getCACertificates("system").slice(0, 3),
+        ]) {
+          expect(bundle).toContain(certificate.trim().replaceAll("\r\n", "\n"));
+        }
+        const userTrust = yield* prepareSpawn([], { SSL_CERT_DIR: "C:\\certs" }, "win32");
+        expect(userTrust?.SSL_CERT_FILE).toBeUndefined();
+        expect(userTrust?.REQUESTS_CA_BUNDLE).toBeUndefined();
+      }),
   );
 
   it.effect("runs the browser helper with installed Node in standalone builds", () =>

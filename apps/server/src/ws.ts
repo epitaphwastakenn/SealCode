@@ -2553,6 +2553,32 @@ const layerWsCoreRpc = (
             );
             return { outcome };
           }),
+        [WS_METHODS.providerDiagnose]:
+          /* Request instrumentation already owns the span; keep this helper in that context. */
+          Effect.fnUntraced(function* (input) {
+            const instance = yield* providerInstances.getInstance(input.instanceId);
+            if (instance?.diagnose === undefined) {
+              return yield* new ProviderSetupError({
+                instanceId: input.instanceId,
+                operation: "diagnose",
+                detail: instance
+                  ? "This provider has no diagnostics."
+                  : "Provider instance not found.",
+              });
+            }
+            const report = yield* instance.diagnose().pipe(
+              Effect.mapError(
+                (error) =>
+                  new ProviderSetupError({
+                    instanceId: input.instanceId,
+                    operation: "diagnose",
+                    detail: error.detail,
+                    cause: error,
+                  }),
+              ),
+            );
+            return { report };
+          }),
         [WS_METHODS.providerAuthStart]: (input) => providerAuth.start(input, currentSessionId),
         [WS_METHODS.providerAuthRespond]: (input) =>
           Effect.annotateCurrentSpan({ instanceId: input.instanceId }).pipe(

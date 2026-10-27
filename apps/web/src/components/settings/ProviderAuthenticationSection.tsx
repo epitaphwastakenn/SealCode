@@ -22,6 +22,7 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { ProviderDiagnosticsButton } from "./ProviderDiagnosticsButton";
 import { SettingsRow } from "./settingsLayout";
 import { RedactedSensitiveText } from "./RedactedSensitiveText";
 
@@ -312,6 +313,13 @@ export function ProviderAuthenticationSection({
               >
                 Sign out
               </Button>
+            ) : null}
+            {provider.driver === "antigravity" ? (
+              <ProviderDiagnosticsButton
+                environmentId={environmentId}
+                instanceId={instanceId}
+                disabled={readOnly}
+              />
             ) : null}
           </>
         </div>

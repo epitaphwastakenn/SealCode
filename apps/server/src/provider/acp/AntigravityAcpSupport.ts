@@ -50,6 +50,8 @@ export interface AntigravityAcpRuntimeInput extends Omit<
   readonly agentDeviceEnvironment?: Readonly<Record<string, string>>;
   readonly childProcessSpawner: ChildProcessSpawner.ChildProcessSpawner["Service"];
   readonly onAuthorizationUrl?: (url: string) => Effect.Effect<void, EffectAcpErrors.AcpError>;
+  /** Sees raw stderr; the caller must redact before keeping it. */
+  readonly onStderrText?: (text: string) => void;
   readonly clientFileSystem?: boolean;
   readonly authMethod?: AntigravityAuthMethod;
 }
@@ -62,6 +64,9 @@ export const makeAntigravityAcpRuntime = Effect.fn("makeAntigravityAcpRuntime")(
   Crypto.Crypto | Scope.Scope
 > {
   const harnessNotices = makeAntigravityHarnessNoticeFilter();
+  const handleStderr = makeAntigravityStderrHandler(
+    input.onAuthorizationUrl ? { onAuthorizationUrl: input.onAuthorizationUrl } : {},
+  );
   const context = yield* Layer.build(
     AcpSessionRuntime.layer({
       ...input,
@@ -83,9 +88,8 @@ export const makeAntigravityAcpRuntime = Effect.fn("makeAntigravityAcpRuntime")(
       transformStdout: makeAntigravityStdoutTransform(
         input.onAuthorizationUrl ? { onAuthorizationUrl: input.onAuthorizationUrl } : {},
       ),
-      onStderr: makeAntigravityStderrHandler(
-        input.onAuthorizationUrl ? { onAuthorizationUrl: input.onAuthorizationUrl } : {},
-      ),
+      onStderr: (text) =>
+        Effect.sync(() => input.onStderrText?.(text)).pipe(Effect.andThen(handleStderr(text))),
       transformSessionUpdate: (notification) =>
         harnessNotices.transform(normalizeAntigravitySessionUpdate(notification)),
     }).pipe(

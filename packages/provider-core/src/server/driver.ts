@@ -49,6 +49,8 @@ export interface ProviderInstance {
     ProviderConsumeResetCreditOutcome,
     ProviderDriverError
   >;
+  /** A plain-text report for troubleshooting; never contains credentials. */
+  readonly diagnose?: () => Effect.Effect<string, ProviderDriverError>;
   readonly orchestrationAdapter: ProviderAdapter.ProviderAdapterV2["Service"];
   readonly textGeneration: ProviderTextGeneration;
   readonly auth?: ProviderAuthController;

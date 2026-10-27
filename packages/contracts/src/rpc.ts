@@ -42,6 +42,8 @@ import {
   ProviderAuthCompleteInput,
   ProviderAuthState,
   ProviderAuthStartInput,
+  ProviderDiagnoseInput,
+  ProviderDiagnoseResult,
   ProviderAuthRespondInput,
   ProviderInstallCancelInput,
   ProviderInstallState,
@@ -427,6 +429,7 @@ export const WS_METHODS = {
   providerUploadFeedback: "provider.uploadFeedback",
   providerAuthStart: "provider.auth.start",
   providerConsumeResetCredit: "provider.consumeResetCredit",
+  providerDiagnose: "provider.diagnose",
   providerAuthComplete: "provider.auth.complete",
   chatGptReconnectProfile: "provider.chatgpt.reconnect-profile",
   chatGptImportProfile: "provider.chatgpt.import-profile",
@@ -661,6 +664,12 @@ const WsProviderConsumeResetCreditRpc = Rpc.make(WS_METHODS.providerConsumeReset
   payload: ProviderConsumeResetCreditInput,
   success: ProviderConsumeResetCreditResult,
   error: Schema.Union([ProviderSetupError, UsageLimitSourceError, EnvironmentAuthorizationError]),
+});
+
+const WsProviderDiagnoseRpc = Rpc.make(WS_METHODS.providerDiagnose, {
+  payload: ProviderDiagnoseInput,
+  success: ProviderDiagnoseResult,
+  error: ProviderSetupRpcError,
 });
 
 const WsProviderAuthStartRpc = Rpc.make(WS_METHODS.providerAuthStart, {
@@ -2002,6 +2011,7 @@ export const WsCoreRpcGroup = RpcGroup.make(
   WsServerRefreshProvidersRpc,
   WsServerUpdateProviderRpc,
   WsProviderConsumeResetCreditRpc,
+  WsProviderDiagnoseRpc,
   WsProviderAuthStartRpc,
   WsProviderAuthCompleteRpc,
   WsChatGptReconnectProfileRpc,

@@ -108,6 +108,15 @@ describe("AntigravityConnectProxy", () => {
     }).pipe(Effect.scoped),
   );
 
+  it("keeps Google traffic on the proxy when an inherited NO_PROXY would bypass it", () => {
+    const environment = withConnectProxyEnvironment(
+      { NO_PROXY: "*.googleapis.com,.google.com,corp.example,oauth2.googleapis.com:443,com,*" },
+      "http://127.0.0.1:1",
+    );
+    assert.equal(environment.NO_PROXY, "corp.example,localhost,127.0.0.1,::1");
+    assert.equal(environment.no_proxy, environment.NO_PROXY);
+  });
+
   it.live("leaves a proxy the user configured alone", () =>
     Effect.gen(function* () {
       let starts = 0;

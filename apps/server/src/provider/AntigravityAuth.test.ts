@@ -60,6 +60,9 @@ const makeHarness = Effect.fn("makeAuthTestHarness")(function* (
     readonly supportsLogout?: boolean;
     readonly beforeInitialize?: Effect.Effect<void>;
     readonly forwardCallback?: Effect.Effect<void, ProviderSetupError>;
+    /** Holds the agent in its launch, before it answers `initialize`. */
+    readonly launch?: Effect.Effect<void>;
+    readonly diagnoseNetwork?: Effect.Effect<string | undefined>;
   } = {},
 ) {
   const authenticated = yield* Deferred.make<void, AcpErrors.AcpError>();
@@ -96,6 +99,8 @@ const makeHarness = Effect.fn("makeAuthTestHarness")(function* (
             }),
           start: () =>
             Effect.gen(function* () {
+              yield* options.launch ?? Effect.void;
+              yield* input.onInitialized ?? Effect.void;
               events.push("authenticate");
               yield* Deferred.succeed(authenticateCalled, undefined);
               yield* Queue.offer(authenticateCalls, undefined);
@@ -130,6 +135,7 @@ const makeHarness = Effect.fn("makeAuthTestHarness")(function* (
       Effect.sync(() => {
         forwarded += 1;
       }),
+    ...(options.diagnoseNetwork ? { diagnoseNetwork: options.diagnoseNetwork } : {}),
   });
   return {
     auth,
@@ -294,6 +300,69 @@ it.layer(NodeServices.layer)("AntigravityAuth", (it) => {
       yield* TestClock.adjust("240 seconds");
       const failed = yield* phase(harness.auth, "failed");
       assert.include(failed.message ?? "", "could not reach Google");
+    }),
+  );
+
+  it.effect("waits for a slow launch instead of restarting it", () =>
+    Effect.gen(function* () {
+      const launched = yield* Deferred.make<void>();
+      const harness = yield* makeHarness({ interactive: false, launch: Deferred.await(launched) });
+      const message = (text: string) =>
+        harness.auth.controller.subscribe(owner).pipe(
+          Stream.filter((state) => state.message?.includes(text) === true),
+          Stream.runHead,
+          Effect.map(Option.getOrThrow),
+        );
+      yield* harness.auth.controller.start(owner);
+
+      yield* TestClock.adjust("30 seconds");
+      assert.equal((yield* message("Antivirus scanning")).phase, "starting");
+      yield* TestClock.adjust("90 seconds");
+      assert.deepEqual(harness.events, ["process-open"]);
+
+      yield* Deferred.succeed(launched, undefined);
+      yield* Queue.take(harness.authenticateCalls);
+      yield* TestClock.adjust("30 seconds");
+      yield* message("Restarting sign-in");
+      yield* Queue.take(harness.authenticateCalls);
+      assert.equal(harness.events.filter((event) => event === "process-open").length, 2);
+    }),
+  );
+
+  it.effect("says the agent never launched instead of blaming the network", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({ interactive: false, launch: Effect.never });
+      yield* harness.auth.controller.start(owner);
+      yield* TestClock.adjust("300 seconds");
+      const failed = yield* phase(harness.auth, "failed");
+      assert.include(failed.message ?? "", "did not start within 5 minutes");
+    }),
+  );
+
+  it.effect("names the cause of a certificate failure found by the network check", () =>
+    Effect.gen(function* () {
+      const certificateFailure = AcpErrors.AcpRequestError.internalError("Internal error", {
+        details:
+          "HTTPSConnectionPool(host='oauth2.googleapis.com', port=443): Max retries exceeded with url: /token (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate')))",
+      });
+      const withFinding = yield* makeHarness({
+        interactive: false,
+        diagnoseNetwork: Effect.succeed('HTTPS to Google is intercepted by "Contoso Web Shield".'),
+      });
+      yield* withFinding.auth.controller.start(owner);
+      yield* Deferred.fail(withFinding.authenticated, certificateFailure);
+      assert.equal(
+        (yield* phase(withFinding.auth, "failed")).message,
+        'HTTPS to Google is intercepted by "Contoso Web Shield".',
+      );
+
+      const withoutFinding = yield* makeHarness({ interactive: false });
+      yield* withoutFinding.auth.controller.start(owner);
+      yield* Deferred.fail(withoutFinding.authenticated, certificateFailure);
+      assert.include(
+        (yield* phase(withoutFinding.auth, "failed")).message ?? "",
+        "intercepts HTTPS",
+      );
     }),
   );
 

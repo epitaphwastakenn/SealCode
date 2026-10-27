@@ -31,14 +31,20 @@ import {
 import type { ProviderAuthController } from "./ProviderAuthService.ts";
 
 const AUTH_TIMEOUT_MS = 300_000;
-// A healthy agent shows the Google link or finishes within seconds. One that has not after 30
-// seconds is replaced once before the user is told to check the network.
+// Once running, a healthy agent shows the Google link or finishes within seconds. One that has
+// not after 30 seconds is replaced once before the user is told to check the network. Launching
+// is not counted: the agent unpacks about 7,000 files first, and antivirus scanning can stretch
+// that past a minute, so a restart would only start the unpacking over.
 const NO_RESPONSE_HINT_MS = 30_000;
+const SLOW_LAUNCH_MESSAGE =
+  "Antigravity is still starting. Antivirus scanning of its files can make this take a few minutes.";
 const RESTARTING_MESSAGE = "Antigravity did not reach Google in 30 seconds. Restarting sign-in.";
 const NO_RESPONSE_MESSAGE =
   "Antigravity still cannot reach Google. Check this machine's internet connection and any proxy, VPN or firewall.";
 const UNREACHABLE_MESSAGE =
   "Antigravity could not reach Google. Check this machine's internet connection and any proxy, VPN or firewall, then start sign-in again.";
+const NOT_LAUNCHED_MESSAGE =
+  "Antigravity did not start within 5 minutes. An antivirus may be blocking or slowly scanning it. Choose Diagnostics in provider settings for details.";
 const FORWARDING_FAILED_MESSAGE = "Could not deliver the sign-in response. Start sign-in again.";
 const isSetupError = Schema.is(ProviderSetupError);
 const isAcpRequestError = Schema.is(AcpErrors.AcpRequestError);
@@ -55,6 +61,7 @@ interface AuthFlow {
   state: ProviderAuthState;
   pending: AntigravityAuthorizationUrl | undefined;
   callbackSent: boolean;
+  launched: boolean;
   fiber: Fiber.Fiber<void> | undefined;
   forwarding: Fiber.Fiber<void, ProviderSetupError> | undefined;
 }
@@ -83,6 +90,8 @@ export interface AntigravityAuthOptions<
   readonly instanceId: ProviderInstanceId;
   readonly makeRuntime: (input: {
     readonly onAuthorizationUrl?: (url: string) => Effect.Effect<void, AcpErrors.AcpError>;
+    /** Runs when the agent answers `initialize`, that is once it finished launching. */
+    readonly onInitialized?: Effect.Effect<void>;
   }) => Effect.Effect<Runtime, AcpErrors.AcpError | ProviderSetupError, Scope.Scope>;
   readonly onAuthenticated: (
     result: AcpSessionRuntime.AcpSessionRuntimeStartResult,
@@ -91,6 +100,8 @@ export interface AntigravityAuthOptions<
   readonly onSignedOut: Effect.Effect<void>;
   readonly forwardCallback?: (callback: URL) => Effect.Effect<void, ProviderSetupError>;
   readonly usesBrowser?: boolean;
+  /** Names a network cause the user can act on, or nothing when Google looks reachable. */
+  readonly diagnoseNetwork?: Effect.Effect<string | undefined>;
 }
 
 function visibleSnapshot(snapshot: AuthSnapshot, ownerSessionId: string): ProviderAuthState {
@@ -106,6 +117,40 @@ function visibleSnapshot(snapshot: AuthSnapshot, ownerSessionId: string): Provid
     expiresAt: null,
     ...(busy ? { message: "Sign-in is in progress in another client." } : {}),
   };
+}
+
+type NetworkFailure = "certificate" | "dns" | "proxy" | "timeout" | "connection";
+
+const NETWORK_FAILURE_MESSAGES: Record<NetworkFailure, string> = {
+  certificate:
+    "Antigravity does not trust the certificate it got for Google, so something on this computer or network intercepts HTTPS. Choose Diagnostics in provider settings to see what.",
+  dns: "Antigravity could not look up Google's servers. Check this machine's DNS settings or content filter.",
+  proxy: "Antigravity could not connect through the configured proxy.",
+  timeout:
+    "Antigravity timed out talking to Google. Check this machine's internet connection and any proxy, VPN or firewall.",
+  connection:
+    "Antigravity could not connect to Google. Check this machine's internet connection and any proxy, VPN or firewall.",
+};
+
+/** Classifies the agent's Python transport errors, which arrive as `Internal error` details. */
+export function antigravityNetworkFailure(cause: Cause.Cause<unknown>): NetworkFailure | undefined {
+  const error = Cause.findErrorOption(cause);
+  if (Option.isNone(error) || !isAcpRequestError(error.value)) return undefined;
+  const text = `${error.value.errorMessage} ${JSON.stringify(error.value.data ?? "")}`;
+  if (/CERTIFICATE_VERIFY_FAILED|SSLCertVerification|self[- ]signed certificate/i.test(text)) {
+    return "certificate";
+  }
+  if (/NameResolution|getaddrinfo failed|Failed to resolve|Name or service not known/i.test(text)) {
+    return "dns";
+  }
+  if (/ProxyError|Unable to connect to proxy/i.test(text)) return "proxy";
+  if (/timed out|Timeout/i.test(text)) return "timeout";
+  if (
+    /ConnectionError|Connection refused|Connection reset|Max retries exceeded|SSLError/i.test(text)
+  ) {
+    return "connection";
+  }
+  return undefined;
 }
 
 function safeAuthFailure(cause: Cause.Cause<unknown>, usesBrowser: boolean): string {
@@ -222,7 +267,23 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
       }),
     );
 
-  const finishFlow = (flow: AuthFlow, result: Exit.Exit<void, unknown>) =>
+  const networkFinding = (fallback: string) =>
+    (options.diagnoseNetwork ?? Effect.undefined).pipe(
+      Effect.map((finding) => finding ?? fallback),
+      Effect.timeoutOrElse({ duration: "30 seconds", orElse: () => Effect.succeed(fallback) }),
+    );
+
+  const outcomeMessage = (result: Exit.Exit<void, unknown>) => {
+    if (Exit.isSuccess(result)) {
+      return Effect.succeed(usesBrowser ? "Signed in with Google." : "Connected to Antigravity.");
+    }
+    const network = antigravityNetworkFailure(result.cause);
+    return network === undefined
+      ? Effect.succeed(safeAuthFailure(result.cause, usesBrowser))
+      : networkFinding(NETWORK_FAILURE_MESSAGES[network]);
+  };
+
+  const finishFlow = (flow: AuthFlow, result: Exit.Exit<void, unknown>, message: string) =>
     lock.withPermits(1)(
       Effect.gen(function* () {
         if (activeFlow !== flow) return;
@@ -234,11 +295,7 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
           phase: Exit.isSuccess(result) ? "succeeded" : "failed",
           authorizationUrl: null,
           expiresAt: null,
-          message: Exit.isSuccess(result)
-            ? usesBrowser
-              ? "Signed in with Google."
-              : "Connected to Antigravity."
-            : safeAuthFailure(result.cause, usesBrowser),
+          message,
         });
       }),
     );
@@ -272,9 +329,14 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
   const runSignIn = Effect.fn("AntigravityAuth.runSignIn")(
     function* (flow: AuthFlow, stopSessions: Effect.Effect<void, ProviderSetupError>) {
       yield* stopSessions.pipe(Effect.ensuring(stopOwnedProcesses));
-      const startRuntime = Effect.gen(function* () {
+      const startRuntime = Effect.fn("AntigravityAuth.startRuntime")(function* (
+        initialized: Deferred.Deferred<void>,
+      ) {
         const runtime = yield* options.makeRuntime({
           onAuthorizationUrl: (url) => receiveAuthorizationUrl(flow, url),
+          onInitialized: Effect.sync(() => {
+            flow.launched = true;
+          }).pipe(Effect.andThen(Deferred.succeed(initialized, undefined)), Effect.asVoid),
         });
         return { runtime, started: yield* runtime.start() };
       });
@@ -286,23 +348,28 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
             return true;
           }),
         );
+      const noticeSlowLaunch = (initialized: Deferred.Deferred<void>) =>
+        Effect.sleep(NO_RESPONSE_HINT_MS).pipe(
+          Effect.andThen(Deferred.isDone(initialized)),
+          Effect.flatMap((done) => (done ? Effect.void : stillStarting(SLOW_LAUNCH_MESSAGE))),
+          Effect.forkScoped,
+        );
+      const silentAfterLaunch = (initialized: Deferred.Deferred<void>) =>
+        Deferred.await(initialized).pipe(Effect.andThen(Effect.sleep(NO_RESPONSE_HINT_MS)));
+      const firstInitialized = yield* Deferred.make<void>();
+      yield* noticeSlowLaunch(firstInitialized);
       const firstScope = yield* Scope.fork(yield* Effect.scope);
-      const first = yield* startRuntime.pipe(
+      const first = yield* startRuntime(firstInitialized).pipe(
         Effect.provideService(Scope.Scope, firstScope),
         Effect.forkScoped,
       );
-      const firstAttempt = yield* Fiber.join(first).pipe(
-        Effect.asSome,
-        Effect.timeoutOrElse({
-          duration: NO_RESPONSE_HINT_MS,
-          // Once the Google link is shown the wait is on the user, not the network.
-          orElse: () =>
-            stillStarting(RESTARTING_MESSAGE).pipe(
-              Effect.flatMap((stalled) =>
-                stalled ? Effect.succeedNone : Fiber.join(first).pipe(Effect.asSome),
-              ),
-            ),
-        }),
+      const firstAttempt = yield* Effect.raceFirst(
+        Fiber.join(first).pipe(Effect.asSome),
+        // Once the Google link is shown the wait is on the user, not the network.
+        silentAfterLaunch(firstInitialized).pipe(
+          Effect.andThen(stillStarting(RESTARTING_MESSAGE)),
+          Effect.flatMap((stalled) => (stalled ? Effect.succeedNone : Effect.never)),
+        ),
       );
       const { runtime, started } = Option.isSome(firstAttempt)
         ? firstAttempt.value
@@ -310,11 +377,14 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
             // A stalled agent never gets its answer; a fresh process opens new connections.
             yield* Fiber.interrupt(first);
             yield* Scope.close(firstScope, Exit.void);
-            yield* Effect.sleep(NO_RESPONSE_HINT_MS).pipe(
-              Effect.andThen(stillStarting(NO_RESPONSE_MESSAGE)),
+            const initialized = yield* Deferred.make<void>();
+            yield* noticeSlowLaunch(initialized);
+            yield* silentAfterLaunch(initialized).pipe(
+              Effect.andThen(networkFinding(NO_RESPONSE_MESSAGE)),
+              Effect.flatMap(stillStarting),
               Effect.forkScoped,
             );
-            return yield* startRuntime;
+            return yield* startRuntime(initialized);
           });
       yield* lock.withPermits(1)(
         Effect.gen(function* () {
@@ -336,17 +406,19 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
         Effect.timeoutOrElse({
           duration: AUTH_TIMEOUT_MS,
           orElse: () =>
-            Effect.fail(
-              setupError(
-                "start",
-                flow.state.phase === "starting"
-                  ? UNREACHABLE_MESSAGE
-                  : "Google sign-in expired. Start sign-in again.",
-              ),
-            ),
+            (flow.state.phase !== "starting"
+              ? Effect.succeed("Google sign-in expired. Start sign-in again.")
+              : flow.launched
+                ? networkFinding(UNREACHABLE_MESSAGE)
+                : Effect.succeed(NOT_LAUNCHED_MESSAGE)
+            ).pipe(Effect.flatMap((detail) => Effect.fail(setupError("start", detail)))),
         }),
         Effect.exit,
-        Effect.flatMap((result) => finishFlow(flow, result)),
+        Effect.flatMap((result) =>
+          outcomeMessage(result).pipe(
+            Effect.flatMap((message) => finishFlow(flow, result, message)),
+          ),
+        ),
       ),
   );
 
@@ -429,6 +501,7 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
               state,
               pending: undefined,
               callbackSent: false,
+              launched: false,
               fiber: undefined,
               forwarding: undefined,
             };

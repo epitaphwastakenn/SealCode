@@ -59,6 +59,8 @@ import { makeAntigravityProvider } from "../AntigravityProvider.ts";
 import { antigravityBaseSlug } from "../antigravityModelVariants.ts";
 import { makeAntigravityUsageProbe } from "../antigravityUsageLimits.ts";
 import { AntigravityConnectProxy } from "../AntigravityConnectProxy.ts";
+import { runAntigravityDiagnostics } from "../AntigravityDiagnostics.ts";
+import { agentProxyUrl, explainGoogleConnectivity } from "../antigravityNetworkChecks.ts";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import * as ModelCatalog from "@t3tools/provider-core/server/ModelCatalog";
 import {
@@ -190,6 +192,9 @@ export const AntigravityDriver: ProviderDriver<
       );
     const defaultModel = currentCatalog.pipe(Effect.map((catalog) => catalog?.defaultChatModel));
     const connectProxy = yield* AntigravityConnectProxy;
+    const platform = yield* HostProcess.Platform;
+    // Sign-in output only: chat sessions' output can quote the conversation.
+    let recentSignInOutput = "";
 
     const makeRuntime = Effect.fn("AntigravityDriver.makeRuntime")(function* (
       input: Omit<AntigravityAcpRuntimeInput, "spawn" | "childProcessSpawner">,
@@ -310,7 +315,9 @@ export const AntigravityDriver: ProviderDriver<
     });
 
     const makeDisposableRuntime = Effect.fn("AntigravityDriver.makeDisposableRuntime")(function* (
-      input: Pick<AntigravityAcpRuntimeInput, "onAuthorizationUrl">,
+      input: Pick<AntigravityAcpRuntimeInput, "onAuthorizationUrl"> & {
+        readonly onInitialized?: Effect.Effect<void>;
+      },
     ) {
       const cwd = yield* fileSystem
         .makeTempDirectoryScoped({ prefix: "t3-antigravity-setup-" })
@@ -340,6 +347,10 @@ export const AntigravityDriver: ProviderDriver<
         clientInfo: { name: "t3-code-provider-setup", version: "0.0.0" },
         mcpServers: [],
         ...(input.onAuthorizationUrl ? { onAuthorizationUrl: input.onAuthorizationUrl } : {}),
+        ...(input.onInitialized ? { onInitialized: () => input.onInitialized! } : {}),
+        onStderrText: (text) => {
+          recentSignInOutput = `${recentSignInOutput}${text}`.slice(-16_000);
+        },
       });
       return {
         ...runtime,
@@ -379,7 +390,47 @@ export const AntigravityDriver: ProviderDriver<
       onAuthenticated: publishCatalog,
       onSignedOut: Effect.suspend(() => provider.onSignedOut),
       usesBrowser: antigravityAuthUsesBrowser(auth.authMethod),
+      diagnoseNetwork: connectProxy
+        .environment(processEnvironment)
+        .pipe(
+          Effect.flatMap((agentEnvironment) =>
+            Effect.promise(() =>
+              explainGoogleConnectivity({ proxyUrl: agentProxyUrl(agentEnvironment) }),
+            ),
+          ),
+        ),
     });
+
+    const diagnose = Effect.fn("AntigravityDriver.diagnose")(
+      function* () {
+        const executable = yield* installation
+          .acquire(settings.binaryPath, processEnvironment)
+          .pipe(Effect.catch((cause) => Effect.succeed({ error: cause.detail })));
+        return yield* runAntigravityDiagnostics({
+          platform,
+          stateDir: host.paths.stateDir,
+          profileDirectory,
+          processEnvironment,
+          agentEnvironment: yield* connectProxy.environment(processEnvironment),
+          installation: executable,
+          recentSignInOutput,
+        });
+      },
+      Effect.scoped,
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+      Effect.provideService(Path.Path, path),
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+      Effect.provideService(Crypto.Crypto, crypto),
+      Effect.mapError(
+        (cause) =>
+          new ProviderDriverError({
+            driver: DRIVER,
+            instanceId,
+            detail: "Could not run Antigravity diagnostics.",
+            cause,
+          }),
+      ),
+    );
 
     // The probe must not spawn. The agent is a PyInstaller one-file bundle
     // that unpacks about 1 GB per launch, and the health check runs every
@@ -563,6 +614,7 @@ export const AntigravityDriver: ProviderDriver<
       textGeneration,
       auth: authFlow.controller,
       refreshModels,
+      diagnose,
     } satisfies ProviderInstance;
   }),
 };

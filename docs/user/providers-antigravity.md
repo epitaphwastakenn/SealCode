@@ -144,10 +144,21 @@ for eligibility.
 
 SealCode connects Antigravity to Google over IPv4 first and uses IPv6 only when IPv4
 fails, so a network with broken IPv6 does not stall it. A proxy set in `HTTPS_PROXY` is
-used as is. If Antigravity still does not answer within 30 seconds, SealCode restarts
-it once: sign-in retries on its own, and a turn stops and asks you to send your message
-again. If it happens again, check the machine's internet connection and any proxy, VPN
-or firewall.
+used as is. On Windows, Antigravity also trusts the certificates Windows trusts, so
+antivirus HTTPS scanning or a company certificate does not block it.
+
+Antigravity unpacks its files each time it starts. Antivirus scanning can make that take
+a minute or more; SealCode waits and says so. Once it is running, if it does not answer
+within 30 seconds, SealCode restarts it once: sign-in retries on its own, and a turn
+stops and asks you to send your message again. When sign-in fails because of the
+network, SealCode names the cause it finds, such as intercepted HTTPS, a wrong clock or
+a DNS failure.
+
+To get a report to send to whoever helps you, choose **Diagnostics** next to the
+Antigravity account in **Settings > Providers** on web or desktop, or run
+`t3 antigravity diagnose`. It checks DNS, IPv4 and IPv6, HTTPS certificates, the proxy
+and the clock, starts Antigravity once with a throwaway profile, and never includes
+passwords, tokens or email addresses.
 
 If a turn says Antigravity has sent nothing for 5 minutes, press **Stop**. Stop restarts
 Antigravity, and your next message continues the same conversation.

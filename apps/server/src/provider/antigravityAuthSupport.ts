@@ -9,6 +9,7 @@ import * as Effect from "effect/Effect";
 import * as Hex from "effect/encoding/Hex";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
+import * as Random from "effect/Random";
 import type * as PlatformError from "effect/PlatformError";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -22,6 +23,11 @@ import {
   antigravityUserSkillDirectories,
   resolveAntigravityUserHome,
 } from "./Drivers/AntigravitySkills.ts";
+import {
+  ANTIGRAVITY_CA_BUNDLE_VARIABLES,
+  mergeCaCertificates,
+  trustedCaCertificates,
+} from "./antigravityTrust.ts";
 
 export const ANTIGRAVITY_AUTH_STDOUT_PREFIX =
   "Open the following link to authenticate the ACP server: ";
@@ -217,7 +223,12 @@ function antigravityEnvironment(
     ...(profile.caBundlePath !== undefined &&
     baseEnv.SSL_CERT_FILE === undefined &&
     baseEnv.SSL_CERT_DIR === undefined
-      ? { SSL_CERT_FILE: profile.caBundlePath }
+      ? Object.fromEntries(
+          ANTIGRAVITY_CA_BUNDLE_VARIABLES.filter((key) => baseEnv[key] === undefined).map((key) => [
+            key,
+            profile.caBundlePath,
+          ]),
+        )
       : {}),
     GEMINI_HOME: profile.geminiHome,
     AGY_ACP_FORCE_FILE_STORAGE: "1",
@@ -416,7 +427,37 @@ export const prepareAntigravityProfile = Effect.fn("prepareAntigravityProfile")(
       ),
     );
   yield* linkAntigravityUserSkills({ profileDirectory: geminiHome, userHome, platform });
-  return profile;
+  if (platform !== "win32") return profile;
+  const windowsCaBundlePath = yield* writeWindowsCaBundle(acpDirectory);
+  return windowsCaBundlePath === undefined
+    ? profile
+    : { ...profile, caBundlePath: windowsCaBundlePath };
+});
+
+/** Agents of other sessions may be reading the bundle, so it is replaced, never rewritten in place. */
+const writeWindowsCaBundle = Effect.fn("writeWindowsCaBundle")(function* (acpDirectory: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const bundlePath = path.join(acpDirectory, "ca-bundle.pem");
+  const pem = mergeCaCertificates(trustedCaCertificates());
+  const current = yield* fs.readFileString(bundlePath).pipe(Effect.orElseSucceed(() => ""));
+  if (current === pem) return bundlePath;
+  const written = yield* Effect.gen(function* () {
+    const temporary = `${bundlePath}.${yield* Random.nextInt}.tmp`;
+    yield* fs.writeFileString(temporary, pem);
+    yield* fs
+      .rename(temporary, bundlePath)
+      .pipe(Effect.tapError(() => fs.remove(temporary).pipe(Effect.ignore)));
+  }).pipe(
+    Effect.as(true),
+    Effect.catch((error) =>
+      Effect.logWarning("Could not write the Antigravity certificate bundle.", { error }).pipe(
+        Effect.as(false),
+      ),
+    ),
+  );
+  // Another agent holding the old file open can block the swap; its content still works.
+  return written || current !== "" ? bundlePath : undefined;
 });
 
 export function buildAntigravityAcpSpawnInput(input: {

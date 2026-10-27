@@ -14,6 +14,7 @@ const IPV4_CONNECT_TIMEOUT_MS = 3_000;
 const IPV6_CONNECT_TIMEOUT_MS = 10_000;
 const USER_PROXY_KEYS = new Set(["HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "GRPC_PROXY"]);
 const LOOPBACK_HOSTS = ["localhost", "127.0.0.1", "::1"];
+const GOOGLE_DOMAINS = ["google.com", "googleapis.com"];
 
 interface DialTimeouts {
   readonly ipv4Ms: number;
@@ -59,7 +60,25 @@ const hasUserProxy = (environment: NodeJS.ProcessEnv) =>
     ([key, value]) => USER_PROXY_KEYS.has(key.toUpperCase()) && Boolean(value?.trim()),
   );
 
-/** Leaves a proxy the user configured alone; it already owns how the agent connects. */
+/** Python's NO_PROXY matching: `*`, or a host suffix with an optional leading `.` or `*.`. */
+const bypassesGoogle = (entry: string) => {
+  const host = entry
+    .trim()
+    .toLowerCase()
+    .replace(/^\*?\./, "")
+    .replace(/:\d+$/, "");
+  return (
+    host === "*" ||
+    GOOGLE_DOMAINS.some(
+      (domain) => host === domain || domain.endsWith(`.${host}`) || host.endsWith(`.${domain}`),
+    )
+  );
+};
+
+/**
+ * Leaves a proxy the user configured alone; it already owns how the agent connects. Inherited
+ * NO_PROXY entries that would send Google traffic around this proxy are dropped.
+ */
 export function withConnectProxyEnvironment(
   environment: NodeJS.ProcessEnv,
   proxyUrl: string,
@@ -73,7 +92,7 @@ export function withConnectProxyEnvironment(
       continue;
     }
     for (const entry of value?.split(",") ?? []) {
-      if (entry.trim()) noProxy.add(entry.trim());
+      if (entry.trim() && !bypassesGoogle(entry)) noProxy.add(entry.trim());
     }
   }
   // The agent reaches its own harness and credential proxy over loopback.

@@ -142,12 +142,12 @@ If Google reports `SUBSCRIPTION_REQUIRED`, an account restriction, or a usage li
 follow the provider's message and any retry time. See [Google's account plans][plans]
 for eligibility.
 
-If sign-in or a turn says Antigravity has not reached Google, check the machine's
-network connection. Broken IPv6 is a common cause: when SealCode finds that IPv6 to
-Google fails while IPv4 works, it connects Antigravity over IPv4 by itself. If that
-is only found after a turn went quiet, SealCode stops the turn and asks you to send
-your message again; sign-in retries on its own. A proxy set in `HTTPS_PROXY` is used
-as is.
+SealCode connects Antigravity to Google over IPv4 first and uses IPv6 only when IPv4
+fails, so a network with broken IPv6 does not stall it. A proxy set in `HTTPS_PROXY` is
+used as is. If Antigravity still does not answer within 30 seconds, SealCode restarts
+it once: sign-in retries on its own, and a turn stops and asks you to send your message
+again. If it happens again, check the machine's internet connection and any proxy, VPN
+or firewall.
 
 If a turn says Antigravity has sent nothing for 5 minutes, press **Stop**. Stop restarts
 Antigravity, and your next message continues the same conversation.

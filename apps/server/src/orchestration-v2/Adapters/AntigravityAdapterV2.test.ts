@@ -37,8 +37,8 @@ import { normalizeAntigravitySessionUpdate } from "../../provider/acp/Antigravit
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProviderAdapter from "@t3tools/provider-core/server/ProviderAdapter";
 import {
-  ANTIGRAVITY_IPV4_RESTART_MESSAGE,
   ANTIGRAVITY_SILENT_TURN_MESSAGE,
+  ANTIGRAVITY_SILENT_TURN_RESTART_MESSAGE,
   ANTIGRAVITY_STALLED_TURN_MESSAGE,
   makeAntigravityAcpAdapterFlavor,
   makeAntigravityAdapterV2,
@@ -507,7 +507,7 @@ describe("AntigravityAdapterV2 workspace changes", () => {
 const startHangingTurn = Effect.fn("test.startHangingTurn")(function* (
   name: string,
   env: Record<string, string>,
-  recovery?: { readonly recoverUnreachable: Effect.Effect<boolean>; readonly afterMs?: number },
+  silentTurnNoticeMs?: number,
 ) {
   const childProcessSpawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const fileSystem = yield* FileSystem.FileSystem;
@@ -544,8 +544,7 @@ const startHangingTurn = Effect.fn("test.startHangingTurn")(function* (
         );
       }),
     withProcess: (_stop, task) => task,
-    ...(recovery === undefined ? {} : { recoverUnreachable: recovery.recoverUnreachable }),
-    ...(recovery?.afterMs === undefined ? {} : { silentTurnNoticeMs: recovery.afterMs }),
+    ...(silentTurnNoticeMs === undefined ? {} : { silentTurnNoticeMs }),
     // @effect-diagnostics-next-line effectSucceedWithVoid:off - No default model is a value, not a void step.
     defaultModel: Effect.succeed(undefined),
   });
@@ -703,31 +702,10 @@ const silentTurnNotices = (items: ReadonlyArray<ProviderAdapter.ProviderAdapterV
   );
 
 describe("AntigravityAdapterV2 silent turns", () => {
-  // Without network to Google the agent accepts the prompt and then says nothing for minutes.
-  it.effect("tells the user when the agent has said nothing 30 seconds into a turn", () =>
-    Effect.gen(function* () {
-      const turn = yield* startHangingTurn("silent", {});
-      yield* Deferred.await(turn.promptSent);
-      yield* TestClock.adjust("29 seconds");
-      assert.deepEqual(silentTurnNotices(yield* Queue.clear(turn.turnItems)), []);
-
-      yield* TestClock.adjust("1 second");
-      const notice = yield* Queue.take(turn.turnItems);
-      assert.deepEqual(silentTurnNotices([notice]), [ANTIGRAVITY_SILENT_TURN_MESSAGE]);
-      assert.include(ANTIGRAVITY_SILENT_TURN_MESSAGE, "Broken IPv6");
-    }).pipe(Effect.provide(layerSession), Effect.scoped),
-  );
-
   // Live: stopping the runtime waits on the real process exiting.
-  it.live("stops a silent turn and restarts the agent once it was switched to IPv4", () =>
+  it.live("restarts a silent agent once, then tells the user what to check", () =>
     Effect.gen(function* () {
-      let rechecks = 0;
-      const turn = yield* startHangingTurn(
-        "ipv4-restart",
-        {},
-        // Only the first recheck finds a change; the restarted agent already has the proxy.
-        { recoverUnreachable: Effect.sync(() => rechecks++ === 0), afterMs: 100 },
-      );
+      const turn = yield* startHangingTurn("silent", {}, 100);
       const ended = yield* Queue.take(turn.turnUpdates).pipe(
         Effect.repeat({
           until: (event) =>
@@ -739,32 +717,22 @@ describe("AntigravityAdapterV2 silent turns", () => {
         "interrupted",
       );
       assert.deepEqual(silentTurnNotices(yield* Queue.clear(turn.turnItems)), [
-        ANTIGRAVITY_SILENT_TURN_MESSAGE,
-        ANTIGRAVITY_IPV4_RESTART_MESSAGE,
+        ANTIGRAVITY_SILENT_TURN_RESTART_MESSAGE,
       ]);
 
-      // The next message gets a fresh agent, which the driver starts with the IPv4 proxy.
+      // The next message gets a fresh agent; a second silence only warns.
       assert.equal(turn.spawns(), 1);
       yield* turn.startNextTurn;
       yield* Queue.take(turn.turnUpdates);
       assert.equal(turn.spawns(), 2);
-    }).pipe(Effect.provide(layerSession), Effect.scoped),
-  );
-
-  it.effect("keeps waiting when switching networks would not help", () =>
-    Effect.gen(function* () {
-      const turn = yield* startHangingTurn(
-        "no-ipv4-restart",
-        {},
-        {
-          recoverUnreachable: Effect.succeed(false),
-        },
+      const notice = yield* Queue.take(turn.turnItems).pipe(
+        Effect.repeat({
+          until: (event) =>
+            event.type === "turn_item.updated" && event.turnItem.type === "system_notice",
+        }),
       );
-      yield* Deferred.await(turn.promptSent);
-      yield* TestClock.adjust("30 seconds");
-      const notice = yield* Queue.take(turn.turnItems);
       assert.deepEqual(silentTurnNotices([notice]), [ANTIGRAVITY_SILENT_TURN_MESSAGE]);
-      assert.deepEqual(silentTurnNotices(yield* Queue.clear(turn.turnItems)), []);
+      assert.include(ANTIGRAVITY_SILENT_TURN_MESSAGE, "proxy");
     }).pipe(Effect.provide(layerSession), Effect.scoped),
   );
 

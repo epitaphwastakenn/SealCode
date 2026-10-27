@@ -31,15 +31,14 @@ import {
 import type { ProviderAuthController } from "./ProviderAuthService.ts";
 
 const AUTH_TIMEOUT_MS = 300_000;
-// A healthy agent shows the Google link or finishes within seconds. Its bundled Python has no
-// IPv4 fallback race, so a host with broken IPv6 waits about two minutes per Google request.
+// A healthy agent shows the Google link or finishes within seconds. One that has not after 30
+// seconds is replaced once before the user is told to check the network.
 const NO_RESPONSE_HINT_MS = 30_000;
+const RESTARTING_MESSAGE = "Antigravity did not reach Google in 30 seconds. Restarting sign-in.";
 const NO_RESPONSE_MESSAGE =
-  "Antigravity has not reached Google after 30 seconds. Check this machine's network connection. Broken IPv6 is a common cause.";
+  "Antigravity still cannot reach Google. Check this machine's internet connection and any proxy, VPN or firewall.";
 const UNREACHABLE_MESSAGE =
-  "Antigravity could not reach Google. Check this machine's network connection, then start sign-in again.";
-const RETRYING_OVER_IPV4_MESSAGE =
-  "Antigravity could not reach Google over IPv6. Retrying sign-in over IPv4.";
+  "Antigravity could not reach Google. Check this machine's internet connection and any proxy, VPN or firewall, then start sign-in again.";
 const FORWARDING_FAILED_MESSAGE = "Could not deliver the sign-in response. Start sign-in again.";
 const isSetupError = Schema.is(ProviderSetupError);
 const isAcpRequestError = Schema.is(AcpErrors.AcpRequestError);
@@ -92,8 +91,6 @@ export interface AntigravityAuthOptions<
   readonly onSignedOut: Effect.Effect<void>;
   readonly forwardCallback?: (callback: URL) => Effect.Effect<void, ProviderSetupError>;
   readonly usesBrowser?: boolean;
-  /** Runs after the no-response hint; true when the driver just switched the agent to IPv4. */
-  readonly recoverUnreachable?: Effect.Effect<boolean>;
 }
 
 function visibleSnapshot(snapshot: AuthSnapshot, ownerSessionId: string): ProviderAuthState {
@@ -281,43 +278,41 @@ export const makeAntigravityAuth = Effect.fn("makeAntigravityAuth")(function* <
         });
         return { runtime, started: yield* runtime.start() };
       });
-      const recoverStall = Effect.sleep(NO_RESPONSE_HINT_MS).pipe(
-        Effect.andThen(
-          lock.withPermits(1)(
-            Effect.gen(function* () {
-              if (activeFlow !== flow || flow.state.phase !== "starting") return false;
-              yield* publishFlow(flow, { ...flow.state, message: NO_RESPONSE_MESSAGE });
-              return true;
-            }),
-          ),
-        ),
-        Effect.flatMap((stalled) =>
-          stalled && options.recoverUnreachable !== undefined
-            ? options.recoverUnreachable
-            : Effect.succeed(false),
-        ),
-        Effect.flatMap((recovered) => (recovered ? Effect.void : Effect.never)),
-      );
+      const stillStarting = (message: string) =>
+        lock.withPermits(1)(
+          Effect.gen(function* () {
+            if (activeFlow !== flow || flow.state.phase !== "starting") return false;
+            yield* publishFlow(flow, { ...flow.state, message });
+            return true;
+          }),
+        );
       const firstScope = yield* Scope.fork(yield* Effect.scope);
       const first = yield* startRuntime.pipe(
         Effect.provideService(Scope.Scope, firstScope),
         Effect.forkScoped,
       );
-      const firstAttempt = yield* Effect.raceFirst(
-        Fiber.join(first).pipe(Effect.asSome),
-        recoverStall.pipe(Effect.as(Option.none())),
+      const firstAttempt = yield* Fiber.join(first).pipe(
+        Effect.asSome,
+        Effect.timeoutOrElse({
+          duration: NO_RESPONSE_HINT_MS,
+          // Once the Google link is shown the wait is on the user, not the network.
+          orElse: () =>
+            stillStarting(RESTARTING_MESSAGE).pipe(
+              Effect.flatMap((stalled) =>
+                stalled ? Effect.succeedNone : Fiber.join(first).pipe(Effect.asSome),
+              ),
+            ),
+        }),
       );
       const { runtime, started } = Option.isSome(firstAttempt)
         ? firstAttempt.value
         : yield* Effect.gen(function* () {
-            // The stalled agent never gets its answer; a new one starts on the working path.
+            // A stalled agent never gets its answer; a fresh process opens new connections.
             yield* Fiber.interrupt(first);
             yield* Scope.close(firstScope, Exit.void);
-            yield* lock.withPermits(1)(
-              Effect.gen(function* () {
-                if (activeFlow !== flow) return;
-                yield* publishFlow(flow, { ...flow.state, message: RETRYING_OVER_IPV4_MESSAGE });
-              }),
+            yield* Effect.sleep(NO_RESPONSE_HINT_MS).pipe(
+              Effect.andThen(stillStarting(NO_RESPONSE_MESSAGE)),
+              Effect.forkScoped,
             );
             return yield* startRuntime;
           });

@@ -44,14 +44,13 @@ import {
 } from "@t3tools/provider-acp/server/adapter";
 
 const ANTIGRAVITY_PROVIDER = ProviderDriverKind.make("antigravity");
-// A healthy agent streams its first thought or reply within seconds. When it cannot reach
-// Google (often broken IPv6: its bundled Python has no IPv4 fallback race) it stays silent
-// for minutes while the turn looks like it is thinking.
+// A healthy agent streams its first thought or reply within seconds. A silent one is restarted
+// once, since a fresh process opens new connections; a second silence means the network.
 export const ANTIGRAVITY_SILENT_TURN_NOTICE_MS = 30_000;
+export const ANTIGRAVITY_SILENT_TURN_RESTART_MESSAGE =
+  "Antigravity did not respond for 30 seconds, so SealCode stopped this turn and restarted it. Send your message again.";
 export const ANTIGRAVITY_SILENT_TURN_MESSAGE =
-  "Antigravity has not responded after 30 seconds and may not be reaching Google. Check this machine's network connection. Broken IPv6 is a common cause.";
-export const ANTIGRAVITY_IPV4_RESTART_MESSAGE =
-  "Antigravity could not reach Google over IPv6, so SealCode stopped this turn and will connect it over IPv4. Send your message again.";
+  "Antigravity still has not responded after a restart. Check this machine's internet connection and any proxy, VPN or firewall, then send your message again.";
 // Its prompt stays open after a model call dies mid-answer, so the turn would look busy forever.
 export const ANTIGRAVITY_STALLED_TURN_NOTICE_MS = 5 * 60_000;
 export const ANTIGRAVITY_STALLED_TURN_MESSAGE =
@@ -85,8 +84,6 @@ export interface AntigravityAdapterV2Options {
     Scope.Scope
   >;
   readonly withProcess: AntigravityAuth["withProcess"];
-  /** Runs when a turn goes silent; true when the driver just switched the agent to IPv4. */
-  readonly recoverUnreachable?: Effect.Effect<boolean>;
   /** Live tests that restart a real process shorten the 30 second wait. */
   readonly silentTurnNoticeMs?: number;
   readonly defaultModel: Effect.Effect<string | undefined>;
@@ -188,13 +185,7 @@ export function makeAntigravityAcpAdapterFlavor(
     silentTurnNotice: {
       afterMs: options.silentTurnNoticeMs ?? ANTIGRAVITY_SILENT_TURN_NOTICE_MS,
       message: ANTIGRAVITY_SILENT_TURN_MESSAGE,
-      ...(options.recoverUnreachable === undefined
-        ? {}
-        : {
-            recover: options.recoverUnreachable.pipe(
-              Effect.map((recovered) => (recovered ? ANTIGRAVITY_IPV4_RESTART_MESSAGE : undefined)),
-            ),
-          }),
+      restartMessage: ANTIGRAVITY_SILENT_TURN_RESTART_MESSAGE,
     },
     stalledTurnNotice: {
       afterMs: ANTIGRAVITY_STALLED_TURN_NOTICE_MS,

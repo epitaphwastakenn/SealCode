@@ -6,6 +6,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
+import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
@@ -59,13 +60,13 @@ const makeHarness = Effect.fn("makeAuthTestHarness")(function* (
     readonly supportsLogout?: boolean;
     readonly beforeInitialize?: Effect.Effect<void>;
     readonly forwardCallback?: Effect.Effect<void, ProviderSetupError>;
-    readonly recoverUnreachable?: Effect.Effect<boolean>;
   } = {},
 ) {
   const authenticated = yield* Deferred.make<void, AcpErrors.AcpError>();
   const discovered = yield* Deferred.make<void, AcpErrors.AcpError>();
   const closed = yield* Deferred.make<void>();
   const authenticateCalled = yield* Deferred.make<void>();
+  const authenticateCalls = yield* Queue.unbounded<void>();
   const events: string[] = [];
   let receiveAuthorizationUrl:
     | ((url: string) => Effect.Effect<void, AcpErrors.AcpError>)
@@ -97,6 +98,7 @@ const makeHarness = Effect.fn("makeAuthTestHarness")(function* (
             Effect.gen(function* () {
               events.push("authenticate");
               yield* Deferred.succeed(authenticateCalled, undefined);
+              yield* Queue.offer(authenticateCalls, undefined);
               if (options.interactive !== false && input.onAuthorizationUrl) {
                 for (const url of options.authorizationUrls ?? [authorizationUrl]) {
                   yield* input.onAuthorizationUrl(url);
@@ -123,9 +125,6 @@ const makeHarness = Effect.fn("makeAuthTestHarness")(function* (
       catalog = [];
       events.push("catalog-cleared");
     }),
-    ...(options.recoverUnreachable === undefined
-      ? {}
-      : { recoverUnreachable: options.recoverUnreachable }),
     forwardCallback: () =>
       options.forwardCallback ??
       Effect.sync(() => {
@@ -138,6 +137,7 @@ const makeHarness = Effect.fn("makeAuthTestHarness")(function* (
     discovered,
     closed,
     authenticateCalled,
+    authenticateCalls,
     events,
     catalog: () => catalog,
     forwarded: () => forwarded,
@@ -263,46 +263,21 @@ it.layer(NodeServices.layer)("AntigravityAuth", (it) => {
     }),
   );
 
-  it.effect("tells the user when the agent cannot reach Google", () =>
+  it.effect("restarts a sign-in that has not reached Google, then says what to check", () =>
     Effect.gen(function* () {
       const harness = yield* makeHarness({ interactive: false });
+      const message = (text: string) =>
+        harness.auth.controller.subscribe(owner).pipe(
+          Stream.filter((state) => state.message?.includes(text) === true),
+          Stream.runHead,
+          Effect.map(Option.getOrThrow),
+        );
       yield* harness.auth.controller.start(owner);
-      yield* Deferred.await(harness.authenticateCalled);
+      yield* Queue.take(harness.authenticateCalls);
 
       yield* TestClock.adjust("30 seconds");
-      const stalled = yield* harness.auth.controller.subscribe(owner).pipe(
-        Stream.filter((state) => state.message?.includes("Broken IPv6") === true),
-        Stream.runHead,
-        Effect.map(Option.getOrThrow),
-      );
-      assert.equal(stalled.phase, "starting");
-
-      yield* TestClock.adjust("270 seconds");
-      const failed = yield* phase(harness.auth, "failed");
-      assert.include(failed.message ?? "", "could not reach Google");
-    }),
-  );
-
-  it.effect("restarts a stalled sign-in once the agent was switched to IPv4", () =>
-    Effect.gen(function* () {
-      const harness = yield* makeHarness({
-        interactive: false,
-        recoverUnreachable: Effect.succeed(true),
-      });
-      yield* harness.auth.controller.start(owner);
-      yield* Deferred.await(harness.authenticateCalled);
-
-      yield* TestClock.adjust("30 seconds");
-      const retrying = yield* harness.auth.controller.subscribe(owner).pipe(
-        Stream.filter((state) => state.message?.includes("over IPv4") === true),
-        Stream.runHead,
-        Effect.map(Option.getOrThrow),
-      );
-      assert.equal(retrying.phase, "starting");
-
-      yield* Deferred.succeed(harness.authenticated, undefined);
-      yield* Deferred.succeed(harness.discovered, undefined);
-      yield* phase(harness.auth, "succeeded");
+      assert.equal((yield* message("Restarting sign-in")).phase, "starting");
+      yield* Queue.take(harness.authenticateCalls);
       assert.deepEqual(harness.events.slice(0, 5), [
         "process-open",
         "authenticate",
@@ -310,6 +285,30 @@ it.layer(NodeServices.layer)("AntigravityAuth", (it) => {
         "process-open",
         "authenticate",
       ]);
+
+      yield* TestClock.adjust("30 seconds");
+      const stalled = yield* message("still cannot reach Google");
+      assert.equal(stalled.phase, "starting");
+      assert.include(stalled.message ?? "", "proxy");
+
+      yield* TestClock.adjust("240 seconds");
+      const failed = yield* phase(harness.auth, "failed");
+      assert.include(failed.message ?? "", "could not reach Google");
+    }),
+  );
+
+  it.effect("finishes sign-in on the restarted agent", () =>
+    Effect.gen(function* () {
+      const harness = yield* makeHarness({ interactive: false });
+      yield* harness.auth.controller.start(owner);
+      yield* Queue.take(harness.authenticateCalls);
+      yield* TestClock.adjust("30 seconds");
+      yield* Queue.take(harness.authenticateCalls);
+
+      yield* Deferred.succeed(harness.authenticated, undefined);
+      yield* Deferred.succeed(harness.discovered, undefined);
+      yield* phase(harness.auth, "succeeded");
+      assert.equal(harness.events.filter((event) => event === "process-open").length, 2);
     }),
   );
 

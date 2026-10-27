@@ -42,6 +42,7 @@ import { checkCodexProviderStatus, type CodexAppServerProviderSnapshot } from ".
 import { checkClaudeProviderStatus } from "./ClaudeProvider.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as AntigravityInstallation from "./AntigravityInstallation.ts";
+import { AntigravityConnectProxy } from "./AntigravityConnectProxy.ts";
 import * as ModelManifest from "./ModelManifest.ts";
 import { applyProviderCompatibility } from "./providerCompatibility.ts";
 import * as ResetCreditCoordinator from "./resetCreditCoordinator.ts";
@@ -1963,6 +1964,7 @@ it.layer(
         const layerProviderRegistry = ProviderRegistry.layer.pipe(
           Layer.provideMerge(ProviderInstanceRegistryHydration.layer),
           Layer.provideMerge(AntigravityInstallation.AntigravityInstallation.layer),
+          Layer.provideMerge(AntigravityConnectProxy.layer),
           Layer.provideMerge(
             Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
           ),
@@ -2086,6 +2088,7 @@ it.layer(
         const layerProviderRegistry = ProviderRegistry.layer.pipe(
           Layer.provideMerge(ProviderInstanceRegistryHydration.layer),
           Layer.provideMerge(AntigravityInstallation.AntigravityInstallation.layer),
+          Layer.provideMerge(AntigravityConnectProxy.layer),
           Layer.provideMerge(
             Layer.succeed(ServerSettingsModule.ServerSettingsService, serverSettings),
           ),
@@ -2194,6 +2197,7 @@ it.layer(
       const dependencies = yield* Layer.build(
         Layer.mergeAll(
           AntigravityInstallation.AntigravityInstallation.layer,
+          AntigravityConnectProxy.layer,
           ServerSecretStore.layer,
           OpenCodeRuntime.layer.pipe(Layer.provide(OpenCodeServerLedger.layerTest)),
         ).pipe(

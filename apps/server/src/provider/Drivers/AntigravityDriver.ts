@@ -58,7 +58,7 @@ import { ProviderDriverError } from "../Errors.ts";
 import { makeAntigravityProvider } from "../AntigravityProvider.ts";
 import { antigravityBaseSlug } from "../antigravityModelVariants.ts";
 import { makeAntigravityUsageProbe } from "../antigravityUsageLimits.ts";
-import { makeAntigravityIpv4Fallback } from "../antigravityIpv4Fallback.ts";
+import { AntigravityConnectProxy } from "../AntigravityConnectProxy.ts";
 import * as ProviderEventLoggers from "@t3tools/provider-core/server/ProviderEventLoggers";
 import * as ModelCatalog from "@t3tools/provider-core/server/ModelCatalog";
 import {
@@ -75,6 +75,7 @@ const decodeSettings = Schema.decodeSync(AntigravitySettings);
 const isNodeRuntimeUnavailableError = Schema.is(NodeRuntimeUnavailableError);
 
 export type AntigravityDriverEnv =
+  | AntigravityConnectProxy
   | AntigravityInstallation.AntigravityInstallation
   | ProviderHost.ProviderHost
   | ChildProcessSpawner.ChildProcessSpawner
@@ -188,7 +189,7 @@ export const AntigravityDriver: ProviderDriver<
         ),
       );
     const defaultModel = currentCatalog.pipe(Effect.map((catalog) => catalog?.defaultChatModel));
-    const ipv4Fallback = yield* makeAntigravityIpv4Fallback();
+    const connectProxy = yield* AntigravityConnectProxy;
 
     const makeRuntime = Effect.fn("AntigravityDriver.makeRuntime")(function* (
       input: Omit<AntigravityAcpRuntimeInput, "spawn" | "childProcessSpawner">,
@@ -268,7 +269,7 @@ export const AntigravityDriver: ProviderDriver<
           installation: executable,
           profile,
           cwd: input.cwd,
-          baseEnv: yield* ipv4Fallback.environment(
+          baseEnv: yield* connectProxy.environment(
             withAgentDeviceEnvironment(processEnvironment, input),
           ),
           auth,
@@ -378,7 +379,6 @@ export const AntigravityDriver: ProviderDriver<
       onAuthenticated: publishCatalog,
       onSignedOut: Effect.suspend(() => provider.onSignedOut),
       usesBrowser: antigravityAuthUsesBrowser(auth.authMethod),
-      recoverUnreachable: ipv4Fallback.recheck(processEnvironment),
     });
 
     // The probe must not spawn. The agent is a PyInstaller one-file bundle
@@ -457,7 +457,6 @@ export const AntigravityDriver: ProviderDriver<
       selfInvocation,
       makeRuntime,
       withProcess: authFlow.withProcess,
-      recoverUnreachable: ipv4Fallback.recheck(processEnvironment),
       defaultModel,
       onSessionStarted: provider.onSessionStarted,
       onSessionEvent: (event) => {

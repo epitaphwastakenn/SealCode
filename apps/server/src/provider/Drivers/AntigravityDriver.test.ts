@@ -18,6 +18,7 @@ import * as BackgroundPolicy from "../../background/BackgroundPolicy.ts";
 import * as ServerConfig from "../../config.ts";
 import * as ServerSettings from "../../serverSettings.ts";
 import * as AntigravityInstallation from "../AntigravityInstallation.ts";
+import { AntigravityConnectProxy } from "../AntigravityConnectProxy.ts";
 import {
   ANTIGRAVITY_AUTH_STDOUT_PREFIX,
   resolveAntigravityInstanceDirectories,
@@ -197,7 +198,7 @@ const makeHarness = Effect.fn("makeAntigravityDriverHarness")(function* (
       { name: "BROWSER", value: "must-not-run" },
     ].map((variable) => ({ ...variable, sensitive: false })),
   }).pipe(
-    Effect.provide(layerInstallation),
+    Effect.provide(Layer.merge(layerInstallation, AntigravityConnectProxy.layer)),
     Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, observedSpawner),
   );
   const refresh = instance.refreshModels;
@@ -399,6 +400,7 @@ it.layer(layerTest)("AntigravityDriver", (it) => {
               acquire: () => Effect.die("unused"),
             }),
           ),
+          Effect.provide(AntigravityConnectProxy.layer),
         );
         expect(yield* fs.exists(directories.runtimeTemp)).toBe(false);
         expect(yield* fs.exists(legacyRoot)).toBe(false);

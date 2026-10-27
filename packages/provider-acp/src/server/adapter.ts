@@ -325,10 +325,10 @@ export interface AcpAdapterV2Flavor {
     readonly afterMs: number;
     readonly message: string;
     /**
-     * Runs after the warning; a message means a new runtime would get through, so the
-     * turn stops with that message and the runtime restarts.
+     * The first silent turn stops with this message and its runtime restarts; `message`
+     * marks a later silence, until a turn gets agent output again.
      */
-    readonly recover?: Effect.Effect<string | undefined>;
+    readonly restartMessage?: string;
   };
   /**
    * Posts a warning when an agent that has started answering sends nothing for
@@ -2182,6 +2182,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
           yield* emitProviderRetry(context, "running");
         });
 
+        let silentTurnRestartSpent = false;
         const emitTurnNotice = Effect.fnUntraced(function* (
           context: ActiveAcpTurn,
           notice: { readonly kind: "silent" | "recovery" | "stalled"; readonly message: string },
@@ -4919,6 +4920,7 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
           }
           if (acpRootSessionUpdateIngestsOutput(notification)) {
             context.agentOutputSeen = true;
+            silentTurnRestartSpent = false;
             context.lastAgentOutputAtMillis = DateTime.toEpochMillis(yield* DateTime.now);
           }
           if (
@@ -7308,18 +7310,17 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
         });
 
         // Stop with a restart is the one path that reliably ends a prompt the agent never answers.
-        const recoverSilentTurn = Effect.fnUntraced(function* (
+        const restartSilentTurn = Effect.fnUntraced(function* (
           context: ActiveAcpTurn,
           generation: number,
-          recover: Effect.Effect<string | undefined>,
+          message: string,
         ) {
-          const message = yield* recover;
-          if (message === undefined) return;
           const posted = yield* runRuntimeCallbackAtGeneration(
             generation,
             emitTurnNotice(context, { kind: "recovery", message }),
           );
           if (!Option.getOrElse(posted, () => false)) return;
+          silentTurnRestartSpent = true;
           yield* sessionRuntime
             .interruptTurn({
               providerThread: context.input.providerThread,
@@ -7623,16 +7624,12 @@ export const makeAcpAdapterV2 = Effect.fn("makeAcpAdapterV2")(function* (
                 Effect.timeoutOrElse({
                   duration: notice.afterMs,
                   orElse: () =>
-                    runRuntimeCallbackAtGeneration(
-                      promptGeneration,
-                      emitTurnNotice(context, { kind: "silent", message: notice.message }),
-                    ).pipe(
-                      Effect.flatMap((warned) =>
-                        notice.recover !== undefined && Option.getOrElse(warned, () => false)
-                          ? recoverSilentTurn(context, promptGeneration, notice.recover)
-                          : Effect.void,
-                      ),
-                    ),
+                    notice.restartMessage !== undefined && !silentTurnRestartSpent
+                      ? restartSilentTurn(context, promptGeneration, notice.restartMessage)
+                      : runRuntimeCallbackAtGeneration(
+                          promptGeneration,
+                          emitTurnNotice(context, { kind: "silent", message: notice.message }),
+                        ).pipe(Effect.asVoid),
                 }),
                 Effect.forkIn(sessionScope),
               );

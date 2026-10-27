@@ -28,30 +28,30 @@ describe("normalizeGitRemoteUrl", () => {
     );
   });
 
-  it("preserves nested group paths for providers like GitLab", () => {
-    expect(normalizeGitRemoteUrl("git@gitlab.com:T3Tools/platform/T3Code.git")).toBe(
-      "gitlab.com/t3tools/platform/t3code",
+  it("preserves nested group paths", () => {
+    expect(normalizeGitRemoteUrl("git@git.example.com:T3Tools/platform/T3Code.git")).toBe(
+      "git.example.com/t3tools/platform/t3code",
     );
-    expect(normalizeGitRemoteUrl("https://gitlab.com/T3Tools/platform/T3Code.git")).toBe(
-      "gitlab.com/t3tools/platform/t3code",
+    expect(normalizeGitRemoteUrl("https://git.example.com/T3Tools/platform/T3Code.git")).toBe(
+      "git.example.com/t3tools/platform/t3code",
     );
   });
 
   it("drops explicit ports from URL-shaped remotes", () => {
-    expect(normalizeGitRemoteUrl("https://gitlab.company.com:8443/team/project.git")).toBe(
-      "gitlab.company.com/team/project",
+    expect(normalizeGitRemoteUrl("https://git.company.test:8443/team/project.git")).toBe(
+      "git.company.test/team/project",
     );
-    expect(normalizeGitRemoteUrl("ssh://git@gitlab.company.com:2222/team/project.git")).toBe(
-      "gitlab.company.com/team/project",
+    expect(normalizeGitRemoteUrl("ssh://git@git.company.test:2222/team/project.git")).toBe(
+      "git.company.test/team/project",
     );
   });
 
   it("normalizes SCP-like remotes with non-git SSH users", () => {
-    expect(normalizeGitRemoteUrl("gitlab@gitlab.example.com:group/project.git")).toBe(
-      "gitlab.example.com/group/project",
+    expect(normalizeGitRemoteUrl("git@git.example.com:group/project.git")).toBe(
+      "git.example.com/group/project",
     );
-    expect(normalizeGitRemoteUrl("deploy@bitbucket.org:workspace/repo.git")).toBe(
-      "bitbucket.org/workspace/repo",
+    expect(normalizeGitRemoteUrl("deploy@scm.example.org:workspace/repo.git")).toBe(
+      "scm.example.org/workspace/repo",
     );
     expect(normalizeGitRemoteUrl("code.example.test:team/repo.git")).toBe(
       "code.example.test/team/repo",

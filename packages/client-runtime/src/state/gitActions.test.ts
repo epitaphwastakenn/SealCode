@@ -25,7 +25,7 @@ function status(overrides: Partial<VcsStatusResult> = {}): VcsStatusResult {
   };
 }
 
-const gitLab = {
+const retiredHost = {
   sourceControlProvider: {
     kind: SourceControlProviderKind.make("gitlab"),
     name: "GitLab",
@@ -58,24 +58,15 @@ describe("git action copy", () => {
     ).toBe("No local commits to include in a PR.");
   });
 
-  it("says MR for a GitLab ref", () => {
-    expect(resolveQuickAction(status({ ...gitLab, aheadCount: 1 }), false).label).toBe(
-      "Push & create MR",
+  it("says change request for a ref on a retired host", () => {
+    expect(resolveQuickAction(status({ ...retiredHost, aheadCount: 1 }), false).label).toBe(
+      "Push & create change request",
     );
-    expect(
-      resolveQuickAction(status({ ...gitLab, hasWorkingTreeChanges: true }), false).label,
-    ).toBe("Commit, push & MR");
-    expect(resolveQuickAction(status({ ...gitLab, pr: openPr }), false).label).toBe("View MR");
-    const [, , prItem] = buildMenuItems(status(gitLab), false);
-    expect(prItem?.label).toBe("Create MR");
-    expect(
-      getGitActionDisabledReason({
-        item: prItem!,
-        gitStatus: status(gitLab),
-        isBusy: false,
-        hasOriginRemote: true,
-      }),
-    ).toBe("No local commits to include in an MR.");
+    expect(resolveQuickAction(status({ ...retiredHost, pr: openPr }), false).label).toBe(
+      "View change request",
+    );
+    const [, , prItem] = buildMenuItems(status(retiredHost), false);
+    expect(prItem?.label).toBe("Create change request");
   });
 
   it("names the host's change request in the default-branch dialog", () => {
@@ -89,8 +80,8 @@ describe("git action copy", () => {
     expect(
       resolveDefaultBranchActionDialogCopy({
         ...input,
-        terminology: sourceControlClients.get("gitlab").changeRequest,
+        terminology: sourceControlClients.get("unknown").changeRequest,
       }).continueLabel,
-    ).toBe("Commit, push & create MR");
+    ).toBe("Commit, push & create change request");
   });
 });

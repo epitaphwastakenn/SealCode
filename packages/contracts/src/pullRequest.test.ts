@@ -10,6 +10,8 @@ import {
 
 const decodeDetail = Schema.decodeUnknownSync(Schema.toCodecJson(PullRequestDetail));
 
+// The gitlab.com entry is a provider kind this build no longer supports: stored and remote data
+// that names one must still decode.
 const LIST_RESULT: PullRequestListResult = {
   viewers: { "github.com": "bilal", "gitlab.com": "bilal.hassan" },
   providers: [
@@ -27,7 +29,7 @@ const LIST_RESULT: PullRequestListResult = {
       searchesOnHost: true,
       projectCount: 1,
       configured: false,
-      detail: "glab is not installed.",
+      detail: "Unsupported source control host.",
     },
   ],
   entries: [

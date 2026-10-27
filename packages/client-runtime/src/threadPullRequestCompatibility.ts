@@ -32,7 +32,7 @@ export function planThreadPullRequestMutation({
   reference: ThreadPullRequestKey & { readonly url: string };
   /** Older servers need the exact repository checkout; same-host routing is not available. */
   legacyProjectId: ProjectId | null;
-  /** Provider selector for legacy APIs, which omit Azure organization and project paths. */
+  /** Repository selector for legacy APIs, which may name the repository more briefly. */
   legacyRepository?: string | undefined;
   linked: boolean;
 }) {

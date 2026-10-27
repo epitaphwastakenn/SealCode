@@ -86,7 +86,7 @@ describe("parseDiffFileRevisions", () => {
     assert.deepStrictEqual([...revisions], [["\uFEFFnote.txt", "2222222"]]);
   });
 
-  it("leaves out a file Bitbucket excluded, which it gives no index line for", () => {
+  it("leaves out a file with no index line", () => {
     const revisions = parseDiffFileRevisions(
       patchOf(
         "diff --git a/package.json b/package.json",

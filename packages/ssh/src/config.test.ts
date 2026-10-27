@@ -221,7 +221,7 @@ describe("ssh config", () => {
         parseKnownHostsHostnames(
           [
             "github.com ssh-ed25519 AAAA",
-            "gitlab.com,gitlab-alias ssh-ed25519 BBBB",
+            "git.example.test,git-alias ssh-ed25519 BBBB",
             "|1|hashed|entry ssh-ed25519 CCCC",
             "@cert-authority *.example.com ssh-ed25519 DDDD",
             "[ssh.example.com]:2200 ssh-ed25519 EEEE",
@@ -234,9 +234,9 @@ describe("ssh config", () => {
         [
           "::1",
           "2001:db8::1",
+          "git-alias",
+          "git.example.test",
           "github.com",
-          "gitlab-alias",
-          "gitlab.com",
           "port.example.com",
           "ssh.example.com",
         ],

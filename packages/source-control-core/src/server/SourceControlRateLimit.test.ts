@@ -58,7 +58,7 @@ it.effect("keeps providers and hosts isolated", () =>
 
     assert.equal(
       yield* limits.check({
-        provider: SourceControlProviderKind.make("gitlab"),
+        provider: SourceControlProviderKind.make("other"),
         host: "github.com",
       }),
       0,

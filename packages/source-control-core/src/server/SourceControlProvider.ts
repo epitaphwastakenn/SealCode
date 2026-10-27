@@ -72,33 +72,6 @@ export function transportSafeSourceControlErrorValue(value: string): string {
   return safe.slice(0, MAX_ERROR_TRANSPORT_VALUE_LENGTH);
 }
 
-export function parseSourceControlOwnerRef(
-  headSelector: string,
-): SourceControlRefSelector | undefined {
-  const match = /^([^:/\s]+):(.+)$/u.exec(headSelector.trim());
-  const owner = match?.[1]?.trim();
-  const refName = match?.[2]?.trim();
-  return owner && refName ? { owner, refName } : undefined;
-}
-
-function normalizeSourceBranch(headSelector: string): string {
-  return parseSourceControlOwnerRef(headSelector)?.refName ?? headSelector.trim();
-}
-
-export function sourceBranch(input: {
-  readonly headSelector: string;
-  readonly source?: SourceControlRefSelector;
-}): string {
-  return input.source?.refName ?? normalizeSourceBranch(input.headSelector);
-}
-
-export function sourceControlRefFromInput(input: {
-  readonly headSelector: string;
-  readonly source?: SourceControlRefSelector;
-}): SourceControlRefSelector | undefined {
-  return input.source ?? parseSourceControlOwnerRef(input.headSelector);
-}
-
 export function repositoryPathFromRemoteUrl(url: string | null): string | null {
   const trimmed = url?.trim() ?? "";
   if (trimmed.length === 0) {

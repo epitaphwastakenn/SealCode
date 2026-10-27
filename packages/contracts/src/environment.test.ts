@@ -1,9 +1,10 @@
 import * as Schema from "effect/Schema";
 import { describe, expect, it } from "vite-plus/test";
 
-import { ExecutionEnvironmentDescriptor } from "./environment.ts";
+import { ExecutionEnvironmentDescriptor, RepositoryIdentity } from "./environment.ts";
 
 const decodeDescriptor = Schema.decodeUnknownSync(ExecutionEnvironmentDescriptor);
+const decodeRepositoryIdentity = Schema.decodeSync(RepositoryIdentity);
 
 const descriptor = {
   environmentId: "environment-1",
@@ -32,5 +33,23 @@ describe("ExecutionEnvironmentDescriptor", () => {
         }).capabilities.serverInstallation,
       ).toBeUndefined();
     }
+  });
+});
+
+describe("RepositoryIdentity", () => {
+  it("decodes a stored identity that names a source control provider this build dropped", () => {
+    const decoded = decodeRepositoryIdentity({
+      canonicalKey: "gitlab.com/group/project",
+      locator: {
+        source: "git-remote",
+        remoteName: "origin",
+        remoteUrl: "git@gitlab.com:group/project.git",
+      },
+      provider: "gitlab",
+      owner: "group",
+      name: "project",
+    });
+
+    expect(decoded.provider).toBe("gitlab");
   });
 });

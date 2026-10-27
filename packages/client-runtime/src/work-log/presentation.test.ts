@@ -163,10 +163,9 @@ describe("resolveWorkEntryToolPresentation", () => {
     ).toBe("Failed to click in the preview browser");
   });
 
-  it.each([
-    ["https://github.com/acme/web/pull/7", "PR #7"],
-    ["https://gitlab.com/acme/web/-/merge_requests/7", "MR #7"],
-  ])("names a linked change request with its host's term (%s)", (url, target) => {
+  it("names a linked change request with its host's term", () => {
+    const url = "https://github.com/acme/web/pull/7";
+    const target = "PR #7";
     expect(
       resolveWorkEntryToolPresentation({
         label: "T3-code.link_pull_request",

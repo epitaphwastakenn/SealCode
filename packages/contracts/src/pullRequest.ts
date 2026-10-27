@@ -778,7 +778,7 @@ export type PullRequestReviewPosition = typeof PullRequestReviewPosition.Type;
 
 export const PullRequestReviewCommentDraft = Schema.Struct({
   path: TrimmedNonEmptyString,
-  /** GitLab needs both names for renamed-file comments; hosts using one path ignore this. */
+  /** The file's previous path for a comment on a renamed file; hosts using one path ignore this. */
   oldPath: Schema.optional(TrimmedNonEmptyString),
   position: PullRequestReviewPosition,
   /**

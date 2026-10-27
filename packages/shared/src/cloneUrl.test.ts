@@ -10,8 +10,8 @@ describe("cloneUrlForProtocol", () => {
     expect(cloneUrlForProtocol("https://github.com/pingdotgg/t3code.git", "ssh")).toBe(
       "git@github.com:pingdotgg/t3code.git",
     );
-    expect(cloneUrlForProtocol("ssh://git@gitlab.com/group/sub/repo.git", "https")).toBe(
-      "https://gitlab.com/group/sub/repo.git",
+    expect(cloneUrlForProtocol("ssh://git@git.example.com/group/sub/repo.git", "https")).toBe(
+      "https://git.example.com/group/sub/repo.git",
     );
   });
 

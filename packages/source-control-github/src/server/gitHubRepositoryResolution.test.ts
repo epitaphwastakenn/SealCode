@@ -56,7 +56,7 @@ describe("selectGitHubBaseRepository", () => {
       {
         remotes: remotes(
           ["origin", "git@github.com:me/web.git"],
-          ["mirror", "git@gitlab.com:me/web.git"],
+          ["mirror", "git@git.example.test:me/web.git"],
         ),
       },
       { remotes: remotes(["origin", "git@github-work:me/web.git"]) },
@@ -86,6 +86,6 @@ describe("gitHubApiHostForRemote", () => {
       gitHubApiHostForRemote("git@github.example.com:a/b.git"),
       "github.example.com",
     );
-    assert.strictEqual(gitHubApiHostForRemote("git@gitlab.com:a/b.git"), null);
+    assert.strictEqual(gitHubApiHostForRemote("git@git.example.test:a/b.git"), null);
   });
 });

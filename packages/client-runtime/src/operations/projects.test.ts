@@ -21,8 +21,8 @@ describe("add project shared logic", () => {
   });
 
   it("keeps explicit clone URLs and local paths unchanged", () => {
-    expect(normalizePastedCloneUrl("https://gitlab.com/group/project.git")).toBe(
-      "https://gitlab.com/group/project.git",
+    expect(normalizePastedCloneUrl("https://git.example.test/group/project.git")).toBe(
+      "https://git.example.test/group/project.git",
     );
     expect(normalizePastedCloneUrl("git@github.com:owner/repo.git")).toBe(
       "git@github.com:owner/repo.git",
@@ -39,13 +39,16 @@ describe("add project shared logic", () => {
         sshUrl: "git@github.com:imputnet/helium.git",
       }),
     ).toBe("https://github.com/imputnet/helium");
+  });
+
+  it("clones a repository of a retired provider over SSH", () => {
     expect(
       getDefaultCloneUrl({
-        provider: SourceControlProviderKind.make("forgejo"),
-        url: "https://forgejo.example.test:8443/owner/repo.git",
-        sshUrl: "ssh://git@forgejo.example.test:2222/owner/repo.git",
+        provider: SourceControlProviderKind.make("gitlab"),
+        url: "https://gitlab.example.test:8443/owner/repo.git",
+        sshUrl: "ssh://git@gitlab.example.test:2222/owner/repo.git",
       }),
-    ).toBe("https://forgejo.example.test:8443/owner/repo.git");
+    ).toBe("ssh://git@gitlab.example.test:2222/owner/repo.git");
   });
 
   it("derives the clone folder name from any pasted clone URL", () => {
@@ -54,8 +57,8 @@ describe("add project shared logic", () => {
     expect(getCloneDirectoryName("https://github.com/owner/repo/")).toBe("repo");
     expect(getCloneDirectoryName("git@github.com:owner/repo.git")).toBe("repo");
     expect(getCloneDirectoryName("ssh://git@github.com:22/owner/repo.git")).toBe("repo");
-    expect(getCloneDirectoryName("https://user@bitbucket.org/owner/repo.git")).toBe("repo");
-    expect(getCloneDirectoryName("https://dev.azure.com/org/project/_git/repo")).toBe("repo");
+    expect(getCloneDirectoryName("https://user@git.example.test/owner/repo.git")).toBe("repo");
+    expect(getCloneDirectoryName("https://git.example.test/org/project/_git/repo")).toBe("repo");
     expect(getCloneDirectoryName("https://github.com/owner/repo.git?ref=main#readme")).toBe("repo");
     expect(getCloneDirectoryName("/srv/git/repo.git")).toBe("repo");
     expect(getCloneDirectoryName("C:\\src\\repo.git")).toBe("repo");

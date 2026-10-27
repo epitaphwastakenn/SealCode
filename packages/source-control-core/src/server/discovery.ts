@@ -163,21 +163,6 @@ export function firstSafeAuthLine(text: string): string | undefined {
   return sanitizedAuthLines(text)[0];
 }
 
-export function parseCliHost(text: string): string | undefined {
-  return sanitizedAuthLines(text)
-    .map((line) => line.replace(/^[^a-z0-9]+/iu, ""))
-    .find((line) => /^[a-z0-9][a-z0-9.-]*(?::\d+)?$/iu.test(line));
-}
-
-export function matchFirst(text: string, patterns: ReadonlyArray<RegExp>): string | undefined {
-  for (const pattern of patterns) {
-    const match = pattern.exec(text);
-    const value = match?.[1]?.trim();
-    if (value && value.length > 0) return value;
-  }
-  return undefined;
-}
-
 function isCliRemoteRefinementSpec(
   spec: SourceControlProviderDiscoverySpec,
 ): spec is SourceControlCliRemoteRefinementSpec {

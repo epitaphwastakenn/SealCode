@@ -6,13 +6,13 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import { useEnvironmentIdentificationMode } from "../../hooks/useSettings";
 import { cn } from "../../lib/utils";
 import { usePullRequestsSupported } from "../../state/environments";
-import { SealCodeMark } from "../SealCodeMark";
+import { HarpMark } from "../HarpMark";
 import {
-  resolveEnvironmentIdentificationPillLabel,
-  resolveSidebarStageBackdropVariant,
   SidebarStageBackdrop,
   useEnvironmentStageLabel,
+  useSidebarHeaderArtVariant,
 } from "../SidebarStageBackdrop";
+import { resolveEnvironmentIdentificationPillLabel } from "../SidebarStageBackdrop.logic";
 import { Badge } from "../ui/badge";
 import {
   SidebarFooter,
@@ -38,10 +38,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
 }) {
   const stageLabel = useEnvironmentStageLabel();
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
-  const backdropVariant = resolveSidebarStageBackdropVariant(
-    stageLabel,
-    environmentIdentificationMode === "artwork",
-  );
+  const backdropVariant = useSidebarHeaderArtVariant();
   const pillLabel =
     environmentIdentificationMode === "pill"
       ? resolveEnvironmentIdentificationPillLabel(stageLabel)
@@ -117,17 +114,14 @@ function SidebarBrand({ onBackdrop }: { onBackdrop: boolean }) {
 
 function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
   return (
-    <span className="inline-flex min-w-0 items-center gap-1.5 text-sm font-semibold tracking-tight">
-      <SealCodeMark aria-hidden className="size-5 shrink-0 object-contain" />
-      <span
-        className={cn(
-          "truncate [text-box:trim-both_cap_alphabetic] supports-[text-box:trim-both_cap_alphabetic]:py-1",
-          onBackdrop ? "text-white/70" : "text-muted-foreground",
-        )}
-      >
-        SealCode
-      </span>
-    </span>
+    <HarpMark
+      className="text-sm"
+      glyphClassName={onBackdrop ? "sidebar-stage-brand-glyph" : undefined}
+      wordmarkClassName={cn(
+        "[text-box:trim-both_cap_alphabetic] supports-[text-box:trim-both_cap_alphabetic]:py-1",
+        onBackdrop ? "text-white/85 sidebar-stage-brand-text" : "text-muted-foreground",
+      )}
+    />
   );
 }
 

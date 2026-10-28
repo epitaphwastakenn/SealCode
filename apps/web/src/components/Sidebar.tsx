@@ -215,6 +215,7 @@ import { SidebarPointerSensor } from "./Sidebar.pointer";
 import { createSidebarListMotion } from "./Sidebar.motion";
 import { resolveSnoozePresets, snoozeWakeLabel, type SnoozePreset } from "./Sidebar.snooze";
 import { ProjectFavicon } from "./ProjectFavicon";
+import { HarpMascot } from "./mascot/HarpMascot";
 import { deriveProviderEntriesByEnvironment } from "../providerInstances";
 import { useStableCallback } from "../hooks/useStableCallback";
 import {
@@ -3584,6 +3585,12 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             settledCount ===
             0 ? (
             <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">
+              {projects.length > 0 ? (
+                <HarpMascot
+                  scene="sleeping"
+                  className="h-10 w-auto [--harp-mascot-eye:var(--sidebar)]"
+                />
+              ) : null}
               {projects.length === 0 ? (
                 <>
                   <span>No projects yet</span>

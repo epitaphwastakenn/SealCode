@@ -656,6 +656,17 @@ html[data-ui-motion="off"]
   }
 }
 
+/* Over the art, the glows brighten toward the right, so the brand carries a tinted halo. */
+@utility sidebar-stage-brand-text {
+  text-shadow:
+    0 0 6px color-mix(in oklch, var(--stage-art-bottom) 80%, transparent),
+    0 1px 2px color-mix(in oklch, var(--stage-art-bottom) 90%, transparent);
+}
+
+@utility sidebar-stage-brand-glyph {
+  filter: drop-shadow(0 0 3px color-mix(in oklch, var(--stage-art-bottom) 80%, transparent));
+}
+
 @keyframes live-tool-shine {
   from {
     background-position:
@@ -816,6 +827,31 @@ html[data-ui-motion="off"]
       --stage-art-top: #7c3aed;
       --stage-art-mid: #4c1d95;
       --stage-art-bottom: #240b45;
+    }
+  }
+
+  /* The blueprint art takes its hue from the theme's --primary, so every theme, custom ones
+     included, gets a matching tint. Lightness is fixed per appearance, and low on the bottom
+     and mid stops where the header's white wordmark and controls sit, so they stay readable. */
+  @supports (color: oklch(from red l c h)) {
+    :root {
+      --stage-art-top: oklch(from var(--primary) 0.76 min(c, 0.12) h);
+      --stage-art-mid: oklch(from var(--primary) 0.42 min(c, 0.2) h);
+      --stage-art-bottom: oklch(from var(--primary) 0.3 min(c, 0.2) h);
+      --stage-art-highlight: oklch(from var(--primary) 0.95 min(c, 0.04) h);
+      --stage-art-secondary: oklch(from var(--primary) 0.74 min(c, 0.17) calc(h + 15));
+      --stage-art-tertiary: oklch(from var(--primary) 0.72 min(c, 0.15) calc(h - 20));
+      --stage-art-line: oklch(from var(--primary) 0.92 min(c, 0.06) h);
+      --stage-art-celeste-highlight: var(--stage-art-highlight);
+      --stage-art-celeste-secondary: var(--stage-art-secondary);
+      --stage-art-violet-highlight: var(--stage-art-highlight);
+      --stage-art-grid-line: var(--stage-art-line);
+
+      @variant dark {
+        --stage-art-top: oklch(from var(--primary) 0.48 min(c, 0.2) h);
+        --stage-art-mid: oklch(from var(--primary) 0.32 min(c, 0.16) h);
+        --stage-art-bottom: oklch(from var(--primary) 0.2 min(c, 0.1) h);
+      }
     }
   }
 

@@ -1,0 +1,293 @@
+/* Harp the seal. Pivots are in the scene's user space (transform-box: view-box).
+   Loops follow lib/visibleAnimation.ts: they run only while the mascot is on screen,
+   and most tick on a stepped clock, so a visible seal costs a few frames a second. */
+[data-harp-mascot] {
+  color: var(--harp-mascot-color, var(--primary));
+  --harp-mascot-loop: infinite var(--visible-animation-state, paused);
+}
+
+:is([data-part="seal"], [data-part="head"], [data-part="tail"], [data-part="flipper"]) {
+  transform-box: view-box;
+}
+
+[data-part="eye"] {
+  transform-box: fill-box;
+  transform-origin: center;
+  fill: var(--harp-mascot-eye, var(--background));
+}
+
+[data-part="eye-closed"] {
+  fill: none;
+  stroke: var(--harp-mascot-eye, var(--background));
+  stroke-width: 7;
+  stroke-linecap: round;
+}
+
+[data-part="ball"] {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+[data-part="z"] {
+  opacity: 0;
+  transform-box: fill-box;
+}
+
+[data-pose="lie"] [data-part="seal"] {
+  transform-origin: 510px 668px;
+}
+[data-pose="lie"] [data-part="head"] {
+  transform-origin: 715px 515px;
+}
+[data-pose="lie"] [data-part="tail"] {
+  transform-origin: 300px 615px;
+}
+[data-pose="lie"] [data-part="flipper"] {
+  transform-origin: 700px 640px;
+}
+[data-pose="sit"] [data-part="seal"] {
+  transform-origin: 509px 805px;
+}
+[data-pose="sit"] [data-part="head"] {
+  transform-origin: 612px 500px;
+}
+[data-pose="sit"] [data-part="flipper"] {
+  transform-origin: 712px 700px;
+}
+
+/* Resting: lying on its side, breathing, looking around, now and then scratching. */
+[data-harp-mascot="resting"] [data-part="seal"] {
+  animation: harp-mascot-breathe 4s steps(12) var(--harp-mascot-loop);
+  will-change: var(--visible-animation-will-change, auto);
+}
+[data-harp-mascot="resting"] [data-part="head"] {
+  animation: harp-mascot-look-around 8s steps(10) var(--harp-mascot-loop);
+  will-change: var(--visible-animation-will-change, auto);
+}
+[data-harp-mascot="resting"] [data-part="tail"] {
+  animation: harp-mascot-tail-up 6s steps(8) var(--harp-mascot-loop);
+  will-change: var(--visible-animation-will-change, auto);
+}
+[data-harp-mascot="resting"] [data-part="flipper"] {
+  animation: harp-mascot-scratch 9s steps(6) var(--harp-mascot-loop);
+  will-change: var(--visible-animation-will-change, auto);
+}
+[data-harp-mascot="resting"] [data-part="eye"] {
+  animation: harp-mascot-blink 4.4s steps(2) var(--harp-mascot-loop);
+  will-change: var(--visible-animation-will-change, auto);
+}
+
+/* Sleeping: chin down, eyes closed, slow breathing, drifting z's. */
+[data-harp-mascot="sleeping"] [data-part="head"] {
+  transform: rotate(17deg);
+}
+[data-harp-mascot="sleeping"] [data-part="seal"] {
+  animation: harp-mascot-breathe 5.2s steps(12) var(--harp-mascot-loop);
+  will-change: var(--visible-animation-will-change, auto);
+}
+[data-harp-mascot="sleeping"] [data-part="tail"] {
+  animation: harp-mascot-tail-twitch 11s steps(3) var(--harp-mascot-loop);
+  will-change: var(--visible-animation-will-change, auto);
+}
+[data-harp-mascot="sleeping"] [data-part="z"] {
+  animation: harp-mascot-z 3.9s steps(18) var(--harp-mascot-loop);
+  will-change: var(--visible-animation-will-change, auto);
+}
+[data-harp-mascot="sleeping"] [data-part="z"]:nth-child(2) {
+  animation-delay: 1.3s;
+}
+[data-harp-mascot="sleeping"] [data-part="z"]:nth-child(3) {
+  animation-delay: 2.6s;
+}
+
+/* Typing: eyes on the laptop, one flipper tapping. */
+[data-harp-mascot="typing"] [data-part="head"] {
+  animation: harp-mascot-look 1.6s steps(4) var(--harp-mascot-loop);
+  will-change: var(--visible-animation-will-change, auto);
+}
+[data-harp-mascot="typing"] [data-part="flipper"] {
+  animation: harp-mascot-tap 0.32s steps(2) var(--harp-mascot-loop);
+  will-change: var(--visible-animation-will-change, auto);
+}
+[data-harp-mascot="typing"] [data-part="eye"] {
+  animation: harp-mascot-blink 3.4s steps(2) var(--harp-mascot-loop);
+  will-change: var(--visible-animation-will-change, auto);
+}
+
+/* Ball: bouncing a ball off its nose, with a nod on every catch. */
+[data-harp-mascot="ball"] [data-part="ball"] {
+  animation: harp-mascot-bounce 1.2s var(--harp-mascot-loop);
+  will-change: var(--visible-animation-will-change, auto);
+}
+[data-harp-mascot="ball"] [data-part="head"] {
+  animation: harp-mascot-nod 1.2s var(--harp-mascot-loop);
+  will-change: var(--visible-animation-will-change, auto);
+}
+[data-harp-mascot="ball"] [data-part="eye"] {
+  animation: harp-mascot-blink 4.8s steps(2) var(--harp-mascot-loop);
+  will-change: var(--visible-animation-will-change, auto);
+}
+
+/* Reduced motion holds each loop on its first frame. The ball would freeze mid-squash and
+   the z's would start invisible, so those two get a calm pose instead. */
+@media (prefers-reduced-motion: reduce) {
+  [data-harp-mascot] {
+    --harp-mascot-loop: infinite paused;
+  }
+  [data-harp-mascot="ball"] [data-part="ball"] {
+    animation: none;
+  }
+  [data-harp-mascot="sleeping"] [data-part="z"] {
+    animation: none;
+    opacity: 0.7;
+  }
+  [data-harp-mascot="sleeping"] [data-part="z"]:nth-child(2) {
+    transform: translate(30px, -58px);
+  }
+  [data-harp-mascot="sleeping"] [data-part="z"]:nth-child(3) {
+    transform: translate(62px, -118px);
+  }
+}
+
+@keyframes harp-mascot-blink {
+  0%,
+  93%,
+  100% {
+    transform: scaleY(1);
+  }
+  96% {
+    transform: scaleY(0.12);
+  }
+}
+@keyframes harp-mascot-breathe {
+  0%,
+  100% {
+    transform: scale(1, 1);
+  }
+  50% {
+    transform: scale(1.008, 1.03);
+  }
+}
+@keyframes harp-mascot-look-around {
+  0%,
+  100% {
+    transform: rotate(-12deg);
+  }
+  25% {
+    transform: rotate(-20deg);
+  }
+  55% {
+    transform: rotate(-6deg);
+  }
+  75% {
+    transform: rotate(-14deg);
+  }
+}
+@keyframes harp-mascot-tail-up {
+  0%,
+  100% {
+    transform: rotate(22deg);
+  }
+  50% {
+    transform: rotate(28deg);
+  }
+}
+@keyframes harp-mascot-tail-twitch {
+  0%,
+  90%,
+  100% {
+    transform: rotate(0);
+  }
+  93% {
+    transform: rotate(7deg);
+  }
+  96% {
+    transform: rotate(2deg);
+  }
+}
+@keyframes harp-mascot-scratch {
+  0%,
+  62%,
+  100% {
+    transform: rotate(0);
+  }
+  68% {
+    transform: rotate(-52deg);
+  }
+  71% {
+    transform: rotate(-40deg);
+  }
+  74% {
+    transform: rotate(-54deg);
+  }
+  77% {
+    transform: rotate(-40deg);
+  }
+  80% {
+    transform: rotate(-54deg);
+  }
+  86% {
+    transform: rotate(0);
+  }
+}
+@keyframes harp-mascot-z {
+  0% {
+    opacity: 0;
+    transform: translate(0, 0) scale(0.6);
+  }
+  15% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(52px, -110px) scale(1.15);
+  }
+}
+@keyframes harp-mascot-look {
+  0%,
+  100% {
+    transform: rotate(22deg);
+  }
+  50% {
+    transform: rotate(25deg);
+  }
+}
+@keyframes harp-mascot-tap {
+  0%,
+  100% {
+    transform: rotate(0);
+  }
+  50% {
+    transform: rotate(-9deg);
+  }
+}
+@keyframes harp-mascot-nod {
+  0%,
+  100% {
+    transform: rotate(3deg);
+  }
+  14%,
+  86% {
+    transform: rotate(0);
+  }
+}
+@keyframes harp-mascot-bounce {
+  0% {
+    transform: translateY(10px) scale(1.18, 0.82);
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1);
+  }
+  8% {
+    transform: translateY(0) scale(0.94, 1.06);
+    animation-timing-function: cubic-bezier(0.2, 0.7, 0.4, 1);
+  }
+  50% {
+    transform: translateY(-120px) scale(1, 1);
+    animation-timing-function: cubic-bezier(0.6, 0, 0.8, 0.3);
+  }
+  92% {
+    transform: translateY(0) scale(0.96, 1.04);
+  }
+  100% {
+    transform: translateY(10px) scale(1.18, 0.82);
+  }
+}

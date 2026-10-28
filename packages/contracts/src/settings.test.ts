@@ -199,6 +199,23 @@ describe("ClientSettings notifications", () => {
   });
 });
 
+describe("ClientSettings sidebar header art", () => {
+  it("is on for existing settings that predate it and keeps an explicit off", () => {
+    expect(decodeClientSettings({}).sidebarHeaderArt).toBe(true);
+    expect(decodeClientSettings({ sidebarHeaderArt: false }).sidebarHeaderArt).toBe(false);
+    expect(encodeClientSettings(decodeClientSettings({ sidebarHeaderArt: false }))).toMatchObject({
+      sidebarHeaderArt: false,
+    });
+  });
+
+  it("patches only when set", () => {
+    expect(decodeClientSettingsPatch({})).not.toHaveProperty("sidebarHeaderArt");
+    expect(decodeClientSettingsPatch({ sidebarHeaderArt: false })).toEqual({
+      sidebarHeaderArt: false,
+    });
+  });
+});
+
 describe("ClientSettings quit confirmation", () => {
   it.each([
     [true, "hold"],

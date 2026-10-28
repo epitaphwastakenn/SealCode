@@ -1,34 +1,31 @@
+const HARP_ICON_PATHS = {
+  macPng: "assets/harp/harp-icon-macos.png",
+  ico: "assets/harp/harp-icon.ico",
+  favicon16Png: "assets/harp/harp-icon-16.png",
+  favicon32Png: "assets/harp/harp-icon-32.png",
+  appleTouchIconPng: "assets/harp/harp-icon-180.png",
+} as const;
+
+// Every channel ships the same Harp icon; the keys stay per channel so one can diverge later.
 export const BRAND_ASSET_PATHS = {
-  developmentIconComposerProject: "assets/dev/app-icon.icon",
-  developmentIosIconPng: "assets/sealcode/sealcode-icon.png",
-  developmentUniversalIconPng: "assets/sealcode/sealcode-icon.png",
+  productionMacIconPng: HARP_ICON_PATHS.macPng,
+  productionWindowsIconIco: HARP_ICON_PATHS.ico,
+  productionWebFaviconIco: HARP_ICON_PATHS.ico,
+  productionWebFavicon16Png: HARP_ICON_PATHS.favicon16Png,
+  productionWebFavicon32Png: HARP_ICON_PATHS.favicon32Png,
+  productionWebAppleTouchIconPng: HARP_ICON_PATHS.appleTouchIconPng,
 
-  productionIconComposerProject: "assets/prod/app-icon.icon",
-  productionIosIconPng: "assets/sealcode/sealcode-icon.png",
-  productionMacIconPng: "assets/sealcode/sealcode-icon.png",
-  productionLinuxIconPng: "assets/sealcode/sealcode-icon.png",
-  productionWindowsIconIco: "assets/sealcode/sealcode-icon.ico",
-  productionWebFaviconIco: "assets/sealcode/sealcode-icon.ico",
-  productionWebFavicon16Png: "assets/sealcode/sealcode-icon-16.png",
-  productionWebFavicon32Png: "assets/sealcode/sealcode-icon-32.png",
-  productionWebAppleTouchIconPng: "assets/sealcode/sealcode-icon-180.png",
+  nightlyMacIconPng: HARP_ICON_PATHS.macPng,
+  nightlyWindowsIconIco: HARP_ICON_PATHS.ico,
+  nightlyWebFaviconIco: HARP_ICON_PATHS.ico,
+  nightlyWebFavicon16Png: HARP_ICON_PATHS.favicon16Png,
+  nightlyWebFavicon32Png: HARP_ICON_PATHS.favicon32Png,
+  nightlyWebAppleTouchIconPng: HARP_ICON_PATHS.appleTouchIconPng,
 
-  nightlyIconComposerProject: "assets/nightly/app-icon.icon",
-  nightlyIosIconPng: "assets/sealcode/sealcode-icon.png",
-  nightlyMacIconPng: "assets/sealcode/sealcode-icon.png",
-  nightlyLinuxIconPng: "assets/sealcode/sealcode-icon.png",
-  nightlyWindowsIconIco: "assets/sealcode/sealcode-icon.ico",
-  nightlyWebFaviconIco: "assets/sealcode/sealcode-icon.ico",
-  nightlyWebFavicon16Png: "assets/sealcode/sealcode-icon-16.png",
-  nightlyWebFavicon32Png: "assets/sealcode/sealcode-icon-32.png",
-  nightlyWebAppleTouchIconPng: "assets/sealcode/sealcode-icon-180.png",
-
-  developmentDesktopIconPng: "assets/sealcode/sealcode-icon.png",
-  developmentWindowsIconIco: "assets/sealcode/sealcode-icon.ico",
-  developmentWebFaviconIco: "assets/sealcode/sealcode-icon.ico",
-  developmentWebFavicon16Png: "assets/sealcode/sealcode-icon-16.png",
-  developmentWebFavicon32Png: "assets/sealcode/sealcode-icon-32.png",
-  developmentWebAppleTouchIconPng: "assets/sealcode/sealcode-icon-180.png",
+  developmentWebFaviconIco: HARP_ICON_PATHS.ico,
+  developmentWebFavicon16Png: HARP_ICON_PATHS.favicon16Png,
+  developmentWebFavicon32Png: HARP_ICON_PATHS.favicon32Png,
+  developmentWebAppleTouchIconPng: HARP_ICON_PATHS.appleTouchIconPng,
 } as const;
 
 export type WebAssetBrand = "development" | "nightly" | "production";
@@ -104,8 +101,3 @@ export function resolveWebIconOverrides(
 }
 
 export const DEVELOPMENT_ICON_OVERRIDES = resolveWebIconOverrides("development", "dist/client");
-
-export const DEVELOPMENT_PUBLIC_ICON_OVERRIDES = resolveWebIconOverrides(
-  "development",
-  "apps/web/public",
-);

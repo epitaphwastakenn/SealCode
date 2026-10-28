@@ -3,32 +3,19 @@ import { useId } from "react";
 
 import { APP_STAGE_LABEL } from "../branding";
 import { resolveServerBackedAppStageLabel } from "../branding.logic";
+import {
+  useClientSettings,
+  useClientSettingsHydrated,
+  useEnvironmentIdentificationMode,
+} from "../hooks/useSettings";
 import { primaryServerConfigAtom } from "../state/server";
-
-export type SidebarStageBackdropVariant = "nightly" | "dev";
-export type EnvironmentIdentificationPillLabel = "Dev" | "Nightly";
+import {
+  resolveSidebarHeaderArtVariant,
+  resolveSidebarStageBackdropVariant,
+  type SidebarStageBackdropVariant,
+} from "./SidebarStageBackdrop.logic";
 
 const STAGE_BACKDROP_VIEW_BOX = "0 0 8192 96";
-
-export function resolveSidebarStageBackdropVariant(
-  stageLabel: string,
-  enabled = true,
-): SidebarStageBackdropVariant | null {
-  if (!enabled) return null;
-  const normalized = stageLabel.trim().toLowerCase();
-  if (normalized === "nightly") return "nightly";
-  if (normalized === "dev") return "dev";
-  return null;
-}
-
-export function resolveEnvironmentIdentificationPillLabel(
-  stageLabel: string,
-): EnvironmentIdentificationPillLabel | null {
-  const normalized = stageLabel.trim().toLowerCase();
-  if (normalized === "dev") return "Dev";
-  if (normalized === "nightly") return "Nightly";
-  return null;
-}
 
 export function useEnvironmentStageLabel(): string {
   const primaryServerVersion =
@@ -44,6 +31,19 @@ export function useSidebarStageBackdropVariant(enabled = true): SidebarStageBack
   return resolveSidebarStageBackdropVariant(useEnvironmentStageLabel(), enabled);
 }
 
+/** Waits for hydration like the identification mode, so the art never flashes in and out. */
+export function useSidebarHeaderArtVariant(): SidebarStageBackdropVariant | null {
+  const stageLabel = useEnvironmentStageLabel();
+  const environmentIdentificationMode = useEnvironmentIdentificationMode();
+  const settingsHydrated = useClientSettingsHydrated();
+  const headerArt = useClientSettings((settings) => settings.sidebarHeaderArt);
+  return resolveSidebarHeaderArtVariant({
+    stageLabel,
+    environmentIdentificationMode,
+    headerArtEnabled: settingsHydrated && headerArt,
+  });
+}
+
 export function SidebarStageBackdrop({ variant }: { variant: SidebarStageBackdropVariant }) {
   return (
     <div
@@ -56,11 +56,11 @@ export function SidebarStageBackdrop({ variant }: { variant: SidebarStageBackdro
 }
 
 export function StageBackdropArt({ variant }: { variant: SidebarStageBackdropVariant }) {
-  return variant === "nightly" ? <NightlySkyArt /> : <DevBlueprintArt />;
+  return variant === "nightly" ? <NightlySkyArt /> : <BlueprintArt />;
 }
 
 export function StageBackdropButtonArt({ variant }: { variant: SidebarStageBackdropVariant }) {
-  return variant === "nightly" ? <NightlySkyArt compact /> : <DevBlueprintArt compact />;
+  return variant === "nightly" ? <NightlySkyArt compact /> : <BlueprintArt compact />;
 }
 
 const NIGHTLY_STARS: ReadonlyArray<{
@@ -206,7 +206,7 @@ function NightlySkyArt({ compact = false }: { compact?: boolean }) {
   );
 }
 
-function DevBlueprintArt({ compact = false }: { compact?: boolean }) {
+function BlueprintArt({ compact = false }: { compact?: boolean }) {
   const idPrefix = useId().replaceAll(":", "");
   const paperId = `${idPrefix}-stage-bp-paper`;
   const glowId = `${idPrefix}-stage-bp-glow`;

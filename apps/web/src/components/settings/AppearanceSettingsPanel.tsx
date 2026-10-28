@@ -16,10 +16,8 @@ import {
   MIN_PANEL_ANIMATION_DURATION_MS,
   MIN_SCROLLBAR_SIZE,
 } from "@t3tools/contracts/settings";
-import {
-  resolveEnvironmentIdentificationPillLabel,
-  useEnvironmentStageLabel,
-} from "../SidebarStageBackdrop";
+import { useEnvironmentStageLabel } from "../SidebarStageBackdrop";
+import { resolveEnvironmentIdentificationPillLabel } from "../SidebarStageBackdrop.logic";
 import { useCustomThemes } from "../../hooks/useCustomThemes";
 import { useTheme } from "../../hooks/useTheme";
 import { useThrottledRange } from "../../hooks/useThrottledRange";
@@ -225,6 +223,32 @@ export function AppearanceSettingsPanel() {
             />
           }
         />
+
+        {showEnvironmentIdentification ? null : (
+          <SettingsRow
+            {...searchableSetting("sidebar-header-art")}
+            description="Draw a blueprint grid in your theme's colors behind the sidebar header."
+            resetAction={
+              settings.sidebarHeaderArt !== DEFAULT_UNIFIED_SETTINGS.sidebarHeaderArt ? (
+                <SettingResetButton
+                  label="sidebar header art"
+                  onClick={() =>
+                    updateSettings({ sidebarHeaderArt: DEFAULT_UNIFIED_SETTINGS.sidebarHeaderArt })
+                  }
+                />
+              ) : null
+            }
+            control={
+              <Switch
+                checked={settings.sidebarHeaderArt}
+                onCheckedChange={(checked) =>
+                  updateSettings({ sidebarHeaderArt: Boolean(checked) })
+                }
+                aria-label="Sidebar header art"
+              />
+            }
+          />
+        )}
 
         <SettingsRow
           {...searchableSetting("setting-glass-opacity")}

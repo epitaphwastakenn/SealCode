@@ -371,6 +371,7 @@ export const AppearancePresetSettings = Schema.Struct({
   glassOpacity: Schema.optionalKey(GlassOpacity),
   glassAppEnabled: Schema.optionalKey(Schema.Boolean),
   panelGlassOpacity: Schema.optionalKey(PanelGlassOpacity),
+  sidebarHeaderArt: Schema.optionalKey(Schema.Boolean),
   backdrop: Schema.optionalKey(Schema.NullOr(AppBackdrop)),
   cornerRadius: Schema.optionalKey(CornerRadius),
   smoothCorners: Schema.optionalKey(Schema.Boolean),
@@ -545,6 +546,7 @@ export const ClientSettingsSchema = Schema.Struct({
   planModeEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   glassSidebarEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   glassAppEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  sidebarHeaderArt: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
   cornerRadius: CornerRadius.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_CORNER_RADIUS)),
   ),
@@ -1951,6 +1953,7 @@ export const ClientSettingsPatch = Schema.Struct({
   planModeEnabled: Schema.optionalKey(Schema.Boolean),
   glassSidebarEnabled: Schema.optionalKey(Schema.Boolean),
   glassAppEnabled: Schema.optionalKey(Schema.Boolean),
+  sidebarHeaderArt: Schema.optionalKey(Schema.Boolean),
   cornerRadius: Schema.optionalKey(CornerRadius),
   smoothCorners: Schema.optionalKey(Schema.Boolean),
   floatingPanels: Schema.optionalKey(Schema.Boolean),

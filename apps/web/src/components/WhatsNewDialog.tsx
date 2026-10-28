@@ -94,7 +94,7 @@ function WhatsNewDialog({ releases }: { readonly releases: ReadonlyArray<Changel
         <header className="relative shrink-0 overflow-hidden rounded-t-2xl bg-linear-to-br from-primary/35 via-primary/15 to-transparent px-6 pt-6 pb-5">
           <div className="flex items-center gap-4 pe-8">
             <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-background/40 shadow-sm">
-              <img src="/sealcode-icon.png" alt="" className="size-10 object-contain" />
+              <img src="/harp-icon.png" alt="" className="size-10 object-contain" />
             </div>
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">

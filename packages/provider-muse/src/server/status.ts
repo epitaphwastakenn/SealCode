@@ -91,8 +91,8 @@ export const checkMuseProviderStatus = Effect.fn("checkMuseProviderStatus")(func
       status: "error",
       auth: { status: "unknown" },
       message: missing
-        ? "Muse Code CLI (`muse`) was not found. Install Muse Code and run `muse login` on this T3 server host."
-        : "Failed to execute Muse Code CLI. Check its binary path on this T3 server host.",
+        ? "Muse Code CLI (`muse`) was not found. Install Muse Code and run `muse login` on this SealCode server host."
+        : "Failed to execute Muse Code CLI. Check its binary path on this SealCode server host.",
     });
   }
   if (Option.isNone(versionResult.success)) {
@@ -128,7 +128,7 @@ export const checkMuseProviderStatus = Effect.fn("checkMuseProviderStatus")(func
       status: "error",
       auth: { status: "unknown" },
       message:
-        "Muse Code SDK could not read the model catalog. Check your Muse installation and run `muse login` on this T3 server host.",
+        "Muse Code SDK could not read the model catalog. Check your Muse installation and run `muse login` on this SealCode server host.",
     });
   }
   const models = catalog.success.value;
@@ -143,7 +143,7 @@ export const checkMuseProviderStatus = Effect.fn("checkMuseProviderStatus")(func
         : {
             status: "warning",
             message:
-              "Muse Code returned no models. Run `muse login` on this T3 server host and refresh its status.",
+              "Muse Code returned no models. Run `muse login` on this SealCode server host and refresh its status.",
           }),
     },
     models,

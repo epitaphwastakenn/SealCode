@@ -4,6 +4,8 @@ import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 
 import { collectUint8StreamText } from "@t3tools/provider-core/server/collectStreamText";
 
+import type { AntigravityRuntimeLedger } from "./AntigravityRuntimeLedger.ts";
+
 export interface WindowsProcessEntry {
   readonly pid: number;
   readonly parentPid: number;
@@ -61,16 +63,17 @@ export function selectOrphanedRuntimeRoots(
 }
 
 /**
- * Windows has no process group to signal, and the runtime is spawned detached, so a server that
- * is killed (the desktop app ends its backend with TerminateProcess, and crashes do the same)
- * leaves the whole tree running: a launcher, the agent server and its harness, holding hundreds
- * of megabytes and the unpacked runtime files. Only one server owns a T3 home, so any runtime
- * from its managed directory that no live process owns is a leftover of an earlier server.
+ * The desktop app ends its backend with TerminateProcess and the detached agent runtime survives,
+ * so any runtime from the managed directory that no live process owns is an earlier server's.
+ * The scan costs a PowerShell start (65-80 MB, 1-2 s), so it runs only when the ledger lists a
+ * runtime an earlier server never saw exit, or does not exist yet.
  */
 export const terminateOrphanedAntigravityRuntimes = Effect.fn(
   "terminateOrphanedAntigravityRuntimes",
 )(
-  function* (managedDirectory: string) {
+  function* (managedDirectory: string, ledger: AntigravityRuntimeLedger) {
+    const leftBehind = yield* ledger.leftByEarlierServers;
+    if (leftBehind !== undefined && leftBehind.length === 0) return;
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const listing = yield* Effect.scoped(
       Effect.gen(function* () {
@@ -112,6 +115,7 @@ export const terminateOrphanedAntigravityRuntimes = Effect.fn(
         exitCode: Number(exitCode),
       });
     }
+    yield* ledger.settleEarlierServers;
   },
   Effect.timeoutOption("20 seconds"),
   Effect.catchCause((cause) =>

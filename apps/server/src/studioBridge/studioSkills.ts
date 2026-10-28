@@ -66,7 +66,7 @@ export const buildSkillLibrary = (
   return { skills };
 };
 
-export const loadStudioSkills = Effect.gen(function* () {
+const readStudioSkills = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const bundled = path.resolve(import.meta.dirname, "studio-skills.json");
@@ -90,6 +90,22 @@ export const loadStudioSkills = Effect.gen(function* () {
       Effect.as({ skills: new Map() } satisfies StudioSkillLibrary),
     ),
   ),
+);
+
+let studioSkillLibrary: StudioSkillLibrary | undefined;
+
+/** The pack is 1.4 MB of text; the config and the tools share one decode of it. */
+export const loadStudioSkills = Effect.suspend(() =>
+  studioSkillLibrary !== undefined
+    ? Effect.succeed(studioSkillLibrary)
+    : readStudioSkills.pipe(
+        Effect.tap((library) =>
+          Effect.sync(() => {
+            // An empty library means the read failed; the next caller tries again.
+            if (library.skills.size > 0) studioSkillLibrary = library;
+          }),
+        ),
+      ),
 );
 
 const MAX_RESULT_CHARS = 48_000;

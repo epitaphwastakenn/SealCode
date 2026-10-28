@@ -279,8 +279,7 @@ describe("source control host search items", () => {
     expect(searchSettings("ex switch accounts", items)).toHaveLength(1);
   });
 
-  it("finds the built-in hosts by their own words", () => {
-    expect(searchSettings("codeberg").map((item) => item.id)).toContain("source-control");
+  it("finds the built-in host by its own words", () => {
     expect(searchSettings("ghes").map((item) => item.id)).toContain(
       sourceControlHostSettingsSearchId("github"),
     );

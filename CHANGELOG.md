@@ -10,6 +10,15 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.17.12 · 2026-10-27
+
+> SealCode drops the parts of T3 Code that have nothing to do with making games, and no longer sends usage data to T3.
+
+### Improved
+
+- **No usage data sent to T3** — SealCode inherited anonymous usage reporting to T3's analytics service, on by default. It is gone.
+- **Leaner app** — Removed T3 Cloud sign-in and its relay, guest sharing, the phone and emulator device hub, webhook triggers for scheduled tasks, and the Azure DevOps, Bitbucket, Forgejo, GitCafe and GitLab integrations. Scheduled tasks, GitHub, and remote access over SSH, Tailscale and WSL stay. Settings and threads that mention removed features still open; a scheduled task that ran from a webhook is paused, and you can switch it to a schedule.
+
 ## 2.17.11 · 2026-10-27
 
 > Antigravity starts on Windows PCs where it used to get stuck, and starts faster everywhere.

@@ -33,11 +33,11 @@ const rpcError = (id: unknown, code: number, message: string) => ({
 const badRequest = (message: string) =>
   HttpServerResponse.jsonUnsafe({ error: "invalid_mcp_request", message }, { status: 400 });
 
-/** Only agents SealCode launched may call the user's servers; OAuth clients have no thread. */
+/** Only agents Harp launched may call the user's servers; OAuth clients have no thread. */
 const forbidden = HttpServerResponse.jsonUnsafe(
   {
     error: "global_mcp_thread_required",
-    message: "The global MCP gateway is only available to agents running inside a SealCode thread.",
+    message: "The global MCP gateway is only available to agents running inside a Harp thread.",
   },
   { status: 403 },
 );
@@ -80,7 +80,7 @@ const post = HttpRouter.add(
               ? requested
               : SUPPORTED_PROTOCOL_VERSIONS[0],
           capabilities: { tools: { listChanged: true } },
-          serverInfo: { name: "SealCode Global MCP", version: packageJson.version },
+          serverInfo: { name: "Harp Global MCP", version: packageJson.version },
         });
       }
       case "ping":

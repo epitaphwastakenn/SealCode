@@ -80,7 +80,7 @@ const unauthorized = (input: {
   return HttpServerResponse.jsonUnsafe(
     {
       error: "invalid_mcp_credential",
-      message: "A valid SealCode MCP credential is required.",
+      message: "A valid Harp MCP credential is required.",
     },
     {
       status: 401,
@@ -782,7 +782,7 @@ export const layerPullRequestsToolkit = toolkitRegistration(
 );
 
 export const layerMcpTransport = McpServer.layerHttp({
-  name: "SealCode",
+  name: "Harp",
   version: packageJson.version,
   path: "/mcp",
   protocols: [McpProtocol.v2025_06_18],

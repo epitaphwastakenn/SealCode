@@ -9,14 +9,14 @@ const GENERIC_ERROR_PREFIXES = [
 ];
 
 const SQLITE_RECOVERY_MESSAGES: Readonly<Record<number, string>> = {
-  5: "The SealCode server database is busy (SQLITE_BUSY). Wait a moment, then retry. If this keeps happening, check for another SealCode process using the same data directory on the server.",
-  6: "The SealCode server database is locked (SQLITE_LOCKED). Wait a moment, then retry. If this keeps happening, check the server logs for the process holding the database lock.",
-  8: "The SealCode server database is read-only (SQLITE_READONLY). On the machine running the server, check that its data directory is writable and its disk is mounted read-write, then retry.",
-  10: "The SealCode server could not read or write its database (SQLITE_IOERR). On the machine running the server, check free disk space and disk health, then retry. If it still fails, check the server logs.",
-  11: "The SealCode server database appears damaged (SQLITE_CORRUPT). Preserve the server data directory and check the server logs before restoring a database backup.",
-  13: "The SealCode server could not save this change because its database or disk is full (SQLITE_FULL). Free space on the machine running the server, then retry. If space is available, check the server logs for a database size limit.",
-  14: "The SealCode server could not open a database file (SQLITE_CANTOPEN). On the machine running the server, check free disk space and that its data and temporary directories exist and are writable, then retry. If it still fails, check the server logs.",
-  26: "The SealCode server could not read its database file (SQLITE_NOTADB). Preserve the server data directory and check the configured database path and server logs before restoring a database backup.",
+  5: "The Harp server database is busy (SQLITE_BUSY). Wait a moment, then retry. If this keeps happening, check for another Harp process using the same data directory on the server.",
+  6: "The Harp server database is locked (SQLITE_LOCKED). Wait a moment, then retry. If this keeps happening, check the server logs for the process holding the database lock.",
+  8: "The Harp server database is read-only (SQLITE_READONLY). On the machine running the server, check that its data directory is writable and its disk is mounted read-write, then retry.",
+  10: "The Harp server could not read or write its database (SQLITE_IOERR). On the machine running the server, check free disk space and disk health, then retry. If it still fails, check the server logs.",
+  11: "The Harp server database appears damaged (SQLITE_CORRUPT). Preserve the server data directory and check the server logs before restoring a database backup.",
+  13: "The Harp server could not save this change because its database or disk is full (SQLITE_FULL). Free space on the machine running the server, then retry. If space is available, check the server logs for a database size limit.",
+  14: "The Harp server could not open a database file (SQLITE_CANTOPEN). On the machine running the server, check free disk space and that its data and temporary directories exist and are writable, then retry. If it still fails, check the server logs.",
+  26: "The Harp server could not read its database file (SQLITE_NOTADB). Preserve the server data directory and check the configured database path and server logs before restoring a database backup.",
 };
 
 function databaseErrorMessage(value: unknown): string | undefined {
@@ -34,7 +34,7 @@ function databaseErrorMessage(value: unknown): string | undefined {
     cause = cause.cause;
   }
 
-  return "The SealCode server could not complete this database request. Retry once; if it still fails, check the server logs for the database error.";
+  return "The Harp server could not complete this database request. Retry once; if it still fails, check the server logs for the database error.";
 }
 
 const CAPABILITY_REJECTION_MESSAGES: Record<string, (provider: string) => string> = {

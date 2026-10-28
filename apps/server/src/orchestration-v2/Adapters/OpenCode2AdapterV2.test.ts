@@ -1847,7 +1847,7 @@ it.layer(McpProviderSessions.layer)("OpenCode2 adapter", (it) => {
       assert.equal(ended?.status, "failed");
       assert.equal(
         ended?.status === "failed" ? ended.failure.message : undefined,
-        "OpenCode is waiting on a request SealCode couldn't answer.",
+        "OpenCode is waiting on a request Harp couldn't answer.",
       );
     }).pipe(Effect.scoped),
   );

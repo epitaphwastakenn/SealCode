@@ -284,8 +284,8 @@ export const continueRestartedRun = Effect.fn("RestartContinuation.continueResta
           source: { kind: "system" },
           outcome: "updated",
           summary: note.settled
-            ? "SealCode restarted and stopped background work"
-            : "SealCode restarted and resumed this turn",
+            ? "Harp restarted and stopped background work"
+            : "Harp restarted and resumed this turn",
           detail: text,
         },
         attachments: [],

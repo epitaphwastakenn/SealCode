@@ -180,7 +180,7 @@ describe("GlobalMcpManager", () => {
     );
     const managed = {
       ...fakeServer("studio", markerPath),
-      displayName: "Roblox Studio (SealCode)",
+      displayName: "Roblox Studio (Harp)",
     };
     const layer = GlobalMcpManager.layer.pipe(
       Layer.provideMerge(ServerSettingsService.layerTest({ mcpServers: {} })),
@@ -190,11 +190,9 @@ describe("GlobalMcpManager", () => {
       const manager = yield* GlobalMcpManager.GlobalMcpManager;
       yield* manager.reload;
       expect(yield* manager.getStatuses).toMatchObject([
-        { id: "studio", displayName: "Roblox Studio (SealCode)", state: "ready", toolCount: 1 },
+        { id: "studio", displayName: "Roblox Studio (Harp)", state: "ready", toolCount: 1 },
       ]);
-      expect((yield* manager.getCatalog).tools[0]?.serverDisplayName).toBe(
-        "Roblox Studio (SealCode)",
-      );
+      expect((yield* manager.getCatalog).tools[0]?.serverDisplayName).toBe("Roblox Studio (Harp)");
 
       const serverSettings = yield* ServerSettingsService;
       yield* serverSettings.updateSettings({

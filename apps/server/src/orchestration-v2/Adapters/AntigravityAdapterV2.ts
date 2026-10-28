@@ -48,7 +48,7 @@ const ANTIGRAVITY_PROVIDER = ProviderDriverKind.make("antigravity");
 // once, since a fresh process opens new connections; a second silence means the network.
 export const ANTIGRAVITY_SILENT_TURN_NOTICE_MS = 30_000;
 export const ANTIGRAVITY_SILENT_TURN_RESTART_MESSAGE =
-  "Antigravity did not respond for 30 seconds, so SealCode stopped this turn and restarted it. Send your message again.";
+  "Antigravity did not respond for 30 seconds, so Harp stopped this turn and restarted it. Send your message again.";
 export const ANTIGRAVITY_SILENT_TURN_MESSAGE =
   "Antigravity still has not responded after a restart. Check this machine's internet connection and any proxy, VPN or firewall, then send your message again.";
 // Its prompt stays open after a model call dies mid-answer, so the turn would look busy forever.

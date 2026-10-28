@@ -394,9 +394,9 @@ function assertReinjectedInstructions(
   request: string,
 ) {
   const text = blocks[0]?.text ?? "";
-  assert.include(text, "SealCode interaction mode: Default");
-  assert.include(text, "## SealCode browser");
-  assert.include(text, "SealCode orchestration");
+  assert.include(text, "Harp interaction mode: Default");
+  assert.include(text, "## Harp browser");
+  assert.include(text, "Harp orchestration");
   assert.include(text, `<user_request>\n${request}\n</user_request>`);
 }
 
@@ -981,9 +981,9 @@ describe("AcpAdapterV2", () => {
       assert.notInclude(whitespaceCommand.prompt, "<t3_code_instructions>");
       const firstDefault = yield* runTurn(2, defaultPolicy, "First default request.");
       assert.equal(firstDefault.textBlockCount, 2);
-      assert.include(firstDefault.prompt, "SealCode interaction mode: Default");
-      assert.include(firstDefault.prompt, "## SealCode browser");
-      assert.include(firstDefault.prompt, "SealCode orchestration");
+      assert.include(firstDefault.prompt, "Harp interaction mode: Default");
+      assert.include(firstDefault.prompt, "## Harp browser");
+      assert.include(firstDefault.prompt, "Harp orchestration");
       assert.notInclude(
         firstDefault.methods,
         "session/set_config_option",
@@ -996,14 +996,14 @@ describe("AcpAdapterV2", () => {
 
       const planPolicy = policy("plan");
       const firstPlan = yield* runTurn(4, planPolicy, "Plan this change.");
-      assert.include(firstPlan.prompt, "SealCode interaction mode: Plan");
+      assert.include(firstPlan.prompt, "Harp interaction mode: Plan");
       assert.include(firstPlan.methods, "session/set_config_option");
       assert.include(
         (yield* runTurn(5, planPolicy, "Continue planning.")).prompt,
         "Continue planning.",
       );
       const restoredBuild = yield* runTurn(6, defaultPolicy, "Implement the change.");
-      assert.include(restoredBuild.prompt, "SealCode interaction mode: Default");
+      assert.include(restoredBuild.prompt, "Harp interaction mode: Default");
       assert.include(
         restoredBuild.methods,
         "session/set_config_option",

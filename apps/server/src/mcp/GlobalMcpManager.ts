@@ -64,7 +64,7 @@ const IDLE_CHECK_INTERVAL = Duration.minutes(1);
 
 const KEPT_STDERR_LINES = 20;
 
-/** Lets a server tell which SealCode thread a call belongs to, so it can scope its skills and jobs. */
+/** Lets a server tell which Harp thread a call belongs to, so it can scope its skills and jobs. */
 export const THREAD_SCOPE_META_KEY = "sealcode/threadId";
 
 class GlobalMcpConnectionError extends Schema.TaggedError<GlobalMcpConnectionError>()(
@@ -116,7 +116,7 @@ export class GlobalMcpManager extends Context.Service<
     readonly getStatuses: Effect.Effect<ReadonlyArray<GlobalMcpStatus>>;
     readonly getCatalog: Effect.Effect<McpToolCatalog>;
     readonly callTool: (input: McpInvocation) => Effect.Effect<McpCallResult>;
-    /** A call SealCode itself makes, such as reading a managed server's status. */
+    /** A call Harp itself makes, such as reading a managed server's status. */
     readonly callServerTool: (input: {
       readonly serverId: string;
       readonly toolName: string;
@@ -260,12 +260,12 @@ type UpstreamConnection = {
 };
 
 type ConnectionEvents = {
-  /** The transport closed without SealCode closing it. */
+  /** The transport closed without Harp closing it. */
   readonly onClosed: (serverId: string, client: Client) => void;
   readonly onToolsChanged: (serverId: string, client: Client) => void;
 };
 
-/** Clients SealCode is closing on purpose, whose close is not a crash to recover from. */
+/** Clients Harp is closing on purpose, whose close is not a crash to recover from. */
 const closingClients = new WeakSet<Client>();
 
 type RunningConnection = UpstreamConnection & { readonly client: Client };
@@ -332,7 +332,7 @@ const connect = (
       const transport = createTransport(server);
       const output = recentOutput(transport);
       const client = new McpClient(
-        { name: "SealCode Global MCP", version: "1.0.0" },
+        { name: "Harp Global MCP", version: "1.0.0" },
         { capabilities: {} },
       );
       try {

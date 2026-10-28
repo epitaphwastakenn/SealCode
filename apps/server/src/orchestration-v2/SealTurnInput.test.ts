@@ -289,7 +289,7 @@ describe("SealTurnInput", () => {
           "<sealcode_harness_instructions>\nSeals rule.\n\n<studio_instructions>\nUse the Studio tools.\n</studio_instructions>\n</sealcode_harness_instructions>\n\nbuild a tower",
         );
         expect(yield* turn("conversation-1", false)).not.toContain("studio_instructions");
-        // A conversation SealCode has not given them to in this process gets them once.
+        // A conversation Harp has not given them to in this process gets them once.
         expect(yield* turn("conversation-2", false)).toContain("<studio_instructions>");
         expect(yield* turn("conversation-2", false)).not.toContain("studio_instructions");
         expect(yield* turn("conversation-3", true, "/elsewhere")).not.toContain(

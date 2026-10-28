@@ -94,7 +94,7 @@ export const make = Effect.fn("makeProcessDiagnostics")(function* () {
           pid: input.pid,
           signal: input.signal,
           signaled: false,
-          message: Option.some("Refusing to signal the SealCode server process."),
+          message: Option.some("Refusing to signal the Harp server process."),
         };
       }
       const current = yield* telemetry.refresh.pipe(Effect.option);
@@ -127,9 +127,7 @@ export const make = Effect.fn("makeProcessDiagnostics")(function* () {
           pid: input.pid,
           signal: input.signal,
           signaled: false,
-          message: Option.some(
-            `Process ${input.pid} is not a signalable SealCode backend descendant.`,
-          ),
+          message: Option.some(`Process ${input.pid} is not a signalable Harp backend descendant.`),
         };
       }
       return yield* Effect.try({

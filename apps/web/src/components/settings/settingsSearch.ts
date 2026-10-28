@@ -523,6 +523,14 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["composer rich text tiptap bold italic markdown styled wysiwyg"],
   },
   {
+    id: "voice-live-preview",
+    title: "Live transcription preview",
+    to: "/settings/general",
+    searchTerms: [
+      "voice microphone speech dictation record whisper transcribe words dimmed gpu webgpu model download",
+    ],
+  },
+  {
     id: "composer-collapse",
     title: "Collapse composer on scroll",
     to: "/settings/general",

@@ -755,6 +755,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.composerRichTextEnabled !== DEFAULT_UNIFIED_SETTINGS.composerRichTextEnabled
       ? ["Rich text composer"]
       : []),
+    ...(settings.voiceLivePreviewEnabled !== DEFAULT_UNIFIED_SETTINGS.voiceLivePreviewEnabled
+      ? ["Live transcription preview"]
+      : []),
     ...(settings.sendShortcut !== DEFAULT_UNIFIED_SETTINGS.sendShortcut ? ["Send shortcut"] : []),
     ...(settings.followUpBehavior !== DEFAULT_UNIFIED_SETTINGS.followUpBehavior
       ? ["Follow-up behavior"]
@@ -877,6 +880,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       showSkillsInSlashMenu: DEFAULT_UNIFIED_SETTINGS.showSkillsInSlashMenu,
       composerCollapseOnScroll: DEFAULT_UNIFIED_SETTINGS.composerCollapseOnScroll,
       composerRichTextEnabled: DEFAULT_UNIFIED_SETTINGS.composerRichTextEnabled,
+      voiceLivePreviewEnabled: DEFAULT_UNIFIED_SETTINGS.voiceLivePreviewEnabled,
       sendShortcut: DEFAULT_UNIFIED_SETTINGS.sendShortcut,
       followUpBehavior: DEFAULT_UNIFIED_SETTINGS.followUpBehavior,
       contextWindowMeterEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled,
@@ -1764,6 +1768,33 @@ export function GeneralSettingsPanel() {
                 updateSettings({ composerRichTextEnabled: Boolean(checked) })
               }
               aria-label="Rich text composer"
+            />
+          }
+        />
+
+        <SettingsRow
+          {...searchableSetting("voice-live-preview")}
+          description="Show the words you speak, dimmed in the composer, while a voice note records. Downloads a speech model (about 200 MB) the first time and runs it on your GPU. The final transcript still comes from the server."
+          resetAction={
+            settings.voiceLivePreviewEnabled !==
+            DEFAULT_UNIFIED_SETTINGS.voiceLivePreviewEnabled ? (
+              <SettingResetButton
+                label="live transcription preview"
+                onClick={() =>
+                  updateSettings({
+                    voiceLivePreviewEnabled: DEFAULT_UNIFIED_SETTINGS.voiceLivePreviewEnabled,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Switch
+              checked={settings.voiceLivePreviewEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ voiceLivePreviewEnabled: Boolean(checked) })
+              }
+              aria-label="Live transcription preview"
             />
           }
         />

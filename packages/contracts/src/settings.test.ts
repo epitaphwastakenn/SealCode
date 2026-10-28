@@ -216,6 +216,22 @@ describe("ClientSettings sidebar header art", () => {
   });
 });
 
+describe("ClientSettings voice live preview", () => {
+  it("is on for existing settings that predate it and keeps an explicit off", () => {
+    expect(decodeClientSettings({}).voiceLivePreviewEnabled).toBe(true);
+    expect(decodeClientSettings({ voiceLivePreviewEnabled: false }).voiceLivePreviewEnabled).toBe(
+      false,
+    );
+  });
+
+  it("patches only when set", () => {
+    expect(decodeClientSettingsPatch({})).not.toHaveProperty("voiceLivePreviewEnabled");
+    expect(decodeClientSettingsPatch({ voiceLivePreviewEnabled: false })).toEqual({
+      voiceLivePreviewEnabled: false,
+    });
+  });
+});
+
 describe("ClientSettings quit confirmation", () => {
   it.each([
     [true, "hold"],

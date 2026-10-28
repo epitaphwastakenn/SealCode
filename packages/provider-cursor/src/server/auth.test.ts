@@ -11,7 +11,7 @@ import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 
 import { makeCursorAuth, type CursorAuthOptions } from "./auth.ts";
-import { InMemoryCredentialStore } from "./sdk.ts";
+import { loadCursorSdk } from "./sdk.ts";
 
 const instanceId = ProviderInstanceId.make("cursor-personal");
 const owner = "owner-client";
@@ -21,7 +21,7 @@ const authorizationUrl = "https://cursor.com/loginDeepControl?challenge=test-cha
 const makeHarness = Effect.fn("makeCursorAuthHarness")(function* (
   overrides: Partial<CursorAuthOptions> = {},
 ) {
-  const store = new InMemoryCredentialStore();
+  const store = new (loadCursorSdk().InMemoryCredentialStore)();
   const complete = Promise.withResolvers<void>();
   const returned = Promise.withResolvers<void>();
   const now = yield* Clock.currentTimeMillis;

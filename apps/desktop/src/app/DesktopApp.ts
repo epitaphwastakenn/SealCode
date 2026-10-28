@@ -244,6 +244,12 @@ const bootstrap = Effect.gen(function* () {
       Effect.catch((error) => logStartupError("desktop app control socket unavailable", { error })),
     );
     yield* Effect.forkScoped(wslBackend.reconcile);
+    // After the backend process is requested: window creation blocks the main thread for a few hundred ms.
+    yield* desktopWindow.prepareMain.pipe(
+      Effect.catch((error) =>
+        logBootstrapWarning("could not prepare the main window early", { error: error.message }),
+      ),
+    );
   }
 }).pipe(Effect.withSpan("desktop.bootstrap"));
 

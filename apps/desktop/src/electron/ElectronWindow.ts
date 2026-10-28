@@ -116,6 +116,9 @@ export class ElectronWindow extends Context.Service<
     readonly currentMainOrFirst: Effect.Effect<Option.Option<Electron.BrowserWindow>>;
     readonly focusedMainOrFirst: Effect.Effect<Option.Option<Electron.BrowserWindow>>;
     readonly setMain: (window: Electron.BrowserWindow) => Effect.Effect<void>;
+    /** Keeps a created but not yet loaded window out of the main-or-first lookups until released. */
+    readonly hold: (window: Electron.BrowserWindow) => Effect.Effect<void>;
+    readonly release: (window: Electron.BrowserWindow) => Effect.Effect<void>;
     readonly clearMain: (window: Option.Option<Electron.BrowserWindow>) => Effect.Effect<void>;
     readonly prepareReveal: (window: Electron.BrowserWindow) => Effect.Effect<boolean>;
     readonly reveal: (window: Electron.BrowserWindow) => Effect.Effect<void>;
@@ -141,6 +144,7 @@ export const make = Effect.gen(function* () {
   const captureRevealWindows = new Set<number>();
   yield* Effect.addFinalizer(() => Effect.sync(() => windowsForegroundFocus?.close()));
   const mainWindowRef = yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none());
+  const heldWindows = new WeakSet<Electron.BrowserWindow>();
 
   const listWindows = Effect.try({
     try: () => Electron.BrowserWindow.getAllWindows(),
@@ -181,7 +185,9 @@ export const make = Effect.gen(function* () {
       return main;
     }
 
-    const first = Option.fromNullishOr((yield* listWindows)[0] ?? null);
+    const first = Option.fromNullishOr(
+      (yield* listWindows).find((window) => !heldWindows.has(window)) ?? null,
+    );
     if (Option.isNone(first) || (yield* isWindowDestroyed(first.value))) {
       return Option.none<Electron.BrowserWindow>();
     }
@@ -240,6 +246,8 @@ export const make = Effect.gen(function* () {
     currentMainOrFirst,
     focusedMainOrFirst,
     setMain: (window) => Ref.set(mainWindowRef, Option.some(window)),
+    hold: (window) => Effect.sync(() => void heldWindows.add(window)),
+    release: (window) => Effect.sync(() => void heldWindows.delete(window)),
     clearMain: (window) =>
       Ref.update(mainWindowRef, (current) => {
         if (Option.isNone(current)) {

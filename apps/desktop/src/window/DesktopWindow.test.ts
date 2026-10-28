@@ -229,6 +229,8 @@ function layerTest(input: {
   readonly previewZoomReapplies?: number[];
   readonly onReveal?: (window: Electron.BrowserWindow) => void;
   readonly focusedWindow?: Electron.BrowserWindow;
+  readonly windowEvents?: string[];
+  readonly previewSessionRequests?: unknown[];
 }) {
   let desktopSettings = input.desktopSettings ?? DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS;
   const layerDesktopAppSettings = Layer.succeed(DesktopAppSettings.DesktopAppSettings, {
@@ -280,7 +282,12 @@ function layerTest(input: {
       input.focusedWindow === undefined
         ? Ref.get(input.mainWindow)
         : Effect.succeedSome(input.focusedWindow),
-    setMain: (window) => Ref.set(input.mainWindow, Option.some(window)),
+    setMain: (window) =>
+      Effect.sync(() => input.windowEvents?.push("setMain")).pipe(
+        Effect.andThen(Ref.set(input.mainWindow, Option.some(window))),
+      ),
+    hold: () => Effect.sync(() => void input.windowEvents?.push("hold")),
+    release: () => Effect.sync(() => void input.windowEvents?.push("release")),
     clearMain: () => Ref.set(input.mainWindow, Option.none()),
     prepareReveal: () => Effect.succeed(false),
     reveal: (window) => Effect.sync(() => input.onReveal?.(window)),
@@ -329,7 +336,11 @@ function layerTest(input: {
           attachGuest: () => () => {},
         }),
         Layer.mock(PreviewManager.PreviewManager)({
-          getBrowserSession: () => Effect.succeed({} as Electron.Session),
+          getBrowserSession: (...args) =>
+            Effect.sync(() => {
+              input.previewSessionRequests?.push(args);
+              return {} as Electron.Session;
+            }),
           setMainWindow: input.setPreviewMainWindow ?? (() => Effect.void),
           prepareWebview: () => Effect.void,
           isBrowserPartition: (partition) => partition.startsWith("persist:t3code-preview-"),
@@ -402,6 +413,8 @@ const makeSplashScenario = (createOutcomes: readonly (Electron.BrowserWindow | n
       currentMainOrFirst,
       focusedMainOrFirst: currentMainOrFirst,
       setMain: (window) => Ref.set(mainWindow, Option.some(window)),
+      hold: () => Effect.void,
+      release: () => Effect.void,
       clearMain: () => Ref.set(mainWindow, Option.none()),
       prepareReveal: () => Effect.succeed(false),
       reveal: (window) => Ref.update(revealedWindows, (windows) => [...windows, window]),
@@ -502,6 +515,157 @@ describe("DesktopWindow", () => {
         }).pipe(Effect.provide(layer));
       }),
   );
+
+  describe("early main window", () => {
+    const backendUrl = new URL("http://127.0.0.1:3773");
+
+    it.effect(
+      "loads a prepared window once the backend is ready and reveals it after it paints",
+      () =>
+        Effect.gen(function* () {
+          const fakeWindow = makeFakeBrowserWindow();
+          const createCount = yield* Ref.make(0);
+          const mainWindow = yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none());
+          const windowEvents: string[] = [];
+          const revealed: Electron.BrowserWindow[] = [];
+          const layer = layerTest({
+            window: fakeWindow.window,
+            createCount,
+            mainWindow,
+            windowEvents,
+            onReveal: (window) => revealed.push(window),
+          });
+
+          yield* Effect.gen(function* () {
+            const desktopWindow = yield* DesktopWindow.DesktopWindow;
+            yield* desktopWindow.prepareMain;
+
+            assert.equal(yield* Ref.get(createCount), 1);
+            assert.equal(fakeWindow.loadURL.mock.calls.length, 0);
+            assert.isTrue(Option.isNone(yield* Ref.get(mainWindow)));
+            assert.deepEqual(windowEvents, ["hold"]);
+
+            yield* desktopWindow.activate;
+            fakeWindow.windowListeners.get("ready-to-show")?.();
+            assert.deepEqual(revealed, []);
+
+            yield* desktopWindow.handleBackendReady(backendUrl);
+            assert.equal(yield* Ref.get(createCount), 1);
+            assert.deepEqual(
+              fakeWindow.loadURL.mock.calls.map(([url]) => url),
+              ["t3code-dev://app/"],
+            );
+            assert.deepEqual(windowEvents, ["hold", "release", "setMain"]);
+            assert.deepEqual(revealed, []);
+
+            // Backend restarts keep the window and never reload it.
+            yield* desktopWindow.handleBackendNotReady;
+            yield* desktopWindow.handleBackendReady(backendUrl);
+            assert.equal(yield* Ref.get(createCount), 1);
+            assert.equal(fakeWindow.loadURL.mock.calls.length, 1);
+
+            fakeWindow.windowListeners.get("ready-to-show")?.();
+            assert.deepEqual(revealed, [fakeWindow.window]);
+          }).pipe(Effect.provide(layer));
+        }),
+    );
+
+    it.effect("prepares nothing when the backend is ready or the local environment is off", () =>
+      Effect.gen(function* () {
+        const readyWindow = makeFakeBrowserWindow();
+        const readyCount = yield* Ref.make(0);
+        const readyLayer = layerTest({
+          window: readyWindow.window,
+          createCount: readyCount,
+          mainWindow: yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none()),
+        });
+        yield* Effect.gen(function* () {
+          const desktopWindow = yield* DesktopWindow.DesktopWindow;
+          yield* desktopWindow.handleBackendReady(backendUrl);
+          yield* desktopWindow.prepareMain;
+          assert.equal(yield* Ref.get(readyCount), 1);
+        }).pipe(Effect.provide(readyLayer));
+
+        const offWindow = makeFakeBrowserWindow();
+        const offCount = yield* Ref.make(0);
+        const offLayer = layerTest({
+          window: offWindow.window,
+          createCount: offCount,
+          mainWindow: yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none()),
+          desktopSettings: {
+            ...DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS,
+            localEnvironmentEnabled: false,
+          },
+        });
+        yield* Effect.gen(function* () {
+          const desktopWindow = yield* DesktopWindow.DesktopWindow;
+          yield* desktopWindow.prepareMain;
+          assert.equal(yield* Ref.get(offCount), 0);
+        }).pipe(Effect.provide(offLayer));
+      }),
+    );
+
+    it.effect("opens a single window when the backend becomes ready during preparation", () =>
+      Effect.gen(function* () {
+        const fakeWindow = makeFakeBrowserWindow();
+        const createCount = yield* Ref.make(0);
+        const mainWindow = yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none());
+        const layer = layerTest({
+          window: fakeWindow.window,
+          createCount,
+          mainWindow,
+          onWindowCreate: Effect.yieldNow,
+        });
+
+        yield* Effect.gen(function* () {
+          const desktopWindow = yield* DesktopWindow.DesktopWindow;
+          yield* Effect.all(
+            [desktopWindow.prepareMain, desktopWindow.handleBackendReady(backendUrl)],
+            { concurrency: "unbounded" },
+          );
+          assert.equal(yield* Ref.get(createCount), 1);
+          assert.equal(fakeWindow.loadURL.mock.calls.length, 1);
+        }).pipe(Effect.provide(layer));
+      }),
+    );
+
+    it.effect("hands a held window to an explicit request before the backend is ready", () =>
+      Effect.gen(function* () {
+        const fakeWindow = makeFakeBrowserWindow();
+        const createCount = yield* Ref.make(0);
+        const mainWindow = yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none());
+        const layer = layerTest({ window: fakeWindow.window, createCount, mainWindow });
+
+        yield* Effect.gen(function* () {
+          const desktopWindow = yield* DesktopWindow.DesktopWindow;
+          yield* desktopWindow.prepareMain;
+          yield* desktopWindow.ensureMain;
+          assert.equal(yield* Ref.get(createCount), 1);
+          assert.equal(fakeWindow.loadURL.mock.calls.length, 1);
+        }).pipe(Effect.provide(layer));
+      }),
+    );
+
+    it.effect("does not open the preview browser session while creating the window", () =>
+      Effect.gen(function* () {
+        const fakeWindow = makeFakeBrowserWindow();
+        const previewSessionRequests: unknown[] = [];
+        const layer = layerTest({
+          window: fakeWindow.window,
+          createCount: yield* Ref.make(0),
+          mainWindow: yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none()),
+          previewSessionRequests,
+        });
+
+        yield* Effect.gen(function* () {
+          const desktopWindow = yield* DesktopWindow.DesktopWindow;
+          yield* desktopWindow.prepareMain;
+          yield* desktopWindow.handleBackendReady(backendUrl);
+          assert.deepEqual(previewSessionRequests, []);
+        }).pipe(Effect.provide(layer));
+      }),
+    );
+  });
 
   it.effect("blocks only repeated Cmd+W input before it reaches the native window menu", () =>
     Effect.gen(function* () {

@@ -95,9 +95,8 @@ asks before restarting the background service; if you decline, run
 stop it and start it again afterwards with your usual options such as `--host`
 or `--tailscale-serve`.
 
-If you run the server with `npx` rather than an installed `t3`, there is
-nothing to update on the host: stop the server and relaunch it as
-`npx t3@<client-version>` with the same subcommand and options.
+If the host's `t3` is older than this client, update SealCode on the host,
+then relaunch the server with the same subcommand and options.
 
 ## If an update fails
 

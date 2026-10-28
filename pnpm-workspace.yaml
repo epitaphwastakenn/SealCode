@@ -22,6 +22,8 @@ allowBuilds:
   node-pty: true
   # Ships N-API prebuilds; its install script only rebuilds from source.
   objc-js: false
+  # From onnxruntime-web; its install script only warns about version ranges.
+  protobufjs: false
   "@tsc-rs/typescript": true
   utf-8-validate: false
   workerd: false

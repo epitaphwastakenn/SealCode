@@ -7,12 +7,16 @@ import { ConnectionCatalogDocument, Persistence } from "@t3tools/client-runtime/
 import { describe, expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Deferred from "effect/Deferred";
+import * as Fiber from "effect/Fiber";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 import { afterEach, vi } from "vite-plus/test";
 
+import { makeThreadProjectionFixture } from "../test-fixtures";
 import * as ConnectionStorage from "./storage";
+import { THREAD_CACHE_MAX_ENTRY_CHARS } from "./threadCachePolicy";
 
 const emptyCatalog = {
   schemaVersion: 1,
@@ -282,5 +286,254 @@ describe("browser GitHub routing permissions", () => {
       );
       expect(yield* second.get(entry)).toBe("off");
     }).pipe(Effect.scoped),
+  );
+});
+
+function makeFakeThreadDatabase() {
+  const stores = new Map<string, Map<string, unknown>>();
+  const storeFor = (name: string) => {
+    let store = stores.get(name);
+    if (store === undefined) {
+      store = new Map();
+      stores.set(name, store);
+    }
+    return store;
+  };
+  const database = Object.assign(new EventTarget(), {
+    close: vi.fn(),
+    transaction: () => {
+      const transaction = Object.assign(new EventTarget(), { error: null });
+      let pending = 0;
+      let completed = false;
+      const settle = () =>
+        queueMicrotask(() => {
+          if (pending === 0 && !completed) {
+            completed = true;
+            transaction.dispatchEvent(new Event("complete"));
+          }
+        });
+      const request = (run: () => unknown) => {
+        const req = Object.assign(new EventTarget(), { result: undefined as unknown, error: null });
+        pending += 1;
+        queueMicrotask(() => {
+          req.result = run();
+          req.dispatchEvent(new Event("success"));
+          pending -= 1;
+          settle();
+        });
+        return req;
+      };
+      const objectStore = (name: string) => {
+        const store = storeFor(name);
+        return {
+          get: (key: string) => request(() => store.get(key)),
+          put: (value: unknown, key: string) =>
+            request(() => {
+              store.set(key, value);
+              return key;
+            }),
+          delete: (target: string | { lower: string; upper: string }) =>
+            request(() => {
+              if (typeof target === "string") {
+                store.delete(target);
+                return;
+              }
+              for (const key of store.keys()) {
+                if (key >= target.lower && key <= target.upper) store.delete(key);
+              }
+            }),
+          openCursor: () => {
+            // Read lazily: the cursor sees writes queued earlier in the same transaction.
+            let keys: Array<string> | undefined;
+            let position = 0;
+            const req = Object.assign(new EventTarget(), {
+              result: null as unknown,
+              error: null,
+            });
+            const step = () => {
+              pending += 1;
+              queueMicrotask(() => {
+                keys ??= [...store.keys()].toSorted();
+                const key = keys[position++];
+                req.result =
+                  key === undefined ? null : { key, value: store.get(key), continue: step };
+                req.dispatchEvent(new Event("success"));
+                pending -= 1;
+                settle();
+              });
+            };
+            step();
+            return req;
+          },
+        };
+      };
+      return Object.assign(transaction, { objectStore });
+    },
+  }) as unknown as IDBDatabase;
+  const open = vi.fn(() => {
+    const req = Object.assign(new EventTarget(), { result: database, error: null });
+    queueMicrotask(() => req.dispatchEvent(new Event("success")));
+    return req;
+  });
+  vi.stubGlobal("window", {});
+  vi.stubGlobal("indexedDB", { open });
+  vi.stubGlobal("IDBKeyRange", {
+    bound: (lower: string, upper: string) => ({ lower, upper }),
+  });
+  return { thread: storeFor("thread"), index: storeFor("thread-index") };
+}
+
+function stubIdleCallbacks(mode: "immediate" | "manual") {
+  const queued: Array<() => void> = [];
+  let onQueued: (() => void) | undefined;
+  vi.stubGlobal("requestIdleCallback", (callback: () => void) => {
+    if (mode === "immediate") {
+      callback();
+    } else {
+      queued.push(callback);
+      onQueued?.();
+    }
+    return queued.length;
+  });
+  vi.stubGlobal("cancelIdleCallback", () => {});
+  return {
+    nextQueued: () =>
+      new Promise<void>((resolve) => {
+        onQueued = resolve;
+      }),
+    flush: () => queued.splice(0).forEach((callback) => callback()),
+  };
+}
+
+const threadSnapshot = (id: string, title = "Thread") => {
+  const fixture = makeThreadProjectionFixture();
+  const threadId = ThreadId.make(id);
+  return {
+    snapshotSequence: 1,
+    projection: {
+      ...fixture,
+      thread: {
+        ...fixture.thread,
+        id: threadId,
+        title,
+        lineage: { ...fixture.thread.lineage, rootThreadId: threadId },
+      },
+    },
+  };
+};
+
+describe("thread snapshot cache bounds", () => {
+  const environmentId = EnvironmentId.make("env-cache");
+
+  it.effect("keeps only the most recently used threads", () =>
+    Effect.gen(function* () {
+      const stored = makeFakeThreadDatabase();
+      stubIdleCallbacks("immediate");
+
+      yield* Effect.gen(function* () {
+        const cache = yield* Persistence.EnvironmentCacheStore;
+        for (let i = 0; i < 8; i++) {
+          yield* cache.saveThread(environmentId, threadSnapshot(`thread-${i}`));
+          yield* TestClock.adjust("1 millis");
+        }
+        // Opening thread-0 again makes it the newest, so thread-1 is the next to go.
+        const reopened = yield* cache.loadThread(environmentId, ThreadId.make("thread-0"));
+        expect(Option.isSome(reopened)).toBe(true);
+        yield* TestClock.adjust("1 millis");
+        yield* cache.saveThread(environmentId, threadSnapshot("thread-8"));
+        yield* TestClock.adjust("1 millis");
+        yield* cache.saveThread(environmentId, threadSnapshot("thread-9"));
+
+        const kept = [0, 3, 4, 5, 6, 7, 8, 9].map((i) => `env-cache:thread-${i}`);
+        expect([...stored.thread.keys()].toSorted()).toEqual(kept.toSorted());
+        expect([...stored.index.keys()].toSorted()).toEqual(kept.toSorted());
+      }).pipe(Effect.provide(ConnectionStorage.layer));
+    }),
+  );
+
+  it.effect("does not cache a thread over the size cap and drops its older copy", () =>
+    Effect.gen(function* () {
+      const stored = makeFakeThreadDatabase();
+      stubIdleCallbacks("immediate");
+
+      yield* Effect.gen(function* () {
+        const cache = yield* Persistence.EnvironmentCacheStore;
+        yield* cache.saveThread(environmentId, threadSnapshot("big"));
+        expect(stored.thread.size).toBe(1);
+
+        yield* cache.saveThread(
+          environmentId,
+          threadSnapshot("big", "x".repeat(THREAD_CACHE_MAX_ENTRY_CHARS)),
+        );
+
+        expect(stored.thread.size).toBe(0);
+        expect(stored.index.size).toBe(0);
+        const loaded = yield* cache.loadThread(environmentId, ThreadId.make("big"));
+        expect(Option.isNone(loaded)).toBe(true);
+      }).pipe(Effect.provide(ConnectionStorage.layer));
+    }),
+  );
+
+  it.effect("writes a pending save only once the idle callback runs", () =>
+    Effect.gen(function* () {
+      const stored = makeFakeThreadDatabase();
+      const idle = stubIdleCallbacks("manual");
+
+      yield* Effect.gen(function* () {
+        const cache = yield* Persistence.EnvironmentCacheStore;
+        const queued = idle.nextQueued();
+        const save = yield* cache
+          .saveThread(environmentId, threadSnapshot("closing"))
+          .pipe(Effect.forkChild);
+        yield* Effect.promise(() => queued);
+        expect(stored.thread.size).toBe(0);
+
+        idle.flush();
+        yield* Fiber.join(save);
+
+        expect([...stored.thread.keys()]).toEqual(["env-cache:closing"]);
+      }).pipe(Effect.provide(ConnectionStorage.layer));
+    }),
+  );
+
+  it.effect("lets a delete cancel a save that is still waiting for idle time", () =>
+    Effect.gen(function* () {
+      const stored = makeFakeThreadDatabase();
+      const idle = stubIdleCallbacks("manual");
+
+      yield* Effect.gen(function* () {
+        const cache = yield* Persistence.EnvironmentCacheStore;
+        const queued = idle.nextQueued();
+        const save = yield* cache
+          .saveThread(environmentId, threadSnapshot("closing"))
+          .pipe(Effect.forkChild);
+        yield* Effect.promise(() => queued);
+
+        yield* cache.removeThread(environmentId, ThreadId.make("closing"));
+        idle.flush();
+        yield* Fiber.join(save);
+
+        expect(stored.thread.size).toBe(0);
+        expect(stored.index.size).toBe(0);
+      }).pipe(Effect.provide(ConnectionStorage.layer));
+    }),
+  );
+
+  it.effect("clears one environment's threads and index entries", () =>
+    Effect.gen(function* () {
+      const stored = makeFakeThreadDatabase();
+      stubIdleCallbacks("immediate");
+
+      yield* Effect.gen(function* () {
+        const cache = yield* Persistence.EnvironmentCacheStore;
+        yield* cache.saveThread(environmentId, threadSnapshot("a"));
+        yield* cache.saveThread(EnvironmentId.make("env-other"), threadSnapshot("b"));
+
+        yield* cache.clear(environmentId);
+
+        expect([...stored.thread.keys()]).toEqual(["env-other:b"]);
+        expect([...stored.index.keys()]).toEqual(["env-other:b"]);
+      }).pipe(Effect.provide(ConnectionStorage.layer));
+    }),
   );
 });

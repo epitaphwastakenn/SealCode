@@ -397,9 +397,11 @@ function errorReport(error: unknown, pathname: string): string {
 }
 
 function AuthenticatedTracingBootstrap() {
+  const exportRequested =
+    useAtomValue(primaryServerConfigAtom)?.observability.otlpTracesEnabled === true;
   useEffect(() => {
-    void configureClientTracing();
-  }, []);
+    void configureClientTracing({ exportRequested });
+  }, [exportRequested]);
 
   return null;
 }

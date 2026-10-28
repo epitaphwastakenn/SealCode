@@ -22,6 +22,12 @@ window.addEventListener("vite:preloadError", (event) => {
 
 const app = <AppRoot router={router} />;
 
+// The root route awaits the auth request before the router touches any route chunk. Start the
+// matched routes' chunks now so they load while that request is in flight.
+for (const route of router.getMatchedRoutes(router.latestLocation.pathname).matchedRoutes) {
+  void router.loadRouteChunk(route)?.catch(() => undefined);
+}
+
 export const startup = router
   .load()
   .then(() => {

@@ -14,7 +14,9 @@ import * as PrimaryEnvironmentHttpLayer from "../environments/primary/httpLayer"
 import { isElectron } from "../env";
 import { APP_VERSION } from "~/branding";
 
-const DEFAULT_EXPORT_INTERVAL_MS = 1_000;
+const DEFAULT_EXPORT_INTERVAL_MS = 10_000;
+// A full batch is sent right away, so a burst of spans never sits in memory until the next tick.
+const MAX_EXPORT_BATCH_SIZE = 200;
 interface NavigatorUserAgentData {
   readonly platform: string;
   readonly mobile: boolean;
@@ -76,10 +78,20 @@ let pendingConfiguration = Promise.resolve();
 
 export interface ClientTracingConfig {
   readonly exportIntervalMs?: number;
+  /** The server has an OpenTelemetry trace export configured. */
+  readonly exportRequested?: boolean;
 }
 
+// Spans cost memory and a periodic request, so only dev builds and users who configured an
+// OpenTelemetry trace export pay for them.
+const isTracingWanted = (config: ClientTracingConfig) =>
+  RELEASE_CHANNEL === "dev" || config.exportRequested === true;
+
 export function configureClientTracing(config: ClientTracingConfig = {}): Promise<void> {
-  if (config.exportIntervalMs === undefined && activeConfigKey !== null) {
+  if (
+    config.exportIntervalMs === undefined &&
+    isTracingWanted(config) === (activeConfigKey !== null)
+  ) {
     return pendingConfiguration;
   }
   pendingConfiguration = pendingConfiguration.finally(() => applyClientTracingConfig(config));
@@ -87,6 +99,10 @@ export function configureClientTracing(config: ClientTracingConfig = {}): Promis
 }
 
 async function applyClientTracingConfig(config: ClientTracingConfig): Promise<void> {
+  if (!isTracingWanted(config)) {
+    await stopClientTracing();
+    return;
+  }
   const otlpTracesUrl = resolvePrimaryEnvironmentHttpUrl("/api/observability/v1/traces");
   const exportIntervalMs = Math.max(10, config.exportIntervalMs ?? DEFAULT_EXPORT_INTERVAL_MS);
   const nextConfigKey = `${otlpTracesUrl}|${exportIntervalMs}`;
@@ -116,6 +132,7 @@ async function applyClientTracingConfig(config: ClientTracingConfig): Promise<vo
         OtlpTracer.make({
           url: otlpTracesUrl,
           exportInterval: `${exportIntervalMs} millis`,
+          maxBatchSize: MAX_EXPORT_BATCH_SIZE,
           resource: CLIENT_TRACING_RESOURCE,
         }),
       ),
@@ -146,6 +163,17 @@ async function applyClientTracingConfig(config: ClientTracingConfig): Promise<vo
   ClientTracer.setDelegate(delegateResult.value);
   activeRuntime = runtime;
   activeScope = scope;
+}
+
+async function stopClientTracing(): Promise<void> {
+  activeConfigKey = null;
+  configurationGeneration += 1;
+  const previousRuntime = activeRuntime;
+  const previousScope = activeScope;
+  ClientTracer.setDelegate(null);
+  activeRuntime = null;
+  activeScope = null;
+  await disposeTracerRuntime(previousRuntime, previousScope);
 }
 
 async function disposeTracerRuntime(

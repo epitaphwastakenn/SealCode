@@ -4,7 +4,7 @@ import {
   scopedThreadKey,
   scopeThreadRef,
 } from "@t3tools/client-runtime/environment";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useComposerDraftStore } from "../../composerDraftStore";
 import type { TerminalContextSelection } from "../../lib/terminalContext";
@@ -15,10 +15,14 @@ import {
   MAX_HIDDEN_MOUNTED_TERMINAL_THREADS,
   reconcileMountedTerminalThreadIds,
 } from "../ChatView.logic";
-import {
-  PersistentThreadTerminalDrawer,
-  type PersistentTerminalLaunchContext,
-} from "../PersistentThreadTerminals";
+import type { PersistentTerminalLaunchContext } from "../PersistentThreadTerminals";
+
+// The terminal runtime loads when a drawer first mounts, not with every chat view.
+const PersistentThreadTerminalDrawer = lazy(() =>
+  import("../PersistentThreadTerminals").then((module) => ({
+    default: module.PersistentThreadTerminalDrawer,
+  })),
+);
 
 interface ChatTerminalDrawersProps {
   readonly activeThreadKey: string | null;
@@ -89,19 +93,20 @@ export function ChatTerminalDrawers(props: ChatTerminalDrawersProps) {
   });
 
   return mountedTerminalThreadRefs.map(({ key: mountedThreadKey, threadRef: mountedThreadRef }) => (
-    <PersistentThreadTerminalDrawer
-      key={mountedThreadKey}
-      threadRef={mountedThreadRef}
-      threadId={mountedThreadRef.threadId}
-      active={mountedThreadKey === activeThreadKey}
-      composerHeight={mountedThreadKey === activeThreadKey ? props.composerHeight : 0}
-      launchContext={mountedThreadKey === activeThreadKey ? props.launchContext : null}
-      splitShortcutLabel={props.splitShortcutLabel}
-      splitVerticalShortcutLabel={props.splitVerticalShortcutLabel}
-      newShortcutLabel={props.newShortcutLabel}
-      closeShortcutLabel={props.closeShortcutLabel}
-      keybindings={props.keybindings}
-      onAddTerminalContext={props.onAddTerminalContext}
-    />
+    <Suspense key={mountedThreadKey} fallback={null}>
+      <PersistentThreadTerminalDrawer
+        threadRef={mountedThreadRef}
+        threadId={mountedThreadRef.threadId}
+        active={mountedThreadKey === activeThreadKey}
+        composerHeight={mountedThreadKey === activeThreadKey ? props.composerHeight : 0}
+        launchContext={mountedThreadKey === activeThreadKey ? props.launchContext : null}
+        splitShortcutLabel={props.splitShortcutLabel}
+        splitVerticalShortcutLabel={props.splitVerticalShortcutLabel}
+        newShortcutLabel={props.newShortcutLabel}
+        closeShortcutLabel={props.closeShortcutLabel}
+        keybindings={props.keybindings}
+        onAddTerminalContext={props.onAddTerminalContext}
+      />
+    </Suspense>
   ));
 }

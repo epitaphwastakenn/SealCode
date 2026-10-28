@@ -1,6 +1,6 @@
 # Dev container
 
-> For maintainers. Using T3 Code? See [docs/user](../user/).
+> For maintainers. Using SealCode? See [docs/user](../user/).
 
 `.devcontainer/` gives you a ready-to-code Linux environment matching CI: Ubuntu 24.04, Node 26, pnpm, Rust stable, the global `vp` CLI, and the GitHub CLI. Open the repo in VS Code and "Reopen in Container", or create a GitHub Codespace. Dependency install (`vp i`), the Electron exec-bit repair, and the Vite dep-cache warmup all run automatically before you attach.
 
@@ -20,7 +20,6 @@ Two named volumes keep rebuilds fast and installs off the slow macOS/Windows bin
 ## Out of scope
 
 - Windowed Electron development is host-only. Building and verifying the desktop bundle works fine in the container (CI does exactly that, headless); launching the app needs a display.
-- Mobile native builds are host-only (Xcode for iOS, Android SDK for Android). Typecheck, lint, and the mobile static checks run fine.
 - `vp run dev --share` needs a tailscale binary and a tailnet; not provisioned here.
 
 ## Prebuilds

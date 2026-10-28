@@ -1,6 +1,6 @@
 # Architecture
 
-T3 Code keeps execution in the environment that owns the workspace. Web, desktop, and mobile
+SealCode keeps execution in the environment that owns the workspace. Web and desktop
 clients control it over authenticated RPC. A remote client must never substitute its own filesystem,
 provider credentials, or machine state for the environment's. The desktop app bundles a server,
 but its renderer follows the same boundary.
@@ -10,7 +10,7 @@ but its renderer follows the same boundary.
 Provider processes, terminals, Git, and project files belong to the server. Shared connection and
 domain state belongs in `packages/client-runtime`; clients supply platform services and UI.
 Keeping that logic shared prevents reconnect and multi-environment behavior from diverging between
-web and mobile. See [connection runtime](./connection-runtime.md) and
+web and desktop. See [connection runtime](./connection-runtime.md) and
 [remote environments](./remote.md).
 
 The [RPC contract](../../packages/contracts/src/rpc.ts) is the boundary between independently
@@ -20,7 +20,7 @@ method on it. See [environment auth](./environment-auth.md).
 
 ### Pull request linking compatibility
 
-Web, desktop, mobile, and environments upgrade independently. Negotiate linking through the
+Web, desktop, and environments upgrade independently. Negotiate linking through the
 environment descriptor, never through a client version or an assumed coordinated release:
 
 | Environment capability                | Client behavior                                                                                                   |
@@ -87,7 +87,7 @@ must reject that operation before changing the filesystem.
 Thread settlement is server-owned. The
 [settlement service](../../apps/server/src/orchestration-v2/ThreadSettlementService.ts) evaluates PR
 and inactivity settings without a connected client. Merge notifications invalidate cached PR state
-and trigger a check. A merge outside T3, such as an agent running `gh pr merge`, sends no
+and trigger a check. A merge outside SealCode, such as an agent running `gh pr merge`, sends no
 notification, so the [PR sync reactor](../../apps/server/src/orchestration-v2/PullRequestSyncReactor.ts)
 re-reads a thread's open links when a run that ran a merge or close command ends. Each forge's
 definition names its CLI's commands in `changeRequestCloseCommand`. The guarded

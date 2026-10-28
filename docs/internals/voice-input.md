@@ -2,8 +2,8 @@
 
 Transcription edits a composer draft. It does not submit an agent turn. Audio is
 temporary client input, and only normal message submission sends the resulting
-text. Mobile transcribes locally on supported iOS devices. The web and desktop
-composer can instead send a short WAV clip to the environment, which forwards it to a
+text. The web and desktop
+composer send a short WAV clip to the environment, which forwards it to a
 speech-to-text API (`voice.transcribe`; see [Speech to text](../user/speech-to-text.md)).
 
 The [shared controller](../../packages/client-runtime/src/voice-input/controller.ts)

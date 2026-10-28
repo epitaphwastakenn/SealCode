@@ -12,10 +12,10 @@ session or catalog state. For a new driver, start with [adding a provider](./add
 ## Process and account isolation
 
 The `opencode` driver probes the installed version and runs the 1.x or 2.x runtime. OpenCode's MCP
-registrations are directory-scoped, while T3's MCP connection is thread-scoped, so threads in one
-directory must not share one T3 MCP entry.
+registrations are directory-scoped, while SealCode's MCP connection is thread-scoped, so threads in one
+directory must not share one SealCode MCP entry.
 
-- **1.x** uses one T3-managed chat server per thread, so threads cannot replace each other's
+- **1.x** uses one SealCode-managed chat server per thread, so threads cannot replace each other's
   connection. Catalog and text-generation work can share the
   [instance-owned helper](../../packages/provider-opencode/src/server/OpenCodeServerOwner.ts), which closes
   after an idle period. See the [1.x adapter](../../packages/provider-opencode/src/server/adapter.ts).
@@ -27,10 +27,10 @@ directory must not share one T3 MCP entry.
 External OpenCode servers remain externally owned and can require an external restart to pick up
 configuration changes. OpenCode stores "always" approval grants for the whole project. Automatic
 full-access replies use `once` so they cannot widen a supervised thread's permissions on a shared
-server. On 2.x, a session-wide approval also replies `once` and becomes T3's own rule on that session.
+server. On 2.x, a session-wide approval also replies `once` and becomes SealCode's own rule on that session.
 
 Pi runs the user's own `pi` install in RPC mode and owns native extension, package, and project
-trust discovery. T3 injects only its namespaced MCP bridge, so a Pi session behaves as it does in
+trust discovery. SealCode injects only its namespaced MCP bridge, so a Pi session behaves as it does in
 the Pi TUI. Pi session files back native resume, rollback, and same-instance thread forks.
 Forks use Pi's CLI in the destination directory because RPC session switching retains the source
 session's cwd. Provider switches still use portable handoff summaries.
@@ -64,7 +64,7 @@ session creation for this reason. Antigravity likewise reserves authenticated ca
 explicit setup or model refresh; background checks use initialization only.
 
 [Antigravity sign-in](../../apps/server/src/provider/AntigravityAuth.ts) belongs to the initiating
-T3 auth session. The client carries the return URL back to the environment because the provider's
+SealCode auth session. The client carries the return URL back to the environment because the provider's
 loopback listener may be on another machine. Forward only the callback for the owned pending flow;
 a successful callback HTTP request is not proof that provider authentication finished. The native
 process owns token exchange and storage.
@@ -114,7 +114,7 @@ Codex async questions arrive as notifications and are answered with a new user m
 no pending RPC response to send. The
 [adapter](../../apps/server/src/orchestration-v2/Adapters/CodexAdapterV2.ts) persists them as
 `user_input_request` turn items and runtime requests with `responseCapability: { type: "message" }`.
-Their execution nodes do not block the run. Web, desktop, and mobile use their normal question
+Their execution nodes do not block the run. Web and desktop use their normal question
 panels, and requests remain pending after a turn finishes, a provider exits, or the server restarts.
 
 `runtime-request.respond` reads the persisted request and question item, validates required
@@ -162,7 +162,7 @@ before redaction and serialization, so logging a large response does not require
 copies. These limits apply to diagnostics; provider event handling is unchanged.
 
 Codex resumes with metadata-only reads when it needs a thread's identity and update time. Its
-initialization capabilities opt out of `turn/diff/updated`: T3 derives diffs from checkpoints.
+initialization capabilities opt out of `turn/diff/updated`: SealCode derives diffs from checkpoints.
 The logger filters those notifications before traversal when an older provider still sends them.
 
 Model classification has its own [manifest constraints](./model-manifest.md). Assistant-reference

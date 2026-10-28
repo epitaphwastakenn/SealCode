@@ -7,10 +7,10 @@ real provider CLI credentials and consumes model usage:
 node apps/server/scripts/verify-background-live.ts --repeat 2
 ```
 
-Each scenario starts the production server in a fresh temporary T3 home and Git
+Each scenario starts the production server in a fresh temporary SealCode home and Git
 project. It connects through authenticated HTTP and the same typed WebSocket RPC
 contract as clients. There are no substituted adapters, in-memory databases, or
-seeded projection rows. Existing T3 environments are not modified.
+seeded projection rows. Existing SealCode environments are not modified.
 
 The scenarios exercise delegated completion after the parent ends its turn,
 delivery into an active foreground command, native background-command wake-up,
@@ -45,7 +45,7 @@ Each run prints its evidence directory. It retains the SQLite database, native
 provider logs, streamed events, final projection, prompt, revision and dirty-file
 inventory, and machine-readable verdict. Suite reports link every attempt,
 including failures; repeating a test does not erase an earlier failure. Evidence
-is local and may contain provider output. Do not upload the entire T3 home.
+is local and may contain provider output. Do not upload the entire SealCode home.
 
 This loop does not verify rendered folding, mobile UI, cancellation, or abrupt
 process loss between provider acceptance and receipt persistence. Those require

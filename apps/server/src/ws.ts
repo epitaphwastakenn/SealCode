@@ -544,7 +544,7 @@ const PROVIDER_STATUS_DEBOUNCE_MS = 200;
 
 // Middleware added later wraps middleware added earlier, so instrumentation wraps authorization.
 const ServerWsRpcGroup = WsRpcGroup.middleware(RpcInstrumentation);
-// SealCode's own methods are served by layerSealCodeWsRpc; the core group holds the rest.
+// Harp's own methods are served by layerSealCodeWsRpc; the core group holds the rest.
 const ServerWsCoreRpcGroup = WsCoreRpcGroup.middleware(RpcInstrumentation);
 const ServerSealCodeWsRpcGroup = SealCodeWsRpcGroup.middleware(RpcInstrumentation);
 
@@ -1147,7 +1147,7 @@ export const subscribeOrchestrationV2Shell = Effect.fn("ws.orchestrationV2.subsc
   },
 );
 
-// SealCode's own methods, served from SealCodeWsRpcGroup beside the core handlers.
+// Harp's own methods, served from SealCodeWsRpcGroup beside the core handlers.
 const layerSealCodeWsRpc = ServerSealCodeWsRpcGroup.toLayer(
   Effect.gen(function* () {
     const projectDiffIndex = yield* ProjectDiffIndex.ProjectDiffIndex;
@@ -1489,7 +1489,7 @@ const layerWsCoreRpc = (
               if (racedImport !== null) return { threadId, imported: false } as const;
               return yield* new AcpRegistryOperationError({
                 reason: "session_import_failed",
-                message: "Could not create a SealCode thread for the ACP session.",
+                message: "Could not create a Harp thread for the ACP session.",
                 cause: launched.failure,
               });
             }
@@ -1530,8 +1530,7 @@ const layerWsCoreRpc = (
             if (importedThread !== null) {
               return yield* new AcpRegistryOperationError({
                 reason: "session_delete_failed",
-                message:
-                  "Delete the imported SealCode thread before deleting its native ACP session.",
+                message: "Delete the imported Harp thread before deleting its native ACP session.",
               });
             }
             yield* manager.deleteSession({

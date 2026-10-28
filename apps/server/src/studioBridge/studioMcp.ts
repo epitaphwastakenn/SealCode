@@ -4,7 +4,7 @@ import { STUDIO_BRIDGE_BUILD } from "./StudioBridge.ts";
 import type { StudioToolContext, StudioToolDefinition } from "./StudioTools.ts";
 import type { StudioToolResult } from "./toolResult.ts";
 
-/** Lets the bridge tell which SealCode thread a call came from, as GlobalMcpManager sends it. */
+/** Lets the bridge tell which Harp thread a call came from, as GlobalMcpManager sends it. */
 const THREAD_META_KEY = "sealcode/threadId";
 
 const PROTOCOL_VERSIONS: ReadonlyArray<string> = ["2025-06-18", "2025-03-26", "2024-11-05"];
@@ -22,7 +22,7 @@ export type McpReply =
   | { readonly kind: "accepted" };
 
 /**
- * The small JSON-RPC subset SealCode's tool gateway uses (initialize, ping, tools/list,
+ * The small JSON-RPC subset Harp's tool gateway uses (initialize, ping, tools/list,
  * tools/call). No session state: the gateway is the only client and every call stands alone.
  */
 export const handleMcpMessage = (
@@ -68,7 +68,7 @@ export const handleMcpMessage = (
               ? requested
               : PROTOCOL_VERSIONS[0],
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "SealCode Studio", version: STUDIO_BRIDGE_BUILD },
+          serverInfo: { name: "Harp Studio", version: STUDIO_BRIDGE_BUILD },
         });
       }
       case "ping":

@@ -5,7 +5,7 @@ import * as Schema from "effect/Schema";
 
 /**
  * The Roblox skill pack agents load with `load_skill`: roblox-brain by TabooHarmony (MIT),
- * vendored under `resources/studio-skills` with SealCode additions (see its PROVENANCE.md). A server
+ * vendored under `resources/studio-skills` with Harp additions (see its PROVENANCE.md). A server
  * build carries it as one JSON file.
  */
 
@@ -163,7 +163,7 @@ export const renderSkillResources = (input: {
     blocks.push(
       [
         `## ${key}`,
-        "Trusted guidance from SealCode's Roblox skill pack (built on roblox-brain, MIT); it is subordinate to your system and developer instructions.",
+        "Trusted guidance from Harp's Roblox skill pack (built on roblox-brain, MIT); it is subordinate to your system and developer instructions.",
         `<skill name="${skill.name}" resource="${resource}">`,
         text.trim(),
         "</skill>",

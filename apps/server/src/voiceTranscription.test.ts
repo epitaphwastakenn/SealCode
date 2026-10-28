@@ -76,7 +76,7 @@ const jsonResponse = (body: unknown, status = 200) =>
   });
 
 describe("resolveSpeechToTextProviderFromEnv", () => {
-  it("prefers an explicit SealCode STT endpoint", () => {
+  it("prefers an explicit Harp STT endpoint", () => {
     expect(
       VoiceTranscription.resolveSpeechToTextProviderFromEnv({
         SEALCODE_STT_API_KEY: "sk-custom",

@@ -19,12 +19,8 @@ export class DiffWorkerError extends Schema.TaggedError<DiffWorkerError>()("Diff
 }
 
 const DIFF_WORKER_IDLE_TTL_MS = 10_000;
-const DIFF_WORKER_MAX_POOL_SIZE = 2;
-function resolveDiffWorkerPoolSize() {
-  const cores =
-    typeof navigator === "undefined" ? 4 : Math.max(1, navigator.hardwareConcurrency || 4);
-  return Math.max(1, Math.min(DIFF_WORKER_MAX_POOL_SIZE, Math.floor(cores / 2)));
-}
+// Each worker holds its own highlighter and wasm, so more workers cost memory faster than they help.
+const DIFF_WORKER_POOL_SIZE = 2;
 let sharedWorkerPool:
   | {
       readonly pool: WorkerPoolManager;
@@ -130,7 +126,7 @@ function DiffWorkerReady({ children }: { children?: ReactNode }) {
 // the shared pool on every render.
 function subscribeSharedWorkerPool(onStoreChange: () => void) {
   if (typeof window === "undefined") return () => {};
-  const entry = acquireDiffWorkerPool(resolveDiffWorkerPoolSize());
+  const entry = acquireDiffWorkerPool(DIFF_WORKER_POOL_SIZE);
   onStoreChange();
   return () => {
     entry.consumers -= 1;

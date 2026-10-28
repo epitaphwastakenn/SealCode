@@ -9,6 +9,12 @@ module.exports = {
       if (pkg.name === "@voidzero-dev/vite-plus-core" && pkg.peerDependencies?.typescript) {
         pkg.peerDependencies.typescript = "*";
       }
+      // The web voice preview only uses the browser build. onnxruntime-node alone unpacks ~300 MB
+      // of native binaries per install and would never be loaded.
+      if (pkg.name === "@huggingface/transformers" && pkg.dependencies) {
+        delete pkg.dependencies["onnxruntime-node"];
+        delete pkg.dependencies.sharp;
+      }
       return pkg;
     },
     updateConfig(config) {

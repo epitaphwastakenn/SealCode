@@ -13,8 +13,6 @@
     "start": "vp run --filter t3 start",
     "start:desktop": "vp run --filter @t3tools/desktop start",
     "start:mock-update-server": "node scripts/mock-update-server.ts",
-    "icons:export": "node scripts/export-brand-icons.ts",
-    "icons:check": "node scripts/export-brand-icons.ts --check",
     "licenses:sync": "node scripts/sync-third-party-license-notices.ts",
     "build": "vp run --filter './apps/*' build",
     "build:desktop": "vp run --filter @t3tools/desktop --filter t3 build",

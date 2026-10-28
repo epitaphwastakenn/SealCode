@@ -260,11 +260,11 @@ function FullDiskAccessStep({
   return (
     <>
       <DialogHeader>
-        <DialogTitle>Let SealCode read {source.name}&rsquo;s cookies</DialogTitle>
+        <DialogTitle>Let Harp read {source.name}&rsquo;s cookies</DialogTitle>
         <DialogDescription>
-          To import cookies from {source.name}, SealCode needs Full Disk Access. Turn it on in
-          System Settings, then come back to finish the import. You can revoke it again once the
-          import is done.
+          To import cookies from {source.name}, Harp needs Full Disk Access. Turn it on in System
+          Settings, then come back to finish the import. You can revoke it again once the import is
+          done.
         </DialogDescription>
       </DialogHeader>
       <DialogPanel>
@@ -294,8 +294,8 @@ function FullDiskAccessStep({
         {!permission.isReady(["fullDiskAccess"]) ? (
           <p className="mt-3 text-xs text-muted-foreground">
             {stillRequired
-              ? "Access is still required. Quit and reopen SealCode if you just allowed it, then retry the import."
-              : "If access doesn't update after you allow it, quit and reopen SealCode, then retry the import."}
+              ? "Access is still required. Quit and reopen Harp if you just allowed it, then retry the import."
+              : "If access doesn't update after you allow it, quit and reopen Harp, then retry the import."}
           </p>
         ) : null}
       </DialogPanel>

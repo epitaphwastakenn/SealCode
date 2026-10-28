@@ -155,7 +155,7 @@ const QUIT_CONFIRMATION_MODE_LABELS: Record<QuitConfirmationMode, string> = {
 };
 
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
-// SealCode 1.x ran these helper models on its old orchestrator. V2 has no
+// Harp 1.x ran these helper models on its old orchestrator. V2 has no
 // compaction, curation or delegation hook that reads them, so the rows stay
 // hidden instead of offering settings that change nothing.
 const HARNESS_HELPER_SETTINGS_AVAILABLE = false;
@@ -547,7 +547,7 @@ function AboutVersionSection() {
       />
       <SettingsRow
         {...searchableSetting("whats-new")}
-        description="See what changed in each SealCode release."
+        description="See what changed in each Harp release."
         control={
           <Button size="sm" variant="outline" onClick={() => openWhatsNew()}>
             Show
@@ -2531,7 +2531,7 @@ export function GeneralSettingsPanel() {
         )}
         <SettingsRow
           {...searchableSetting("credits")}
-          description="SealCode is a fork of T3 Code by Theo Browne, Julius Marminge and the T3 Code contributors, released under the MIT license."
+          description="Harp (formerly SealCode) is a fork of T3 Code by Theo Browne, Julius Marminge and the T3 Code contributors, released under the MIT license."
           control={
             <Button
               render={
@@ -2571,7 +2571,7 @@ export function GeneralSettingsPanel() {
         />
         <SettingsRow
           {...searchableSetting("open-source-licenses")}
-          description="Notices for dependencies, assets, and optional tools used by SealCode."
+          description="Notices for dependencies, assets, and optional tools used by Harp."
           control={
             <Button
               render={<Link to="/settings/open-source-licenses" />}

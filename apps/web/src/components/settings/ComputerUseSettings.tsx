@@ -16,7 +16,7 @@ export function ComputerUseSettings() {
   return (
     <SettingsSection
       {...searchableSetting("computer-use")}
-      description="Let agents see the screen and use the mouse and keyboard on this computer. Each app asks for your permission first; browsers stay view only, and terminals and IDEs only take clicks. While the agent works, SealCode shrinks to a small panel in the corner of the screen, and Esc stops it. Applies to new agent sessions."
+      description="Let agents see the screen and use the mouse and keyboard on this computer. Each app asks for your permission first; browsers stay view only, and terminals and IDEs only take clicks. While the agent works, Harp shrinks to a small panel in the corner of the screen, and Esc stops it. Applies to new agent sessions."
     >
       <SettingsRow
         title="Computer use"

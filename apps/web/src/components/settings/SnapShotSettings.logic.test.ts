@@ -81,7 +81,7 @@ it("hides macOS setup only while permissions and the shortcut are all in place",
   const revoked = {
     ...ready,
     macPermissions: { screenRecording: true, accessibility: false },
-    message: "Allow Accessibility in System Settings, then restart SealCode.",
+    message: "Allow Accessibility in System Settings, then restart Harp.",
   };
   expect(snapShotSetupComplete(revoked, true)).toBe(false);
   expect(snapShotStatus(revoked, true)).toBe("Capture needs attention");

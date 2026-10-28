@@ -21,7 +21,7 @@ import { SettingsRow, SettingsSection } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 
 const MODES: ReadonlyArray<{ value: RobloxStudioMode; label: string }> = [
-  { value: "sealcode", label: "SealCode" },
+  { value: "sealcode", label: "Harp" },
   { value: "official", label: "Roblox's own Studio MCP" },
   { value: "off", label: "Off" },
 ];
@@ -75,7 +75,7 @@ function BridgeSummary({ status }: { readonly status: RobloxStudioStatus }) {
   if (bridge === undefined) return null;
   const notices = [
     bridge.pluginUpdated
-      ? "The SealCode Studio plugin was just installed or updated. Open places update themselves in a few seconds; a Studio that was open before SealCode first installed the plugin loads it when its next place opens."
+      ? "The Harp Studio plugin was just installed or updated. Open places update themselves in a few seconds; a Studio that was open before Harp first installed the plugin loads it when its next place opens."
       : undefined,
     bridge.pluginRejected
       ? `A Studio is still running an older plugin (${bridge.pluginRejected}); restart Roblox Studio.`
@@ -175,13 +175,13 @@ export function RobloxStudioSettings() {
   return (
     <SettingsSection
       {...searchableSetting("roblox-studio")}
-      description="Drive Roblox Studio from any agent. SealCode installs its own Studio plugin and keeps it up to date in place. The plugin adds a Studio panel with a switch for every tool, plus safety switches to pause the agent, make the place read-only or stop Luau. Agents can move the camera and send screenshots to the chat, use Creator Store assets and model in Blender."
+      description="Drive Roblox Studio from any agent. Harp installs its own Studio plugin and keeps it up to date in place. The plugin adds a Studio panel with a switch for every tool, plus safety switches to pause the agent, make the place read-only or stop Luau. Agents can move the camera and send screenshots to the chat, use Creator Store assets and model in Blender."
     >
       <SettingsRow
         title="Studio connection"
         description={
           roblox.mode === "sealcode"
-            ? `SealCode Studio connection${status?.bridge?.version ? ` v${status.bridge.version}` : ""}: the plugin, the Studio panel and the tool switches.`
+            ? `Harp Studio connection${status?.bridge?.version ? ` v${status.bridge.version}` : ""}: the plugin, the Studio panel and the tool switches.`
             : roblox.mode === "official"
               ? "Only the MCP server Roblox Studio ships."
               : "Choose how agents reach Roblox Studio."
@@ -237,7 +237,7 @@ export function RobloxStudioSettings() {
             <>
               <SettingsRow
                 title="Studio instructions"
-                description="Gives each new conversation SealCode's rules and Roblox skills for working in Studio."
+                description="Gives each new conversation Harp's rules and Roblox skills for working in Studio."
                 control={
                   <Switch
                     checked={roblox.instructions}
@@ -273,7 +273,7 @@ export function RobloxStudioSettings() {
                 description={
                   status?.officialMcpAvailable === false
                     ? "Roblox Studio's mcp.bat was not found on this machine."
-                    : "Adds Roblox's mesh, texture and material generation beside SealCode's tools."
+                    : "Adds Roblox's mesh, texture and material generation beside Harp's tools."
                 }
                 control={
                   <Switch
@@ -287,7 +287,7 @@ export function RobloxStudioSettings() {
               {roblox.openCloudApiKey.length > 0 ? (
                 <SettingsRow
                   title="Remove the saved Open Cloud key"
-                  description="SealCode no longer uploads with an Open Cloud key: agents ask whether to publish through the Roblox Assistant or let you publish."
+                  description="Harp no longer uploads with an Open Cloud key: agents ask whether to publish through the Roblox Assistant or let you publish."
                   control={
                     <Button
                       type="button"
@@ -362,7 +362,7 @@ export function RobloxStudioSettings() {
               {status.servers.length === 0 ? (
                 <p className="text-xs text-muted-foreground">
                   {roblox.mode === "official" && !status.officialMcpAvailable
-                    ? "Roblox Studio's mcp.bat was not found. Install Roblox Studio, or choose SealCode."
+                    ? "Roblox Studio's mcp.bat was not found. Install Roblox Studio, or choose Harp."
                     : "No Roblox server is running for these settings."}
                 </p>
               ) : (

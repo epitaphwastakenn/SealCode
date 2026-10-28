@@ -134,7 +134,7 @@ function HostedPromptLinkLanding({
         <Alert className="mt-5" variant="error">
           <AlertTitle>This prompt had hidden characters, it may be malicious</AlertTitle>
           <AlertDescription>
-            SealCode removed {prompt.hiddenCharacters} hidden character
+            Harp removed {prompt.hiddenCharacters} hidden character
             {prompt.hiddenCharacters === 1 ? "" : "s"}. Read the prompt before you send it.
           </AlertDescription>
         </Alert>
@@ -155,7 +155,7 @@ function HostedPromptLinkLanding({
           </Button>
         ) : null}
         <Button variant="ghost" render={<a href={DESKTOP_DOWNLOAD_URL} />}>
-          Get SealCode
+          Get Harp
         </Button>
       </div>
       <label className="mt-4 flex items-center gap-2 text-sm text-muted-foreground">

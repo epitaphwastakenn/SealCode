@@ -182,7 +182,7 @@ function ComboboxPopup({
   );
 }
 
-// SealCode model rows: a bordered card that tints violet when selected.
+// Harp model rows: a bordered card that tints violet when selected.
 const COMBOBOX_ITEM_CARD_CLASS =
   "flex min-h-8 cursor-pointer items-center gap-2.5 overflow-hidden rounded-lg border border-transparent px-2.5 py-2 text-base text-foreground/90 outline-none transition-[background-color,border-color,color] duration-150 not-data-disabled:hover:border-border/60 not-data-disabled:hover:bg-muted/60 not-data-disabled:hover:text-foreground data-highlighted:border-border/60 data-highlighted:bg-muted/60 data-selected:border-primary/50 data-selected:bg-linear-to-r data-selected:from-primary/15 data-selected:via-primary/10 data-selected:to-transparent data-selected:text-foreground data-selected:ring-1 data-selected:ring-inset data-selected:ring-primary/20 data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50 sm:text-sm [&_svg]:pointer-events-none [&_svg]:shrink-0";
 

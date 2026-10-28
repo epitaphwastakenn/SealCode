@@ -327,7 +327,7 @@ export function startDesktopUpdateLaunchNotice(): () => void {
         stackedThreadToast({
           type: "error",
           title: "Update did not apply",
-          description: `SealCode is still on ${APP_VERSION}. Install ${notAppliedVersion} again from the update button.`,
+          description: `Harp is still on ${APP_VERSION}. Install ${notAppliedVersion} again from the update button.`,
         }),
       );
     },

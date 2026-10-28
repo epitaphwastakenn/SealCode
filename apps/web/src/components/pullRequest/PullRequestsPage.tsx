@@ -1149,7 +1149,7 @@ export function PullRequestsPage() {
       ) : !pullRequestsSupported ? (
         <PullRequestsUnavailableState
           title="Pull requests unavailable"
-          error="Update your SealCode servers to browse pull requests."
+          error="Update your Harp servers to browse pull requests."
         />
       ) : firstLoad ? (
         <PullRequestListGhost rows={7} caption="Loading pull requests…" />

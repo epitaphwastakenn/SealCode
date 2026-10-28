@@ -641,7 +641,9 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "credits",
     title: "Credits",
     to: "/settings/general",
-    searchTerms: ["about fork upstream t3 code theo browne julius marminge mit license"],
+    searchTerms: [
+      "about fork upstream t3 code theo browne julius marminge mit license formerly sealcode",
+    ],
   },
   {
     id: "whats-new",
@@ -658,7 +660,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "cli-command",
-    title: "SealCode command line",
+    title: "Harp command line",
     to: "/settings/general",
     searchTerms: ["cli terminal shell path install command line"],
     desktopOnly: true,
@@ -852,7 +854,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "pull-request-links-open-in-app",
-    title: "Open pull requests in SealCode",
+    title: "Open pull requests in Harp",
     to: "/settings/integrations",
     searchTerms: [
       `pr links ${SOURCE_CONTROL_HOST_LABELS} browser external click default pull request view panel`,

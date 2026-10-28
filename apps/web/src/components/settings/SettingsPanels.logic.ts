@@ -163,7 +163,7 @@ export function getChangedBrowserSettingLabels(settings: BrowserDefaultSettings)
       ? ["Floating preview"]
       : []),
     ...(settings.pullRequestLinksOpenInApp !== DEFAULT_UNIFIED_SETTINGS.pullRequestLinksOpenInApp
-      ? ["Open pull requests in SealCode"]
+      ? ["Open pull requests in Harp"]
       : []),
   ];
 }

@@ -34,7 +34,7 @@ const layerCliRuntime = Layer.mergeAll(NodeServices.layer, NetService.layer);
 
 export const makeCli = () =>
   Command.make("t3", { ...sharedServerCommandFlags }).pipe(
-    Command.withDescription("Run the SealCode server."),
+    Command.withDescription("Run the Harp server."),
     Command.withHandler(runDefaultServerCommand),
     Command.withSubcommands([
       Command.make("help").pipe(

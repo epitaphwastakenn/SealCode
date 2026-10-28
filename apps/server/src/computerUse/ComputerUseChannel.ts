@@ -36,7 +36,7 @@ export class ComputerUseError extends Schema.TaggedError<ComputerUseError>()("Co
 }) {}
 
 export const COMPUTER_USE_UNAVAILABLE_MESSAGE =
-  "Computer use requires the SealCode desktop app on this computer.";
+  "Computer use requires the Harp desktop app on this computer.";
 const COMPUTER_USE_UNSUPPORTED_MESSAGE = "Computer use is only available on Windows for now.";
 
 const DEFAULT_ACTION_TIMEOUT_MS = 60_000;

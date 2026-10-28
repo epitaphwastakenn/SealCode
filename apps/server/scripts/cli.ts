@@ -98,7 +98,7 @@ const buildCmd = Command.make(
         yield* Effect.logWarning("[cli] Web dist not found. Skipping client bundle.");
       }
 
-      // SealCode's Studio plugin travels as one JSON file; the installer builds the model from it.
+      // Harp's Studio plugin travels as one JSON file; the installer builds the model from it.
       const studioPluginDir = path.join(serverDir, "resources/studio-plugin");
       const studioPluginSources = [];
       for (const entry of (yield* fs.readDirectory(studioPluginDir, {
@@ -142,7 +142,7 @@ const buildCmd = Command.make(
 ).pipe(Command.withDescription("Build the server package (tsdown + bundle web client)."));
 
 const cli = Command.make("cli").pipe(
-  Command.withDescription("SealCode server build CLI."),
+  Command.withDescription("Harp server build CLI."),
   Command.withSubcommands([buildCmd]),
 );
 

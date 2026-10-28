@@ -233,9 +233,7 @@ describe("ProcessDiagnostics", () => {
         pid: CHILD_PID,
         signal: "SIGKILL",
         signaled: false,
-        message: Option.some(
-          `Process ${CHILD_PID} is not a signalable SealCode backend descendant.`,
-        ),
+        message: Option.some(`Process ${CHILD_PID} is not a signalable Harp backend descendant.`),
       });
 
       const diagnostics = yield* Effect.service(ProcessDiagnostics.ProcessDiagnostics).pipe(

@@ -1,4 +1,4 @@
--- SealCode vertical-reel template. LocalScript for StarterPlayerScripts or StarterGui.
+-- Harp vertical-reel template. LocalScript for StarterPlayerScripts or StarterGui.
 -- A crate, case or egg opening: a clipped window shows three cards, a long strip slides down and
 -- decelerates until the winner sits in the middle. Native UI only; the only picture it needs is the glow.
 -- Edit CONFIG and STYLE only. To call it from other scripts, make this a ModuleScript and return `reel`.

@@ -1,4 +1,4 @@
--- SealCode wheel-spin template. LocalScript for StarterPlayerScripts or StarterGui.
+-- Harp wheel-spin template. LocalScript for StarterPlayerScripts or StarterGui.
 -- Native UI only: eight exact 45 degree wedges drawn from gradient triangles, no image art needed.
 -- Edit CONFIG and STYLE only. To call it from other scripts, make this a ModuleScript and return `wheel`.
 

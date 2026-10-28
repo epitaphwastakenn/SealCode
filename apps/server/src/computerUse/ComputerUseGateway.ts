@@ -37,7 +37,7 @@ const agentNameFor = (providerInstanceId: string) =>
 const forbidden = HttpServerResponse.jsonUnsafe(
   {
     error: "computer_use_unavailable",
-    message: "Computer use is only available to agents in a SealCode thread that was granted it.",
+    message: "Computer use is only available to agents in a Harp thread that was granted it.",
   },
   { status: 403 },
 );
@@ -93,7 +93,7 @@ const post = HttpRouter.add(
               ? requested
               : SUPPORTED_PROTOCOL_VERSIONS[0],
           capabilities: { tools: {} },
-          serverInfo: { name: "SealCode Computer Use", version: packageJson.version },
+          serverInfo: { name: "Harp Computer Use", version: packageJson.version },
         });
       }
       case "ping":

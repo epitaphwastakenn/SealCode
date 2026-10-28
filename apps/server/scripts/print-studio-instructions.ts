@@ -1,4 +1,4 @@
-// Prints the system instructions SealCode gives agents in the SealCode Studio mode, for
+// Prints the system instructions Harp gives agents in the Harp Studio mode, for
 // harness comparisons run outside the app: node scripts/print-studio-instructions.ts > out.md
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";

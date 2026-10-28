@@ -53,7 +53,7 @@ export class SqliteStateDatabaseMissingError extends Schema.TaggedError<SqliteSt
   },
 ) {
   override get message(): string {
-    return `Database does not exist at '${this.databasePath}'. Start SealCode once to run migrations.`;
+    return `Database does not exist at '${this.databasePath}'. Start Harp once to run migrations.`;
   }
 }
 
@@ -254,7 +254,7 @@ const t3SqliteStateCommand = Command.make(
       Argument.withDescription("Run a read-only query or a backed-up fixture mutation."),
     ),
     baseDir: Flag.String("base-dir").pipe(
-      Flag.withDescription("Explicit SealCode base directory containing userdata/statev2.sqlite."),
+      Flag.withDescription("Explicit Harp base directory containing userdata/statev2.sqlite."),
     ),
     sql: Flag.String("sql").pipe(
       Flag.optional,
@@ -274,7 +274,7 @@ const t3SqliteStateCommand = Command.make(
     }).pipe(Effect.flatMap(encodeSqliteStateResult), Effect.flatMap(Console.log)),
 ).pipe(
   Command.withDescription(
-    "Inspect or seed an isolated SealCode SQLite database with automatic backups for writes.",
+    "Inspect or seed an isolated Harp SQLite database with automatic backups for writes.",
   ),
 );
 

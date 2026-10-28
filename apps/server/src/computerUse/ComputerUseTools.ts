@@ -65,7 +65,7 @@ export const COMPUTER_USE_TOOLS: ReadonlyArray<ComputerUseToolDefinition> = [
   {
     name: "screenshot",
     description:
-      "Capture the screen. Coordinates for every other tool are pixels in this image. SealCode's own windows never appear in it.",
+      "Capture the screen. Coordinates for every other tool are pixels in this image. Harp's own windows never appear in it.",
     inputSchema: objectSchema({}, []),
     readOnly: true,
   },

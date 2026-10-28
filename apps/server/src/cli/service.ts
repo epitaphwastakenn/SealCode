@@ -63,17 +63,17 @@ function formatServiceChange(
   result: Extract<ServiceReconcileResult, { readonly changed: true }>,
 ): string {
   if (result.plan.handedOff === true) {
-    return `Handed the SealCode service switch to t3@${packageJson.version} to a separate systemd unit, since this session runs inside the service and disconnects when it restarts.\nResult: ${result.plan.logPath}`;
+    return `Handed the Harp service switch to t3@${packageJson.version} to a separate systemd unit, since this session runs inside the service and disconnects when it restarts.\nResult: ${result.plan.logPath}`;
   }
-  return `${result.previouslyInstalled ? "Updated" : "Installed"} SealCode service with t3@${packageJson.version}.\nLogs: ${result.plan.logPath}`;
+  return `${result.previouslyInstalled ? "Updated" : "Installed"} Harp service with t3@${packageJson.version}.\nLogs: ${result.plan.logPath}`;
 }
 
 function formatServiceStatus(status: BootService.BootServiceStatus, cliVersion: string): string {
   if (!status.supported) {
-    return "SealCode service\n  Status: unavailable on this machine\n  Supported on: Linux with systemd, macOS with launchd";
+    return "Harp service\n  Status: unavailable on this machine\n  Supported on: Linux with systemd, macOS with launchd";
   }
   if (!status.installed) {
-    return "SealCode service\n  Status: not installed\n  Next: Run `t3 service install`.";
+    return "Harp service\n  Status: not installed\n  Next: Run `t3 service install`.";
   }
   const installedVersion = status.installedVersion ?? cliVersion;
   const problems = (status.problems ?? []).map(
@@ -85,7 +85,7 @@ function formatServiceStatus(status: BootService.BootServiceStatus, cliVersion: 
     compareExactServiceVersions(status.installedVersion, cliVersion) > 0
   ) {
     return [
-      "SealCode service",
+      "Harp service",
       `  Status: installed · t3@${installedVersion} (newer than this t3@${cliVersion} CLI)`,
       `  Unit: ${status.unitPath}`,
       `  Logs: ${status.logPath}`,
@@ -94,7 +94,7 @@ function formatServiceStatus(status: BootService.BootServiceStatus, cliVersion: 
     ].join("\n");
   }
   return [
-    "SealCode service",
+    "Harp service",
     `  Status: ${status.current ? `installed · t3@${installedVersion}` : "needs an update or repair"}`,
     `  Unit: ${status.unitPath}`,
     `  Logs: ${status.logPath}`,
@@ -121,7 +121,7 @@ const serviceReconcileFlags = {
 };
 
 const serviceInstallCommand = Command.make("install", serviceReconcileFlags).pipe(
-  Command.withDescription("Install SealCode as a background service for this user."),
+  Command.withDescription("Install Harp as a background service for this user."),
   Command.withHandler((flags) =>
     runServiceCommand(
       flags,
@@ -129,7 +129,7 @@ const serviceInstallCommand = Command.make("install", serviceReconcileFlags).pip
         const result = yield* reconcileService({ allowDowngrade: flags.allowDowngrade });
         if (!result.changed) {
           yield* Console.log(
-            `SealCode service is already installed with t3@${packageJson.version} (${yield* resolveEntryPath}).`,
+            `Harp service is already installed with t3@${packageJson.version} (${yield* resolveEntryPath}).`,
           );
           return;
         }
@@ -152,7 +152,7 @@ const serviceUpdateCommand = Command.make("update", serviceReconcileFlags).pipe(
         const result = yield* reconcileService({ allowDowngrade: flags.allowDowngrade });
         if (!result.changed) {
           yield* Console.log(
-            `SealCode service is already using t3@${packageJson.version} (${yield* resolveEntryPath}).`,
+            `Harp service is already using t3@${packageJson.version} (${yield* resolveEntryPath}).`,
           );
           return;
         }
@@ -177,10 +177,10 @@ const serviceRestartCommand = Command.make("restart", projectLocationFlags).pipe
           status.installedVersion === undefined ? "" : ` on t3@${status.installedVersion}`;
         yield* Console.log(
           outcome === "restarted"
-            ? `Restarted the SealCode service${onVersion}.`
+            ? `Restarted the Harp service${onVersion}.`
             : outcome === "queued"
-              ? `Queued a restart of the SealCode service${onVersion}. This session runs inside the service and disconnects when it goes down.\nLogs: ${status.logPath}`
-              : "SealCode service is not installed.",
+              ? `Queued a restart of the Harp service${onVersion}. This session runs inside the service and disconnects when it goes down.\nLogs: ${status.logPath}`
+              : "Harp service is not installed.",
         );
       }),
     ),
@@ -188,7 +188,7 @@ const serviceRestartCommand = Command.make("restart", projectLocationFlags).pipe
 );
 
 const serviceUninstallCommand = Command.make("uninstall", projectLocationFlags).pipe(
-  Command.withDescription("Stop and remove the SealCode background service."),
+  Command.withDescription("Stop and remove the Harp background service."),
   Command.withHandler((flags) =>
     runServiceCommand(
       flags,
@@ -196,7 +196,7 @@ const serviceUninstallCommand = Command.make("uninstall", projectLocationFlags).
         const service = yield* BootService.BootService;
         const removed = yield* service.uninstall;
         yield* Console.log(
-          removed ? "Removed the SealCode service." : "SealCode service is not installed.",
+          removed ? "Removed the Harp service." : "Harp service is not installed.",
         );
       }),
     ),
@@ -204,7 +204,7 @@ const serviceUninstallCommand = Command.make("uninstall", projectLocationFlags).
 );
 
 const serviceStatusCommand = Command.make("status", projectLocationFlags).pipe(
-  Command.withDescription("Show whether the SealCode background service is installed."),
+  Command.withDescription("Show whether the Harp background service is installed."),
   Command.withHandler((flags) =>
     runServiceCommand(
       flags,
@@ -226,7 +226,7 @@ export const offerServiceDuringOnboarding = Effect.gen(function* () {
     return "skipped" as const;
   }
   if (installed && current) {
-    yield* Console.log("SealCode is already set up to run in the background on this machine.");
+    yield* Console.log("Harp is already set up to run in the background on this machine.");
     return "ready" as const;
   }
   for (const problem of status.problems ?? []) {
@@ -246,10 +246,10 @@ export const offerServiceDuringOnboarding = Effect.gen(function* () {
   const wanted = yield* Prompt.run(
     Prompt.Confirm({
       message: installed
-        ? "The installed SealCode service needs an update or repair. Update it now?"
+        ? "The installed Harp service needs an update or repair. Update it now?"
         : platform === "darwin"
-          ? "Run SealCode in the background whenever you log in to this Mac?"
-          : "Run SealCode in the background whenever this machine boots?",
+          ? "Run Harp in the background whenever you log in to this Mac?"
+          : "Run Harp in the background whenever this machine boots?",
       initial: true,
     }),
   );
@@ -297,7 +297,7 @@ export const recoverServiceOnboardingOffer = <R>(
   );
 
 export const serviceCommand = Command.make("service").pipe(
-  Command.withDescription("Manage the SealCode background service."),
+  Command.withDescription("Manage the Harp background service."),
   Command.withSubcommands([
     serviceInstallCommand,
     serviceRestartCommand,

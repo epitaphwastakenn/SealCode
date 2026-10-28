@@ -6,6 +6,7 @@ import { useScratchProject } from "../hooks/useScratchProject";
 import { usePrimaryEnvironmentId } from "../state/environments";
 import { Button } from "./ui/button";
 import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "./ui/empty";
+import { HarpMascot } from "./mascot/HarpMascot";
 import { RouteInset } from "./RouteInset";
 import { WorkspacePageHeader } from "./WorkspacePageHeader";
 
@@ -22,6 +23,7 @@ export function NoProjectsHero() {
         <Empty size="hero" className="flex-1">
           <div className="w-full max-w-lg px-8 py-12">
             <EmptyHeader className="max-w-none">
+              <HarpMascot scene="sleeping" className="mb-6 h-20 w-auto" />
               <EmptyTitle>What should we work on?</EmptyTitle>
               <EmptyDescription>
                 {scratchTargetEnvironmentId === null

@@ -1,6 +1,8 @@
 import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
+  lazy,
+  Suspense,
   useEffect,
   useLayoutEffect,
   useState,
@@ -43,7 +45,6 @@ import {
   usePanelNavigationSuppression,
 } from "../panelAnimations";
 import { BackgroundThreadAnnouncer } from "./BackgroundThreadAnnouncer";
-import LegacyThreadSidebar from "./LegacySidebar";
 import ThreadSidebar from "./Sidebar";
 import { SidebarBrandWidthProbe } from "./sidebar/SidebarChrome";
 import { isAppModalPage } from "./sidebar/mainAppLocation";
@@ -69,6 +70,9 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { registerCommands, registerMenuAction } from "../shortcuts/dispatcher";
 import { resolveThreadRouteRef } from "../threadRoutes";
+
+// Only the legacy-sidebar setting renders it, so the default layout never loads it.
+const LegacyThreadSidebar = lazy(() => import("./LegacySidebar"));
 
 const MACOS_TRAFFIC_LIGHTS_LEFT_INSET = "var(--desktop-window-controls-inset, 90px)";
 
@@ -456,7 +460,9 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           style={windowControlsInsetStyle}
         >
           {legacySidebarEnabled ? (
-            <LegacyThreadSidebar routeReveal={sidebarRouteReveal} />
+            <Suspense fallback={null}>
+              <LegacyThreadSidebar routeReveal={sidebarRouteReveal} />
+            </Suspense>
           ) : (
             <ThreadSidebar routeReveal={sidebarRouteReveal} />
           )}

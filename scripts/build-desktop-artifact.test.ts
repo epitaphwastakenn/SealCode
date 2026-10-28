@@ -1441,6 +1441,26 @@ it.layer(NodeServices.layer)("build-desktop-artifact", (it) => {
     ),
   );
 
+  it.effect(
+    "shows Harp everywhere but keeps the app id and Windows executable existing installs use",
+    () =>
+      Effect.gen(function* () {
+        const windows = (version: string) =>
+          createBuildConfig("win", "nsis", version, false, false, undefined, undefined);
+        const stable = yield* windows("1.2.3");
+        const nightly = yield* windows("1.2.3-nightly.20260101.1");
+
+        // The NSIS installer finds the install and its update key through the app id.
+        assert.equal(stable.appId, "com.sealcode.app");
+        assert.equal(stable.productName, "Harp (Alpha)");
+        assert.equal(nightly.productName, "Harp (Nightly)");
+        assert.equal(stable.artifactName, "Harp-${version}-${arch}.${ext}");
+        // Pins, login items and the t3 launcher point at the old file name, so it stays.
+        assert.equal((stable.win as Record<string, unknown>).executableName, "SealCode (Alpha)");
+        assert.equal((nightly.win as Record<string, unknown>).executableName, "SealCode (Nightly)");
+      }),
+  );
+
   it("parses Windows bsdtar member listings with CRLF line endings", () => {
     assert.deepStrictEqual(
       parseWslRuntimeArchiveMembers("./t3-1.2.3-linux-x64/t3\r\nt3-1.2.3-linux-x64/client/\r\n"),

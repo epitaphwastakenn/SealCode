@@ -31,7 +31,7 @@ const environmentInput = {
 
 const layerElectronApp = Layer.succeed(ElectronApp.ElectronApp, {
   metadata: Effect.die("unexpected metadata read"),
-  name: Effect.succeed("SealCode"),
+  name: Effect.succeed("Harp"),
   systemLocale: Effect.succeed("en-US"),
   whenReady: Effect.void,
   requestSingleInstanceLock: Effect.succeed(true),

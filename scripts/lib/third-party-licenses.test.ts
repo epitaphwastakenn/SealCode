@@ -117,7 +117,7 @@ describe("third-party license generation", () => {
             {
               licenseId: "MIT",
               copyrights: ["Copyright (c) 2026 Example Author"],
-              preamble: ["Adapted for SealCode."],
+              preamble: ["Adapted for Harp."],
             },
           ],
           bundles: ["assets", "web"],
@@ -132,7 +132,7 @@ describe("third-party license generation", () => {
     });
 
     expect(manifest.entries.find((entry) => entry.name === "generated-asset")?.noticeText).toBe(
-      "Adapted for SealCode.\n\nMIT License\n\nCopyright (c) 2026 Example Author\n\nPermission text",
+      "Adapted for Harp.\n\nMIT License\n\nCopyright (c) 2026 Example Author\n\nPermission text",
     );
   });
 

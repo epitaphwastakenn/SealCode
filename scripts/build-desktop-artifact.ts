@@ -2288,10 +2288,20 @@ export function resolvePackageManagerUserAgent(packageManager: string): string {
   return `${trimmed.slice(0, versionSeparator)}/${trimmed.slice(versionSeparator + 1)}`;
 }
 
-export function resolveDesktopProductName(version: string): string {
+function resolveDesktopProductName(version: string): string {
+  return resolveDesktopUpdateChannel(version) === "nightly"
+    ? "Harp (Nightly)"
+    : (desktopPackageJson.productName ?? "Harp");
+}
+
+// Installs from before the Harp rename hold SealCode (Alpha).exe. The NSIS update renames the Start
+// menu and desktop shortcuts in place only while the new executable has the old file name, and
+// taskbar pins, login items, firewall rules and the `t3` launcher all point at that path. People
+// see the product name (shortcut, Apps list, window, Task Manager), not this file name.
+export function resolveWindowsExecutableName(version: string): string {
   return resolveDesktopUpdateChannel(version) === "nightly"
     ? "SealCode (Nightly)"
-    : (desktopPackageJson.productName ?? "SealCode");
+    : "SealCode (Alpha)";
 }
 
 export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
@@ -2313,7 +2323,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
   const buildConfig: Record<string, unknown> = {
     appId: DESKTOP_APP_ID,
     productName: resolveDesktopProductName(version),
-    artifactName: "SealCode-${version}-${arch}.${ext}",
+    artifactName: "Harp-${version}-${arch}.${ext}",
     electronLanguages: [...DESKTOP_ELECTRON_LANGUAGES],
     files: [
       ...DESKTOP_FILE_EXCLUSIONS,
@@ -2360,13 +2370,13 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
         // macOS 26 offers Messages/Mail codes in every text field unless opted out.
         NSAutoFillRequiresTextContentTypeForOneTimeCodeOnMac: true,
         NSLocalNetworkUsageDescription:
-          "SealCode connects to devices on your local network for remote environments and commands run by terminals and coding agents.",
+          "Harp connects to devices on your local network for remote environments and commands run by terminals and coding agents.",
         NSScreenCaptureUsageDescription:
-          "SealCode captures the active window when you use the window capture shortcut.",
+          "Harp captures the active window when you use the window capture shortcut.",
         NSCameraUsageDescription:
-          "SealCode lets commands run by terminals and coding agents use the camera.",
+          "Harp lets commands run by terminals and coding agents use the camera.",
         NSMicrophoneUsageDescription:
-          "SealCode lets commands run by terminals and coding agents use the microphone.",
+          "Harp lets commands run by terminals and coding agents use the microphone.",
         // macOS lists an app under Default web browser only when it opens web
         // pages as documents as well as http and https links (see protocols).
         CFBundleDocumentTypes: [
@@ -2380,7 +2390,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
       },
       protocols: [
         {
-          name: "SealCode",
+          name: "Harp",
           schemes: ["sealcode", "sealcode-dev", "t3code", "t3code-dev"],
         },
         {
@@ -2427,6 +2437,7 @@ export const createBuildConfig = Effect.fn("createBuildConfig")(function* (
     const winConfig: Record<string, unknown> = {
       target: [target],
       icon: "icon.ico",
+      executableName: resolveWindowsExecutableName(version),
       // Smart App Control validates unpacked native libraries independently; sign them too.
       signExts: [".node", ".dll"],
       // Resource editing sets product icons even when code signing is disabled.
@@ -3278,10 +3289,10 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     private: true,
     packageManager: rootPackageJson.packageManager,
     description:
-      "SealCode is an open-source desktop app for coding agents. Work with your existing agent subscriptions, review code changes, and run commands in your projects. Connect from desktop or web to continue working remotely.",
+      "Harp is an open-source desktop app for coding agents. Work with your existing agent subscriptions, review code changes, and run commands in your projects. Connect from desktop or web to continue working remotely.",
     license: "MIT",
     homepage: "https://github.com/epitaphwastakenn/SealCode",
-    author: "SealCode contributors",
+    author: "Harp contributors",
     main: "apps/desktop/dist-electron/boot.cjs",
     build: yield* createBuildConfig(
       options.platform,
@@ -3454,7 +3465,7 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
   if (options.platform === "win") {
     yield* validateWindowsPackagedPayload({
       stageDistDir,
-      appExecutableName: `${resolveDesktopProductName(appVersion)}.exe`,
+      appExecutableName: `${resolveWindowsExecutableName(appVersion)}.exe`,
       targetArch: options.arch,
       appVersion,
       expectWslRuntime: bundlesWslRuntime({
@@ -3558,7 +3569,7 @@ const buildDesktopArtifactCli = Command.make("build-desktop-artifact", {
     Flag.optional,
   ),
 }).pipe(
-  Command.withDescription("Build a desktop artifact for SealCode."),
+  Command.withDescription("Build a desktop artifact for Harp."),
   Command.withHandler((input) => Effect.flatMap(resolveBuildOptions(input), buildDesktopArtifact)),
 );
 

@@ -11,7 +11,7 @@ import * as Logger from "effect/Logger";
 import { Command, Flag } from "effect/cli";
 
 import {
-  resolveDesktopProductName,
+  resolveWindowsExecutableName,
   verifyWindowsPackagedRuntime,
 } from "./build-desktop-artifact.ts";
 
@@ -30,7 +30,7 @@ const verifyWindowsDesktopArtifactCli = Command.make("verify-windows-desktop-art
     Effect.gen(function* () {
       yield* verifyWindowsPackagedRuntime({
         packagedAppDir: appDir,
-        appExecutableName: `${resolveDesktopProductName(buildVersion)}.exe`,
+        appExecutableName: `${resolveWindowsExecutableName(buildVersion)}.exe`,
         targetArch: arch,
         verbose,
       });

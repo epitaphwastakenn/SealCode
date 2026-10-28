@@ -1,4 +1,4 @@
-export interface RootStyleSheet {
+interface RootStyleSheet {
   /** Replaces the whole sheet in one write; `null` empties it. */
   readonly set: (css: string | null) => void;
 }

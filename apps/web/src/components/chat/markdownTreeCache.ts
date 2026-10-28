@@ -10,7 +10,7 @@ const WEIGHT_PER_CHARACTER = 60;
 
 const trees = new LRUCache<ReactNode>(MAX_CACHED_TREES, MAX_CACHED_WEIGHT);
 
-export interface MarkdownTreeFlags {
+interface MarkdownTreeFlags {
   readonly lineBreaks: boolean;
   readonly parseRawHtml: boolean;
   readonly math: boolean;

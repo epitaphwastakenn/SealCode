@@ -1613,6 +1613,7 @@ let appliedColors: ThemeColors | null = null;
 
 // Stored theme text lands inside a declaration; keep it from closing that declaration.
 const UNSAFE_CSS_VALUE = /[;{}<>\\]|\/\*|[\r\n]/;
+const BRAND_ACCENT_MIN_CHROMA = 0.05;
 
 /** One rule that sets every palette variable, so the whole palette is a single style write. */
 export function themeColorsToCss(
@@ -1625,6 +1626,12 @@ export function themeColorsToCss(
     if (variable === undefined || typeof value !== "string") continue;
     if (value.trim() === "" || UNSAFE_CSS_VALUE.test(value) || !accepts(value)) continue;
     declarations.push(`${variable}:${value}`);
+  }
+  // Themes with a neutral accent keep Harp's violet from index.css, so the mascot and the
+  // sidebar header art always have a hue.
+  const accent = parseThemeColor(colors.accent);
+  if (accent && accent.alpha === 1 && accent.color.C >= BRAND_ACCENT_MIN_CHROMA) {
+    declarations.push(`--brand-accent:${formatOklchThemeColor(accent.color)}`);
   }
   return `:root{${declarations.join(";")}}`;
 }

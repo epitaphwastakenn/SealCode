@@ -718,7 +718,21 @@ describe("themeColorsToCss", () => {
     expect(css.match(/{/g)).toHaveLength(1);
     expect(css).toContain(`--app-theme-canvas:${colors.canvas}`);
     expect(css).toContain(`--app-theme-chrome:${colors.chrome}`);
-    expect(css.split(";")).toHaveLength(Object.keys(colors).length);
+    expect(css.split(";").filter((part) => !part.startsWith("--brand-accent"))).toHaveLength(
+      Object.keys(colors).length,
+    );
+  });
+
+  it("tints the brand accent from a colorful accent and leaves Harp's violet for neutral ones", () => {
+    const base = getDefaultThemeColors("dark");
+
+    expect(themeColorsToCss({ ...base, accent: "oklch(0.7 0.18 150)" })).toContain(
+      "--brand-accent:oklch(0.7 0.18 150)",
+    );
+    expect(themeColorsToCss({ ...base, accent: "oklch(0.7 0.01 150)" })).not.toContain(
+      "--brand-accent",
+    );
+    expect(themeColorsToCss({ ...base, accent: "#ffffff" })).not.toContain("--brand-accent");
   });
 
   it("drops values that could end the declaration they are written into", () => {

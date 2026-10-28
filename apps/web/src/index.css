@@ -830,27 +830,36 @@ html[data-ui-motion="off"]
     }
   }
 
-  /* The blueprint art takes its hue from the theme's --primary, so every theme, custom ones
-     included, gets a matching tint. Lightness is fixed per appearance, and low on the bottom
-     and mid stops where the header's white wordmark and controls sit, so they stay readable. */
+  /* Harp's violet; a theme whose accent has a hue replaces it (themeColorsToCss). */
+  :root {
+    --brand-accent: oklch(0.53 0.2 285);
+
+    @variant dark {
+      --brand-accent: oklch(0.74 0.15 285);
+    }
+  }
+
+  /* The blueprint art takes its hue from --brand-accent, so every theme, custom ones included,
+     gets a matching tint. Lightness is fixed per appearance, and low on the bottom and mid
+     stops where the header's white wordmark and controls sit, so they stay readable. */
   @supports (color: oklch(from red l c h)) {
     :root {
-      --stage-art-top: oklch(from var(--primary) 0.76 min(c, 0.12) h);
-      --stage-art-mid: oklch(from var(--primary) 0.42 min(c, 0.2) h);
-      --stage-art-bottom: oklch(from var(--primary) 0.3 min(c, 0.2) h);
-      --stage-art-highlight: oklch(from var(--primary) 0.95 min(c, 0.04) h);
-      --stage-art-secondary: oklch(from var(--primary) 0.74 min(c, 0.17) calc(h + 15));
-      --stage-art-tertiary: oklch(from var(--primary) 0.72 min(c, 0.15) calc(h - 20));
-      --stage-art-line: oklch(from var(--primary) 0.92 min(c, 0.06) h);
+      --stage-art-top: oklch(from var(--brand-accent) 0.76 min(c, 0.12) h);
+      --stage-art-mid: oklch(from var(--brand-accent) 0.42 min(c, 0.2) h);
+      --stage-art-bottom: oklch(from var(--brand-accent) 0.3 min(c, 0.2) h);
+      --stage-art-highlight: oklch(from var(--brand-accent) 0.95 min(c, 0.04) h);
+      --stage-art-secondary: oklch(from var(--brand-accent) 0.74 min(c, 0.17) calc(h + 15));
+      --stage-art-tertiary: oklch(from var(--brand-accent) 0.72 min(c, 0.15) calc(h - 20));
+      --stage-art-line: oklch(from var(--brand-accent) 0.92 min(c, 0.06) h);
       --stage-art-celeste-highlight: var(--stage-art-highlight);
       --stage-art-celeste-secondary: var(--stage-art-secondary);
       --stage-art-violet-highlight: var(--stage-art-highlight);
       --stage-art-grid-line: var(--stage-art-line);
 
       @variant dark {
-        --stage-art-top: oklch(from var(--primary) 0.48 min(c, 0.2) h);
-        --stage-art-mid: oklch(from var(--primary) 0.32 min(c, 0.16) h);
-        --stage-art-bottom: oklch(from var(--primary) 0.2 min(c, 0.1) h);
+        --stage-art-top: oklch(from var(--brand-accent) 0.48 min(c, 0.2) h);
+        --stage-art-mid: oklch(from var(--brand-accent) 0.32 min(c, 0.16) h);
+        --stage-art-bottom: oklch(from var(--brand-accent) 0.2 min(c, 0.1) h);
       }
     }
   }

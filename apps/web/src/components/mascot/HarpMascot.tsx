@@ -23,7 +23,7 @@ const SCENE_VIEW_BOXES = {
 } as const satisfies Record<HarpMascotScene, string>;
 
 /**
- * Harp the seal. The body takes `--primary` and the eye the surface behind it; override
+ * Harp the seal. The body takes `--brand-accent` and the eye the surface behind it; override
  * `--harp-mascot-color` and `--harp-mascot-eye` where that surface is not `--background`.
  * Loops run only while the mascot is on screen, and reduced motion keeps the first frame.
  */

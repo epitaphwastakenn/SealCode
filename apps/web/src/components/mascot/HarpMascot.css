@@ -2,7 +2,7 @@
    Loops follow lib/visibleAnimation.ts: they run only while the mascot is on screen,
    and most tick on a stepped clock, so a visible seal costs a few frames a second. */
 [data-harp-mascot] {
-  color: var(--harp-mascot-color, var(--primary));
+  color: var(--harp-mascot-color, var(--brand-accent));
   --harp-mascot-loop: infinite var(--visible-animation-state, paused);
 }
 

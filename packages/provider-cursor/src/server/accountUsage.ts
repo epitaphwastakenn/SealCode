@@ -137,7 +137,7 @@ export const readCursorAccountUsage = Effect.fn("readCursorAccountUsage")(functi
         : typeof credentialSource === "string"
           ? "Cursor credentials could not be read."
           : CursorKeychain.isCursorKeychainTimeoutError(cause)
-            ? "Allow Keychain access on the Mac running SealCode, then refresh."
+            ? "Allow Keychain access on the Mac running Harp, then refresh."
             : "Cursor Keychain credentials could not be read.",
     };
   }

@@ -21,7 +21,7 @@ describe("mcpToolPresentation", () => {
     });
   });
 
-  it("titles SealCode's Studio tools from their arguments, through the global gateway too", () => {
+  it("titles Harp's Studio tools from their arguments, through the global gateway too", () => {
     const studioSource = { key: "mcp:studio", name: "Roblox Studio", kind: "integration" };
     expect(
       mcpToolPresentation({

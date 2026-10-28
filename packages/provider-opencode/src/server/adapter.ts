@@ -963,10 +963,7 @@ export const makeOpenCodeAdapterV2 = Effect.fn("makeOpenCodeAdapterV2")(function
               }),
             ).pipe(
               Effect.catchCause((cause) =>
-                Effect.logWarning(
-                  "Could not add SealCode's global MCP gateway to OpenCode.",
-                  cause,
-                ),
+                Effect.logWarning("Could not add Harp's global MCP gateway to OpenCode.", cause),
               ),
             );
           }

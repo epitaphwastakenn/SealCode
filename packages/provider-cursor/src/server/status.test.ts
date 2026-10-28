@@ -222,12 +222,12 @@ describe("checkCursorProviderStatus", () => {
     {
       authenticationType: "browser" as const,
       message:
-        "Cursor needs a paid plan to run in SealCode. Upgrade this account or sign in with a different one.",
+        "Cursor needs a paid plan to run in Harp. Upgrade this account or sign in with a different one.",
     },
     {
       authenticationType: "api-key" as const,
       message:
-        "Cursor needs a paid plan to run in SealCode. Upgrade the account that owns CURSOR_API_KEY or use a key from a paid account.",
+        "Cursor needs a paid plan to run in Harp. Upgrade the account that owns CURSOR_API_KEY or use a key from a paid account.",
     },
   ])(
     "explains a rejected plan for $authenticationType authentication",

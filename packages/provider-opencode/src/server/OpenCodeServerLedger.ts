@@ -254,7 +254,7 @@ export const make = Effect.fn("OpenCodeServerLedger.make")(function* (input: {
     ) {
       return;
     }
-    yield* Effect.logInfo("Stopping an OpenCode server left by a previous SealCode server", {
+    yield* Effect.logInfo("Stopping an OpenCode server left by a previous Harp server", {
       pid: entry.pgid,
       port: entry.port,
     });

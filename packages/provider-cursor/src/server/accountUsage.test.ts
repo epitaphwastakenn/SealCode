@@ -299,7 +299,7 @@ describe("readCursorAccountUsage", () => {
         accountKey: null,
         records: [],
         missing: false,
-        error: "Allow Keychain access on the Mac running SealCode, then refresh.",
+        error: "Allow Keychain access on the Mac running Harp, then refresh.",
       });
     }).pipe(Effect.provide(NodeServices.layer)),
   );

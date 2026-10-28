@@ -190,7 +190,7 @@ export const makeOpenCodeTextGeneration = Effect.fn("makeOpenCodeTextGeneration"
           try: (signal) =>
             client.session.create(
               {
-                title: `SealCode ${input.operation}`,
+                title: `Harp ${input.operation}`,
                 permission: [{ permission: "*", pattern: "*", action: "deny" }],
               },
               { signal },

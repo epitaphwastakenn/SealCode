@@ -5,7 +5,7 @@ import type {
 } from "@t3tools/contracts";
 
 /**
- * Drivers whose account quota SealCode reports in `subscriptionUsage`. The
+ * Drivers whose account quota Harp reports in `subscriptionUsage`. The
  * others (Claude, Codex) have their own limits view and no extra account data.
  */
 const SUBSCRIPTION_USAGE_DRIVERS: ReadonlySet<string> = new Set([

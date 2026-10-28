@@ -29,7 +29,7 @@ export function normalizeMcpHttpUrl(value: unknown): string | undefined {
   }
 }
 
-/** The MCP server SealCode attaches to proxy the user's configured MCP servers. */
+/** The MCP server Harp attaches to proxy the user's configured MCP servers. */
 const GLOBAL_GATEWAY_SERVER = "sealcode-global";
 
 export function mcpToolPresentation(input: {

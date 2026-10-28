@@ -112,7 +112,7 @@ export function resolvePiLaunchArgs(launchArgs: string): PiLaunchArgsResolution 
     if (reserved !== undefined) {
       return {
         ok: false,
-        message: `Pi launch argument '${reserved}' is controlled by SealCode and cannot be overridden.`,
+        message: `Pi launch argument '${reserved}' is controlled by Harp and cannot be overridden.`,
       };
     }
     if (arg === "--") {
@@ -146,7 +146,7 @@ export function resolvePiLaunchArgs(launchArgs: string): PiLaunchArgsResolution 
       continue;
     }
     if (arg.startsWith("-")) {
-      return { ok: false, message: `Pi launch argument '${arg}' is not supported by SealCode.` };
+      return { ok: false, message: `Pi launch argument '${arg}' is not supported by Harp.` };
     }
     return {
       ok: false,

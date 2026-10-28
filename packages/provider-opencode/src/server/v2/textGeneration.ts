@@ -113,7 +113,7 @@ const runOnServer = Effect.fn("Opencode2TextGeneration.runOnServer")(function* (
     Effect.forkScoped,
   );
   const session = yield* client.session.create({
-    title: `SealCode ${input.operation}`,
+    title: `Harp ${input.operation}`,
     location: Location.PublicRef.make({ directory: AbsolutePath.make(input.cwd) }),
     model: Model.Ref.make({
       providerID: Provider.ID.make(parsed.providerID),

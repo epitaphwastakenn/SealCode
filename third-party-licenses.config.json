@@ -17,7 +17,7 @@
           "licenseId": "MIT",
           "copyrights": ["Copyright (c) 2026 TabooHarmony"],
           "preamble": [
-            "SealCode's Roblox Studio bridge gives agents the roblox-brain skill pack (v2.3.1) under apps/server/resources/studio-skills, with SealCode additions listed in its PROVENANCE.md."
+            "Harp's Roblox Studio bridge gives agents the roblox-brain skill pack (v2.3.1) under apps/server/resources/studio-skills, with Harp additions listed in its PROVENANCE.md."
           ]
         }
       ]

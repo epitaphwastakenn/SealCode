@@ -10,6 +10,20 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.17.15 · 2026-10-28
+
+> See your words while you dictate, take Claude's guess at your next prompt with Tab, and give the sidebar header art a style and color of your own.
+
+### New
+
+- **Live transcription preview** — While a voice note records, the words you say appear dimmed in the composer, like in Claude Code. A Whisper model runs on your GPU inside Harp; it downloads once (about 600 MB) and then loads from disk. The final text still comes from your transcription server, and if that fails, Harp keeps the preview text instead of losing what you said. Turn it off in Settings → General.
+- **Next prompt suggestions** — When a Claude turn ends, Claude's guess at your next message appears dimmed in the empty composer. Press Tab to use it, or just type. It runs inside Claude's own session, so it costs almost nothing. Settings → General can turn it off, or turn it on for other providers through your text generation model, which uses extra quota.
+- **Header art styles and color** — The sidebar header art now comes in Blueprint, Night sky, Waves, Ice floe, Dots, Pixels and Aurora, and follows your theme or a color you pick. Settings → Appearance → Interface.
+
+### Fixed
+
+- **Antigravity terminal window** — On Windows, Antigravity no longer opens a terminal window, and closing such a window no longer ends its turn with an error. Its tools now run hidden in the background.
+
 ## 2.17.14 · 2026-10-28
 
 > SealCode is now Harp, with a new icon and a seal mascot, and Claude Code no longer burns through its 5-hour limit faster in Harp.

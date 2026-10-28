@@ -4,20 +4,17 @@ import { Atom } from "effect/reactivity";
 
 import { readDesktopSecondaryBootstraps } from "./desktopLocal";
 
-const DESKTOP_LOCAL_BOOTSTRAP_POLL_MS = 2_000;
-
 /**
- * The bridge exposes no change event, so this re-reads on an interval while
- * anything reads it; failed reads retain the latest successful snapshot, while
- * a successful empty read clears it. The reader returns the same array while
- * nothing changed, so an unchanged poll notifies no one.
+ * Re-reads when the desktop shell reports a topology change, subscribing before
+ * the first read so no change falls between them. Failed reads retain the latest
+ * successful snapshot, while a successful empty read clears it. The reader
+ * returns the same array while nothing changed, so an unchanged read notifies no one.
  */
-const desktopLocalBootstrapsAtom = Atom.make((get) => {
-  const interval = setInterval(
-    () => get.setSelf(readDesktopSecondaryBootstraps()),
-    DESKTOP_LOCAL_BOOTSTRAP_POLL_MS,
+export const desktopLocalBootstrapsAtom = Atom.make((get) => {
+  const unsubscribe = window.desktopBridge?.onLocalEnvironmentBootstrapsChanged?.(() =>
+    get.setSelf(readDesktopSecondaryBootstraps()),
   );
-  get.addFinalizer(() => clearInterval(interval));
+  get.addFinalizer(() => unsubscribe?.());
   return readDesktopSecondaryBootstraps();
 }).pipe(Atom.withLabel("desktop-local-bootstraps"));
 

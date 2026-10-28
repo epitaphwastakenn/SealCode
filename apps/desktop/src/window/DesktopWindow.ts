@@ -22,6 +22,7 @@ import * as ElectronTheme from "../electron/ElectronTheme.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import {
   MENU_ACTION_CHANNEL,
+  LOCAL_ENVIRONMENT_BOOTSTRAPS_CHANGED_CHANNEL,
   QUIT_SHORTCUT_CHANNEL,
   SNAP_SHOT_EVENT_CHANNEL,
   WINDOW_FULLSCREEN_STATE_CHANNEL,
@@ -113,6 +114,8 @@ export class DesktopWindow extends Context.Service<
     readonly showConnectingSplash: Effect.Effect<void>;
     readonly handleBackendReady: (httpBaseUrl: URL) => Effect.Effect<void, DesktopWindowError>;
     readonly handleBackendNotReady: Effect.Effect<void>;
+    /** Tells renderers to re-read getLocalEnvironmentBootstraps. */
+    readonly notifyLocalEnvironmentsChanged: Effect.Effect<void>;
     readonly flushMainWindowBounds: Effect.Effect<void>;
     readonly prepareCaptureReveal: Effect.Effect<void>;
     readonly dispatchMenuAction: (
@@ -1095,6 +1098,10 @@ export const make = Effect.gen(function* () {
     handleBackendNotReady: Ref.set(backendReadyRef, false).pipe(
       Effect.withSpan("desktop.window.handleBackendNotReady"),
     ),
+    // Runs inside backend stop finalizers, which a window already torn down must not abort.
+    notifyLocalEnvironmentsChanged: Effect.suspend(() =>
+      electronWindow.sendAll(LOCAL_ENVIRONMENT_BOOTSTRAPS_CHANGED_CHANNEL),
+    ).pipe(Effect.ignoreCause),
     flushMainWindowBounds: Effect.suspend(() => flushMainWindowBounds).pipe(
       Effect.withSpan("desktop.window.flushMainWindowBounds"),
     ),

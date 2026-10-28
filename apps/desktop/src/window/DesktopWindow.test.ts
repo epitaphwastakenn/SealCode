@@ -45,7 +45,10 @@ import * as ElectronMenu from "../electron/ElectronMenu.ts";
 import * as ElectronShell from "../electron/ElectronShell.ts";
 import * as ElectronTheme from "../electron/ElectronTheme.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
-import { SNAP_SHOT_EVENT_CHANNEL } from "../ipc/channels.ts";
+import {
+  LOCAL_ENVIRONMENT_BOOTSTRAPS_CHANGED_CHANNEL,
+  SNAP_SHOT_EVENT_CHANNEL,
+} from "../ipc/channels.ts";
 import * as DesktopServerExposure from "../backend/DesktopServerExposure.ts";
 import * as DesktopWindow from "./DesktopWindow.ts";
 import * as PreviewManager from "../preview/Manager.ts";
@@ -231,6 +234,7 @@ function layerTest(input: {
   readonly focusedWindow?: Electron.BrowserWindow;
   readonly windowEvents?: string[];
   readonly previewSessionRequests?: unknown[];
+  readonly broadcasts?: string[];
 }) {
   let desktopSettings = input.desktopSettings ?? DesktopAppSettings.DEFAULT_DESKTOP_SETTINGS;
   const layerDesktopAppSettings = Layer.succeed(DesktopAppSettings.DesktopAppSettings, {
@@ -291,7 +295,7 @@ function layerTest(input: {
     clearMain: () => Ref.set(input.mainWindow, Option.none()),
     prepareReveal: () => Effect.succeed(false),
     reveal: (window) => Effect.sync(() => input.onReveal?.(window)),
-    sendAll: () => Effect.void,
+    sendAll: (channel) => Effect.sync(() => void input.broadcasts?.push(channel)),
     destroyAll: input.destroyAll ?? Effect.void,
     syncAllAppearance: (sync) => sync(input.window),
   } satisfies ElectronWindow.ElectronWindow["Service"]);
@@ -514,6 +518,24 @@ describe("DesktopWindow", () => {
           assert.equal(yield* Ref.get(createCount), 3);
         }).pipe(Effect.provide(layer));
       }),
+  );
+
+  it.effect("broadcasts local environment changes to every window", () =>
+    Effect.gen(function* () {
+      const broadcasts: string[] = [];
+      const layer = layerTest({
+        window: makeFakeBrowserWindow().window,
+        createCount: yield* Ref.make(0),
+        mainWindow: yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none()),
+        broadcasts,
+      });
+
+      yield* Effect.gen(function* () {
+        const desktopWindow = yield* DesktopWindow.DesktopWindow;
+        yield* desktopWindow.notifyLocalEnvironmentsChanged;
+        assert.deepEqual(broadcasts, [LOCAL_ENVIRONMENT_BOOTSTRAPS_CHANGED_CHANNEL]);
+      }).pipe(Effect.provide(layer));
+    }),
   );
 
   describe("early main window", () => {

@@ -110,6 +110,14 @@ export const layer = Layer.effect(
     const layerScope = yield* Scope.Scope;
     const factoryContext = yield* Effect.context<BackendInstanceFactoryRequirements>();
 
+    // Renderers read the topology synchronously; this tells them when to read it again.
+    const notifyChanged = desktopWindow.notifyLocalEnvironmentsChanged;
+    const announceChanges = (instance: DesktopBackendInstance): DesktopBackendInstance => ({
+      ...instance,
+      start: instance.start.pipe(Effect.ensuring(notifyChanged)),
+      stop: (options) => instance.stop(options).pipe(Effect.ensuring(notifyChanged)),
+    });
+
     // Persist fatal Windows fallbacks; transient transport failures must preserve the user's WSL preference.
     const handlePrimaryPreflightFailure = Effect.fn("desktop.backendPool.primaryPreflightFailed")(
       function* (failure: DesktopBackendManager.PreflightFailure) {
@@ -163,8 +171,9 @@ export const layer = Layer.effect(
               error: error.message,
             }),
           ),
+          Effect.andThen(notifyChanged),
         ),
-      onShutdown: () => desktopWindow.handleBackendNotReady,
+      onShutdown: () => desktopWindow.handleBackendNotReady.pipe(Effect.andThen(notifyChanged)),
       onPreflightFailed: handlePrimaryPreflightFailure,
       onStateDirOwned: () =>
         electronDialog
@@ -175,13 +184,14 @@ export const layer = Layer.effect(
           .pipe(Effect.andThen(electronApp.quit)),
     });
 
+    const announcedPrimary = announceChanges(primary);
     const instancesRef = yield* SynchronizedRef.make<
       ReadonlyMap<BackendInstanceId, RegisteredInstance>
     >(
       new Map([
         [
           DesktopBackendManager.PRIMARY_INSTANCE_ID,
-          { _tag: "Active", instance: primary, scope: Option.none() },
+          { _tag: "Active", instance: announcedPrimary, scope: Option.none() },
         ],
       ]),
     );
@@ -211,18 +221,22 @@ export const layer = Layer.effect(
             return Effect.gen(function* () {
               // Provide the child Scope last so the captured pool Scope cannot shadow it and orphan stop/restart finalizers.
               const instanceScope = yield* Scope.fork(layerScope, "sequential");
-              const instance = yield* DesktopBackendManager.makeBackendInstance(spec).pipe(
-                Scope.provide(instanceScope),
-                Effect.provide(factoryContext),
-              );
+              const instance = yield* DesktopBackendManager.makeBackendInstance({
+                ...spec,
+                onReady: (httpBaseUrl) =>
+                  (spec.onReady?.(httpBaseUrl) ?? Effect.void).pipe(Effect.andThen(notifyChanged)),
+                onShutdown: () =>
+                  (spec.onShutdown?.() ?? Effect.void).pipe(Effect.andThen(notifyChanged)),
+              }).pipe(Scope.provide(instanceScope), Effect.provide(factoryContext));
+              const announcing = announceChanges(instance);
               const next = new Map(current);
               next.set(spec.id, {
                 _tag: "Active",
-                instance,
+                instance: announcing,
                 scope: Option.some(instanceScope),
               });
               return [
-                { _tag: "Registered", instance } as const,
+                { _tag: "Registered", instance: announcing } as const,
                 next as ReadonlyMap<BackendInstanceId, RegisteredInstance>,
               ] as const;
             });
@@ -230,7 +244,7 @@ export const layer = Layer.effect(
         ).pipe(
           Effect.flatMap((result) =>
             result._tag === "Registered"
-              ? Effect.succeed(result.instance)
+              ? notifyChanged.pipe(Effect.as(result.instance))
               : Deferred.await(result.done).pipe(Effect.andThen(register(spec))),
           ),
         ),
@@ -283,7 +297,11 @@ export const layer = Layer.effect(
           undefined,
           next as ReadonlyMap<BackendInstanceId, RegisteredInstance>,
         ] as const);
-      }).pipe(Effect.andThen(Deferred.succeed(done, undefined)), Effect.asVoid);
+      }).pipe(
+        Effect.andThen(Deferred.succeed(done, undefined)),
+        Effect.andThen(notifyChanged),
+        Effect.asVoid,
+      );
       yield* Option.match(action.entry.scope, {
         onNone: () => Effect.void,
         onSome: (scope) => Scope.close(scope, Exit.void).pipe(Effect.ignore),
@@ -305,7 +323,7 @@ export const layer = Layer.effect(
           ),
         ),
       ),
-      primary: Effect.succeed(primary),
+      primary: Effect.succeed(announcedPrimary),
       register,
       unregister,
     });

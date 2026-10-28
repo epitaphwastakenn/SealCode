@@ -20,7 +20,10 @@ import * as DesktopBackendConfiguration from "./DesktopBackendConfiguration.ts";
 import * as DesktopBackendPool from "./DesktopBackendPool.ts";
 import type { DesktopBackendStartConfig } from "./DesktopBackendManager.ts";
 
-function layerPool(labelRef: Ref.Ref<string>): Layer.Layer<DesktopBackendPool.DesktopBackendPool> {
+function layerPool(
+  labelRef: Ref.Ref<string>,
+  topologyNotifications?: Ref.Ref<number>,
+): Layer.Layer<DesktopBackendPool.DesktopBackendPool> {
   return DesktopBackendPool.layer.pipe(
     Layer.provideMerge(
       Layer.mergeAll(
@@ -75,6 +78,10 @@ function layerPool(labelRef: Ref.Ref<string>): Layer.Layer<DesktopBackendPool.De
           showConnectingSplash: Effect.void,
           handleBackendReady: () => Effect.void,
           handleBackendNotReady: Effect.void,
+          notifyLocalEnvironmentsChanged:
+            topologyNotifications === undefined
+              ? Effect.void
+              : Ref.update(topologyNotifications, (count) => count + 1),
           flushMainWindowBounds: Effect.void,
           prepareCaptureReveal: Effect.void,
           dispatchMenuAction: () => Effect.die("unexpected menu action"),
@@ -88,7 +95,57 @@ function layerPool(labelRef: Ref.Ref<string>): Layer.Layer<DesktopBackendPool.De
   );
 }
 
+const waitingWslConfig = {
+  executablePath: "/electron",
+  args: [],
+  entryPath: "/server/bin.mjs",
+  cwd: "/server",
+  env: {},
+  bootstrap: {
+    mode: "desktop",
+    noBrowser: true,
+    port: 3774,
+    t3Home: "/tmp/t3",
+    host: "127.0.0.1",
+    desktopBootstrapToken: "token",
+    tailscaleServeEnabled: false,
+    tailscaleServePort: 443,
+  },
+  bootstrapDelivery: "fd3",
+  extendEnv: true,
+  httpBaseUrl: new URL("http://127.0.0.1:3774"),
+  captureOutput: false,
+  preflightFailure: Option.some({ reason: "WSL starting", fatal: false }),
+} satisfies DesktopBackendStartConfig;
+
 describe("DesktopBackendPool", () => {
+  it.effect("tells renderers to re-read the topology when an instance changes", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const notifications = yield* Ref.make(0);
+        yield* Effect.gen(function* () {
+          const id = DesktopBackendPool.BackendInstanceId("wsl:Ubuntu");
+          const pool = yield* DesktopBackendPool.DesktopBackendPool;
+          assert.equal(yield* Ref.get(notifications), 0);
+
+          const instance = yield* pool.register({
+            id,
+            label: Effect.succeed("WSL (Ubuntu)"),
+            configResolve: Effect.succeed(waitingWslConfig),
+          });
+          assert.equal(yield* Ref.get(notifications), 1);
+
+          yield* instance.start;
+          assert.equal(yield* Ref.get(notifications), 2);
+
+          const beforeStop = yield* Ref.get(notifications);
+          yield* pool.unregister(id);
+          assert.isAbove(yield* Ref.get(notifications), beforeStop);
+        }).pipe(Effect.provide(layerPool(Ref.makeUnsafe("Windows"), notifications)));
+      }),
+    ),
+  );
+
   it.effect("unregister stops the registered instance", () =>
     Effect.scoped(
       Effect.gen(function* () {

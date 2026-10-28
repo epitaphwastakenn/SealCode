@@ -965,6 +965,8 @@ export interface DesktopBridge {
    */
   getSystemLocale?: () => string | null;
   getLocalEnvironmentBootstraps: () => readonly DesktopEnvironmentBootstrap[];
+  /** Fires when a desktop-managed backend appears, goes away, starts, stops or becomes ready. */
+  onLocalEnvironmentBootstrapsChanged?: (listener: () => void) => () => void;
   getLocalEnvironmentEnabled?: () => boolean;
   setLocalEnvironmentEnabled?: (enabled: boolean) => Promise<void>;
   getLocalEnvironmentBearerToken: () => Promise<string>;

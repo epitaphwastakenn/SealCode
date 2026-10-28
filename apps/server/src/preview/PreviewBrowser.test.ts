@@ -170,7 +170,7 @@ it.layer(NodeServices.layer)("PreviewBrowser", (it) => {
 
       expect(error._tag).toBe("PreviewBrowserInstallError");
       expect(error.message).toMatch(
-        /^SealCode could not install its headless browser: .+ Try again\.$/,
+        /^Harp could not install its headless browser: .+ Try again\.$/,
       );
       expect(yield* fs.readDirectory(installRoot)).toEqual([]);
       yield* browser.executable.pipe(Effect.flip);

@@ -65,7 +65,7 @@ export interface AntigravityDiagnosticsInput {
   readonly platform: NodeJS.Platform;
   readonly stateDir: string;
   readonly profileDirectory: string;
-  /** The environment SealCode starts the agent with, so the report mirrors its network path. */
+  /** The environment Harp starts the agent with, so the report mirrors its network path. */
   readonly processEnvironment: NodeJS.ProcessEnv;
   readonly agentEnvironment: NodeJS.ProcessEnv;
   readonly installation: AntigravityInstallationInfo | { readonly error: string };
@@ -355,11 +355,11 @@ export const runAntigravityDiagnostics = Effect.fn("runAntigravityDiagnostics")(
   const arch = yield* HostProcess.Architecture;
   const redact = (text: string) => redactDiagnosticText(text, home);
   const report: string[] = [
-    "SealCode Antigravity diagnostics",
+    "Harp Antigravity diagnostics",
     `Generated: ${DateTime.formatIso(yield* DateTime.now)} (this computer's clock)`,
     "",
     "== Versions ==",
-    `SealCode: ${packageJson.version}`,
+    `Harp: ${packageJson.version}`,
     `System: ${NodeOS.type()} ${NodeOS.release()} ${arch}, Node ${process.versions.node}`,
   ];
 
@@ -423,9 +423,9 @@ export const runAntigravityDiagnostics = Effect.fn("runAntigravityDiagnostics")(
     }
   }
 
-  report.push("", "== Proxy and VPN ==", "Environment of SealCode:");
+  report.push("", "== Proxy and VPN ==", "Environment of Harp:");
   report.push(...environmentSection(input.processEnvironment, home));
-  report.push("Environment SealCode gives the agent:");
+  report.push("Environment Harp gives the agent:");
   report.push(...environmentSection(input.agentEnvironment, home));
   report.push(...(yield* Effect.promise(() => networkSettingsSection(input.platform))));
 
@@ -484,10 +484,10 @@ export const runAntigravityDiagnostics = Effect.fn("runAntigravityDiagnostics")(
   report.push("", "== Recent sign-in output ==");
   report.push(
     ...(input.recentSignInOutput === undefined
-      ? ["  (only in reports made from SealCode's settings)"]
+      ? ["  (only in reports made from Harp's settings)"]
       : input.recentSignInOutput.trim()
         ? indent(redact(input.recentSignInOutput))
-        : ["  (no sign-in attempt since SealCode started)"]),
+        : ["  (no sign-in attempt since Harp started)"]),
   );
   return `${report.join("\n")}\n`;
 });

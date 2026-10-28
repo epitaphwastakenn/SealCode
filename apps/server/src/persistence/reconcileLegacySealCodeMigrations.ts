@@ -8,11 +8,11 @@ import AuthSessionClientConnection from "./Migrations/041_AuthSessionClientConne
 import ProjectionThreadLinkedPullRequest from "./Migrations/042_ProjectionThreadLinkedPullRequest.ts";
 import ProjectionThreadsUnsettledAt from "./Migrations/043_ProjectionThreadsUnsettledAt.ts";
 
-// SealCode 1.x recorded its own migrations under ids that main assigns to other
+// Harp 1.x recorded its own migrations under ids that main assigns to other
 // schema. The migrator skips every recorded id regardless of name, so main's
 // columns and indexes for those ids never existed and later migrations fail
 // against them. Main's migrations at these ids only add what is missing, so
-// running them over a SealCode database is safe.
+// running them over a Harp database is safe.
 const LEGACY_SEALCODE_MIGRATIONS = [
   {
     id: 36,
@@ -52,7 +52,7 @@ const LEGACY_SEALCODE_MIGRATIONS = [
   },
 ] as const;
 
-// SealCode 1.x kept one row per provider instance in these tables. Main keys
+// Harp 1.x kept one row per provider instance in these tables. Main keys
 // them by thread alone and upserts with ON CONFLICT (thread_id), which fails
 // outright against the composite key, so keep each thread's latest row.
 const LEGACY_COMPOSITE_KEY_TABLES = [

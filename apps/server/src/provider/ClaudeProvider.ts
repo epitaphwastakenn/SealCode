@@ -548,7 +548,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
         version: null,
         status: "warning",
         auth: { status: "unknown" },
-        message: "Claude is disabled in SealCode settings.",
+        message: "Claude is disabled in Harp settings.",
       },
     });
   }
@@ -764,7 +764,7 @@ export const makePendingClaudeProvider = Effect.fn("ClaudeProvider.makePendingCl
           version: null,
           status: "warning",
           auth: { status: "unknown" },
-          message: "Claude is disabled in SealCode settings.",
+          message: "Claude is disabled in Harp settings.",
         },
       });
     }

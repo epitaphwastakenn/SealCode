@@ -271,7 +271,7 @@ it.layer(NodeServices.layer)("Antigravity installation", (it) => {
       expect(path.dirname(selected.harnessPath)).toBe(path.dirname(selected.executablePath));
       expect(yield* fs.readFileString(selected.executablePath)).toBe(serverContents);
       expect(yield* fs.readFileString(selected.harnessPath)).toBe(harnessContents);
-      // SealCode prunes the previous release once the new one is active.
+      // Harp prunes the previous release once the new one is active.
       expect(yield* fs.readDirectory(path.join(installation.managedDirectory, "versions"))).toEqual(
         [(yield* releaseAsset()).sha256],
       );

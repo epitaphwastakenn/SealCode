@@ -5,7 +5,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 
 import { migrationManifest, runMigrations } from "./Migrations.ts";
 
-// The shape SealCode 1.x left behind: its own names at main's ids 36, 37 and
+// The shape Harp 1.x left behind: its own names at main's ids 36, 37 and
 // 40–43, and per-provider-instance rows keyed by (thread_id, instance).
 const seedSealCodeDatabase = Effect.gen(function* () {
   const sql = yield* SqlClient.SqlClient;
@@ -45,8 +45,8 @@ const seedSealCodeDatabase = Effect.gen(function* () {
   `;
 });
 
-describe("SealCode 1.x upgrade", () => {
-  it.effect("runs main's schema for ids SealCode reused and keeps one session per thread", () =>
+describe("Harp 1.x upgrade", () => {
+  it.effect("runs main's schema for ids Harp reused and keeps one session per thread", () =>
     Effect.gen(function* () {
       const sql = yield* SqlClient.SqlClient;
       yield* seedSealCodeDatabase;

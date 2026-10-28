@@ -563,7 +563,7 @@ it.effect(
           "state",
         ]);
         assert.strictEqual(first.searchParams.get("client_id"), "dynamic_agent_client");
-        assert.strictEqual(first.searchParams.get("agent_name_hint"), "SealCode");
+        assert.strictEqual(first.searchParams.get("agent_name_hint"), "Harp");
         assert.strictEqual(first.searchParams.get("response_type"), "code");
         assert.strictEqual(
           first.searchParams.get("scope"),

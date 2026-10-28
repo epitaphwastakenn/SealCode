@@ -1405,6 +1405,13 @@ export function makeClaudeQueryOptions(input: {
           ...compactQuerySettings,
           env: { ...compactQuerySettings?.env, ENABLE_TOOL_SEARCH: input.toolSearchOverride },
         } as ClaudeSdkSettings);
+  // Claude Code withholds suggestions from SDK sessions without this, even far below the usage limit.
+  const environment =
+    input.promptSuggestions === true &&
+    input.environment !== undefined &&
+    input.environment.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION === undefined
+      ? { ...input.environment, CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION: "true" }
+      : input.environment;
   const options: ClaudeAgentSdkQueryOptions = {
     model: compiledSelection.apiModelId,
     tools: claudeAgentSdkQueryToolsForSdk(selectedTools),
@@ -1449,7 +1456,7 @@ export function makeClaudeQueryOptions(input: {
     ...(input.settings?.binaryPath
       ? { pathToClaudeCodeExecutable: input.settings.binaryPath }
       : {}),
-    ...(input.environment === undefined ? {} : { env: input.environment }),
+    ...(environment === undefined ? {} : { env: environment }),
     ...(input.mcpServers === undefined ? {} : { mcpServers: input.mcpServers }),
     systemPrompt: {
       type: "preset" as const,

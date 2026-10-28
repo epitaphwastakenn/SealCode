@@ -4660,6 +4660,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         const harness = yield* makeWakeHarness;
         const input = yield* startTurn(harness, 1);
         assert.equal(harness.getOpenedOptions()?.promptSuggestions, true);
+        assert.equal(harness.getOpenedOptions()?.env?.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION, "true");
         yield* endTurn(harness, 1);
         yield* harness.offerAndWait(suggestionFrame("run the tests"));
         yield* harness.until(() => suggestionEvents(harness).length === 1);
@@ -4692,6 +4693,7 @@ describe("ClaudeAdapterV2 background wake turns", () => {
         const harness = yield* makeWakeHarness;
         yield* startTurn(harness, 1);
         assert.isUndefined(harness.getOpenedOptions()?.promptSuggestions);
+        assert.isUndefined(harness.getOpenedOptions()?.env?.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION);
         yield* endTurn(harness, 1);
         yield* harness.offerAndWait(suggestionFrame("run the tests"));
         yield* startTurn(harness, 2);

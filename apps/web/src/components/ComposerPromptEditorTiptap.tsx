@@ -1117,7 +1117,7 @@ function ComposerPromptEditorTiptapInner(
         }
       : {}),
     "aria-placeholder": suggestion
-      ? `Suggested message: ${suggestion}. Press Tab to use it.`
+      ? `Suggested message: “${suggestion}” Press Tab to use it.`
       : placeholder,
   };
 

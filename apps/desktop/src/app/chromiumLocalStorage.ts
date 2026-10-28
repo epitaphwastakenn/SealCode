@@ -17,6 +17,8 @@ class LevelDbFormatError extends Schema.TaggedError<LevelDbFormatError>()("Level
 
 const isLevelDbFormatError = Schema.is(LevelDbFormatError);
 
+const DATABASE_CHANGED_DETAIL = "database changed while reading";
+
 const fail = (detail: string): never => {
   throw new LevelDbFormatError({ detail });
 };
@@ -358,6 +360,10 @@ export class ChromiumLocalStorageReadError extends Schema.TaggedError<ChromiumLo
   }
 }
 
+/** A malformed database stays malformed; only a concurrent write makes a format error worth retrying. */
+export const isMalformedDatabaseError = (error: ChromiumLocalStorageReadError): boolean =>
+  isLevelDbFormatError(error.cause) && error.cause.detail !== DATABASE_CHANGED_DETAIL;
+
 export const readChromiumLocalStorage = Effect.fn("desktop.chromiumLocalStorage.read")(function* (
   directory: string,
   origin: string,
@@ -419,7 +425,7 @@ export const readChromiumLocalStorage = Effect.fn("desktop.chromiumLocalStorage.
   if (currentAfter !== current || Number(manifestAfter.size) !== manifest.length) {
     return yield* new ChromiumLocalStorageReadError({
       directory,
-      cause: new LevelDbFormatError({ detail: "database changed while reading" }),
+      cause: new LevelDbFormatError({ detail: DATABASE_CHANGED_DETAIL }),
     });
   }
 

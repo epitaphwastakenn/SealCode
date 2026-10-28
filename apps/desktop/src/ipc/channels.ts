@@ -14,7 +14,8 @@ export const SNAP_SHOT_EVENT_CHANNEL = "desktop:snap-shot-event";
 export const WEB_LINK_OPEN_CHANNEL = "desktop:web-link-open";
 export const WEB_LINK_READY_CHANNEL = "desktop:web-link-ready";
 export const QUIT_SHORTCUT_CHANNEL = "desktop:quit-shortcut";
-export const TRACKPAD_SCROLL_END_CHANNEL = "desktop:trackpad-scroll-end";
+export const LOCAL_ENVIRONMENT_BOOTSTRAPS_CHANGED_CHANNEL =
+  "desktop:local-environment-bootstraps-changed";
 export const GET_WINDOW_FULLSCREEN_STATE_CHANNEL = "desktop:get-window-fullscreen-state";
 export const WINDOW_FULLSCREEN_STATE_CHANNEL = "desktop:window-fullscreen-state";
 export const GET_WINDOW_CONTROLS_STATE_CHANNEL = "desktop:get-window-controls-state";

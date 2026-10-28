@@ -823,13 +823,14 @@ export const make = Effect.gen(function* () {
       }
       return yield* buildWindowsPrimaryConfig;
     }).pipe(Effect.withSpan("desktop.backendConfiguration.resolvePrimary")),
+    // Every bootstraps read looks the label up, so it opens no span.
     resolvePrimaryLabel: Effect.gen(function* () {
       const { useWsl, distro } = yield* describePrimary;
       if (!useWsl) {
         return environment.platform === "win32" ? "Windows" : "Local environment";
       }
       return distro ? `WSL (${distro})` : "WSL";
-    }).pipe(Effect.withSpan("desktop.backendConfiguration.resolvePrimaryLabel")),
+    }),
     // The span options depend on each request's port and distro.
     resolveWsl: Effect.fnUntraced(
       function* (input) {

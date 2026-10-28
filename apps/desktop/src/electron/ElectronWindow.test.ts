@@ -4,6 +4,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import type * as Electron from "electron";
 import { beforeEach, vi } from "vite-plus/test";
 
@@ -130,6 +131,29 @@ describe("ElectronWindow", () => {
       assert.lengthOf(window.getNativeWindowHandle.mock.calls, 1);
       assert.lengthOf(window.getTitle.mock.calls, 0);
     }).pipe(Effect.provide(layerTestFor("win32"))),
+  );
+
+  it.effect("keeps a held window out of the first-window lookups until it is released", () =>
+    Effect.gen(function* () {
+      const held = { id: 51, isDestroyed: vi.fn(() => false) } as unknown as Electron.BrowserWindow;
+      const other = {
+        id: 52,
+        isDestroyed: vi.fn(() => false),
+      } as unknown as Electron.BrowserWindow;
+      getAllWindowsMock.mockReturnValue([held, other]);
+      getFocusedWindowMock.mockReturnValue(null);
+
+      const electronWindow = yield* ElectronWindow.ElectronWindow;
+      yield* electronWindow.hold(held);
+      assert.strictEqual(Option.getOrNull(yield* electronWindow.currentMainOrFirst), other);
+      assert.strictEqual(Option.getOrNull(yield* electronWindow.focusedMainOrFirst), other);
+
+      getAllWindowsMock.mockReturnValue([held]);
+      assert.isTrue(Option.isNone(yield* electronWindow.currentMainOrFirst));
+
+      yield* electronWindow.release(held);
+      assert.strictEqual(Option.getOrNull(yield* electronWindow.currentMainOrFirst), held);
+    }).pipe(Effect.provide(layerTest)),
   );
 
   it.effect("preserves destroy failures and continues with later windows", () =>

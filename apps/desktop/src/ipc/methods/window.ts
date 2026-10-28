@@ -65,10 +65,11 @@ function toWebSocketBaseUrl(httpBaseUrl: URL): string {
   return url.href;
 }
 
+// Renderers block on these synchronous reads from hot paths, so none of them opens a span.
 export const getAppBranding = DesktopIpc.makeSyncIpcMethod({
   channel: IpcChannels.GET_APP_BRANDING_CHANNEL,
   result: Schema.NullOr(DesktopAppBrandingSchema),
-  handler: Effect.fn("desktop.ipc.window.getAppBranding")(function* () {
+  handler: Effect.fnUntraced(function* () {
     const environment = yield* DesktopEnvironment.DesktopEnvironment;
     return environment.branding;
   }),
@@ -77,7 +78,7 @@ export const getAppBranding = DesktopIpc.makeSyncIpcMethod({
 export const getSystemLocale = DesktopIpc.makeSyncIpcMethod({
   channel: IpcChannels.GET_SYSTEM_LOCALE_CHANNEL,
   result: Schema.String,
-  handler: Effect.fn("desktop.ipc.window.getSystemLocale")(function* () {
+  handler: Effect.fnUntraced(function* () {
     const electronApp = yield* ElectronApp.ElectronApp;
     return yield* electronApp.systemLocale;
   }),
@@ -86,7 +87,7 @@ export const getSystemLocale = DesktopIpc.makeSyncIpcMethod({
 export const getWindowFullscreenState = DesktopIpc.makeSyncIpcMethod({
   channel: IpcChannels.GET_WINDOW_FULLSCREEN_STATE_CHANNEL,
   result: Schema.Boolean,
-  handler: Effect.fn("desktop.ipc.window.getWindowFullscreenState")(function* () {
+  handler: Effect.fnUntraced(function* () {
     const electronWindow = yield* ElectronWindow.ElectronWindow;
     const window = yield* electronWindow.currentMainOrFirst;
     return Option.isSome(window) && window.value.isFullScreen();
@@ -96,7 +97,7 @@ export const getWindowFullscreenState = DesktopIpc.makeSyncIpcMethod({
 export const getWindowControlsState = DesktopIpc.makeSyncIpcMethod({
   channel: IpcChannels.GET_WINDOW_CONTROLS_STATE_CHANNEL,
   result: Schema.NullOr(DesktopWindowControlsStateSchema),
-  handler: Effect.fn("desktop.ipc.window.getWindowControlsState")(function* () {
+  handler: Effect.fnUntraced(function* () {
     const window = yield* (yield* ElectronWindow.ElectronWindow).main;
     return Option.isSome(window) ? getAppCaptionButtonsState(window.value) : null;
   }),
@@ -123,7 +124,7 @@ export const controlWindow = DesktopIpc.makeIpcMethod({
 export const getLocalEnvironmentBootstraps = DesktopIpc.makeSyncIpcMethod({
   channel: IpcChannels.GET_LOCAL_ENVIRONMENT_BOOTSTRAPS_CHANNEL,
   result: Schema.Array(DesktopEnvironmentBootstrapSchema),
-  handler: Effect.fn("desktop.ipc.window.getLocalEnvironmentBootstraps")(function* () {
+  handler: Effect.fnUntraced(function* () {
     const pool = yield* DesktopBackendPool.DesktopBackendPool;
     const configuration = yield* DesktopBackendConfiguration.DesktopBackendConfiguration;
     const instances = yield* pool.list;

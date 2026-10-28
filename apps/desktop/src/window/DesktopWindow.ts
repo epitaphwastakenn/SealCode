@@ -5,6 +5,7 @@ import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
+import * as Semaphore from "effect/Semaphore";
 
 import * as Electron from "electron";
 
@@ -21,9 +22,9 @@ import * as ElectronTheme from "../electron/ElectronTheme.ts";
 import * as ElectronWindow from "../electron/ElectronWindow.ts";
 import {
   MENU_ACTION_CHANNEL,
+  LOCAL_ENVIRONMENT_BOOTSTRAPS_CHANGED_CHANNEL,
   QUIT_SHORTCUT_CHANNEL,
   SNAP_SHOT_EVENT_CHANNEL,
-  TRACKPAD_SCROLL_END_CHANNEL,
   WINDOW_FULLSCREEN_STATE_CHANNEL,
 } from "../ipc/channels.ts";
 import { PASSKEY_BRIDGE_ARGUMENT } from "../preview/GuestProtocol.ts";
@@ -108,9 +109,13 @@ export class DesktopWindow extends Context.Service<
     readonly revealOrCreateMain: Effect.Effect<Electron.BrowserWindow, DesktopWindowError>;
     readonly activate: Effect.Effect<void, DesktopWindowError>;
     readonly createMainIfBackendReady: Effect.Effect<void, DesktopWindowError>;
+    /** Creates the main window hidden and unloaded so Chromium starts while the backend does; the page loads once the backend is ready. */
+    readonly prepareMain: Effect.Effect<void, DesktopWindowError>;
     readonly showConnectingSplash: Effect.Effect<void>;
     readonly handleBackendReady: (httpBaseUrl: URL) => Effect.Effect<void, DesktopWindowError>;
     readonly handleBackendNotReady: Effect.Effect<void>;
+    /** Tells renderers to re-read getLocalEnvironmentBootstraps. */
+    readonly notifyLocalEnvironmentsChanged: Effect.Effect<void>;
     readonly flushMainWindowBounds: Effect.Effect<void>;
     readonly prepareCaptureReveal: Effect.Effect<void>;
     readonly dispatchMenuAction: (
@@ -314,6 +319,11 @@ function bindFirstRevealTrigger(
   }
 }
 
+interface HeldMainWindow {
+  readonly window: Electron.BrowserWindow;
+  readonly load: () => void;
+}
+
 /** @public */
 export const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
@@ -331,6 +341,9 @@ export const make = Effect.gen(function* () {
   const rendererHistory = yield* DesktopRendererHistory.DesktopRendererHistory;
   const backendReadyRef = yield* Ref.make(false);
   const splashWindowRef = yield* Ref.make<Option.Option<Electron.BrowserWindow>>(Option.none());
+  const heldMainRef = yield* Ref.make<Option.Option<HeldMainWindow>>(Option.none());
+  // Releasing the held window and creating a window must not interleave, or a second main window opens.
+  const withMainWindowLock = (yield* Semaphore.make(1)).withPermits(1);
   const context = yield* Effect.context<DesktopWindowRuntimeServices>();
   const runFork = Effect.runForkWith(context);
   const runPromise = Effect.runPromiseWith(context);
@@ -369,12 +382,10 @@ export const make = Effect.gen(function* () {
     yield* previewManager.reapplyZoom();
   });
 
-  const createWindow = Effect.fn("desktop.window.createWindow")(function* (): Effect.fn.Return<
-    Option.Option<Electron.BrowserWindow>,
-    DesktopWindowError
-  > {
+  const createWindow = Effect.fn("desktop.window.createWindow")(function* (input: {
+    readonly deferLoad: boolean;
+  }): Effect.fn.Return<Option.Option<Electron.BrowserWindow>, DesktopWindowError> {
     if (yield* Ref.get(desktopState.quitting)) return Option.none();
-    yield* previewManager.getBrowserSession();
     const applicationUrl = getDesktopUrl(environment.isDevelopment);
     const iconPaths = yield* assets.iconPaths;
     const iconOption = getIconOption(iconPaths, environment.platform);
@@ -439,6 +450,19 @@ export const make = Effect.gen(function* () {
         disableHtmlFullscreenWindowResize: true,
       },
     });
+    // ready-to-show before the first load would reveal an empty window.
+    let pageRequested = !input.deferLoad;
+    const loadApplication = () => {
+      if (window.isDestroyed()) {
+        return;
+      }
+      pageRequested = true;
+      void window.loadURL(applicationUrl).catch(() => undefined);
+    };
+    if (input.deferLoad) {
+      yield* electronWindow.hold(window);
+      yield* Ref.set(heldMainRef, Option.some({ window, load: loadApplication }));
+    }
     if (yield* Ref.get(desktopState.quitting)) {
       yield* electronWindow.destroyAll;
       return Option.none();
@@ -701,9 +725,6 @@ export const make = Effect.gen(function* () {
         event.preventDefault();
       }
     });
-    window.webContents.on("input-event", (_event, input) => {
-      if (input.type === "gestureScrollEnd") window.webContents.send(TRACKPAD_SCROLL_END_CHANNEL);
-    });
     // Ctrl+wheel bypasses menus; guest contents emit their own zoom-changed event.
     window.webContents.on("zoom-changed", (_event, direction) => {
       if (window.isDestroyed()) return;
@@ -742,12 +763,6 @@ export const make = Effect.gen(function* () {
       const retryFiber = developmentLoadRetryFiber;
       developmentLoadRetryFiber = undefined;
       runFork(Fiber.interrupt(retryFiber));
-    };
-    const loadApplication = () => {
-      if (window.isDestroyed()) {
-        return;
-      }
-      void window.loadURL(applicationUrl).catch(() => undefined);
     };
     const scheduleDevelopmentLoadRetry = () => {
       if (developmentLoadRetryFiber !== undefined || window.isDestroyed()) {
@@ -829,9 +844,12 @@ export const make = Effect.gen(function* () {
           rendererRecoveryTimestamps = rendererRecoveryTimestamps.filter(
             (timestamp) => now - timestamp < RENDERER_RECOVERY_WINDOW_MS,
           );
+          // A held window has no page to recover; it loads when the backend is ready.
+          const held = yield* Ref.get(heldMainRef);
           const shouldRecover =
             recoverable &&
             !window.isDestroyed() &&
+            !(Option.isSome(held) && held.value.window === window) &&
             rendererRecoveryTimestamps.length < RENDERER_RECOVERY_MAX_ATTEMPTS;
           yield* logWindowWarning("main window render process gone", {
             reason: details.reason,
@@ -850,7 +868,12 @@ export const make = Effect.gen(function* () {
       );
     });
 
-    const revealSubscribers: RevealSubscription[] = [(fire) => window.once("ready-to-show", fire)];
+    const revealSubscribers: RevealSubscription[] = [
+      (fire) =>
+        window.on("ready-to-show", () => {
+          if (pageRequested) fire();
+        }),
+    ];
     bindFirstRevealTrigger(revealSubscribers, () => {
       if (!window.isDestroyed()) {
         window.webContents.setBackgroundThrottling(true);
@@ -861,7 +884,7 @@ export const make = Effect.gen(function* () {
       void runPromise(Effect.andThen(electronWindow.reveal(window), dismissConnectingSplash));
     });
 
-    loadApplication();
+    if (!input.deferLoad) loadApplication();
     if (environment.isDevelopment) {
       window.webContents.openDevTools({ mode: "detach" });
     }
@@ -869,14 +892,18 @@ export const make = Effect.gen(function* () {
     window.on("closed", () => {
       clearDevelopmentLoadRetry();
       clearBoundsPersist();
-      void runPromise(electronWindow.clearMain(Option.some(window)));
+      void runPromise(
+        Ref.update(heldMainRef, (held) =>
+          Option.isSome(held) && held.value.window === window ? Option.none() : held,
+        ).pipe(Effect.andThen(electronWindow.clearMain(Option.some(window)))),
+      );
     });
 
     return Option.some(window);
   });
 
-  const createMain = Effect.gen(function* () {
-    const window = yield* createWindow();
+  const createMainUnlocked = Effect.gen(function* () {
+    const window = yield* createWindow({ deferLoad: false });
     if (Option.isSome(window)) {
       yield* electronWindow.setMain(window.value);
       yield* logWindowInfo("main window created");
@@ -884,14 +911,36 @@ export const make = Effect.gen(function* () {
     return window;
   }).pipe(Effect.withSpan("desktop.window.createMain"));
 
-  const ensureMain = Effect.gen(function* () {
-    if (yield* Ref.get(desktopState.quitting)) return Option.none<Electron.BrowserWindow>();
-    const existingWindow = yield* currentMainWindow;
-    if (Option.isSome(existingWindow)) {
-      return existingWindow;
+  const createMain = withMainWindowLock(createMainUnlocked);
+
+  // Starts the page load of the window made by prepareMain; none when nothing is held.
+  const releaseHeldMain = Effect.gen(function* () {
+    const held = yield* Ref.getAndSet(heldMainRef, Option.none());
+    if (Option.isNone(held) || held.value.window.isDestroyed()) {
+      return Option.none<Electron.BrowserWindow>();
     }
-    return yield* createMain;
-  }).pipe(Effect.withSpan("desktop.window.ensureMain"));
+    const { window, load } = held.value;
+    yield* electronWindow.release(window);
+    yield* electronWindow.setMain(window);
+    load();
+    yield* logWindowInfo("main window created");
+    return Option.some(window);
+  });
+
+  const ensureMain = withMainWindowLock(
+    Effect.gen(function* () {
+      if (yield* Ref.get(desktopState.quitting)) return Option.none<Electron.BrowserWindow>();
+      const existingWindow = yield* currentMainWindow;
+      if (Option.isSome(existingWindow)) {
+        return existingWindow;
+      }
+      const released = yield* releaseHeldMain;
+      if (Option.isSome(released)) {
+        return released;
+      }
+      return yield* createMainUnlocked;
+    }),
+  ).pipe(Effect.withSpan("desktop.window.ensureMain"));
 
   const requireWindow = (window: Option.Option<Electron.BrowserWindow>) =>
     Option.match(window, {
@@ -910,13 +959,30 @@ export const make = Effect.gen(function* () {
     return (yield* desktopSettings.get).localEnvironmentEnabled;
   });
 
-  const createMainIfBackendReady = Effect.gen(function* () {
-    if (yield* Ref.get(desktopState.quitting)) return;
-    if (yield* waitingForBackend) return;
-    const existingWindow = yield* currentMainWindow;
-    if (Option.isSome(existingWindow)) return;
-    yield* createMain;
-  }).pipe(Effect.withSpan("desktop.window.createMainIfBackendReady"));
+  const createMainIfBackendReady = withMainWindowLock(
+    Effect.gen(function* () {
+      if (yield* Ref.get(desktopState.quitting)) return;
+      if (yield* waitingForBackend) return;
+      const existingWindow = yield* currentMainWindow;
+      if (Option.isSome(existingWindow)) return;
+      if (Option.isSome(yield* releaseHeldMain)) return;
+      yield* createMainUnlocked;
+    }),
+  ).pipe(Effect.withSpan("desktop.window.createMainIfBackendReady"));
+
+  const prepareMain = withMainWindowLock(
+    Effect.gen(function* () {
+      if (yield* Ref.get(desktopState.quitting)) return;
+      // Without a pending backend the normal path opens the window.
+      if (!(yield* waitingForBackend)) return;
+      if (Option.isSome(yield* currentMainWindow)) return;
+      if (Option.isSome(yield* Ref.get(heldMainRef))) return;
+      const window = yield* createWindow({ deferLoad: true });
+      if (Option.isSome(window)) {
+        yield* logWindowInfo("main window prepared; its page loads when the backend is ready");
+      }
+    }),
+  ).pipe(Effect.withSpan("desktop.window.prepareMain"));
 
   const showConnectingSplash = Effect.gen(function* () {
     if (yield* Ref.get(desktopState.quitting)) return;
@@ -1022,6 +1088,7 @@ export const make = Effect.gen(function* () {
       yield* createMainIfBackendReady;
     }).pipe(Effect.withSpan("desktop.window.activate")),
     createMainIfBackendReady,
+    prepareMain,
     showConnectingSplash,
     handleBackendReady: Effect.fn("desktop.window.handleBackendReady")(function* (httpBaseUrl) {
       yield* Ref.set(backendReadyRef, true);
@@ -1031,6 +1098,10 @@ export const make = Effect.gen(function* () {
     handleBackendNotReady: Ref.set(backendReadyRef, false).pipe(
       Effect.withSpan("desktop.window.handleBackendNotReady"),
     ),
+    // Runs inside backend stop finalizers, which a window already torn down must not abort.
+    notifyLocalEnvironmentsChanged: Effect.suspend(() =>
+      electronWindow.sendAll(LOCAL_ENVIRONMENT_BOOTSTRAPS_CHANGED_CHANNEL),
+    ).pipe(Effect.ignoreCause),
     flushMainWindowBounds: Effect.suspend(() => flushMainWindowBounds).pipe(
       Effect.withSpan("desktop.window.flushMainWindowBounds"),
     ),

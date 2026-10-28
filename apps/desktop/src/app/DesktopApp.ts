@@ -13,6 +13,7 @@ import * as ElectronProtocol from "../electron/ElectronProtocol.ts";
 import { installDesktopIpcHandlers } from "../ipc/DesktopIpcHandlers.ts";
 import * as DesktopAppActivation from "./DesktopAppActivation.ts";
 import * as DesktopAppIdentity from "./DesktopAppIdentity.ts";
+import { activeCompileCacheDirectory, cleanStaleCompileCaches } from "./DesktopCompileCache.ts";
 import * as DesktopAppLinks from "./DesktopAppLinks.ts";
 import * as DesktopApplicationMenu from "../window/DesktopApplicationMenu.ts";
 import * as DesktopWindow from "../window/DesktopWindow.ts";
@@ -33,6 +34,7 @@ import * as DesktopSnapShot from "../snapShot/DesktopSnapShot.ts";
 import * as DesktopWslBackend from "../wsl/DesktopWslBackend.ts";
 import * as DesktopRendererHistory from "../telemetry/DesktopRendererHistory.ts";
 
+const COMPILE_CACHE_CLEANUP_DELAY = Duration.minutes(1);
 const DEFAULT_DESKTOP_BACKEND_PORT = 3773;
 const MAX_TCP_PORT = 65_535;
 const DESKTOP_BACKEND_PORT_PROBE_HOSTS = ["127.0.0.1", "0.0.0.0", "::"] as const;
@@ -244,6 +246,12 @@ const bootstrap = Effect.gen(function* () {
       Effect.catch((error) => logStartupError("desktop app control socket unavailable", { error })),
     );
     yield* Effect.forkScoped(wslBackend.reconcile);
+    // After the backend process is requested: window creation blocks the main thread for a few hundred ms.
+    yield* desktopWindow.prepareMain.pipe(
+      Effect.catch((error) =>
+        logBootstrapWarning("could not prepare the main window early", { error: error.message }),
+      ),
+    );
   }
 }).pipe(Effect.withSpan("desktop.bootstrap"));
 
@@ -280,6 +288,11 @@ const startup = Effect.gen(function* () {
   yield* updates.configure;
   yield* DesktopRemoteUpdates.listen;
   yield* bootstrap.pipe(Effect.catchCause((cause) => fatalStartupCause("bootstrap", cause)));
+  // Disk housekeeping with nothing waiting on it: wait until startup has settled.
+  yield* cleanStaleCompileCaches(activeCompileCacheDirectory()).pipe(
+    Effect.delay(COMPILE_CACHE_CLEANUP_DELAY),
+    Effect.forkScoped,
+  );
 }).pipe(Effect.withSpan("desktop.startup"));
 
 const scopedProgram = Effect.scoped(

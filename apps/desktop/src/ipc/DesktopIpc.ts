@@ -127,16 +127,9 @@ export const make = (ipcMain: DesktopIpcMain): DesktopIpc["Service"] =>
         Effect.try({
           try: () => {
             ipcMain.removeAllListeners(channel);
+            // Renderers call these on hot paths and block on each one; a span per call floods the trace file.
             ipcMain.on(channel, (event) => {
-              event.returnValue = runSync(
-                Effect.gen(function* () {
-                  yield* Effect.annotateCurrentSpan({ channel });
-                  return yield* handler();
-                }).pipe(
-                  Effect.annotateLogs({ channel }),
-                  Effect.withSpan("desktop.ipc.invokeSync"),
-                ),
-              );
+              event.returnValue = runSync(handler().pipe(Effect.annotateLogs({ channel })));
             });
           },
           catch: (cause) =>
@@ -263,12 +256,6 @@ export const makeSyncIpcMethod = <
 
   return {
     channel: method.channel,
-    handler: () =>
-      method
-        .handler()
-        .pipe(
-          Effect.flatMap(encode),
-          Effect.withSpan("desktop.ipc.method", { attributes: { channel: method.channel } }),
-        ),
+    handler: () => method.handler().pipe(Effect.flatMap(encode)),
   };
 };

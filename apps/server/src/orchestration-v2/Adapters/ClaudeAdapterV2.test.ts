@@ -77,6 +77,7 @@ import { SpawnExecutableResolution } from "@t3tools/shared/shell";
 import { attachmentRelativePath } from "../../attachmentStore.ts";
 import { WorkflowAgentTranscriptReadObserver } from "../workflowAgentTranscript.ts";
 import * as ServerConfig from "../../config.ts";
+import * as ServerSettings from "../../serverSettings.ts";
 import * as McpProviderSession from "@t3tools/provider-core/server/mcpSession";
 import * as McpProviderSessions from "@t3tools/provider-core/server/McpProviderSessions";
 import { PreviewControlsToolkit } from "../../mcp/toolkits/previewControls/tools.ts";
@@ -4612,6 +4613,93 @@ describe("ClaudeAdapterV2 background wake turns", () => {
       ),
     ),
   );
+
+  describe("prompt suggestions", () => {
+    type Harness = Effect.Success<ReturnType<typeof makeWakeHarnessWithOptions>>;
+    const suggestionFrame = (suggestion: string) =>
+      claudeSdkFrame({
+        type: "prompt_suggestion",
+        suggestion,
+        uuid: "00000000-0000-4000-8000-000000000701",
+        session_id: WAKE_NATIVE_SESSION,
+      });
+    const suggestionEvents = (harness: Harness) =>
+      harness.events.filter((event) => event.type === "prompt_suggestion.updated");
+    const startTurn = (harness: Harness, ordinal: number) =>
+      Effect.gen(function* () {
+        const input = makeClaudeTestTurnInput({
+          threadId: harness.threadId,
+          providerThread: harness.providerThread,
+          now: yield* DateTime.now,
+          attemptId: RunAttemptId.make(`attempt-claude-suggestion-${ordinal}`),
+          providerTurnOrdinal: ordinal,
+          text: "Add the button.",
+          attachments: [],
+        });
+        yield* harness.runtime.startTurn(input);
+        return input;
+      });
+    // The terminal follows any earlier event on the same queue, so it also marks them delivered.
+    const endTurn = (harness: Harness, ordinal: number) =>
+      Effect.gen(function* () {
+        yield* Queue.offer(
+          harness.sdkMessages,
+          makeResultFrame({
+            uuid: `00000000-0000-4000-8000-00000000072${ordinal}`,
+            result: "Added.",
+          }),
+        );
+        yield* Queue.take(harness.terminalReceipts);
+      });
+    const provide = Effect.provide(
+      Layer.mergeAll(IdAllocator.layer, McpProviderSessions.layer, NodeServices.layer),
+    );
+
+    it.effect("asks Claude Code for suggestions and reports the one after a finished turn", () =>
+      Effect.gen(function* () {
+        const harness = yield* makeWakeHarness;
+        const input = yield* startTurn(harness, 1);
+        assert.equal(harness.getOpenedOptions()?.promptSuggestions, true);
+        yield* endTurn(harness, 1);
+        yield* harness.offerAndWait(suggestionFrame("run the tests"));
+        yield* harness.until(() => suggestionEvents(harness).length === 1);
+        assert.deepEqual(suggestionEvents(harness), [
+          {
+            type: "prompt_suggestion.updated",
+            driver: ClaudeAdapterV2.CLAUDE_PROVIDER,
+            threadId: harness.threadId,
+            runId: input.runId,
+            suggestion: "run the tests",
+          },
+        ]);
+      }).pipe(provide),
+    );
+
+    it.effect("drops a suggestion that arrives once the next turn is running", () =>
+      Effect.gen(function* () {
+        const harness = yield* makeWakeHarness;
+        yield* startTurn(harness, 1);
+        yield* endTurn(harness, 1);
+        yield* startTurn(harness, 2);
+        yield* harness.offerAndWait(suggestionFrame("run the tests"));
+        yield* endTurn(harness, 2);
+        assert.lengthOf(suggestionEvents(harness), 0);
+      }).pipe(provide),
+    );
+
+    it.effect("neither asks for nor reports suggestions while the setting is off", () =>
+      Effect.gen(function* () {
+        const harness = yield* makeWakeHarness;
+        yield* startTurn(harness, 1);
+        assert.isUndefined(harness.getOpenedOptions()?.promptSuggestions);
+        yield* endTurn(harness, 1);
+        yield* harness.offerAndWait(suggestionFrame("run the tests"));
+        yield* startTurn(harness, 2);
+        yield* endTurn(harness, 2);
+        assert.lengthOf(suggestionEvents(harness), 0);
+      }).pipe(provide, Effect.provide(ServerSettings.layerTest({ suggestNextPrompt: false }))),
+    );
+  });
 
   it.effect("announces usage-limit pauses once per window and again on a new turn", () =>
     Effect.gen(function* () {

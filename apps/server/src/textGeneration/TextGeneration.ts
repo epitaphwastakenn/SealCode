@@ -17,6 +17,8 @@ export type {
   CommitMessageGenerationResult,
   PrContentGenerationInput,
   PrContentGenerationResult,
+  PromptSuggestionGenerationInput,
+  PromptSuggestionGenerationResult,
   ReviewGuideGenerationInput,
   ReviewGuideGenerationResult,
   ThreadTitleGenerationInput,
@@ -33,6 +35,7 @@ type TextGenerationOp =
   | "generateBranchName"
   | "generateThreadTitle"
   | "generateReviewGuide"
+  | "generatePromptSuggestion"
   | "describeImages";
 
 const resolveInstance = (
@@ -73,6 +76,19 @@ export const make = Effect.gen(function* () {
     generateReviewGuide: (input) =>
       resolveInstance(registry, "generateReviewGuide", input.modelSelection.instanceId).pipe(
         Effect.flatMap((textGeneration) => textGeneration.generateReviewGuide(input)),
+      ),
+    generatePromptSuggestion: (input) =>
+      resolveInstance(registry, "generatePromptSuggestion", input.modelSelection.instanceId).pipe(
+        Effect.flatMap((textGeneration) =>
+          textGeneration.generatePromptSuggestion
+            ? textGeneration.generatePromptSuggestion(input)
+            : Effect.fail(
+                new TextGenerationError({
+                  operation: "generatePromptSuggestion",
+                  detail: `Provider instance '${input.modelSelection.instanceId}' cannot suggest prompts.`,
+                }),
+              ),
+        ),
       ),
     describeImages: (input) =>
       resolveInstance(registry, "describeImages", input.modelSelection.instanceId).pipe(

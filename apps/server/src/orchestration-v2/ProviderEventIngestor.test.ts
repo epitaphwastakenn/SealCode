@@ -1,6 +1,7 @@
-import { assert, it } from "@effect/vitest";
+import { assert, describe, it } from "@effect/vitest";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import {
+  currentPromptSuggestion,
   CheckpointId,
   CheckpointRef,
   CheckpointScopeId,
@@ -357,6 +358,114 @@ layer("ProviderEventIngestorV2", (it) => {
       assert.equal(projection.nodes.find((entry) => entry.id === nodeId)?.status, "waiting");
     }),
   );
+
+  describe("prompt suggestions", () => {
+    const seed = Effect.gen(function* () {
+      const now = yield* DateTime.now;
+      const eventSink = yield* EventSink.EventSinkV2;
+      const ingestor = yield* ProviderEventIngestor.ProviderEventIngestorV2;
+      const idAllocator = yield* IdAllocator.IdAllocatorV2;
+      const threadEvent = yield* threadCreatedEvent(now);
+      const threadId = threadEvent.threadId;
+      const providerSessionId = yield* idAllocator.allocate.providerSession({
+        providerInstanceId: modelSelection.instanceId,
+        threadId,
+      });
+      const addRun = (ordinal: number) =>
+        Effect.gen(function* () {
+          const runId = RunId.make(`run:suggestion:${ordinal}`);
+          yield* eventSink.write({
+            events: [
+              {
+                id: yield* idAllocator.allocate.event({ threadId }),
+                type: "run.created",
+                threadId,
+                occurredAt: now,
+                payload: {
+                  id: runId,
+                  threadId,
+                  ordinal,
+                  providerInstanceId: modelSelection.instanceId,
+                  modelSelection,
+                  providerThreadId: null,
+                  userMessageId: MessageId.make(`message:suggestion:${ordinal}`),
+                  rootNodeId: null,
+                  activeAttemptId: null,
+                  status: "completed",
+                  requestedAt: now,
+                  startedAt: now,
+                  completedAt: now,
+                  checkpointId: null,
+                  contextHandoffId: null,
+                },
+              },
+            ],
+          });
+          return runId;
+        });
+      const suggest = (runId: RunId, suggestion: string) =>
+        ingestor.ingestNormalized({
+          providerSessionId,
+          providerInstanceId: modelSelection.instanceId,
+          threadId,
+          event: {
+            type: "prompt_suggestion.updated",
+            driver: CODEX_DRIVER,
+            threadId,
+            runId,
+            suggestion,
+          },
+        });
+      yield* eventSink.write({ events: [threadEvent] });
+      return { now, threadId, addRun, suggest };
+    });
+
+    it.effect("keeps the suggestion on the thread without counting it as activity", () =>
+      Effect.gen(function* () {
+        const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+        const { now, threadId, addRun, suggest } = yield* seed;
+        const runId = yield* addRun(1);
+
+        const stored = yield* suggest(runId, '  "run   the tests"\n');
+        assert.deepEqual(
+          stored.map((entry) => entry.event.type),
+          ["thread.metadata-updated"],
+        );
+
+        const projection = yield* projectionStore.getThreadProjection(threadId);
+        assert.deepEqual(projection.thread.promptSuggestion, { runId, text: "run the tests" });
+        assert.equal(
+          DateTime.toEpochMillis(projection.thread.updatedAt),
+          DateTime.toEpochMillis(now),
+        );
+        assert.equal(currentPromptSuggestion(projection.thread, projection.runs), "run the tests");
+        assert.isEmpty(yield* suggest(runId, "run the tests"));
+      }),
+    );
+
+    it.effect("ignores a suggestion once a newer run exists", () =>
+      Effect.gen(function* () {
+        const projectionStore = yield* ProjectionStore.ProjectionStoreV2;
+        const { threadId, addRun, suggest } = yield* seed;
+        const firstRun = yield* addRun(1);
+        const secondRun = yield* addRun(2);
+
+        assert.isEmpty(yield* suggest(firstRun, "run the tests"));
+        const projection = yield* projectionStore.getThreadProjection(threadId);
+        assert.isUndefined(projection.thread.promptSuggestion);
+
+        assert.lengthOf(yield* suggest(secondRun, "commit this"), 1);
+      }),
+    );
+
+    it.effect("drops a suggestion with nothing left after cleaning", () =>
+      Effect.gen(function* () {
+        const { addRun, suggest } = yield* seed;
+        const runId = yield* addRun(1);
+        assert.isEmpty(yield* suggest(runId, ' \n "" '));
+      }),
+    );
+  });
 
   it.effect("rolls back runs a provider rewound off its active branch", () =>
     Effect.gen(function* () {

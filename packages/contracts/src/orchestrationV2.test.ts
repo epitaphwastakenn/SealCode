@@ -2,9 +2,14 @@ import { describe, expect, it } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Schema from "effect/Schema";
 
-import { NodeId, RunAttemptId, TrimmedNonEmptyString } from "./index.ts";
+import { NodeId, RunAttemptId, RunId, TrimmedNonEmptyString } from "./index.ts";
 import {
+  currentPromptSuggestion,
+  latestPromptSuggestionRun,
   latestProviderTurnForAttempt,
+  MAX_PROMPT_SUGGESTION_LENGTH,
+  normalizePromptSuggestionText,
+  OrchestrationV2AppThreadJson,
   OrchestrationV2ProviderCapabilities,
   OrchestrationV2ProviderThread,
   OrchestrationV2ProviderThreadJson,
@@ -21,6 +26,7 @@ const now = DateTime.makeUnsafe("2026-04-20T00:00:00.000Z");
 
 const decodeOrchestrationV2TurnItemJson = Schema.decodeUnknownSync(OrchestrationV2TurnItemJson);
 const encodeOrchestrationV2TurnItemJson = Schema.encodeSync(OrchestrationV2TurnItemJson);
+const decodeOrchestrationV2AppThreadJson = Schema.decodeUnknownSync(OrchestrationV2AppThreadJson);
 const decodeOrchestrationV2Subagent = Schema.decodeUnknownSync(OrchestrationV2Subagent);
 const encodeOrchestrationV2SubagentJson = Schema.encodeSync(OrchestrationV2SubagentJson);
 const decodeOrchestrationV2ProviderThreadJson = Schema.decodeUnknownSync(
@@ -628,5 +634,71 @@ describe("latestProviderTurnForAttempt", () => {
     ];
     expect(latestProviderTurnForAttempt(turns, RunAttemptId.make("goal-attempt"))?.id).toBe("last");
     expect(latestProviderTurnForAttempt(turns, null)).toBeUndefined();
+  });
+});
+
+const appThreadFixture = {
+  createdBy: "user",
+  creationSource: "web",
+  id: "thread-1",
+  projectId: "project-1",
+  title: "Thread",
+  providerInstanceId: "codex",
+  modelSelection: { instanceId: "codex", model: "gpt-5.4" },
+  runtimeMode: "full-access",
+  interactionMode: "default",
+  branch: null,
+  worktreePath: null,
+  activeProviderThreadId: null,
+  lineage: { parentThreadId: null, relationshipToParent: null, rootThreadId: "thread-1" },
+  forkedFrom: null,
+  createdAt: "2026-04-20T00:00:00.000Z",
+  updatedAt: "2026-04-20T00:00:00.000Z",
+  archivedAt: null,
+  deletedAt: null,
+};
+
+describe("prompt suggestions", () => {
+  const run = (id: string, ordinal: number, status: "completed" | "running" | "rolled_back") => ({
+    id: RunId.make(id),
+    ordinal,
+    status,
+  });
+  const suggestion = { runId: RunId.make("run-2"), text: "run the tests" };
+
+  it("offers a suggestion only while its run is the newest and has finished", () => {
+    const runs = [run("run-1", 1, "completed"), run("run-2", 2, "completed")];
+    expect(currentPromptSuggestion({ promptSuggestion: suggestion }, runs)).toBe("run the tests");
+    expect(currentPromptSuggestion({}, runs)).toBeNull();
+    expect(currentPromptSuggestion({ promptSuggestion: null }, runs)).toBeNull();
+  });
+
+  it("stops offering it when a message starts a newer run", () => {
+    const next = [run("run-2", 2, "completed"), run("run-3", 3, "running")];
+    expect(currentPromptSuggestion({ promptSuggestion: suggestion }, next)).toBeNull();
+    const still = [run("run-2", 2, "running")];
+    expect(currentPromptSuggestion({ promptSuggestion: suggestion }, still)).toBeNull();
+  });
+
+  it("follows the newest run that was not rolled back", () => {
+    const runs = [run("run-2", 2, "completed"), run("run-3", 3, "rolled_back")];
+    expect(latestPromptSuggestionRun(runs)?.id).toBe("run-2");
+    expect(currentPromptSuggestion({ promptSuggestion: suggestion }, runs)).toBe("run the tests");
+  });
+
+  it("reads a thread whose suggestion this build cannot read, without it", () => {
+    const decoded = decodeOrchestrationV2AppThreadJson({
+      ...appThreadFixture,
+      promptSuggestion: { runId: 7 },
+    });
+    expect(decoded.promptSuggestion).toBeNull();
+  });
+
+  it("keeps a suggestion to one short line", () => {
+    expect(normalizePromptSuggestionText('  "fix   the\nbuild"  ')).toBe("fix the build");
+    expect(normalizePromptSuggestionText(' "" ')).toBeNull();
+    const long = normalizePromptSuggestionText("word ".repeat(200));
+    expect(long?.length).toBeLessThanOrEqual(MAX_PROMPT_SUGGESTION_LENGTH);
+    expect(long?.endsWith("...")).toBe(true);
   });
 });

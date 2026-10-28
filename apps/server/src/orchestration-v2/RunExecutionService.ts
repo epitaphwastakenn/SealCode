@@ -502,6 +502,9 @@ export function routeProviderEvent(
     case "command_output.delta":
       // The session manager hands live output to the command output hub; runs never see it.
       return [false, state];
+    case "prompt_suggestion.updated":
+      // Arrives after the terminal, so the session manager records it without a run.
+      return [false, state];
     case "turn.terminal":
       return event.providerTurnId === state.rootProviderTurnId
         ? [true, { ...state, rootTurnEnded: true }]

@@ -11,6 +11,7 @@ import {
   buildCommitMessagePrompt,
   buildImageDescriptionPrompt,
   buildPrContentPrompt,
+  buildPromptSuggestionPrompt,
   buildReviewGuidePrompt,
   buildThreadTitlePrompt,
 } from "./textGenerationPrompts.ts";
@@ -168,6 +169,20 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     });
   });
 
+  const generatePromptSuggestion: NonNullable<ProviderTextGeneration["generatePromptSuggestion"]> =
+    Effect.fn(`${name}.generatePromptSuggestion`)(function* (input) {
+      const generated = yield* run({
+        operation: "generatePromptSuggestion",
+        cwd: input.cwd,
+        modelSelection: input.modelSelection,
+        ...buildPromptSuggestionPrompt({
+          userMessage: input.userMessage,
+          assistantMessage: input.assistantMessage,
+        }),
+      });
+      return { suggestion: generated.suggestion.trim() };
+    });
+
   const describeImages: NonNullable<ProviderTextGeneration["describeImages"]> = Effect.fn(
     `${name}.describeImages`,
   )(function* (input) {
@@ -193,6 +208,7 @@ export function fromRunner(name: string, run: Runner): ProviderTextGeneration {
     generateBranchName,
     generateThreadTitle,
     generateReviewGuide,
+    generatePromptSuggestion,
     describeImages,
   } satisfies ProviderTextGeneration;
 }

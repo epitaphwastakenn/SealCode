@@ -120,6 +120,14 @@ export const ProviderAdapterV2Event = Schema.Union([
     driver: ProviderDriverKind,
     turnItem: OrchestrationV2TurnItem,
   }),
+  /** Arrives after the turn's terminal and outside any run's subscription; the session manager records it directly. */
+  Schema.Struct({
+    type: Schema.Literal("prompt_suggestion.updated"),
+    driver: ProviderDriverKind,
+    threadId: ThreadId,
+    runId: RunId,
+    suggestion: Schema.String,
+  }),
   /** Unpersisted deltas go only to clients showing the row; final output arrives in turn_item.updated. */
   Schema.Struct({
     type: Schema.Literal("command_output.delta"),

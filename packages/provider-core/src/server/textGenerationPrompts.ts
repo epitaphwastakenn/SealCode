@@ -501,3 +501,39 @@ export function buildImageDescriptionPrompt(input: ImageDescriptionPromptInput) 
 
   return { prompt, outputSchema };
 }
+
+export const PROMPT_SUGGESTION_USER_MESSAGE_CHARS = 1_500;
+export const PROMPT_SUGGESTION_ASSISTANT_MESSAGE_CHARS = 3_000;
+
+export interface PromptSuggestionPromptInput {
+  readonly userMessage: string;
+  readonly assistantMessage: string;
+}
+
+// The end of a reply holds its conclusion and open questions, so that is what survives truncation.
+function limitMessageEnd(message: string, maxChars: number): string {
+  return message.length <= maxChars
+    ? message
+    : `[Earlier content truncated]\n\n${message.slice(-maxChars)}`;
+}
+
+export function buildPromptSuggestionPrompt(input: PromptSuggestionPromptInput) {
+  const prompt = [
+    "You predict what the user will type next to a coding agent after it finishes a turn.",
+    "Return JSON with exactly one key: suggestion.",
+    "Rules:",
+    "- Write the message exactly as the user would type it: short, imperative, in their voice and language.",
+    "- Prefer the one obvious next step the agent's reply points to, such as running the tests, committing, or continuing with the part it left open.",
+    "- 2-12 words. No quotes, no explanation, no questions to the user.",
+    "- If nothing follows naturally, return an empty string for suggestion.",
+    "",
+    "User message:",
+    limitSection(input.userMessage, PROMPT_SUGGESTION_USER_MESSAGE_CHARS),
+    "",
+    "Agent reply:",
+    limitMessageEnd(input.assistantMessage, PROMPT_SUGGESTION_ASSISTANT_MESSAGE_CHARS),
+  ].join("\n");
+  const outputSchema = Schema.Struct({ suggestion: Schema.String });
+
+  return { prompt, outputSchema };
+}

@@ -8,11 +8,11 @@ import { cn } from "../../lib/utils";
 import { usePullRequestsSupported } from "../../state/environments";
 import { HarpMark } from "../HarpMark";
 import {
-  resolveEnvironmentIdentificationPillLabel,
-  resolveSidebarStageBackdropVariant,
   SidebarStageBackdrop,
   useEnvironmentStageLabel,
+  useSidebarHeaderArtVariant,
 } from "../SidebarStageBackdrop";
+import { resolveEnvironmentIdentificationPillLabel } from "../SidebarStageBackdrop.logic";
 import { Badge } from "../ui/badge";
 import {
   SidebarFooter,
@@ -38,10 +38,7 @@ export const SidebarChromeHeader = memo(function SidebarChromeHeader({
 }) {
   const stageLabel = useEnvironmentStageLabel();
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
-  const backdropVariant = resolveSidebarStageBackdropVariant(
-    stageLabel,
-    environmentIdentificationMode === "artwork",
-  );
+  const backdropVariant = useSidebarHeaderArtVariant();
   const pillLabel =
     environmentIdentificationMode === "pill"
       ? resolveEnvironmentIdentificationPillLabel(stageLabel)
@@ -119,9 +116,10 @@ function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
   return (
     <HarpMark
       className="text-sm"
+      glyphClassName={onBackdrop ? "sidebar-stage-brand-glyph" : undefined}
       wordmarkClassName={cn(
         "[text-box:trim-both_cap_alphabetic] supports-[text-box:trim-both_cap_alphabetic]:py-1",
-        onBackdrop ? "text-white/70" : "text-muted-foreground",
+        onBackdrop ? "text-white/85 sidebar-stage-brand-text" : "text-muted-foreground",
       )}
     />
   );

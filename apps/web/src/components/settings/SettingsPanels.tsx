@@ -657,6 +657,9 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.glassSidebarEnabled !== DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled
       ? ["Glass sidebar"]
       : []),
+    ...(settings.sidebarHeaderArt !== DEFAULT_UNIFIED_SETTINGS.sidebarHeaderArt
+      ? ["Sidebar header art"]
+      : []),
     ...(settings.appearanceContrast !== DEFAULT_UNIFIED_SETTINGS.appearanceContrast
       ? ["Contrast"]
       : []),
@@ -879,6 +882,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       contextWindowMeterEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
       glassSidebarEnabled: DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled,
+      sidebarHeaderArt: DEFAULT_UNIFIED_SETTINGS.sidebarHeaderArt,
       glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity,
       panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
       interfaceAnimationsEnabled: DEFAULT_UNIFIED_SETTINGS.interfaceAnimationsEnabled,

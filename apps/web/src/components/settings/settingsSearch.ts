@@ -240,6 +240,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["translucent transparent acrylic blur sidebar"],
   },
   {
+    id: "sidebar-header-art",
+    title: "Sidebar header art",
+    to: "/settings/appearance",
+    searchTerms: ["blueprint grid artwork banner header logo decoration theme tint"],
+  },
+  {
     id: "glass-app",
     title: "Glass app",
     to: "/settings/appearance",

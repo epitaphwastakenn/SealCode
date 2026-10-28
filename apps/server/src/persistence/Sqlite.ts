@@ -79,6 +79,9 @@ export const layerFromPath = Effect.fn("makeSqlitePersistenceLive")(function* (d
     NodeSqliteClient.layer({
       filename: dbPath,
       readerWorker: true,
+      // Each reader is a thread of about 13 MB. Three versus two changed 2,400 overlapping point
+      // reads from 79 to 87 ms in total; one doubled that.
+      readerWorkers: 2,
       // Run checkpoint fsyncs off the event loop so slow disk flushes cannot stall clients.
       checkpointWorker: true,
       spanAttributes: {

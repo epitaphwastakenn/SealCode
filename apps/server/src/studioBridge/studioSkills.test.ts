@@ -73,4 +73,12 @@ describe("studio skills", () => {
       expect(real.skills.has("roblox-studio-mcp")).toBe(false);
     }).pipe(Effect.provide(NodeServices.layer)),
   );
+
+  it.effect("decodes the pack once for every caller", () =>
+    Effect.gen(function* () {
+      const first = yield* loadStudioSkills;
+      const second = yield* loadStudioSkills;
+      expect(second).toBe(first);
+    }).pipe(Effect.provide(NodeServices.layer)),
+  );
 });

@@ -25,6 +25,13 @@ const MAX_DETAIL_STRING_BYTES = 32_768;
 const MAX_DYNAMIC_VALUE_BYTES = 16_384;
 const MAX_ON_DEMAND_BYTES = 256 * 1024;
 
+/**
+ * The wire reads this much of a command's output: the failure scan covers the first
+ * MAX_DETAIL_STRING_BYTES UTF-16 units, and one more character keeps a truncated copy longer than
+ * that bound. A windowed read may cut the output here without changing the projected item.
+ */
+export const WIRE_COMMAND_OUTPUT_PREFIX_CHARS = MAX_DETAIL_STRING_BYTES + 1;
+
 function truncateDetail(
   value: string | undefined,
   maxBytes = MAX_DETAIL_STRING_BYTES,

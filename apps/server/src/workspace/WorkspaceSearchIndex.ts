@@ -29,7 +29,12 @@ import { isProjectFaviconPath } from "@t3tools/shared/projectFavicon";
 
 // fff-node's native library stays external; single-executables require disk packages instead of importing them.
 const requireForFff = NodeModule.createRequire(import.meta.url);
-const { FileFinder } = requireForFff("@ff-labs/fff-node") as typeof import("@ff-labs/fff-node");
+// Loaded on the first search so a server nobody searches never maps the native library.
+let fileFinderModule: typeof import("@ff-labs/fff-node") | undefined;
+const loadFileFinder = () => {
+  fileFinderModule ??= requireForFff("@ff-labs/fff-node") as typeof import("@ff-labs/fff-node");
+  return fileFinderModule.FileFinder;
+};
 
 const WORKSPACE_INDEX_MAX_ENTRIES = 25_000;
 const WORKSPACE_INDEX_PAGE_SIZE = WORKSPACE_INDEX_MAX_ENTRIES + 2;
@@ -293,7 +298,7 @@ const createFinder = Effect.fn("WorkspaceSearchIndex.createFinder")(function* (
 ) {
   const result = yield* Effect.try({
     try: () =>
-      FileFinder.create({
+      loadFileFinder().create({
         basePath: cwd,
         disableMmapCache: true,
         // Content indexing costs CPU/memory; path-only consumers use the lightweight index.

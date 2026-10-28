@@ -28,8 +28,9 @@ next message starts a fresh one.
 
 Models come from `commandcode --list-models` on the selected host, with display names and
 reasoning levels read from the CLI's bundled catalog. Reasoning levels appear only for models
-that have them. After CommandCode changes its catalog, refresh provider status. Add a model the
-list omits under **Custom models** in the instance settings.
+that have them. SealCode keeps the list for a CLI version for a day. After CommandCode changes its
+catalog, refresh provider status to read it again. Add a model the list omits under **Custom
+models** in the instance settings.
 
 Usage limits appear when the host's login is signed in to a subscription. SealCode reads them with
 the same credential CommandCode saves in `~/.commandcode/auth.json`.

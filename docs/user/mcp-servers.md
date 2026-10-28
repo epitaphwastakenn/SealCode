@@ -16,6 +16,11 @@ whether it is connecting, ready, or failing. **Reconnect** restarts a stdio proc
 remote connection without touching the other servers. New tools appear in new sessions; agents whose
 MCP client handles tool list updates also see them in a running one.
 
+Once SealCode has seen a stdio server's tools, it lists them without running the server. The server
+starts when an agent first calls one of its tools and stops after 30 minutes without a call, so a
+server that keeps state between calls loses it after that quiet period. Its tools stay listed, and
+**Reconnect** starts it right away and reads its tools again.
+
 Agents see the tools as `mcp__<server id>__<tool name>` under a `sealcode-global` MCP server. Tool
 calls follow the thread's usual approval rules: SealCode does not pre-approve them. Two servers
 whose names normalize to the same tool name both go into an error state until one is renamed.

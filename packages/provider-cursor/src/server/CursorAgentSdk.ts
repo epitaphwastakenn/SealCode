@@ -325,7 +325,7 @@ function makeCursorAgentSdkProtocolLogger(input: {
 export const makeCursorAgentSdkRunner = Effect.fn("makeCursorAgentSdkRunner")(function* (
   protocolLoggerFor: (input: CursorAgentSdkOpenInput) => CursorAgentSdkProtocolLogger | undefined,
 ) {
-  const { Agent, createAgentPlatform } = yield* CursorSdk.CursorSdk;
+  const cursorSdk = yield* CursorSdk.CursorSdk;
 
   // Prime with cursorsandbox before any Full access run; the SDK caches sandbox support per process.
   const sandboxSupportPrimeStarted = yield* Ref.make(false);
@@ -337,7 +337,9 @@ export const makeCursorAgentSdkRunner = Effect.fn("makeCursorAgentSdkRunner")(fu
       }
       yield* Effect.tryPromise(async () => {
         const cwd = typeof options.local?.cwd === "string" ? options.local.cwd : undefined;
-        const platform = await createAgentPlatform(cwd === undefined ? {} : { workspaceRef: cwd });
+        const platform = await cursorSdk.createAgentPlatform(
+          cwd === undefined ? {} : { workspaceRef: cwd },
+        );
         const release = await platform.prewarmLocalWorkspace({
           ...(options.apiKey === undefined ? {} : { apiKey: options.apiKey }),
           local: {
@@ -374,8 +376,8 @@ export const makeCursorAgentSdkRunner = Effect.fn("makeCursorAgentSdkRunner")(fu
       const agent = yield* Effect.tryPromise({
         try: () =>
           input.operation === "create"
-            ? Agent.create(input.options)
-            : Agent.resume(input.agentId!, input.options),
+            ? cursorSdk.Agent.create(input.options)
+            : cursorSdk.Agent.resume(input.agentId!, input.options),
         catch: (cause) => runnerError(cause, `agent.${input.operation}`),
       });
 
@@ -464,7 +466,7 @@ export const makeCursorAgentSdkRunner = Effect.fn("makeCursorAgentSdkRunner")(fu
                 Effect.gen(function* () {
                   abandonedRunRecoveryAvailable = false;
                   const latestRun = yield* Effect.tryPromise({
-                    try: () => Agent.listRuns(agent.agentId, { ...runOptions, limit: 1 }),
+                    try: () => cursorSdk.Agent.listRuns(agent.agentId, { ...runOptions, limit: 1 }),
                     catch: (cause) => runnerError(cause, "agent.listRuns"),
                   });
                   const activeRun = latestRun.items.find(
@@ -479,7 +481,7 @@ export const makeCursorAgentSdkRunner = Effect.fn("makeCursorAgentSdkRunner")(fu
                     payload: { type: "run.cancel", runId: activeRun.id },
                   });
                   yield* Effect.tryPromise({
-                    try: () => Agent.cancelRun(activeRun.id, runOptions),
+                    try: () => cursorSdk.Agent.cancelRun(activeRun.id, runOptions),
                     catch: (cause) => runnerError(cause, "agent.cancelRun"),
                   });
                   return yield* startRun();
@@ -566,7 +568,7 @@ export const makeCursorAgentSdkRunner = Effect.fn("makeCursorAgentSdkRunner")(fu
           Effect.andThen(
             Effect.tryPromise({
               try: () =>
-                Agent.messages.list(agent.agentId, {
+                cursorSdk.Agent.messages.list(agent.agentId, {
                   runtime: "local",
                   ...(cwd === undefined ? {} : { cwd }),
                 }),

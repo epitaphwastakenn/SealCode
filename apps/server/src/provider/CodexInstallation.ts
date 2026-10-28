@@ -1,5 +1,6 @@
 // @effect-diagnostics nodeBuiltinImport:off - Effect has no incremental digest.
 import { ProviderDriverKind, type ProviderInstallState } from "@t3tools/contracts";
+import { writeFileStringAtomically } from "@t3tools/shared/atomicWrite";
 import { cliArchiveTarCommand } from "@t3tools/shared/cliRelease";
 import * as HostProcess from "@t3tools/shared/HostProcess";
 import { resolveCommandPath, resolveSpawnCommand } from "@t3tools/shared/shell";
@@ -42,6 +43,14 @@ const PackageManifest = Schema.Struct({
   target: Schema.String,
   entrypoint: Schema.String,
 });
+// Executables already proven to be Codex, by path; a changed file fails the fingerprint check.
+const VerifiedLocalRuntimes = Schema.Record(
+  Schema.String,
+  Schema.Struct({ fingerprint: Schema.String, version: Version }),
+);
+const verifiedLocalRuntimesJson = Schema.fromJsonString(VerifiedLocalRuntimes);
+const decodeVerifiedLocalRuntimes = Schema.decodeUnknownOption(verifiedLocalRuntimesJson);
+const encodeVerifiedLocalRuntimes = Schema.encodeSync(verifiedLocalRuntimesJson);
 const decodeVersion = Schema.decodeUnknownEffect(Version);
 const encodeRecord = Schema.encodeEffect(Schema.fromJsonString(InstalledRelease));
 const encodeActive = Schema.encodeEffect(Schema.fromJsonString(ActiveRelease));
@@ -371,6 +380,34 @@ export const makeCodexInstallation = Effect.fn("makeCodexInstallation")(function
     Effect.orElseSucceed(() => false),
   );
   const localCache = new Map<string, { fingerprint: string; executable: CodexExecutable | null }>();
+  // The probe starts Codex twice. A binary seen at the same size and time before is not probed again.
+  const verifiedRuntimesPath = path.join(options.baseDir, "caches", "codex-local-runtimes.json");
+  let verifiedRuntimes: Record<string, { fingerprint: string; version: string }> | undefined;
+  const readVerifiedRuntimes = Effect.fn("CodexInstallation.readVerifiedRuntimes")(function* () {
+    verifiedRuntimes ??= yield* fs.readFileString(verifiedRuntimesPath).pipe(
+      Effect.map((raw) => Option.getOrElse(decodeVerifiedLocalRuntimes(raw), () => ({}))),
+      Effect.orElseSucceed(() => ({})),
+    );
+    return verifiedRuntimes;
+  });
+  const rememberVerifiedRuntime = Effect.fn("CodexInstallation.rememberVerifiedRuntime")(function* (
+    executablePath: string,
+    fingerprint: string,
+    version: string,
+  ) {
+    verifiedRuntimes = {
+      ...(yield* readVerifiedRuntimes()),
+      [executablePath]: { fingerprint, version },
+    };
+    yield* writeFileStringAtomically({
+      filePath: verifiedRuntimesPath,
+      contents: `${encodeVerifiedLocalRuntimes(verifiedRuntimes)}\n`,
+    }).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+      Effect.ignore({ log: true }),
+    );
+  });
   const resolveLocal = Effect.fn("CodexInstallation.resolveLocal")(
     function* () {
       const executablePath = yield* resolveCommandPath("codex", { env: environment }).pipe(
@@ -392,24 +429,34 @@ export const makeCodexInstallation = Effect.fn("makeCodexInstallation")(function
       const info = yield* fs.stat(executablePath);
       const fingerprint = `${realExecutablePath}:${info.size}:${Option.getOrUndefined(info.mtime)?.getTime()}:${Option.getOrUndefined(info.ino)}`;
       const cached = localCache.get(executablePath);
+      const verified =
+        cached === undefined ? (yield* readVerifiedRuntimes())[executablePath] : undefined;
       const executable =
         cached?.fingerprint === fingerprint
           ? cached.executable
-          : yield* Effect.gen(function* () {
-              const output = yield* runCommand(executablePath, ["--version"]);
-              const version = /^codex-cli (\d+\.\d+\.\d+)$/u.exec(output.trim())?.[1];
-              if (!version) return null;
-              yield* runCommand(executablePath, ["app-server", "--help"]);
-              return {
+          : verified?.fingerprint === fingerprint
+            ? ({
                 executablePath,
                 source: "local",
-                version,
+                version: verified.version,
                 managedVersionDirectory: null,
-              } satisfies CodexExecutable;
-            }).pipe(
-              Effect.timeout("5 seconds"),
-              Effect.orElseSucceed(() => null),
-            );
+              } satisfies CodexExecutable)
+            : yield* Effect.gen(function* () {
+                const output = yield* runCommand(executablePath, ["--version"]);
+                const version = /^codex-cli (\d+\.\d+\.\d+)$/u.exec(output.trim())?.[1];
+                if (!version) return null;
+                yield* runCommand(executablePath, ["app-server", "--help"]);
+                yield* rememberVerifiedRuntime(executablePath, fingerprint, version);
+                return {
+                  executablePath,
+                  source: "local",
+                  version,
+                  managedVersionDirectory: null,
+                } satisfies CodexExecutable;
+              }).pipe(
+                Effect.timeout("5 seconds"),
+                Effect.orElseSucceed(() => null),
+              );
       localCache.set(executablePath, { fingerprint, executable });
       if (!executable) return null;
       const advisory = yield* compatibility(executable.version);

@@ -19,6 +19,13 @@ import * as ProviderHost from "./ProviderHost.ts";
 import { applyUsageLimitsUpdate, resolveUsageLimitsAfterProbe } from "./usageLimits.ts";
 import type { ManagedServerProvider } from "./snapshot.ts";
 
+/**
+ * Why a status check runs. `requested` is a user or API refresh, `startup` is the check at boot,
+ * and the rest run unattended. A driver with an expensive probe uses it to skip that probe while
+ * the app is opening.
+ */
+export type ProviderCheckReason = "startup" | "settings" | "interval" | "requested";
+
 interface ProviderSnapshotState {
   readonly snapshot: ServerProvider;
   readonly enrichmentGeneration: number;
@@ -44,6 +51,10 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   readonly haveSettingsChanged: (previous: Settings, next: Settings) => boolean;
   readonly initialSnapshot: (settings: Settings) => Effect.Effect<ServerProvider>;
   readonly checkProvider: Effect.Effect<ServerProvider, ServerSettingsError>;
+  /** Used in place of `checkProvider` by drivers that depend on why the check runs. */
+  readonly checkProviderFor?: (
+    reason: ProviderCheckReason,
+  ) => Effect.Effect<ServerProvider, ServerSettingsError>;
   readonly enrichSnapshot?: (input: {
     readonly settings: Settings;
     readonly snapshot: ServerProvider;
@@ -123,7 +134,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
 
   const applySnapshotBase = Effect.fn("applySnapshot")(function* (
     nextSettings: Settings,
-    options?: { readonly forceRefresh?: boolean },
+    options?: { readonly forceRefresh?: boolean; readonly reason?: ProviderCheckReason },
   ) {
     const forceRefresh = options?.forceRefresh === true;
     const previousSettings = yield* Ref.get(settingsRef);
@@ -147,7 +158,9 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
       return state.snapshot;
     }
 
-    const probedSnapshot = yield* input.checkProvider;
+    const probedSnapshot = yield* input.checkProviderFor
+      ? input.checkProviderFor(options?.reason ?? "settings")
+      : input.checkProvider;
     const { snapshot: nextSnapshot, generation: nextGeneration } = yield* Ref.modify(
       snapshotStateRef,
       (state) => {
@@ -187,8 +200,10 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     yield* restartSnapshotEnrichment(nextSettings, nextSnapshot, nextGeneration);
     return nextSnapshot;
   });
-  const applySnapshot = (nextSettings: Settings, options?: { readonly forceRefresh?: boolean }) =>
-    refreshSemaphore.withPermits(1)(applySnapshotBase(nextSettings, options));
+  const applySnapshot = (
+    nextSettings: Settings,
+    options?: { readonly forceRefresh?: boolean; readonly reason?: ProviderCheckReason },
+  ) => refreshSemaphore.withPermits(1)(applySnapshotBase(nextSettings, options));
 
   // Providers call this on every token-usage tick, usually without changing the snapshot.
   const applyUsageLimits: ManagedServerProvider["applyUsageLimits"] = Effect.fnUntraced(
@@ -211,9 +226,9 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     },
   );
 
-  const refreshSnapshot = Effect.fn("refreshSnapshot")(function* () {
+  const refreshSnapshot = Effect.fn("refreshSnapshot")(function* (reason: ProviderCheckReason) {
     const nextSettings = yield* input.getSettings;
-    return yield* applySnapshot(nextSettings, { forceRefresh: true });
+    return yield* applySnapshot(nextSettings, { forceRefresh: true, reason });
   });
 
   const shouldRefreshOnInterval = Effect.gen(function* () {
@@ -262,7 +277,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
   }
 
   yield* Stream.runForEach(input.streamSettings, (nextSettings) =>
-    Effect.asVoid(applySnapshot(nextSettings)),
+    Effect.asVoid(applySnapshot(nextSettings, { reason: "settings" })),
   ).pipe(Effect.forkScoped);
 
   yield* Effect.forever(
@@ -281,7 +296,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
             intervalElapsed && Duration.toMillis(Duration.fromInputUnsafe(refreshInterval)) > 0
               ? shouldRefreshOnInterval.pipe(
                   Effect.flatMap((shouldRefresh) =>
-                    shouldRefresh ? refreshSnapshot().pipe(Effect.asVoid) : Effect.void,
+                    shouldRefresh ? refreshSnapshot("interval").pipe(Effect.asVoid) : Effect.void,
                   ),
                 )
               : Effect.void,
@@ -292,7 +307,7 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     ),
   ).pipe(Effect.forkScoped);
 
-  yield* applySnapshot(initialSettings, { forceRefresh: true }).pipe(
+  yield* applySnapshot(initialSettings, { forceRefresh: true, reason: "startup" }).pipe(
     Effect.ignoreCause({ log: true }),
     Effect.forkScoped,
   );
@@ -302,7 +317,11 @@ export const makeManagedServerProvider = Effect.fn("makeManagedServerProvider")(
     getSnapshot: Ref.get(snapshotStateRef).pipe(Effect.map((state) => state.snapshot)),
     refresh: input
       .resolveMaintenance({ fresh: true })
-      .pipe(Effect.andThen(refreshSnapshot), Effect.tapError(Effect.logError), Effect.orDie),
+      .pipe(
+        Effect.andThen(refreshSnapshot("requested")),
+        Effect.tapError(Effect.logError),
+        Effect.orDie,
+      ),
     applyUsageLimits,
     get streamChanges() {
       return Stream.fromPubSub(changesPubSub);

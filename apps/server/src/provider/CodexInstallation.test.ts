@@ -11,6 +11,7 @@ import * as Option from "effect/Option";
 import * as PlatformError from "effect/PlatformError";
 import * as Exit from "effect/Exit";
 import * as Queue from "effect/Queue";
+import * as Sink from "effect/Sink";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import { HttpClient, HttpClientResponse } from "effect/http";
@@ -45,7 +46,8 @@ const makeHarness = Effect.fn("test.makeCodexInstallation")(function* (
   const localDirectory = `${baseDir}/local`;
   const localBinaryPath = `${localDirectory}/codex${input.platform === "win32" ? ".exe" : ""}`;
   const probeLog = `${baseDir}/local-probes.txt`;
-  if (input.local) {
+  // A second harness over the same base directory is the same machine after a restart.
+  if (input.local && !(yield* fs.exists(localBinaryPath))) {
     yield* fs.makeDirectory(localDirectory, { recursive: true });
     yield* fs.writeFileString(
       localBinaryPath,
@@ -201,6 +203,67 @@ const compileNative = Effect.fn("test.compileNative")(function* (
   );
   expect(yield* compiler.exitCode).toBe(0);
 }, Effect.scoped);
+
+const countingSpawner = (spawned: Array<string>, version: string) =>
+  ChildProcessSpawner.make((command) => {
+    const args = (command as unknown as { readonly args: ReadonlyArray<string> }).args;
+    spawned.push(args.join(" "));
+    const encoder = new TextEncoder();
+    return Effect.succeed(
+      ChildProcessSpawner.makeHandle({
+        pid: ChildProcessSpawner.ProcessId(1),
+        exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(0)),
+        isRunning: Effect.succeed(false),
+        kill: () => Effect.void,
+        unref: Effect.succeed(Effect.void),
+        stdin: Sink.drain,
+        stdout: Stream.make(encoder.encode(`codex-cli ${version}\n`)),
+        stderr: Stream.empty,
+        all: Stream.empty,
+        getInputFd: () => Sink.drain,
+        getOutputFd: () => Stream.empty,
+      }),
+    );
+  });
+
+it.effect("does not start a local Codex again after a restart when it is unchanged", () =>
+  Effect.gen(function* () {
+    const spawned: Array<string> = [];
+    const first = yield* makeHarness({
+      local: { version: "0.156.1" },
+      platform: "win32",
+      spawner: countingSpawner(spawned, "0.156.1"),
+    });
+    // A Windows launcher needs its adjacent host to count as a real install.
+    yield* first.fs.writeFileString(`${first.baseDir}/local/codex-code-mode-host.exe`, "host");
+    expect((yield* first.installation.resolve()).version).toBe("0.156.1");
+    expect(spawned).toEqual(["--version", "app-server --help"]);
+
+    const restarted = yield* makeHarness({
+      baseDir: first.baseDir,
+      local: { version: "0.156.1" },
+      platform: "win32",
+      spawner: countingSpawner(spawned, "0.156.1"),
+    });
+    expect(yield* restarted.installation.resolve()).toMatchObject({
+      source: "local",
+      version: "0.156.1",
+    });
+    expect((yield* restarted.installation.state).installedVersion).toBe("0.156.1");
+    expect(spawned).toEqual(["--version", "app-server --help"]);
+
+    // A replaced binary no longer matches what was verified.
+    yield* restarted.fs.writeFileString(restarted.localBinaryPath, "# a newer codex\n");
+    const updated = yield* makeHarness({
+      baseDir: first.baseDir,
+      local: { version: "0.157.0" },
+      platform: "win32",
+      spawner: countingSpawner(spawned, "0.157.0"),
+    });
+    expect((yield* updated.installation.resolve()).version).toBe("0.157.0");
+    expect(spawned).toEqual(["--version", "app-server --help", "--version", "app-server --help"]);
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+);
 
 it.effect("rechecks compatibility after the local executable is replaced", () =>
   Effect.gen(function* () {

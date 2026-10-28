@@ -52,6 +52,10 @@ import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import * as ProviderContinuationRequests from "@t3tools/provider-core/server/ProviderContinuationRequests";
 import { makeAntigravityAdapterV2 } from "../../orchestration-v2/Adapters/AntigravityAdapterV2.ts";
 import { terminateOrphanedAntigravityRuntimes } from "../acp/AntigravityOrphanedRuntimes.ts";
+import {
+  makeAntigravityRuntimeLedger,
+  withRuntimeLedger,
+} from "../acp/AntigravityRuntimeLedger.ts";
 import { makeAcpNativeLoggerFactory } from "@t3tools/provider-acp/server/nativeLogging";
 import { ProviderDriverError } from "../Errors.ts";
 import { makeAntigravityProvider } from "../AntigravityProvider.ts";
@@ -151,10 +155,17 @@ export const AntigravityDriver: ProviderDriver<
       ),
     );
     const profileDirectory = directories.profile;
+    const runtimeLedger = yield* makeAntigravityRuntimeLedger(
+      path.join(host.paths.stateDir, "antigravity-runtimes.json"),
+    ).pipe(
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+      Effect.provideService(Path.Path, path),
+    );
     // Before the temp sweep: a leftover runtime keeps its unpacked files locked.
     if ((yield* HostProcess.Platform) === "win32") {
       yield* terminateOrphanedAntigravityRuntimes(
         path.join(host.paths.baseDir, "tools", "antigravity-acp"),
+        runtimeLedger,
       ).pipe(Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner));
     }
     for (const directory of [
@@ -268,7 +279,8 @@ export const AntigravityDriver: ProviderDriver<
       const runtime = yield* makeAntigravityAcpRuntime({
         ...input,
         authMethod: auth.authMethod,
-        childProcessSpawner: spawner,
+        childProcessSpawner:
+          platform === "win32" ? withRuntimeLedger(spawner, runtimeLedger) : spawner,
         spawn: buildAntigravityAcpSpawnInput({
           installation: executable,
           profile,

@@ -7,7 +7,7 @@ import * as Effect from "effect/Effect";
 
 /**
  * Headless Blender jobs. The agent's Python runs inside a prelude that gives it the job folder
- * and, afterwards, SealCode measures the result itself: a topology report for every mesh, an
+ * and, afterwards, Harp measures the result itself: a topology report for every mesh, an
  * optional preview render, and an optional OBJ export Studio can import.
  */
 

@@ -648,7 +648,7 @@ const make = Effect.gen(function* () {
     },
   );
 
-  // A Studio install turns the Roblox settings on once, in SealCode mode. SealCode used to seed Roblox's
+  // A Studio install turns the Roblox settings on once, in Harp mode. Harp used to seed Roblox's
   // own MCP as a plain server instead; that entry is retired so Studio tools are not offered twice
   // (official mode still runs it). The marker keeps a later choice of "off" from being undone.
   const robloxSeedMarkerPath = pathService.join(

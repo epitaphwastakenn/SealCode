@@ -143,7 +143,7 @@ describe("provider compatibility", () => {
     }
   });
 
-  it("applies policies only within their SealCode version range", () => {
+  it("applies policies only within their Harp version range", () => {
     const scopedPolicy = { ...policy, t3CodeRange: ">=0.0.42 <0.1.0" };
     for (const version of ["0.0.42", "0.0.45"]) {
       assert.strictEqual(

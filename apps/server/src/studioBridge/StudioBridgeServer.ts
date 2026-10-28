@@ -86,7 +86,7 @@ const routesFor = (input: {
             success: false,
             error: "unknown_plugin_key",
             message:
-              "This plugin's key does not match this SealCode. Restart Studio to load the plugin SealCode installed.",
+              "This plugin's key does not match this Harp. Restart Studio to load the plugin Harp installed.",
           });
         }
         const body = yield* readBody(request);

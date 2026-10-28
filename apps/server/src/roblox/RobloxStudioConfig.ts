@@ -22,7 +22,7 @@ export const MANAGED_SERVER_IDS: ReadonlySet<string> = new Set([
   BLENDER_MCP_SERVER_ID,
 ]);
 
-/** Where SealCode's own Studio bridge listens, and the token its MCP endpoint wants. */
+/** Where Harp's own Studio bridge listens, and the token its MCP endpoint wants. */
 export interface StudioBridgeEndpoint {
   readonly port: number;
   readonly mcpToken: string;
@@ -89,7 +89,7 @@ export const managedServersFor = (
     const bridge = environment.studioBridge;
     servers[STUDIO_BRIDGE_SERVER_ID] = {
       id: STUDIO_BRIDGE_SERVER_ID,
-      displayName: "Roblox Studio (SealCode)",
+      displayName: "Roblox Studio (Harp)",
       enabled: true,
       transport: "streamable-http",
       url: `http://127.0.0.1:${String(bridge.port)}/mcp`,

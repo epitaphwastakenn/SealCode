@@ -53,7 +53,7 @@ export class StudioHelloRejected extends Schema.TaggedError<StudioHelloRejected>
       case "missing_fields":
         return `The plugin's hello is missing ${(this.fields ?? []).join(", ")}.`;
       case "protocol_mismatch":
-        return `The Studio plugin speaks protocol ${String(this.actualProtocol)} but SealCode expects ${String(this.expectedProtocol)}. Restart Studio to load the updated plugin.`;
+        return `The Studio plugin speaks protocol ${String(this.actualProtocol)} but Harp expects ${String(this.expectedProtocol)}. Restart Studio to load the updated plugin.`;
       case "invalid_role":
         return "The plugin announced a role the bridge does not accept.";
       case "duplicate_instance_role":
@@ -214,7 +214,7 @@ export interface StudioLifecycle {
   readonly port?: number;
   readonly error?: string;
   readonly pluginPath?: string;
-  /** Hash of the plugin code SealCode installed this run. */
+  /** Hash of the plugin code Harp installed this run. */
   readonly pluginHash?: string;
   /** The installed plugin file was replaced this run: Studios already open run the old copy. */
   readonly pluginUpdated: boolean;
@@ -370,7 +370,7 @@ export class StudioBridge extends Context.Service<
       readonly title: string;
       readonly body?: string;
     }) => Effect.Effect<void>;
-    /** The MCP endpoint saw SealCode's tool gateway. */
+    /** The MCP endpoint saw Harp's tool gateway. */
     readonly markAgentLinked: Effect.Effect<void>;
     readonly setLifecycle: (lifecycle: StudioLifecycle) => Effect.Effect<void>;
     /** Drops every session, as when the listener stops. */
@@ -505,7 +505,7 @@ const make = Effect.gen(function* () {
           placeName: session.peer.placeName,
           message: midTask
             ? "Roblox Studio disconnected while the agent was using it."
-            : "Roblox Studio stopped answering SealCode.",
+            : "Roblox Studio stopped answering Harp.",
           count: 1,
           at: now,
         });
@@ -573,7 +573,7 @@ const make = Effect.gen(function* () {
         });
       }
       if (input.protocol !== STUDIO_PROTOCOL_VERSION) {
-        lastRejection = `A Studio plugin with protocol ${String(input.protocol)} (build ${input.build}) was refused; this SealCode speaks protocol ${String(STUDIO_PROTOCOL_VERSION)}.`;
+        lastRejection = `A Studio plugin with protocol ${String(input.protocol)} (build ${input.build}) was refused; this Harp speaks protocol ${String(STUDIO_PROTOCOL_VERSION)}.`;
         yield* changed;
         return yield* new StudioHelloRejected({
           status: 426,

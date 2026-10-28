@@ -176,12 +176,12 @@ export const unpackAntigravityRuntime = Effect.fn("unpackAntigravityRuntime")(
         : parsePyInstallerToc(yield* readAt(cookie.tocOffset, cookie.tocBytes));
     if (cookie === null || entries === null || entries.length === 0 || !cookie.pythonLibrary) {
       return yield* new AntigravityUnpackError({
-        detail: "The Antigravity executable is not an archive SealCode can unpack.",
+        detail: "The Antigravity executable is not an archive Harp can unpack.",
       });
     }
     if (entries.some((entry) => UNSUPPORTED_TYPECODES.has(entry.typecode))) {
       return yield* new AntigravityUnpackError({
-        detail: "The Antigravity executable uses archive entries SealCode cannot unpack.",
+        detail: "The Antigravity executable uses archive entries Harp cannot unpack.",
       });
     }
 

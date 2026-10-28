@@ -6,7 +6,7 @@ import * as NodeTls from "node:tls";
 
 import { trustedCaCertificates } from "./antigravityTrust.ts";
 
-/** Hosts the agent and SealCode reach for Antigravity, seen through a logging proxy. */
+/** Hosts the agent and Harp reach for Antigravity, seen through a logging proxy. */
 export const ANTIGRAVITY_GOOGLE_HOSTS = [
   "oauth2.googleapis.com",
   "accounts.google.com",
@@ -202,7 +202,7 @@ const headRequest = (tls: NodeTls.TLSSocket, host: string) =>
     tls.once("error", reject);
     tls.once("close", () => reject(new Error("connection closed before an HTTP response")));
     tls.write(
-      `HEAD / HTTP/1.1\r\nHost: ${host}\r\nUser-Agent: SealCode-diagnostics\r\nConnection: close\r\n\r\n`,
+      `HEAD / HTTP/1.1\r\nHost: ${host}\r\nUser-Agent: Harp-diagnostics\r\nConnection: close\r\n\r\n`,
     );
   });
 
@@ -298,7 +298,7 @@ export const explainGoogleConnectivity = async (input: {
   if (result.error === undefined) return undefined;
   switch (result.failedAt) {
     case "proxy":
-      return `SealCode's local network proxy for Antigravity is unreachable (${result.error}). A firewall or security program may block connections on this computer.`;
+      return `Harp's local network proxy for Antigravity is unreachable (${result.error}). A firewall or security program may block connections on this computer.`;
     case "connect":
       return `This computer cannot connect to ${host} on port 443 (${result.error}). A firewall, VPN or proxy may be blocking Google.`;
     case "tls":

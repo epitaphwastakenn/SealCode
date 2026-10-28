@@ -789,7 +789,7 @@ export class Launcher {
     // Signal listeners alone do not keep Node alive.
     this.#timer = setInterval(() => {}, 2_147_483_647);
     process.stderr.write(
-      "[service-launcher] Another SealCode server owns this SealCode home. Stop it, then restart this service.\n",
+      "[service-launcher] Another Harp server owns this Harp home. Stop it, then restart this service.\n",
     );
   }
 
@@ -820,7 +820,7 @@ export class Launcher {
 export async function main(): Promise<void> {
   const baseDir = process.env.T3CODE_HOME?.trim();
   if (baseDir === undefined || baseDir === "") {
-    throw new Error("T3CODE_HOME is required by the SealCode service launcher.");
+    throw new Error("T3CODE_HOME is required by the Harp service launcher.");
   }
   const environment = await readServiceEnvironment(baseDir);
   const statePath = NodePath.join(baseDir, "runtime", SERVICE_STATE_FILE);

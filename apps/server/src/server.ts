@@ -499,7 +499,7 @@ const layerProviderInstallationRefresh = Layer.effectDiscard(
   }),
 );
 
-/** SealCode's own Studio bridge; it listens only while the Roblox mode is `sealcode`. */
+/** Harp's own Studio bridge; it listens only while the Roblox mode is `sealcode`. */
 const layerStudioBridge = StudioBridgeServer.layer.pipe(
   Layer.provideMerge(StudioTools.layer),
   Layer.provide(StudioPluginInstaller.layer),

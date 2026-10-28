@@ -566,7 +566,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
   );
 
   it.effect(
-    "turns SealCode mode on once for a Studio install and retires the seeded official MCP",
+    "turns Harp mode on once for a Studio install and retires the seeded official MCP",
     () =>
       Effect.gen(function* () {
         const fileSystem = yield* FileSystem.FileSystem;
@@ -1334,12 +1334,7 @@ it.layer(NodeServices.layer)("server settings", (it) => {
             },
           },
         });
-        const values = [
-          "config-secret",
-          "env-secret",
-          "github-secret",
-          "quota-secret",
-        ];
+        const values = ["config-secret", "env-secret", "github-secret", "quota-secret"];
         const client = ServerSettingsModule.redactServerSettingsForClient(saved);
         const disk = yield* fs.readFileString(config.settingsPath);
         for (const value of values) {

@@ -236,12 +236,12 @@ export const make = Effect.fn("service.server_self_update.make")(function* () {
         return yield* desktopAppUpdate.run(reportProgress);
       }
       return yield* failWith(
-        "This server is managed by the SealCode desktop app on its machine; update the desktop app to update it.",
+        "This server is managed by the Harp desktop app on its machine; update the desktop app to update it.",
       );
     }
     if (capability === null) {
       return yield* failWith(
-        "Remote updates require the SealCode background service. Run `t3 service install` on the server machine.",
+        "Remote updates require the Harp background service. Run `t3 service install` on the server machine.",
       );
     }
 

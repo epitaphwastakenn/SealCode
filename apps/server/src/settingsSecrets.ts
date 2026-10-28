@@ -141,7 +141,7 @@ export function mapSettingsSecrets(
     ]),
   ) as ServerSettings["sourceControlHosts"];
 
-  // Names match what SealCode 1.x stored, so existing MCP secrets keep resolving.
+  // Names match what Harp 1.x stored, so existing MCP secrets keep resolving.
   const mapMcpFields = (
     serverId: string,
     kind: "env" | "header",

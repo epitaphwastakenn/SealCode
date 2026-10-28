@@ -21,7 +21,7 @@ const entry = (
 describe("selectOrphanedRuntimeRoots", () => {
   it("stops a tree whose server died and keeps the live server's runtime", () => {
     const processes = [
-      entry(10, 1, 100, "C:\\Program Files\\SealCode\\SealCode.exe"),
+      entry(10, 1, 100, "C:\\Program Files\\Harp\\Harp.exe"),
       // The live server's runtime: launcher, agent server, harness.
       entry(20, 10, 200, launcher),
       entry(21, 20, 201, launcher),

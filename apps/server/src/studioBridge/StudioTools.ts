@@ -182,7 +182,7 @@ const outdatedPlugin = (payload: unknown): StudioToolResult | undefined =>
   payload.error.startsWith("Unknown endpoint:")
     ? errorResult(
         "plugin_outdated",
-        "The SealCode plugin running in Studio does not know this operation. Restart Studio so it loads the plugin SealCode installed.",
+        "The Harp plugin running in Studio does not know this operation. Restart Studio so it loads the plugin Harp installed.",
       )
     : undefined;
 
@@ -428,7 +428,7 @@ const make = Effect.gen(function* () {
             action: "start",
             error: "playtest_not_ready",
             message:
-              "The playtest's server peer did not connect before the timeout. In Studio, check that the playtest started and that the SealCode plugin may make HTTP requests; if it keeps failing, ask the user to press Play and Stop.",
+              "The playtest's server peer did not connect before the timeout. In Studio, check that the playtest started and that the Harp plugin may make HTTP requests; if it keeps failing, ask the user to press Play and Stop.",
             studio: report,
           },
           { isError: true },
@@ -1508,9 +1508,9 @@ const make = Effect.gen(function* () {
         })),
         pendingRequests: snapshot.pendingRequests,
         hint: snapshot.pluginReloadNeeded
-          ? "SealCode just updated the Studio plugin. Connected places update themselves in place within a few seconds; a place that stays on the old copy can be reopened with manage_studio (open with closeOthers)."
+          ? "Harp just updated the Studio plugin. Connected places update themselves in place within a few seconds; a place that stays on the old copy can be reopened with manage_studio (open with closeOthers)."
           : snapshot.peers.length === 0
-            ? "No Studio is connected: ask the user to open the place in Roblox Studio and check the SealCode panel (Plugins tab)."
+            ? "No Studio is connected: ask the user to open the place in Roblox Studio and check the Harp panel (Plugins tab)."
             : undefined,
       });
     });
@@ -1821,7 +1821,7 @@ const make = Effect.gen(function* () {
       if (executable === undefined) {
         return errorResult(
           "blender_not_found",
-          "Blender is not installed where SealCode looks. The user can set its path in Settings, Connections, Roblox Studio, Blender executable.",
+          "Blender is not installed where Harp looks. The user can set its path in Settings, Connections, Roblox Studio, Blender executable.",
         );
       }
       const continueFrom = str(args.continueFrom);
@@ -2401,7 +2401,7 @@ const make = Effect.gen(function* () {
       name: "get_bridge_status",
       title: "Studio bridge status",
       description:
-        "State of SealCode's Studio bridge: listening, plugin installed or updated, connected peers. Call once when Studio tools fail to connect.",
+        "State of Harp's Studio bridge: listening, plugin installed or updated, connected peers. Call once when Studio tools fail to connect.",
       inputSchema: object({}),
       risk: "read",
       run: (args) => status(args),
@@ -2410,7 +2410,7 @@ const make = Effect.gen(function* () {
       name: "get_connected_instances",
       title: "Connected Studio places",
       description:
-        "Studio places connected to SealCode, with their peers (edit, server while playtesting) and safety toggles.",
+        "Studio places connected to Harp, with their peers (edit, server while playtesting) and safety toggles.",
       inputSchema: object({}),
       risk: "read",
       run: (args) => connected(args),
@@ -3122,7 +3122,7 @@ const make = Effect.gen(function* () {
       name: "manage_studio",
       title: "Manage Studio",
       description:
-        "Roblox Studio windows on this computer. status lists them (pid, place from the title, connected to SealCode or not). open starts Studio on a place file (placeFile) or a published place (placeId), or an empty Studio, and waits for it to connect; closeOthers=true then closes older windows of the same place so Studio windows do not pile up. close asks a window (pid) to close like the user would; Studio may show its save prompt, and force=true ends it without saving. The plugin updates itself in place, so reopening Studio is rarely needed.",
+        "Roblox Studio windows on this computer. status lists them (pid, place from the title, connected to Harp or not). open starts Studio on a place file (placeFile) or a published place (placeId), or an empty Studio, and waits for it to connect; closeOthers=true then closes older windows of the same place so Studio windows do not pile up. close asks a window (pid) to close like the user would; Studio may show its save prompt, and force=true ends it without saving. The plugin updates itself in place, so reopening Studio is rarely needed.",
       inputSchema: object(
         {
           action: { type: "string", enum: ["status", "open", "close"] },
@@ -3146,7 +3146,7 @@ const make = Effect.gen(function* () {
       name: "blender",
       title: "Blender job",
       description:
-        "Runs a Python (bpy) script in headless Blender on this computer, in a fresh scene unless continueFrom names an earlier job's jobDir. JOB_DIR and job_path(name) point at the job folder. Afterwards SealCode measures every mesh (triangles, quads, ngons, non-manifold and open edges, loose geometry, dimensions, materials), renders a preview sheet (front, right, top and three-quarter views in the model's colours) and exports model.obj for import_mesh. Model in metres (1 unit = 1 m), keep clean quads, no ngons, apply scale, and fix every topology problem the report lists before importing.",
+        "Runs a Python (bpy) script in headless Blender on this computer, in a fresh scene unless continueFrom names an earlier job's jobDir. JOB_DIR and job_path(name) point at the job folder. Afterwards Harp measures every mesh (triangles, quads, ngons, non-manifold and open edges, loose geometry, dimensions, materials), renders a preview sheet (front, right, top and three-quarter views in the model's colours) and exports model.obj for import_mesh. Model in metres (1 unit = 1 m), keep clean quads, no ngons, apply scale, and fix every topology problem the report lists before importing.",
       inputSchema: object(
         {
           script: {
@@ -3438,7 +3438,7 @@ const make = Effect.gen(function* () {
         ) {
           return errorResult(
             "tool_disabled",
-            `The user turned off ${name} in Studio's SealCode panel. Work without it, or ask them to switch it back on.`,
+            `The user turned off ${name} in Studio's Harp panel. Work without it, or ask them to switch it back on.`,
           );
         }
         return yield* tool.run(normalizeArgs(name, args), context);

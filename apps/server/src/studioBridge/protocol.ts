@@ -1,5 +1,5 @@
 /**
- * The wire contract between SealCode's Studio bridge and its Roblox Studio plugin. The plugin's
+ * The wire contract between Harp's Studio bridge and its Roblox Studio plugin. The plugin's
  * `Config` module is generated from these values at install time, so both sides read one source.
  *
  * The downstream is a long-poll, not a Server-Sent-Events stream: Studio's SSE client hands the

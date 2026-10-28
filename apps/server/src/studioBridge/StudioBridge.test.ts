@@ -354,7 +354,7 @@ describe("StudioBridge", () => {
       expect(alerts.map((alert) => [alert.kind, alert.message, alert.count])).toEqual([
         ["playtest_error", "boom", 1],
         ["playtest_error", "later", 3],
-        ["disconnected", "Roblox Studio stopped answering SealCode.", 1],
+        ["disconnected", "Roblox Studio stopped answering Harp.", 1],
       ]);
     }).pipe(Effect.provide(layer)),
   );

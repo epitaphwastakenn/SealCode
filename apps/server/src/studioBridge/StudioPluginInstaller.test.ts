@@ -71,4 +71,37 @@ describe("StudioPluginInstaller", () => {
       expect(yield* installer.uninstall).toBe(false);
     }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
   );
+
+  it.effect("replaces the plugin file from before the rename instead of leaving two plugins", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const folder = yield* fs.makeTempDirectoryScoped();
+      const legacy = path.join(folder, "SealCodeStudio.rbxmx");
+      const installer = yield* StudioPluginInstaller.StudioPluginInstaller.pipe(
+        Effect.provide(
+          StudioPluginInstaller.layer.pipe(
+            Layer.provide(
+              Layer.succeed(HostProcess.Environment, { SEALCODE_STUDIO_PLUGINS_DIR: folder }),
+            ),
+          ),
+        ),
+      );
+
+      yield* fs.writeFileString(legacy, "<roblox/>");
+      const upgraded = yield* installer.install({ port: 58760, key: "abc" });
+      expect(upgraded.changed).toBe(true);
+      expect(yield* fs.readDirectory(folder)).toEqual(["HarpStudio.rbxmx"]);
+
+      // A leftover next to an up to date plugin goes too, without rewriting the plugin.
+      yield* fs.writeFileString(legacy, "<roblox/>");
+      expect((yield* installer.install({ port: 58760, key: "abc" })).changed).toBe(false);
+      expect(yield* fs.readDirectory(folder)).toEqual(["HarpStudio.rbxmx"]);
+
+      // Turning the bridge off removes whichever copy is there.
+      yield* fs.writeFileString(legacy, "<roblox/>");
+      expect(yield* installer.uninstall).toBe(true);
+      expect(yield* fs.readDirectory(folder)).toEqual([]);
+    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+  );
 });

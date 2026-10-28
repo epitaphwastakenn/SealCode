@@ -81,11 +81,11 @@ export function resolveProviderCompatibility(
       : "unknown";
   const message =
     status === "broken"
-      ? "This provider version is known to be incompatible with this SealCode release."
+      ? "This provider version is known to be incompatible with this Harp release."
       : status === "unsupported"
-        ? "This provider version is outside the supported range for this SealCode release."
+        ? "This provider version is outside the supported range for this Harp release."
         : status === "graceful"
-          ? "This provider version has limited compatibility with this SealCode release."
+          ? "This provider version has limited compatibility with this Harp release."
           : null;
   const recommendedVersion = policy.recommendedVersion ?? null;
   const recommendedRange = policy.recommendedRange ?? null;

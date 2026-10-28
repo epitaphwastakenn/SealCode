@@ -97,7 +97,7 @@ const make = Effect.gen(function* () {
     const bridge: RobloxStudioBridgeStatus | undefined =
       roblox.mode === "sealcode" ? studioBridgeStatus(yield* studioBridge.snapshot) : undefined;
 
-    // The bridge's `blender` tool exists whenever SealCode mode is on.
+    // The bridge's `blender` tool exists whenever Harp mode is on.
     const executable = blenderExecutableFor(roblox, environment);
     const version =
       roblox.mode === "sealcode" && executable !== undefined
@@ -132,7 +132,7 @@ const make = Effect.gen(function* () {
         environment.detectedBlenderMcp === undefined
           ? {
               problem:
-                "No MCP for Blender install was found, so SealCode runs `uvx blender-mcp`; install uv or set the command.",
+                "No MCP for Blender install was found, so Harp runs `uvx blender-mcp`; install uv or set the command.",
             }
           : {}),
       },

@@ -31,7 +31,7 @@ describe("managedServersFor", () => {
     );
   });
 
-  it("points the SealCode mode at the in-server bridge's MCP endpoint, with its token as a secret", () => {
+  it("points the Harp mode at the in-server bridge's MCP endpoint, with its token as a secret", () => {
     const servers = managedServersFor(
       withRoblox({ mode: "sealcode", officialMcpAlongside: false }),
       environment,
@@ -44,7 +44,7 @@ describe("managedServersFor", () => {
     });
   });
 
-  it("runs Roblox's own MCP alone, or beside SealCode's bridge when asked", () => {
+  it("runs Roblox's own MCP alone, or beside Harp's bridge when asked", () => {
     expect(Object.keys(managedServersFor(withRoblox({ mode: "official" }), environment))).toEqual([
       OFFICIAL_SERVER_ID,
     ]);

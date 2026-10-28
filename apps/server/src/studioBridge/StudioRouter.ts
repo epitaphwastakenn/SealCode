@@ -105,7 +105,7 @@ export const resolveTarget = (input: {
   if (peers.length === 0) {
     return fail(
       "no_studio_connected",
-      "No Roblox Studio is connected to SealCode. Open the place in Studio and check the SealCode panel there.",
+      "No Roblox Studio is connected to Harp. Open the place in Studio and check the Harp panel there.",
     );
   }
 

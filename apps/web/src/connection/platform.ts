@@ -433,9 +433,11 @@ const loadSecondaryConnectionRegistration = Effect.fn(
   };
 });
 
-// The bridge has no topology event. Cache registrations until bearer credentials near expiry.
+// Bridges without a topology event are polled; registrations are cached until bearer credentials near expiry.
 const PLATFORM_POLL_INTERVAL = "3 seconds";
-const SECONDARY_BEARER_REFRESH_SKEW_MS = 5_000;
+const PLATFORM_REFRESH_INTERVAL = "30 seconds";
+// Wider than PLATFORM_REFRESH_INTERVAL so a tick always lands before expiry.
+const SECONDARY_BEARER_REFRESH_SKEW_MS = 45_000;
 
 function secondaryBearerExpiresAtEpochMs(
   issuedAtEpochMs: number,
@@ -725,10 +727,22 @@ const layerPlatformConnectionSource = Layer.effect(
       return registrations as ReadonlyArray<PlatformConnectionRegistration>;
     }).pipe(Effect.provide(FetchHttpClient.layer));
 
+    const subscribe = window.desktopBridge?.onLocalEnvironmentBootstrapsChanged;
+    const triggers =
+      subscribe === undefined
+        ? Stream.tick(PLATFORM_POLL_INTERVAL)
+        : Stream.merge(
+            // The slow tick still refreshes secondary bearer credentials before they expire.
+            Stream.tick(PLATFORM_REFRESH_INTERVAL),
+            Stream.callback<void>((queue) =>
+              Effect.acquireRelease(
+                Effect.sync(() => subscribe(() => Queue.offerUnsafe(queue, undefined))),
+                (unsubscribe) => Effect.sync(unsubscribe),
+              ).pipe(Effect.asVoid),
+            ),
+          );
     return PlatformConnectionSource.PlatformConnectionSource.of({
-      registrations: Stream.tick(PLATFORM_POLL_INTERVAL).pipe(
-        Stream.mapEffect(() => buildPlatformRegistrations),
-      ),
+      registrations: triggers.pipe(Stream.mapEffect(() => buildPlatformRegistrations)),
     });
   }),
 );

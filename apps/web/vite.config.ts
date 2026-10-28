@@ -20,6 +20,7 @@ import {
 
 import { loadRepoEnv } from "../../scripts/lib/public-config";
 import { thirdPartyLicensesPlugin } from "../../scripts/lib/third-party-licenses";
+import { preloadStartupChunksPlugin } from "./vite/preloadStartupChunks";
 import { tailwindPlugins } from "./vite/tailwind";
 import { warmBundledDevPlugin } from "./vite/warmBundledDev";
 
@@ -260,6 +261,7 @@ export default defineConfig(() => {
     plugins: [
       devCompressionPlugin(),
       chunkCycleGuardPlugin(),
+      preloadStartupChunksPlugin(),
       builtDev
         ? undefined
         : thirdPartyLicensesPlugin({

@@ -638,6 +638,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["about check for updates download install upgrade release"],
   },
   {
+    id: "credits",
+    title: "Credits",
+    to: "/settings/general",
+    searchTerms: ["about fork upstream t3 code theo browne julius marminge mit license"],
+  },
+  {
     id: "whats-new",
     title: "What's new",
     to: "/settings/general",
@@ -652,7 +658,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "cli-command",
-    title: "t3 command",
+    title: "SealCode command line",
     to: "/settings/general",
     searchTerms: ["cli terminal shell path install command line"],
     desktopOnly: true,

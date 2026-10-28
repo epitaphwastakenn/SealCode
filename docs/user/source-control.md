@@ -1,6 +1,6 @@
 # Source control
 
-SealCode integrates with GitHub to clone and publish repositories, create pull requests, and
+Harp integrates with GitHub to clone and publish repositories, create pull requests, and
 review changes. Other Git hosts work as plain Git remotes.
 
 ## Review turn changes
@@ -12,13 +12,13 @@ against your base branch. Restore still returns the complete saved workspace.
 
 ## Connect an account
 
-Install Git and configure authentication on the machine running your SealCode server. For a remote
+Install Git and configure authentication on the machine running your Harp server. For a remote
 environment, do this on the remote machine. After signing in, open **Settings → Source control**
 and choose **Rescan**.
 
 ### GitHub
 
-SealCode talks to GitHub's API directly and only needs a token. Any of these works, in this
+Harp talks to GitHub's API directly and only needs a token. Any of these works, in this
 order of precedence:
 
 1. A token saved in **Settings → Source control → GitHub**. It is kept in the server's secret
@@ -31,14 +31,14 @@ If `gh` is signed in to several accounts or hosts, expand **GitHub** in the same
 the account each host uses or turn a host off. A saved token or `GH_TOKEN` takes precedence
 over that choice; a host turned off stays off either way.
 
-For GitHub Enterprise, sign in with `gh auth login --hostname YOUR_HOST`. SealCode treats a
+For GitHub Enterprise, sign in with `gh auth login --hostname YOUR_HOST`. Harp treats a
 custom server name as GitHub once it has a credential for that host.
 
 ## Start, clone, or publish a project
 
 To start from nothing, choose **New project** in the command palette (`Cmd/Ctrl+K`), or
-**New project** under **Add Project** on any client, and type a name. SealCode makes a Git
-repository in `~/.t3/projects` (the `projects` folder of your SealCode data directory) with a README,
+**New project** under **Add Project** on any client, and type a name. Harp makes a Git
+repository in `~/.t3/projects` (the `projects` folder of your Harp data directory) with a README,
 an icon, and a first commit, then opens a new thread in it. Until the project has a thread, new
 threads work in its folder, even when your default is a new worktree. The folder is named after the project,
 like `pinball-stats` for "Pinball Stats". Turn on **Create private repository on GitHub** to also
@@ -49,7 +49,7 @@ Use **Add Project** in the command palette (`Cmd/Ctrl+K`) to clone a repository.
 provider or paste a Git URL, then choose where to save it. The project opens right away while the
 clone runs in the background: you can write your first prompt, and sending waits until the files
 are in place. A toast tracks progress and lets you cancel; if the clone fails, retry it from the
-toast or from the banner above the composer. When the host refuses the machine's SSH key, SealCode
+toast or from the banner above the composer. When the host refuses the machine's SSH key, Harp
 clones over HTTPS with Git's credentials for that host instead, and the project's remote uses the
 HTTPS URL.
 
@@ -59,7 +59,7 @@ make your first commit before pushing.
 
 ## Create a pull request
 
-Use a thread's Git actions to commit, push, and create a pull request. SealCode can generate commit
+Use a thread's Git actions to commit, push, and create a pull request. Harp can generate commit
 messages, review titles, and descriptions from your changes. Descriptions also draw on the work in
 the thread, including the checks it ran.
 
@@ -142,7 +142,7 @@ Tick a file off in the **Code** tab once you have read it and it collapses; the 
 running count. A tick belongs to the pull request rather than to a commit, so scoping the tab to a
 single commit keeps them. A file pushed to after you cleared it comes back marked **Changed**.
 
-These are GitHub's own viewed marks, so a review carries between SealCode and github.com in either
+These are GitHub's own viewed marks, so a review carries between Harp and github.com in either
 direction.
 
 ## Troubleshooting

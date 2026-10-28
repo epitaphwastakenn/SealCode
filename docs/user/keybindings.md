@@ -90,10 +90,10 @@ It is a JSON array of rules:
 ]
 ```
 
-SealCode creates the file with its defaults and adds new defaults on later startups.
+Harp creates the file with its defaults and adds new defaults on later startups.
 New defaults do not replace commands you customized. If a new default overlaps one
 of your shortcuts, [rule order](#precedence) decides which runs.
-Invalid rules are ignored; if the file cannot be parsed, SealCode uses defaults.
+Invalid rules are ignored; if the file cannot be parsed, Harp uses defaults.
 
 ## Rule shape
 
@@ -191,5 +191,5 @@ Change **Settings → General → Confirmations → Quit shortcut** to **Direct*
 single press or **Double press** for two presses only. Choosing **Quit** from the
 application menu always quits immediately.
 
-On Windows and Linux, closing the main window quits SealCode. When `Ctrl+W` has
-nothing left to close, SealCode asks before closing the window.
+On Windows and Linux, closing the main window quits Harp. When `Ctrl+W` has
+nothing left to close, Harp asks before closing the window.

@@ -1,6 +1,6 @@
 # Antigravity
 
-SealCode runs Google's official Antigravity ACP agent on your selected environment.
+Harp runs Google's official Antigravity ACP agent on your selected environment.
 It has its own sign-in, separate from the Antigravity IDE or CLI. Google controls
 which models and account access are available through this agent.
 
@@ -8,7 +8,7 @@ which models and account access are available through this agent.
 
 Open **Settings > Providers**, choose the environment that runs
 your project, and enable Antigravity. Install its runtime there, then choose
-**Sign in** and complete the browser sign-in. Wait for SealCode to confirm
+**Sign in** and complete the browser sign-in. Wait for Harp to confirm
 account access and load models before starting a thread.
 
 Installation continues if you leave settings or reconnect. Setup requires
@@ -24,12 +24,12 @@ fail to load because the sign-in listener is on the environment.
 Copy the full return address, including everything after `?`, into the return URL
 field in the client where you started sign-in, then choose
 **Continue**. Keep the original address; do not replace it with the server's
-hostname. Only that SealCode sign-in session can finish the attempt. If it expires,
+hostname. Only that Harp sign-in session can finish the attempt. If it expires,
 retry sign-in and use the new link.
 
 The return URL contains a temporary sign-in code. Paste it only into the setup
 field. A successful callback page alone does not confirm account access; wait for
-SealCode's confirmation.
+Harp's confirmation.
 
 ### Other sign-in methods
 
@@ -73,18 +73,18 @@ appears once; pick the level with the reasoning slider in the model picker. A
 resumed thread keeps its selected model. If access to that model ends, select
 another available model before continuing.
 
-Use Antigravity's native `/plan` command for planning. SealCode's separate Plan mode
+Use Antigravity's native `/plan` command for planning. Harp's separate Plan mode
 is unavailable. Tool approvals follow [Permission modes](./permission-modes.md).
 Questions with fixed choices still need one of the offered answers, even in
 **Full access**.
 
-SealCode keeps conversation history and file diffs, but Antigravity cannot rewind
+Harp keeps conversation history and file diffs, but Antigravity cannot rewind
 its conversation. Reverting a thread or editing and resubmitting an earlier turn
 is unavailable. Continue with a follow-up message or start a new thread.
 
 ### Skills and attachments
 
-Put project skills in `.agents/skills`. SealCode also reads `.gemini/skills` and the
+Put project skills in `.agents/skills`. Harp also reads `.gemini/skills` and the
 legacy `.agent/skills` directory. Among these project locations, the first copy
 wins in this order: `.gemini/skills`, `.agents/skills`, `.agent/skills`. See
 [commands and skills](./composer.md#commands-and-skills) for invoking them.
@@ -128,7 +128,7 @@ is refused while the runtime is in use.
 
 Open **Usage > Limits** to see the remaining Gemini and shared Claude/GPT allowances
 for Google sign-ins. Each group has separate five-hour and weekly limits and reset
-times. Limits refresh with provider status and include usage outside SealCode.
+times. Limits refresh with provider status and include usage outside Harp.
 
 A server restart keeps your Google sign-in. The provider shows the saved account
 until a session, a refresh, or a sign-out reports something new.
@@ -140,16 +140,16 @@ If Google reports `SUBSCRIPTION_REQUIRED`, an account restriction, or a usage li
 follow the provider's message and any retry time. See [Google's account plans][plans]
 for eligibility.
 
-SealCode connects Antigravity to Google over IPv4 first and uses IPv6 only when IPv4
+Harp connects Antigravity to Google over IPv4 first and uses IPv6 only when IPv4
 fails, so a network with broken IPv6 does not stall it. A proxy set in `HTTPS_PROXY` is
 used as is. On Windows, Antigravity also trusts the certificates Windows trusts, so
 antivirus HTTPS scanning or a company certificate does not block it.
 
 Antigravity unpacks its files each time it starts. Antivirus scanning can make that take
-a minute or more; SealCode waits and says so. Once it is running, if it does not answer
-within 30 seconds, SealCode restarts it once: sign-in retries on its own, and a turn
+a minute or more; Harp waits and says so. Once it is running, if it does not answer
+within 30 seconds, Harp restarts it once: sign-in retries on its own, and a turn
 stops and asks you to send your message again. When sign-in fails because of the
-network, SealCode names the cause it finds, such as intercepted HTTPS, a wrong clock or
+network, Harp names the cause it finds, such as intercepted HTTPS, a wrong clock or
 a DNS failure.
 
 To get a report to send to whoever helps you, choose **Diagnostics** next to the

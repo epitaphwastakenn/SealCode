@@ -1,6 +1,6 @@
 # Welcome wizard
 
-SealCode shows a setup flow when you open a new installation. Existing
+Harp shows a setup flow when you open a new installation. Existing
 workspaces skip this flow.
 
 Close setup while no import is running to go straight to the app. You can connect
@@ -9,7 +9,7 @@ Direct links, such as Settings, open normally before setup is done.
 
 ## Connect your computers
 
-Select one or more computers to set up. If you opened SealCode directly from a
+Select one or more computers to set up. If you opened Harp directly from a
 server or the desktop app, that computer is already connected and selected.
 It is identified by its name, which may differ from the device running your
 browser.
@@ -21,23 +21,23 @@ You can add more computers before continuing:
   the pairing link. You can also run `t3 serve --host <address>` and use
   `t3 pair` when the server is already reachable on your network.
 
-A computer marked **Client not supported** runs a SealCode version that cannot
+A computer marked **Client not supported** runs a Harp version that cannot
 talk to this app. The message under its name says which side to update.
 
 Saved computers are selected by default. Uncheck any you do not want to set up; this does not disconnect them.
 Continue when your selected computers are connected. Setup checks
 agents across the selected computers, then offers project import grouped by computer.
 
-If SealCode cannot confirm the workspace during startup, the setup flow shows
+If Harp cannot confirm the workspace during startup, the setup flow shows
 **Still connecting** instead of opening the app. Select **Reload** to try again.
 
-If SealCode cannot read your saved settings, it shows **Could not read settings**.
+If Harp cannot read your saved settings, it shows **Could not read settings**.
 Select **Retry** after storage becomes available. Setup does not replace
 unreadable settings with defaults.
 
 ## Check your agents
 
-SealCode checks each selected computer for Claude Code and Codex. If an agent is
+Harp checks each selected computer for Claude Code and Codex. If an agent is
 not installed or signed in, select its action to open a terminal with the
 correct command ready to run. Install uses the vendor's own installer, which
 keeps **Update now** working in Settings. Other providers can be enabled in
@@ -49,7 +49,7 @@ terminal metadata while the terminal process can use them.
 
 ## Import your projects
 
-SealCode finds directories that Claude Code or Codex has used. Git repositories
+Harp finds directories that Claude Code or Codex has used. Git repositories
 are listed first, newest activity on top. When the remote is on GitHub, the
 group shows the repository as `owner/name`. Clones with the same remote share
 one group. Directories that are not git repositories sit under "Other folders".
@@ -61,18 +61,18 @@ can be offered as separate projects. Other linked git worktrees, Codex scratch
 directories under `Documents/Codex`, and anything under `Downloads` are not
 offered.
 
-A large or malformed history can reach the scan limit. SealCode keeps the
+A large or malformed history can reach the scan limit. Harp keeps the
 projects it found and warns when projects or conversations may be missing.
 
 Imported projects include Codex and Claude conversations active within the last
-30 days. You can continue those conversations in SealCode.
+30 days. You can continue those conversations in Harp.
 
-Conversation import is best effort. SealCode keeps the first user prompt and the
+Conversation import is best effort. Harp keeps the first user prompt and the
 newest remaining visible user and assistant messages, with 200 messages total.
 It omits tool activity and attachments. For Codex, it omits generated setup
 context only when a canonical user event and a valid shared turn ID identify the
 same user turn. Ambiguous legacy or response-only context stays in the imported
-conversation so SealCode does not remove user text. It reads one conversation at
+conversation so Harp does not remove user text. It reads one conversation at
 a time and skips files larger than 4 GiB. It also skips a conversation when the
 message text and metadata it keeps need more than 32 MiB of memory. Tool output
 does not count toward that limit. It ignores malformed records and skips

@@ -15,7 +15,7 @@ the usual way.
 Chrome, Edge, and the desktop app can transcribe in the browser while you record. No audio is
 uploaded in that case.
 
-If the browser cannot transcribe, SealCode sends the clip to a speech-to-text API on the machine
+If the browser cannot transcribe, Harp sends the clip to a speech-to-text API on the machine
 running the server. Configure one of these on that machine:
 
 - `GROQ_API_KEY` — Groq Whisper
@@ -24,7 +24,7 @@ running the server. Configure one of these on that machine:
   Optional `SEALCODE_STT_MODEL` selects the model.
 
 On the desktop app, you can also put those variables in `~/.t3/userdata/.env` (outside the git
-repo). Restart SealCode after changing that file.
+repo). Restart Harp after changing that file.
 
 A custom endpoint is used first when both the key and URL are set. Otherwise Groq is preferred when
 both Groq and OpenAI keys are present.

@@ -1,6 +1,6 @@
 # Exporting diagnostics
 
-SealCode does not send product usage data, crash reports, or traces to anyone. The only telemetry that
+Harp does not send product usage data, crash reports, or traces to anyone. The only telemetry that
 leaves your machine is the OpenTelemetry export you configure yourself.
 
 ## Export diagnostics to your own receiver

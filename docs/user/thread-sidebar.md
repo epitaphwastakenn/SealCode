@@ -10,7 +10,7 @@ already made in a draft and configured project defaults take precedence.
 Branch and workspace mode come from your configured defaults. To continue in
 an existing worktree, use **New thread in this worktree** from the branch toolbar.
 
-When you change a new thread's project, SealCode stays in the current environment
+When you change a new thread's project, Harp stays in the current environment
 if that project exists there. Otherwise it selects an environment that has it.
 
 ### Start without a project
@@ -23,7 +23,7 @@ from the machine menu to move it there. To move a draft into a project, pick the
 project in the heading.
 
 Each thread without a project works in its own folder under `~/.t3/scratch` (the
-`scratch` folder of your SealCode data directory), named after its date, the first words
+`scratch` folder of your Harp data directory), named after its date, the first words
 of its first message, and a short id, like
 `2026-09-25-convert-these-pngs-to-webp-a1b2c3d4`. Deleting a thread keeps its
 folder, so the files the agent wrote stay until you delete them. Branch, worktree, and diff controls stay hidden because
@@ -94,7 +94,7 @@ position, so using **Un-settle** returns it to the top. Pinning and snoozing pre
 position until you move it again. Thread activity does not change the order. The settled shelf
 continues to use settlement time.
 
-If dragging is unavailable for one environment, update the SealCode server running in that
+If dragging is unavailable for one environment, update the Harp server running in that
 environment. Pinned and active reordering require server support. Threads from older servers keep
 their default order until the server is updated.
 
@@ -106,7 +106,7 @@ To change how titles are written, add **Thread title instructions** in **Setting
 Text generation**, such as a length limit or an identifier to put first. They apply to new and
 regenerated titles. Select a project to give it its own instructions.
 
-Agents connected through SealCode can use the same server-owned metadata workflow to
+Agents connected through Harp can use the same server-owned metadata workflow to
 rename a thread, regenerate its title, or link and unlink a pull request. These changes
 appear on every connected client without requiring the originating browser to remain
 open.

@@ -19,10 +19,10 @@ choose a shortcut. **Finish later** turns capture back off so you can resume whe
 ## Taking a capture
 
 Switch to the window you want and press the shortcut. The default is both Shift keys together.
-SealCode attaches the image to your draft and brings itself forward. If no thread is open it starts
+Harp attaches the image to your draft and brings itself forward. If no thread is open it starts
 a draft in the current project.
 
-Pressing the shortcut while SealCode is in front captures SealCode itself.
+Pressing the shortcut while Harp is in front captures Harp itself.
 
 Pending captures are kept on disk until the attachment is saved to the draft, so a capture survives
 closing the app mid-way and is attached on the next launch. Captures rejected because the image is
@@ -31,7 +31,7 @@ too large are discarded.
 ## Changing the shortcut
 
 Select the shortcut in Settings, press the new keys, then **Save**. You can use a modifier pair such
-as Command+Command or Ctrl+Ctrl, or a key chord. SealCode refuses shortcuts that collide with its own
+as Command+Command or Ctrl+Ctrl, or a key chord. Harp refuses shortcuts that collide with its own
 keybindings or that the operating system already reserves.
 
 ## Include app text
@@ -40,7 +40,7 @@ keybindings or that the operating system already reserves.
 to attach screenshots only. On macOS this also drops the Accessibility permission requirement.
 
 Availability depends on the app. Some apps expose only their window controls, not the document or
-terminal contents. If an app is slow to answer, SealCode attaches the screenshot without the data
+terminal contents. If an app is slow to answer, Harp attaches the screenshot without the data
 rather than waiting.
 
 An icon beside the app name on an attachment shows whether accessibility data was included. Select

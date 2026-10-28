@@ -1,6 +1,6 @@
 # Prompt links
 
-A prompt link opens SealCode with a prompt ready to send. Use one to share a prompt, or to put a
+A prompt link opens Harp with a prompt ready to send. Use one to share a prompt, or to put a
 one-click fix in a pull request comment.
 
 A link never runs anything. It opens a draft. You read the prompt, then press Send. A link cannot
@@ -8,7 +8,7 @@ change your permission mode, branch, or worktree. Your own defaults apply.
 
 ## Write a link
 
-Links use SealCode's `t3code://` scheme, so they open the desktop app (development builds use
+Links use Harp's `t3code://` scheme, so they open the desktop app (development builds use
 `t3code-dev://`). Write one by hand:
 
 ```
@@ -29,23 +29,23 @@ Encode the prompt for a URL. In JavaScript, use `encodeURIComponent`.
 
 ## Open a link
 
-Open the link from a browser, a terminal, or any other app. SealCode opens as a draft.
+Open the link from a browser, a terminal, or any other app. Harp opens as a draft.
 
 - **No `repo`**: the draft opens without a project, on the machine you used last.
 - **`repo`**: the draft opens in your most recently used project for that repository. A fork
   counts only for its own owner. When you do not have the repository, choose **Clone** or **Use
   without project**.
 - **`provider` and `model`**: used when you have that provider set up. Otherwise your default
-  model is used, and SealCode tells you.
+  model is used, and Harp tells you.
 - **`pr`**: opens the thread linked to that pull request on any connected machine, with the prompt
   in its composer. When no thread is linked, the draft goes on the pull request branch in a new
-  worktree. SealCode checks the code out only after you confirm, because the checkout runs your
+  worktree. Harp checks the code out only after you confirm, because the checkout runs your
   setup script on it.
 
 A thread link with a prompt, such as `t3code://threads/<environment>/<thread>?prompt=…`,
-puts the prompt in that thread's composer. If you already typed a draft there, SealCode asks
+puts the prompt in that thread's composer. If you already typed a draft there, Harp asks
 before it replaces it.
 
-SealCode removes characters you cannot see, such as zero-width and hidden tag characters, because
-they can hide instructions for the agent. When a prompt had them, SealCode warns you that it may be
+Harp removes characters you cannot see, such as zero-width and hidden tag characters, because
+they can hide instructions for the agent. When a prompt had them, Harp warns you that it may be
 malicious.

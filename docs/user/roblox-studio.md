@@ -1,6 +1,6 @@
 # Roblox Studio
 
-SealCode connects agents to Roblox Studio through its own Studio plugin. Agents can read and build in
+Harp connects agents to Roblox Studio through its own Studio plugin. Agents can read and build in
 your open place, write scripts, playtest, move the camera, take screenshots, use Creator Store assets
 and model in Blender, while you watch and control everything from a panel inside Studio.
 
@@ -8,18 +8,18 @@ Turn it on in **Settings → Connections → Roblox Studio**.
 
 ## Start
 
-1. Choose **SealCode** under **Studio connection**. On Windows, SealCode turns this on by itself the
+1. Choose **Harp** under **Studio connection**. On Windows, Harp turns this on by itself the
    first time it starts on a machine with Roblox Studio installed.
-2. Open your place in Studio. SealCode installs its plugin automatically; a Studio that was already
+2. Open your place in Studio. Harp installs its plugin automatically; a Studio that was already
    open loads it the next time a place opens.
 3. Ask an agent in a Roblox project for something.
 
-The plugin updates itself in place when SealCode updates, so you do not need to reopen Studio after
+The plugin updates itself in place when Harp updates, so you do not need to reopen Studio after
 an update. The status in Settings shows the connected places and whether the plugin is current.
 
 ## The Studio panel
 
-Open it from the **SealCode** button on Studio's Plugins tab. It shows:
+Open it from the **Harp** button on Studio's Plugins tab. It shows:
 
 - **Connection:** the place, the playtest peers, and buttons to disconnect or retry.
 - **Agent activity:** each action the agent takes, with its result and duration.
@@ -27,7 +27,7 @@ Open it from the **SealCode** button on Studio's Plugins tab. It shows:
 - **Agent tools:** every tool the agent can use, with its own switch. Search to find one quickly.
   A tool you switch off is refused, whatever the agent asks.
 
-These switches are enforced in Studio and in SealCode.
+These switches are enforced in Studio and in Harp.
 
 ## Which threads get it
 
@@ -52,12 +52,12 @@ such as `wally.toml` or `rokit.toml`, or an empty `.sealcode-roblox` file in its
   bring the model into Studio.
 - Manage Studio windows: open a place, and close older windows of it so they do not pile up.
 
-Every tool call follows the thread's usual approval rules. Agents load SealCode's Roblox skills
+Every tool call follows the thread's usual approval rules. Agents load Harp's Roblox skills
 (design, building, scripting, networking, data and more) when a task needs them.
 
 ## Blender
 
-SealCode finds Blender in its usual install folders and Steam libraries; otherwise set **Blender
+Harp finds Blender in its usual install folders and Steam libraries; otherwise set **Blender
 executable**. Each Blender job runs a Python script with your permissions, so approve it as you
 would any script. Models brought in from Blender live in the current Studio session: publish them as
 assets before a saved or published place relies on them.

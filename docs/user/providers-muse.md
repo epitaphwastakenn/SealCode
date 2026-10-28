@@ -2,7 +2,7 @@
 
 Muse Code is a beta integration and is disabled by default. Install
 [Muse Code](https://dev.meta.ai/docs/muse-code) on the machine hosting your
-environment, then run `muse login` as the account that runs SealCode.
+environment, then run `muse login` as the account that runs Harp.
 
 Open **Settings → Providers** in the web or desktop app, select the environment,
 and enable **Muse Code**. Set **Binary path** if Muse is not on the host's `PATH`.
@@ -14,7 +14,7 @@ fail until you run `muse login` on the host.
 
 ## Sign-in and API keys
 
-SealCode ignores a `META_API_KEY` that the SealCode server inherits from its own
+Harp ignores a `META_API_KEY` that the Harp server inherits from its own
 environment, so Muse uses the credential saved on the host by `muse login`. To
 use an API key instead, add `META_API_KEY` to the Muse instance's environment
 variables in **Settings → Providers**. Muse gives that key priority over the
@@ -47,9 +47,9 @@ can use under **Custom models** in the instance settings.
 Muse offers two [permission modes](./permission-modes.md): **Supervised** asks
 before commands and edits, and **Full access** runs them without asking. Muse has
 no equivalent of **Auto-accept edits** or **Auto**, so they are not offered. Muse
-does not offer a separate Plan mode in SealCode.
+does not offer a separate Plan mode in Harp.
 
-Muse can use SealCode's tools. If Muse cannot reach them, the turn continues
+Muse can use Harp's tools. If Muse cannot reach them, the turn continues
 without them. Switching providers can pass conversation context as a handoff.
 
 Muse skills do not appear in the composer's `$` menu. Muse still loads them
@@ -59,7 +59,7 @@ Forking a Muse conversation starts a new session with a copy of the conversation
 context. Conversation rewind is unavailable.
 
 Install Muse and sign in on the host; in-app installation and sign-in are not
-available. Updates can run from **Settings → Providers** when SealCode recognizes
+available. Updates can run from **Settings → Providers** when Harp recognizes
 the Muse launcher; otherwise update Muse on that host manually.
 
 To stop using Muse in an environment, disable it in **Settings → Providers**.

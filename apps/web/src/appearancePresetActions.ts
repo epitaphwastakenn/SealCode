@@ -14,8 +14,9 @@ import { deleteBackdropImage } from "./lib/backdrop/backdropStore";
 import { randomUUID } from "./lib/utils";
 
 export function applyAppearancePreset(preset: AppearancePreset): void {
-  void persistClientSettingsPatch(preset.settings);
-  if (preset.theme !== undefined) applyThemeState(preset.theme);
+  const applySettings = () => void persistClientSettingsPatch(preset.settings);
+  // Settings and colors change together inside one reveal; two passes would restyle the page twice.
+  if (preset.theme === undefined || !applyThemeState(preset.theme, applySettings)) applySettings();
 }
 
 function storePresets(

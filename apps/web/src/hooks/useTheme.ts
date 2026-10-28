@@ -5,6 +5,7 @@ import { useSyncExternalStore } from "react";
 import {
   applyThemePalette,
   CUSTOM_THEMES_STORAGE_KEY,
+  getAppliedThemeChromeColor,
   invalidateCustomThemes,
   canonicalThemePreference,
   isKnownThemePreference,
@@ -24,6 +25,7 @@ import {
   type ThemeHalves,
   type ThemePreferenceMode,
 } from "../themePalette";
+import { bumpThemeEpoch } from "../themeEpoch";
 import { revealThemeChange } from "../themeReveal";
 
 type Theme = ThemePreference;
@@ -277,21 +279,24 @@ function resolveBrowserChromeSurface(): HTMLElement {
   );
 }
 
+let lastChromeColor: string | null = null;
+
 export function syncBrowserChromeTheme() {
   if (typeof document === "undefined" || typeof getComputedStyle === "undefined") return;
-  const rootStyles = getComputedStyle(document.documentElement);
-  const themeChromeColor = document.documentElement.dataset.themeId
-    ? normalizeThemeColor(rootStyles.getPropertyValue("--app-chrome-background"))
-    : null;
-  const surfaceColor = normalizeThemeColor(
-    getComputedStyle(resolveBrowserChromeSurface()).backgroundColor,
-  );
-  const fallbackColor = normalizeThemeColor(getComputedStyle(document.body).backgroundColor);
-  const backgroundColor = themeChromeColor ?? surfaceColor ?? fallbackColor;
+  const root = document.documentElement;
+  // A themed root paints its chrome from the palette, so only an unthemed one needs a style read.
+  const backgroundColor =
+    (root.dataset.themeId ? normalizeThemeColor(getAppliedThemeChromeColor()) : null) ??
+    normalizeThemeColor(getComputedStyle(resolveBrowserChromeSurface()).backgroundColor) ??
+    normalizeThemeColor(getComputedStyle(document.body).backgroundColor);
   if (!backgroundColor) return;
 
-  document.documentElement.style.backgroundColor = backgroundColor;
-  document.body.style.backgroundColor = backgroundColor;
+  // Rewriting an unchanged inline color still invalidates style, so skip it.
+  if (backgroundColor !== lastChromeColor) {
+    lastChromeColor = backgroundColor;
+    root.style.backgroundColor = backgroundColor;
+    document.body.style.backgroundColor = backgroundColor;
+  }
   const themeColorMetas = document.querySelectorAll<HTMLMetaElement>(
     `meta[name="${THEME_COLOR_META_NAME}"]`,
   );
@@ -302,6 +307,24 @@ export function syncBrowserChromeTheme() {
   for (const element of themeColorMetas) {
     element.setAttribute("content", backgroundColor);
   }
+}
+
+let transitionGuardToken = 0;
+
+/**
+ * Keeps CSS transitions from animating the colors a theme change just swapped. The guard must
+ * survive one full style recalculation, which happens at the next frame (or the one after, when a
+ * view transition applies the change), so it lifts two frames out instead of forcing a layout.
+ */
+function suppressTransitionsUntilPainted() {
+  const root = document.documentElement;
+  root.classList.add("no-transitions");
+  const token = ++transitionGuardToken;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      if (token === transitionGuardToken) root.classList.remove("no-transitions");
+    });
+  });
 }
 
 function applyTheme(theme: Theme, { suppressTransitions = false, preservePreview = true } = {}) {
@@ -324,9 +347,7 @@ function applyTheme(theme: Theme, { suppressTransitions = false, preservePreview
     return;
   }
 
-  if (suppressTransitions) {
-    document.documentElement.classList.add("no-transitions");
-  }
+  if (suppressTransitions) suppressTransitionsUntilPainted();
   const resolvedAppearance = resolveThemeAppearance(
     theme,
     systemDark,
@@ -341,13 +362,7 @@ function applyTheme(theme: Theme, { suppressTransitions = false, preservePreview
   lastAppliedLook = `${appliedHalf}|${resolvedAppearance}`;
   syncBrowserChromeTheme();
   syncDesktopTheme(theme, followSystem, appearanceMode);
-  if (suppressTransitions) {
-    // Force a reflow so the no-transitions class takes effect before removal
-    void document.documentElement.offsetHeight;
-    requestAnimationFrame(() => {
-      document.documentElement.classList.remove("no-transitions");
-    });
-  }
+  bumpThemeEpoch();
 }
 
 /** The palette and appearance `theme` would paint with the stored mode and halves. */
@@ -367,13 +382,13 @@ function resolveThemeLook(theme: Theme): string {
 }
 
 /**
- * Applies a theme the user (or the system) just switched to, behind the theme
- * reveal when the colors on screen actually change. The store is notified with
- * the change rather than before it, so React never paints new-theme state
- * into the snapshot of the old colors.
+ * Applies a theme the user (or the system) just switched to, behind the reveal when the colors
+ * change. The store is notified with the change, not before, so React never paints new-theme
+ * state into the snapshot of the old colors. `alongside` runs in the same step.
  */
-function applyThemeChange(theme: () => Theme) {
+function applyThemeChange(theme: () => Theme, alongside?: () => void) {
   const change = () => {
+    alongside?.();
     applyTheme(theme(), { suppressTransitions: true });
     emitChange();
   };
@@ -699,8 +714,11 @@ export function readThemeState(): ThemeState {
   };
 }
 
-/** Restores a saved theme choice in one step, so the reveal animates once. */
-export function applyThemeState(state: ThemeState): boolean {
+/**
+ * Restores a saved theme choice in one step, so the reveal animates once. `alongside` is
+ * skipped when this returns false.
+ */
+export function applyThemeState(state: ThemeState, alongside?: () => void): boolean {
   if (typeof window === "undefined") return false;
   try {
     writeThemePreference(state.theme);
@@ -728,7 +746,7 @@ export function applyThemeState(state: ThemeState): boolean {
     return false;
   }
   themeStorageReadFailure = null;
-  applyThemeChange(getStored);
+  applyThemeChange(getStored, alongside);
   return true;
 }
 

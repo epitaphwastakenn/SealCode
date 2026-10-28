@@ -19,6 +19,7 @@ import { type EdgeColors, revokeBackdropUrl } from "~/lib/backdrop/processBackdr
 import { observeResize } from "~/lib/observeResize";
 import { panelClipPath } from "~/lib/backdrop/panelClipPath";
 import { isWindowsPlatform } from "~/lib/utils";
+import { subscribeThemeEpoch } from "~/themeEpoch";
 
 // How far the image drifts against the mouse at full parallax, as a share of
 // the window (SealScreen's PARALLAX_MAX).
@@ -91,11 +92,7 @@ function useClipToFloatingPanels(container: HTMLDivElement | null, enabled: bool
     });
     // The corner settings land on the root and change the panels' radius and
     // shape without resizing them.
-    const rootObserver = new MutationObserver(scheduleMeasure);
-    rootObserver.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["style", "data-smooth-corners"],
-    });
+    const unsubscribeThemeEpoch = subscribeThemeEpoch(scheduleMeasure);
     function measure() {
       frame = 0;
       if (container === null) return;
@@ -130,7 +127,7 @@ function useClipToFloatingPanels(container: HTMLDivElement | null, enabled: bool
       if (frame !== 0) window.cancelAnimationFrame(frame);
       for (const unobserve of observed.values()) unobserve();
       mutationObserver.disconnect();
-      rootObserver.disconnect();
+      unsubscribeThemeEpoch();
       container.style.removeProperty("clip-path");
     };
   }, [container, enabled]);

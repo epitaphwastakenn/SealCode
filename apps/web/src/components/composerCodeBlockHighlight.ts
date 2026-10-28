@@ -6,6 +6,7 @@ import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { DiffThemeName } from "~/lib/diffRendering";
 import { languageOfInfoString } from "~/composer-code-languages";
 import { getSyntaxHighlighterPromise } from "~/lib/syntaxHighlighting";
+import { subscribeThemeEpoch } from "~/themeEpoch";
 
 interface HighlightedBlock {
   readonly signature: string;
@@ -142,17 +143,14 @@ export function composerCodeBlockHighlight(options: {
             refresh(false);
             // The theme lives on <html>, outside the editor, so nothing would
             // otherwise tell the view a repaint is due.
-            const themeObserver = new MutationObserver(() => refresh(false));
-            themeObserver.observe(document.documentElement, {
-              attributeFilter: ["class"],
-            });
+            const unsubscribeThemeEpoch = subscribeThemeEpoch(() => refresh(false));
 
             return {
               update: () => refresh(true),
               destroy() {
                 disposed = true;
                 clearTimeout(deferredRefresh);
-                themeObserver.disconnect();
+                unsubscribeThemeEpoch();
               },
             };
           },

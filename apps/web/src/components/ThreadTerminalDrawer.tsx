@@ -89,6 +89,7 @@ import { openTerminalLinkInPreview } from "./preview/openTerminalLinkInPreview";
 import { useAtomCommand } from "../state/use-atom-command";
 import { preventTerminalCloseShortcut } from "../lib/terminalCloseShortcut";
 import { observeResize } from "../lib/observeResize";
+import { subscribeThemeEpoch } from "../themeEpoch";
 import {
   consumePendingTerminalFocus,
   focusTerminal,
@@ -1013,16 +1014,13 @@ function TerminalSessionViewport({
       });
       setupCleanups.push(() => selectionActions?.dispose());
 
-      const themeObserver = new MutationObserver(() => {
-        const activeTerminal = terminalRef.current;
-        if (!activeTerminal) return;
-        activeTerminal.setTheme(terminalThemeFromApp(containerRef.current));
-      });
-      themeObserver.observe(document.documentElement, {
-        attributes: true,
-        attributeFilter: ["class", "style"],
-      });
-      setupCleanups.push(() => themeObserver.disconnect());
+      setupCleanups.push(
+        subscribeThemeEpoch(() => {
+          const activeTerminal = terminalRef.current;
+          if (!activeTerminal) return;
+          activeTerminal.setTheme(terminalThemeFromApp(containerRef.current));
+        }),
+      );
 
       const fitTimer = window.setTimeout(() => {
         const activeTerminal = terminalRef.current;

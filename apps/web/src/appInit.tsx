@@ -30,10 +30,29 @@ import {
   syncDocumentWindowControlsOverlayClass,
 } from "./lib/windowControlsOverlay";
 import { startProviderAuthDelivery } from "./providerAuthDelivery";
+import { bumpThemeEpoch } from "./themeEpoch";
 import { getRouter, type AppRouter } from "./router";
 import { appAtomRegistry } from "./rpc/atomRegistry";
 import { primaryServerConfigAtom } from "./state/server";
 import { resolveThreadRouteTarget } from "./threadRoutes";
+
+// Settings that change the document's computed colors, fonts or radius.
+const RESTYLING_SETTINGS = [
+  "appearanceContrast",
+  "cornerRadius",
+  "floatingPanels",
+  "fontFamilyCode",
+  "fontFamilyComposer",
+  "fontFamilySans",
+  "fontSizeCode",
+  "fontSizeInterface",
+  "fontSizePrompt",
+  "fontSmoothing",
+  "glassAppEnabled",
+  "glassOpacity",
+  "panelGlassOpacity",
+  "smoothCorners",
+] as const satisfies ReadonlyArray<keyof ClientSettings>;
 
 /** Writes appearance settings onto the document, touching only the groups that changed. */
 function startClientAppearance(): void {
@@ -100,6 +119,9 @@ function startClientAppearance(): void {
         sizeCode: settings.fontSizeCode,
         smoothing: settings.fontSmoothing,
       });
+    }
+    if (previous !== null && RESTYLING_SETTINGS.some((key) => previous[key] !== settings[key])) {
+      bumpThemeEpoch();
     }
   };
   subscribeClientSettings(apply);

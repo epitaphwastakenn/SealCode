@@ -2,6 +2,8 @@ import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
 import "culori/css";
 import { converter, parse } from "culori/fn";
+import { createRootStyleSheet } from "./lib/rootStyleSheet";
+import { bumpThemeEpoch } from "./themeEpoch";
 import {
   BUILT_IN_THEMES,
   EMBER_THEME,
@@ -1606,6 +1608,36 @@ export function getThemeColorVariable(role: ThemeColorRole): string {
 
 export const THEME_PREVIEW_ID = "__preview";
 
+const paletteSheet = createRootStyleSheet("app-theme-palette");
+let appliedColors: ThemeColors | null = null;
+
+// Stored theme text lands inside a declaration; keep it from closing that declaration.
+const UNSAFE_CSS_VALUE = /[;{}<>\\]|\/\*|[\r\n]/;
+
+/** One rule that sets every palette variable, so the whole palette is a single style write. */
+export function themeColorsToCss(
+  colors: ThemeColors,
+  accepts: (value: string) => boolean = () => true,
+): string {
+  const declarations: string[] = [];
+  for (const [role, value] of Object.entries(colors) as Array<[ThemeColorRole, unknown]>) {
+    const variable: string | undefined = APP_THEME_VARIABLES[role];
+    if (variable === undefined || typeof value !== "string") continue;
+    if (value.trim() === "" || UNSAFE_CSS_VALUE.test(value) || !accepts(value)) continue;
+    declarations.push(`${variable}:${value}`);
+  }
+  return `:root{${declarations.join(";")}}`;
+}
+
+/** The chrome color of the palette on screen, so browser chrome needs no computed-style read. */
+export function getAppliedThemeChromeColor(): string | null {
+  return appliedColors?.chrome ?? null;
+}
+
+export function getAppliedThemeColor(role: ThemeColorRole): string | undefined {
+  return appliedColors?.[role];
+}
+
 /** Callers must restore the stored theme with refreshTheme when the draft closes. */
 export function applyThemeColorPreview(
   colors: ThemeColors,
@@ -1619,10 +1651,10 @@ export function applyThemeColorPreview(
   root.dataset.themeId = THEME_PREVIEW_ID;
   root.classList.toggle("dark", appearance === "dark");
   root.dataset.themeGradient = gradient ? "true" : "false";
-  for (const [role, value] of Object.entries(colors) as Array<[ThemeColorRole, string]>) {
-    if (isThemeColor(value)) root.style.setProperty(APP_THEME_VARIABLES[role], value);
-  }
+  appliedColors = colors;
+  paletteSheet.set(themeColorsToCss(colors, isThemeColor));
   setThemePreviewAppearance(appearance);
+  bumpThemeEpoch();
 }
 
 export function applyThemePalette(theme: ThemePreference, appearance?: ThemeAppearance): void {
@@ -1639,17 +1671,15 @@ export function applyThemePalette(theme: ThemePreference, appearance?: ThemeAppe
     const mode = appearance ?? legacyThemeMode(theme) ?? palette.appearance;
     const colors = getThemeColorsForMode(palette, mode) ?? palette.colors;
     root.dataset.themeGradient = palette.gradient ? "true" : "false";
-    for (const [role, value] of Object.entries(colors) as Array<[ThemeColorRole, string]>) {
-      root.style.setProperty(APP_THEME_VARIABLES[role], value);
-    }
+    appliedColors = colors;
+    paletteSheet.set(themeColorsToCss(colors));
     return;
   }
 
   delete root.dataset.themeId;
   delete root.dataset.themeGradient;
-  for (const variable of Object.values(APP_THEME_VARIABLES)) {
-    root.style.removeProperty(variable);
-  }
+  appliedColors = null;
+  paletteSheet.set(null);
 }
 
 export function resolveThemeAppearance(

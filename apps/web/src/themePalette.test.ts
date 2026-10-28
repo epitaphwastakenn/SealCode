@@ -24,6 +24,8 @@ import {
   CUSTOM_THEMES_STORAGE_KEY,
   createVividThemeColors,
   getDefaultThemeColors,
+  isThemeColor,
+  themeColorsToCss,
   themeColorToHex,
   toCanonicalThemeColor,
   THEME_FILE_VERSION,
@@ -703,5 +705,42 @@ describe("stored theme preferences", () => {
 
     vi.unstubAllGlobals();
     invalidateCustomThemes();
+  });
+});
+
+describe("themeColorsToCss", () => {
+  it("declares the whole palette in one rule on the root", () => {
+    const colors = getDefaultThemeColors("dark");
+    const css = themeColorsToCss(colors);
+
+    expect(css.startsWith(":root{")).toBe(true);
+    expect(css.endsWith("}")).toBe(true);
+    expect(css.match(/{/g)).toHaveLength(1);
+    expect(css).toContain(`--app-theme-canvas:${colors.canvas}`);
+    expect(css).toContain(`--app-theme-chrome:${colors.chrome}`);
+    expect(css.split(";")).toHaveLength(Object.keys(colors).length);
+  });
+
+  it("drops values that could end the declaration they are written into", () => {
+    const colors = {
+      ...getDefaultThemeColors("light"),
+      canvas: "red; } body { display: none",
+      text: "blue /* x */",
+      accent: "",
+    };
+    const css = themeColorsToCss(colors);
+
+    expect(css).not.toContain("--app-theme-canvas");
+    expect(css).not.toContain("--app-theme-text:");
+    expect(css).not.toContain("--app-theme-accent:");
+    expect(css).toContain("--app-theme-chrome:");
+  });
+
+  it("can keep only values that parse as colors, as the editor preview does", () => {
+    const colors = { ...getDefaultThemeColors("light"), border: "not a color" };
+    const css = themeColorsToCss(colors, isThemeColor);
+
+    expect(css).not.toContain("--app-theme-border:");
+    expect(css).toContain("--app-theme-canvas:");
   });
 });

@@ -1,3 +1,4 @@
+import { createRootStyleSheet } from "./lib/rootStyleSheet";
 import { isInterfaceMotionActive } from "./motionPreference";
 
 /**
@@ -22,6 +23,10 @@ const TILT_DEG = 14;
 /** A pointer press older than this is not what picked the theme (a shortcut or the system did). */
 const POINTER_ORIGIN_MAX_AGE_MS = 1500;
 const SEAM_ELEMENT_ID = "theme-reveal-seam";
+
+// A style sheet rather than inline custom properties on <html>, so a reveal does not rewrite the
+// root's style attribute twice (and wake everything that watches it).
+const revealVariables = createRootStyleSheet("theme-reveal-variables");
 
 interface Point {
   readonly x: number;
@@ -95,11 +100,9 @@ export function revealThemeChange(change: () => void): void {
   const endRadius = Math.max(at, lineLength - at) + FEATHER_PX;
 
   root.dataset.themeReveal = "";
-  root.style.setProperty("--theme-reveal-angle", `${90 + TILT_DEG}deg`);
-  root.style.setProperty("--theme-reveal-at", `${at}px`);
-  root.style.setProperty("--theme-reveal-feather", `${FEATHER_PX}px`);
-  root.style.setProperty("--theme-reveal-seam-width", `${SEAM_WIDTH_PX}px`);
-  root.style.setProperty("--theme-reveal-seam-length", `${Math.hypot(width, height) * 2}px`);
+  revealVariables.set(
+    `html[data-theme-reveal]{--theme-reveal-angle:${90 + TILT_DEG}deg;--theme-reveal-at:${at}px;--theme-reveal-feather:${FEATHER_PX}px;--theme-reveal-seam-width:${SEAM_WIDTH_PX}px;--theme-reveal-seam-length:${Math.hypot(width, height) * 2}px}`,
+  );
 
   let seam: HTMLElement | null = null;
   const transition = document.startViewTransition(() => {
@@ -140,14 +143,6 @@ export function revealThemeChange(change: () => void): void {
     seam?.remove();
     if (activeRevealId !== revealId) return;
     delete root.dataset.themeReveal;
-    for (const property of [
-      "--theme-reveal-angle",
-      "--theme-reveal-at",
-      "--theme-reveal-feather",
-      "--theme-reveal-seam-width",
-      "--theme-reveal-seam-length",
-    ]) {
-      root.style.removeProperty(property);
-    }
+    revealVariables.set(null);
   });
 }

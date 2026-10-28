@@ -1,4 +1,9 @@
-import { THEME_COLOR_ROLES, getThemeColorVariable, type ThemeColorRole } from "../../themePalette";
+import {
+  THEME_COLOR_ROLES,
+  getAppliedThemeColor,
+  getThemeColorVariable,
+  type ThemeColorRole,
+} from "../../themePalette";
 
 export type ThemePaintKind = "background" | "border" | "foreground";
 
@@ -317,7 +322,8 @@ function applyThemeTokenProbe(role: ThemeColorRole): () => void {
   const variable = getThemeColorVariable(role);
   const originalValue = root.style.getPropertyValue(variable);
   const originalPriority = root.style.getPropertyPriority(variable);
-  const resolvedValue = originalValue.trim().toLowerCase();
+  // The palette lives in a style sheet, so the inline value is only set while another probe holds it.
+  const resolvedValue = (originalValue || getAppliedThemeColor(role) || "").trim().toLowerCase();
   const probeColor =
     resolvedValue === THEME_TOKEN_PROBE_COLOR
       ? THEME_TOKEN_ALTERNATE_PROBE_COLOR

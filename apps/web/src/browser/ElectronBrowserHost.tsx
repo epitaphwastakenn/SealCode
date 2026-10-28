@@ -16,6 +16,7 @@ import { useActivePreviewSessions } from "~/previewStateStore";
 import { previewEnvironment } from "~/state/preview";
 import { useEnvironmentScope } from "~/state/session";
 import { useAtomCommand } from "~/state/use-atom-command";
+import { subscribeThemeEpoch } from "~/themeEpoch";
 
 import { readPreviewAnnotationTheme } from "./annotationTheme";
 import { useBrowserDefaults } from "./browserDefaults";
@@ -69,11 +70,7 @@ export function ElectronBrowserHost() {
       });
     };
     const frameId = window.requestAnimationFrame(syncTheme);
-    const observer = new MutationObserver(syncTheme);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ["class", "style"],
-    });
+    const unsubscribeThemeEpoch = subscribeThemeEpoch(syncTheme);
     const headObserver = new MutationObserver(syncTheme);
     headObserver.observe(document.head, {
       childList: true,
@@ -82,7 +79,7 @@ export function ElectronBrowserHost() {
     });
     return () => {
       window.cancelAnimationFrame(frameId);
-      observer.disconnect();
+      unsubscribeThemeEpoch();
       headObserver.disconnect();
     };
   }, []);

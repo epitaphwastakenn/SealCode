@@ -90,6 +90,12 @@ function startClientAppearance(): void {
     if (previous?.panelGlassOpacity !== settings.panelGlassOpacity) {
       root.style.setProperty("--panel-glass-opacity", `${settings.panelGlassOpacity}%`);
     }
+    if (previous?.sidebarHeaderArtColor !== settings.sidebarHeaderArtColor) {
+      const custom = settings.sidebarHeaderArtColor !== "theme";
+      root.toggleAttribute("data-header-art-custom", custom);
+      if (custom) root.style.setProperty("--header-art-tint", settings.sidebarHeaderArtColor);
+      else root.style.removeProperty("--header-art-tint");
+    }
     if (previous?.appearanceContrast !== settings.appearanceContrast) {
       applyAppearanceContrast(root, settings.appearanceContrast);
     }

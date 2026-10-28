@@ -833,33 +833,37 @@ html[data-ui-motion="off"]
   /* Harp's violet; a theme whose accent has a hue replaces it (themeColorsToCss). */
   :root {
     --brand-accent: oklch(0.53 0.2 285);
+    /* The sidebar header art's tint: the theme's accent, or the color set in Appearance, which
+       startClientAppearance writes inline on the root together with data-header-art-custom. */
+    --header-art-tint: var(--brand-accent);
 
     @variant dark {
       --brand-accent: oklch(0.74 0.15 285);
     }
   }
 
-  /* The blueprint art takes its hue from --brand-accent, so every theme, custom ones included,
+  /* Every header art style takes its hue from --header-art-tint, so any theme or picked color
      gets a matching tint. Lightness is fixed per appearance, and low on the bottom and mid
-     stops where the header's white wordmark and controls sit, so they stay readable. */
+     stops where the header's white wordmark and controls sit, so they stay readable. A tint
+     without chroma gives a graphite version. */
   @supports (color: oklch(from red l c h)) {
     :root {
-      --stage-art-top: oklch(from var(--brand-accent) 0.76 min(c, 0.12) h);
-      --stage-art-mid: oklch(from var(--brand-accent) 0.42 min(c, 0.2) h);
-      --stage-art-bottom: oklch(from var(--brand-accent) 0.3 min(c, 0.2) h);
-      --stage-art-highlight: oklch(from var(--brand-accent) 0.95 min(c, 0.04) h);
-      --stage-art-secondary: oklch(from var(--brand-accent) 0.74 min(c, 0.17) calc(h + 15));
-      --stage-art-tertiary: oklch(from var(--brand-accent) 0.72 min(c, 0.15) calc(h - 20));
-      --stage-art-line: oklch(from var(--brand-accent) 0.92 min(c, 0.06) h);
+      --stage-art-top: oklch(from var(--header-art-tint) 0.76 min(c, 0.12) h);
+      --stage-art-mid: oklch(from var(--header-art-tint) 0.42 min(c, 0.2) h);
+      --stage-art-bottom: oklch(from var(--header-art-tint) 0.3 min(c, 0.2) h);
+      --stage-art-highlight: oklch(from var(--header-art-tint) 0.95 min(c, 0.04) h);
+      --stage-art-secondary: oklch(from var(--header-art-tint) 0.74 min(c, 0.17) calc(h + 15));
+      --stage-art-tertiary: oklch(from var(--header-art-tint) 0.72 min(c, 0.15) calc(h - 20));
+      --stage-art-line: oklch(from var(--header-art-tint) 0.92 min(c, 0.06) h);
       --stage-art-celeste-highlight: var(--stage-art-highlight);
       --stage-art-celeste-secondary: var(--stage-art-secondary);
       --stage-art-violet-highlight: var(--stage-art-highlight);
       --stage-art-grid-line: var(--stage-art-line);
 
       @variant dark {
-        --stage-art-top: oklch(from var(--brand-accent) 0.48 min(c, 0.2) h);
-        --stage-art-mid: oklch(from var(--brand-accent) 0.32 min(c, 0.16) h);
-        --stage-art-bottom: oklch(from var(--brand-accent) 0.2 min(c, 0.1) h);
+        --stage-art-top: oklch(from var(--header-art-tint) 0.48 min(c, 0.2) h);
+        --stage-art-mid: oklch(from var(--header-art-tint) 0.32 min(c, 0.16) h);
+        --stage-art-bottom: oklch(from var(--header-art-tint) 0.2 min(c, 0.1) h);
       }
     }
   }
@@ -1071,6 +1075,30 @@ html[data-ui-motion="off"]
     --stage-night-glow-highlight: var(--stage-night-highlight);
     --stage-night-glow-secondary: var(--stage-night-secondary);
     --stage-night-sparkle: var(--stage-night-line);
+  }
+
+  /* A header art color picked in Appearance outranks the palettes above. The dark rule repeats
+     the shared tokens because a theme's own dark rule is as specific as this one. */
+  @supports (color: oklch(from red l c h)) {
+    html[data-header-art-custom] {
+      --stage-art-top: oklch(from var(--header-art-tint) 0.76 min(c, 0.12) h);
+      --stage-art-mid: oklch(from var(--header-art-tint) 0.42 min(c, 0.2) h);
+      --stage-art-bottom: oklch(from var(--header-art-tint) 0.3 min(c, 0.2) h);
+      --stage-art-highlight: oklch(from var(--header-art-tint) 0.95 min(c, 0.04) h);
+      --stage-art-secondary: oklch(from var(--header-art-tint) 0.74 min(c, 0.17) calc(h + 15));
+      --stage-art-tertiary: oklch(from var(--header-art-tint) 0.72 min(c, 0.15) calc(h - 20));
+      --stage-art-line: oklch(from var(--header-art-tint) 0.92 min(c, 0.06) h);
+
+      @variant dark {
+        --stage-art-top: oklch(from var(--header-art-tint) 0.48 min(c, 0.2) h);
+        --stage-art-mid: oklch(from var(--header-art-tint) 0.32 min(c, 0.16) h);
+        --stage-art-bottom: oklch(from var(--header-art-tint) 0.2 min(c, 0.1) h);
+        --stage-art-highlight: oklch(from var(--header-art-tint) 0.95 min(c, 0.04) h);
+        --stage-art-secondary: oklch(from var(--header-art-tint) 0.74 min(c, 0.17) calc(h + 15));
+        --stage-art-tertiary: oklch(from var(--header-art-tint) 0.72 min(c, 0.15) calc(h - 20));
+        --stage-art-line: oklch(from var(--header-art-tint) 0.92 min(c, 0.06) h);
+      }
+    }
   }
 
   @keyframes settings-search-target-pulse {

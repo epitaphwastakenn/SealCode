@@ -1,5 +1,5 @@
 import {
-  ClientSettingsSchema,
+  CLIENT_SETTINGS_KEYS,
   type ClientSettingsPatch,
   type EnvironmentId,
   globalIdleCompaction,
@@ -41,7 +41,7 @@ interface ScopedSettingsEnvironment {
 }
 
 const SERVER_KEYS = new Set<string>(Object.keys(ServerSettings.fields));
-const CLIENT_KEYS = new Set<string>(Object.keys(ClientSettingsSchema.fields));
+const CLIENT_KEYS = new Set<string>(CLIENT_SETTINGS_KEYS);
 const PROJECT_SCOPED_KEYS = new Set<string>(PROJECT_SCOPED_SERVER_SETTING_KEYS);
 
 export function isProjectScopedSettingKey(key: string): key is ProjectScopedServerSettingKey {

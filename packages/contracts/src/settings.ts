@@ -340,6 +340,56 @@ const LegacyScrollbarSize = Schema.Literals(["thin", "medium", "thick"]).pipe(
 );
 const ScrollbarSizeSetting = Schema.Union([ScrollbarSize, LegacyScrollbarSize]);
 
+export const SIDEBAR_HEADER_ART_STYLES = [
+  "off",
+  "blueprint",
+  "nightSky",
+  "waves",
+  "iceFloe",
+  "dots",
+  "pixels",
+  "aurora",
+] as const;
+export const SidebarHeaderArtStyle = Schema.Literals(SIDEBAR_HEADER_ART_STYLES);
+export type SidebarHeaderArtStyle = typeof SidebarHeaderArtStyle.Type;
+export const DEFAULT_SIDEBAR_HEADER_ART_STYLE: SidebarHeaderArtStyle = "blueprint";
+
+/** `"theme"` follows the theme's accent; anything else is a custom `#rrggbb` tint. */
+export const SidebarHeaderArtColor = Schema.Union([
+  Schema.Literal("theme"),
+  Schema.String.check(Schema.isPattern(/^#[0-9a-f]{6}$/i)),
+]);
+export type SidebarHeaderArtColor = typeof SidebarHeaderArtColor.Type;
+export const DEFAULT_SIDEBAR_HEADER_ART_COLOR: SidebarHeaderArtColor = "theme";
+
+/** 2.17.14 stored the art as an on/off switch, `sidebarHeaderArt`; an explicit style wins. */
+function migrateLegacySidebarHeaderArt(input: unknown): unknown {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) return input;
+  if (!Object.hasOwn(input, "sidebarHeaderArt")) return input;
+  const { sidebarHeaderArt, ...rest } = input as Record<string, unknown>;
+  if (typeof sidebarHeaderArt !== "boolean" || Object.hasOwn(rest, "sidebarHeaderArtStyle")) {
+    return rest;
+  }
+  return { ...rest, sidebarHeaderArtStyle: sidebarHeaderArt ? "blueprint" : "off" };
+}
+
+/**
+ * Reads stored settings that still carry the retired `sidebarHeaderArt` switch. Decoding takes
+ * any stored shape, but the codec keeps the schema's own encoded type.
+ */
+const withLegacySidebarHeaderArt = <S extends Schema.Top>(
+  schema: S,
+): Schema.Codec<S["Type"], S["Encoded"], S["DecodingServices"], S["EncodingServices"]> =>
+  Schema.Unknown.pipe(
+    Schema.decodeTo(
+      schema,
+      SchemaTransformation.transform<S["Encoded"], unknown>({
+        decode: (input) => migrateLegacySidebarHeaderArt(input) as S["Encoded"],
+        encode: (encoded) => encoded,
+      }),
+    ),
+  ) as never;
+
 export const ModelFavorite = Schema.Struct({
   provider: ProviderInstanceId,
   model: TrimmedNonEmptyString,
@@ -371,7 +421,8 @@ export const AppearancePresetSettings = Schema.Struct({
   glassOpacity: Schema.optionalKey(GlassOpacity),
   glassAppEnabled: Schema.optionalKey(Schema.Boolean),
   panelGlassOpacity: Schema.optionalKey(PanelGlassOpacity),
-  sidebarHeaderArt: Schema.optionalKey(Schema.Boolean),
+  sidebarHeaderArtStyle: Schema.optionalKey(SidebarHeaderArtStyle),
+  sidebarHeaderArtColor: Schema.optionalKey(SidebarHeaderArtColor),
   backdrop: Schema.optionalKey(Schema.NullOr(AppBackdrop)),
   cornerRadius: Schema.optionalKey(CornerRadius),
   smoothCorners: Schema.optionalKey(Schema.Boolean),
@@ -403,7 +454,7 @@ export type AppearancePresetTheme = typeof AppearancePresetTheme.Type;
 export const AppearancePreset = Schema.Struct({
   id: TrimmedNonEmptyString,
   name: TrimmedNonEmptyString,
-  settings: AppearancePresetSettings,
+  settings: withLegacySidebarHeaderArt(AppearancePresetSettings),
   theme: Schema.optionalKey(AppearancePresetTheme),
 });
 export type AppearancePreset = typeof AppearancePreset.Type;
@@ -413,7 +464,7 @@ const AppearancePresets = Schema.Array(AppearancePreset).check(
   Schema.isMaxLength(MAX_APPEARANCE_PRESETS),
 );
 
-export const ClientSettingsSchema = Schema.Struct({
+const ClientSettingsStruct = Schema.Struct({
   // Harp plays its harness sounds out of the box.
   notificationMode: NotificationMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("sound" as const)),
@@ -546,7 +597,12 @@ export const ClientSettingsSchema = Schema.Struct({
   planModeEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   glassSidebarEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
   glassAppEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
-  sidebarHeaderArt: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
+  sidebarHeaderArtStyle: SidebarHeaderArtStyle.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_HEADER_ART_STYLE)),
+  ),
+  sidebarHeaderArtColor: SidebarHeaderArtColor.pipe(
+    Schema.withDecodingDefault(Effect.succeed(DEFAULT_SIDEBAR_HEADER_ART_COLOR)),
+  ),
   cornerRadius: CornerRadius.pipe(
     Schema.withDecodingDefault(Effect.succeed(DEFAULT_CORNER_RADIUS)),
   ),
@@ -619,7 +675,11 @@ export const ClientSettingsSchema = Schema.Struct({
   // Beta: the quieter sidebar, composer and panel design. Off keeps the current look.
   redesignEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
 });
-export type ClientSettings = typeof ClientSettingsSchema.Type;
+export const CLIENT_SETTINGS_KEYS = Object.keys(ClientSettingsStruct.fields) as ReadonlyArray<
+  keyof typeof ClientSettingsStruct.fields
+>;
+export const ClientSettingsSchema = withLegacySidebarHeaderArt(ClientSettingsStruct);
+export type ClientSettings = typeof ClientSettingsStruct.Type;
 
 export const DEFAULT_CLIENT_SETTINGS: ClientSettings = Schema.decodeSync(ClientSettingsSchema)({});
 
@@ -1955,7 +2015,8 @@ export const ClientSettingsPatch = Schema.Struct({
   planModeEnabled: Schema.optionalKey(Schema.Boolean),
   glassSidebarEnabled: Schema.optionalKey(Schema.Boolean),
   glassAppEnabled: Schema.optionalKey(Schema.Boolean),
-  sidebarHeaderArt: Schema.optionalKey(Schema.Boolean),
+  sidebarHeaderArtStyle: Schema.optionalKey(SidebarHeaderArtStyle),
+  sidebarHeaderArtColor: Schema.optionalKey(SidebarHeaderArtColor),
   cornerRadius: Schema.optionalKey(CornerRadius),
   smoothCorners: Schema.optionalKey(Schema.Boolean),
   floatingPanels: Schema.optionalKey(Schema.Boolean),

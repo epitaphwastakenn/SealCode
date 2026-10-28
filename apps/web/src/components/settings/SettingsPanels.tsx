@@ -657,8 +657,11 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.glassSidebarEnabled !== DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled
       ? ["Glass sidebar"]
       : []),
-    ...(settings.sidebarHeaderArt !== DEFAULT_UNIFIED_SETTINGS.sidebarHeaderArt
+    ...(settings.sidebarHeaderArtStyle !== DEFAULT_UNIFIED_SETTINGS.sidebarHeaderArtStyle
       ? ["Sidebar header art"]
+      : []),
+    ...(settings.sidebarHeaderArtColor !== DEFAULT_UNIFIED_SETTINGS.sidebarHeaderArtColor
+      ? ["Sidebar header art color"]
       : []),
     ...(settings.appearanceContrast !== DEFAULT_UNIFIED_SETTINGS.appearanceContrast
       ? ["Contrast"]
@@ -886,7 +889,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       contextWindowMeterEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
       glassSidebarEnabled: DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled,
-      sidebarHeaderArt: DEFAULT_UNIFIED_SETTINGS.sidebarHeaderArt,
+      sidebarHeaderArtStyle: DEFAULT_UNIFIED_SETTINGS.sidebarHeaderArtStyle,
+      sidebarHeaderArtColor: DEFAULT_UNIFIED_SETTINGS.sidebarHeaderArtColor,
       glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity,
       panelAnimationDurationMs: DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs,
       interfaceAnimationsEnabled: DEFAULT_UNIFIED_SETTINGS.interfaceAnimationsEnabled,

@@ -243,7 +243,15 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "sidebar-header-art",
     title: "Sidebar header art",
     to: "/settings/appearance",
-    searchTerms: ["blueprint grid artwork banner header logo decoration theme tint"],
+    searchTerms: [
+      "artwork banner header logo decoration style off blueprint grid night sky stars waves ocean sea ice floe shards dots halftone pixels voxel aurora",
+    ],
+  },
+  {
+    id: "sidebar-header-art-color",
+    title: "Sidebar header art color",
+    to: "/settings/appearance",
+    searchTerms: ["artwork banner header logo tint accent custom color picker theme"],
   },
   {
     id: "glass-app",

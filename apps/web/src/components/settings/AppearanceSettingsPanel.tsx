@@ -37,6 +37,7 @@ import { TypographySection } from "./TypographySettings";
 import { BackgroundSettingsSection } from "./BackgroundSettings";
 import { CornerSettingsSection } from "./CornerSettings";
 import { AppearancePresetsSection } from "./AppearancePresetSettings";
+import { SidebarHeaderArtSettings } from "./SidebarHeaderArtSettings";
 
 const ENVIRONMENT_IDENTIFICATION_LABELS: Record<EnvironmentIdentificationMode, string> = {
   artwork: "Artwork",
@@ -224,31 +225,7 @@ export function AppearanceSettingsPanel() {
           }
         />
 
-        {showEnvironmentIdentification ? null : (
-          <SettingsRow
-            {...searchableSetting("sidebar-header-art")}
-            description="Draw a blueprint grid in your theme's colors behind the sidebar header."
-            resetAction={
-              settings.sidebarHeaderArt !== DEFAULT_UNIFIED_SETTINGS.sidebarHeaderArt ? (
-                <SettingResetButton
-                  label="sidebar header art"
-                  onClick={() =>
-                    updateSettings({ sidebarHeaderArt: DEFAULT_UNIFIED_SETTINGS.sidebarHeaderArt })
-                  }
-                />
-              ) : null
-            }
-            control={
-              <Switch
-                checked={settings.sidebarHeaderArt}
-                onCheckedChange={(checked) =>
-                  updateSettings({ sidebarHeaderArt: Boolean(checked) })
-                }
-                aria-label="Sidebar header art"
-              />
-            }
-          />
-        )}
+        {showEnvironmentIdentification ? null : <SidebarHeaderArtSettings />}
 
         <SettingsRow
           {...searchableSetting("setting-glass-opacity")}

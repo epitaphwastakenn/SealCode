@@ -3,20 +3,22 @@ import { describe, expect, it } from "vite-plus/test";
 import { resolveSidebarHeaderArtVariant } from "./SidebarStageBackdrop.logic";
 
 describe("resolveSidebarHeaderArtVariant", () => {
-  it("shows the brand art on release builds while the setting is on", () => {
+  it("shows the chosen style on release builds unless it is off", () => {
     for (const stageLabel of ["", "Alpha", "Beta"]) {
+      for (const headerArtStyle of ["blueprint", "waves", "aurora"] as const) {
+        expect(
+          resolveSidebarHeaderArtVariant({
+            stageLabel,
+            environmentIdentificationMode: "artwork",
+            headerArtStyle,
+          }),
+        ).toBe(headerArtStyle);
+      }
       expect(
         resolveSidebarHeaderArtVariant({
           stageLabel,
           environmentIdentificationMode: "artwork",
-          headerArtEnabled: true,
-        }),
-      ).toBe("brand");
-      expect(
-        resolveSidebarHeaderArtVariant({
-          stageLabel,
-          environmentIdentificationMode: "artwork",
-          headerArtEnabled: false,
+          headerArtStyle: "off",
         }),
       ).toBeNull();
     }
@@ -27,14 +29,14 @@ describe("resolveSidebarHeaderArtVariant", () => {
       resolveSidebarHeaderArtVariant({
         stageLabel: "Dev",
         environmentIdentificationMode: "artwork",
-        headerArtEnabled: false,
+        headerArtStyle: "off",
       }),
     ).toBe("dev");
     expect(
       resolveSidebarHeaderArtVariant({
         stageLabel: " nightly ",
         environmentIdentificationMode: "artwork",
-        headerArtEnabled: false,
+        headerArtStyle: "off",
       }),
     ).toBe("nightly");
     for (const environmentIdentificationMode of ["pill", "none"] as const) {
@@ -42,7 +44,7 @@ describe("resolveSidebarHeaderArtVariant", () => {
         resolveSidebarHeaderArtVariant({
           stageLabel: "Dev",
           environmentIdentificationMode,
-          headerArtEnabled: true,
+          headerArtStyle: "blueprint",
         }),
       ).toBeNull();
     }

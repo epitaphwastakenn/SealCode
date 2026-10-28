@@ -200,19 +200,70 @@ describe("ClientSettings notifications", () => {
 });
 
 describe("ClientSettings sidebar header art", () => {
-  it("is on for existing settings that predate it and keeps an explicit off", () => {
-    expect(decodeClientSettings({}).sidebarHeaderArt).toBe(true);
-    expect(decodeClientSettings({ sidebarHeaderArt: false }).sidebarHeaderArt).toBe(false);
-    expect(encodeClientSettings(decodeClientSettings({ sidebarHeaderArt: false }))).toMatchObject({
-      sidebarHeaderArt: false,
+  it("defaults to the blueprint art tinted by the theme", () => {
+    const settings = decodeClientSettings({});
+    expect(settings.sidebarHeaderArtStyle).toBe("blueprint");
+    expect(settings.sidebarHeaderArtColor).toBe("theme");
+  });
+
+  it("reads the retired on/off switch as a style", () => {
+    expect(decodeClientSettings({ sidebarHeaderArt: true }).sidebarHeaderArtStyle).toBe(
+      "blueprint",
+    );
+    expect(decodeClientSettings({ sidebarHeaderArt: false }).sidebarHeaderArtStyle).toBe("off");
+    expect(decodeClientSettings({ sidebarHeaderArt: "yes" }).sidebarHeaderArtStyle).toBe(
+      "blueprint",
+    );
+    expect(decodeClientSettings({ sidebarHeaderArt: false })).not.toHaveProperty(
+      "sidebarHeaderArt",
+    );
+  });
+
+  it("reads a stored settings file that still has the switch", () => {
+    const decodeStored = Schema.decodeUnknownSync(Schema.fromJsonString(ClientSettingsSchema));
+    expect(decodeStored('{"sidebarHeaderArt":false,"chatWidth":"wide"}')).toMatchObject({
+      sidebarHeaderArtStyle: "off",
+      chatWidth: "wide",
     });
+    expect(decodeStored('{"sidebarHeaderArt":true}').sidebarHeaderArtStyle).toBe("blueprint");
+  });
+
+  it("keeps an explicit style over the retired switch and writes only the style", () => {
+    const settings = decodeClientSettings({
+      sidebarHeaderArt: false,
+      sidebarHeaderArtStyle: "waves",
+    });
+    expect(settings.sidebarHeaderArtStyle).toBe("waves");
+    expect(encodeClientSettings(settings)).toMatchObject({ sidebarHeaderArtStyle: "waves" });
+    expect(encodeClientSettings(settings)).not.toHaveProperty("sidebarHeaderArt");
+  });
+
+  it("accepts the theme or a #rrggbb tint and rejects other colors", () => {
+    expect(decodeClientSettings({ sidebarHeaderArtColor: "#1E90ff" }).sidebarHeaderArtColor).toBe(
+      "#1E90ff",
+    );
+    expect(() => decodeClientSettings({ sidebarHeaderArtColor: "red" })).toThrow();
+    expect(() => decodeClientSettings({ sidebarHeaderArtColor: "#12345" })).toThrow();
+    expect(() => decodeClientSettings({ sidebarHeaderArtStyle: "confetti" })).toThrow();
+  });
+
+  it("migrates the retired switch inside saved appearance presets", () => {
+    const [saved, current] = decodeClientSettings({
+      appearancePresets: [
+        { id: "a", name: "Plain", settings: { sidebarHeaderArt: false, cornerRadius: 6 } },
+        { id: "b", name: "Sea", settings: { sidebarHeaderArtStyle: "waves" } },
+      ],
+    }).appearancePresets;
+    expect(saved?.settings).toEqual({ sidebarHeaderArtStyle: "off", cornerRadius: 6 });
+    expect(current?.settings).toEqual({ sidebarHeaderArtStyle: "waves" });
   });
 
   it("patches only when set", () => {
-    expect(decodeClientSettingsPatch({})).not.toHaveProperty("sidebarHeaderArt");
-    expect(decodeClientSettingsPatch({ sidebarHeaderArt: false })).toEqual({
-      sidebarHeaderArt: false,
-    });
+    expect(decodeClientSettingsPatch({})).not.toHaveProperty("sidebarHeaderArtStyle");
+    expect(decodeClientSettingsPatch({})).not.toHaveProperty("sidebarHeaderArtColor");
+    expect(
+      decodeClientSettingsPatch({ sidebarHeaderArtStyle: "off", sidebarHeaderArtColor: "#336699" }),
+    ).toEqual({ sidebarHeaderArtStyle: "off", sidebarHeaderArtColor: "#336699" });
   });
 });
 

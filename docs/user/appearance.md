@@ -31,6 +31,15 @@ exporting a table preserves the TeX.
 The composer keeps TeX source editable, including when rich text is enabled. The Render math
 preference is saved separately on each device.
 
+## Sidebar header art
+
+Choose the artwork behind the sidebar header in **Settings → Appearance → Interface**: Blueprint,
+Night sky, Waves, Ice floe, Dots, Pixels, Aurora, or Off. The art follows your theme's accent
+color. Choose **Custom** under **Sidebar header art color** to tint it with a color of your own;
+a color without hue gives a graphite version. Presets save the style and color with the rest of
+your look.
+Dev and Nightly builds keep their own artwork, governed by **Environment identification**.
+
 ## Motion
 
 **Interface animations** fade and slide content in as you switch threads, tabs, and pages, open menus

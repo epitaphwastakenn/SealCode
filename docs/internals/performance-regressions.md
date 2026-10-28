@@ -64,7 +64,7 @@ These are neither compressed WebSocket captures nor measurements of server RSS, 
 fixtures exclude unrelated settings calls and subscription events. Payload budgets belong in
 these tests so regressions fail locally. The transfer budget integration test
 (`apps/server/integration/transferBudgetV2.integration.test.ts`) caps the decoded bytes and rows
-of the compact bounded snapshot that web and mobile load, and of one older page, for a 900-row
+of the compact bounded snapshot that web and desktop load, and of one older page, for a 900-row
 agent turn.
 
 ## Event store and startup

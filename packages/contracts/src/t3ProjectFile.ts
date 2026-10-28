@@ -104,9 +104,9 @@ export const T3ProjectFile = Schema.Struct({
       .check(Schema.isMaxLength(T3_PROJECT_FILE_MAX_SCRIPTS)),
   ),
 }).annotate({
-  title: "T3 project file",
+  title: "SealCode project file",
   description:
-    "Checked-in project configuration for SealCode (t3.json at the repository root). See https://t3.codes for documentation.",
+    "Checked-in project configuration for SealCode (t3.json at the repository root). See https://github.com/epitaphwastakenn/SealCode/blob/main/docs/user/project-settings.md for documentation.",
 });
 export type T3ProjectFile = typeof T3ProjectFile.Type;
 

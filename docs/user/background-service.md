@@ -38,21 +38,20 @@ installing one.
 `t3 uninstall` removes the background service, the `t3` launcher, and the
 downloaded versions after showing you the list and asking once. Your projects,
 threads, and settings under `~/.t3/userdata` are kept, along with `service.env`
-under T3 home. Pass `--yes` from a script.
+under SealCode home. Pass `--yes` from a script.
 
 ## Local network access
 
-The service listens on your local network and Tailscale addresses, so the
-desktop and mobile apps on the same network connect directly instead of through
-T3 Connect. The hosted web app at app.t3.codes stays on T3 Connect, because
-browsers block plain HTTP from an HTTPS page. The service does not answer on
-public addresses, and every device still needs to pair or sign in. To keep the service reachable from this machine only, set
+The service listens on your local network and Tailscale addresses, so other devices on
+the same network connect to it directly. The service does not answer on public addresses,
+and every device still needs to pair or sign in. To keep the service reachable from this
+machine only, set
 `T3CODE_HOST=127.0.0.1` in `service.env` (below). Any `T3CODE_HOST` value
 replaces this default.
 
 ## Configure the service environment
 
-Put custom environment variables in `service.env` under the service's T3 home
+Put custom environment variables in `service.env` under the service's SealCode home
 directory, normally `~/.t3/service.env`. This file survives service installation
 and updates. For example:
 
@@ -72,7 +71,7 @@ For a service installed before env-file support, run `t3 service install` once
 with an up-to-date CLI.
 A missing file is ignored; other read failures stop service startup.
 If the file contains credentials, restrict access to that file with `chmod 600`
-(for the default T3 home, `chmod 600 ~/.t3/service.env`).
+(for the default SealCode home, `chmod 600 ~/.t3/service.env`).
 
 ## Platform support
 
@@ -86,9 +85,6 @@ nobody is logged in at the Mac's screen can fail at the final start step; the
 service is still installed and will start at the next login.
 
 Windows background services are not supported.
-
-T3 Connect can offer service installation during setup, but the two are managed
-separately. Signing out of T3 Connect does not stop or uninstall the service.
 
 ## Troubleshooting
 
@@ -110,8 +106,7 @@ ssh -t your-server 'sudo loginctl enable-linger "$(id -un)"'
 ```
 
 Then retry service setup as your normal user. Run only the `loginctl` command
-with sudo; running SealCode as root creates a separate installation and Connect
-identity. Without administrator access, run `t3 serve` in a terminal and keep
+with sudo; running SealCode as root creates a separate installation. Without administrator access, run `t3 serve` in a terminal and keep
 that session open.
 
 | Status problem                          | Next step                                                                                                                      |
@@ -132,8 +127,7 @@ Downloads, it may need Full Disk Access for the `t3` executable listed in
 SealCode removes superseded internal history on its own while it runs; your
 conversations are kept. Databases created before this shrank automatically
 still hold the freed space on disk until a one-time offline repair returns it
-and turns on automatic shrinking. Settings > Storage (web and desktop) or
-Settings > Maintenance (mobile) suggests the repair when at least 1 GiB can be
+and turns on automatic shrinking. Settings > Storage suggests the repair when at least 1 GiB can be
 reclaimed.
 
 Run `t3 doctor` on the machine that hosts the environment. It reports the

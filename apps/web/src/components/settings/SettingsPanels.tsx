@@ -2529,6 +2529,25 @@ export function GeneralSettingsPanel() {
             />
           </>
         )}
+        <SettingsRow
+          {...searchableSetting("credits")}
+          description="SealCode is a fork of T3 Code by Theo Browne, Julius Marminge and the T3 Code contributors, released under the MIT license."
+          control={
+            <Button
+              render={
+                <a
+                  href="https://github.com/pingdotgg/t3code"
+                  rel="noreferrer noopener"
+                  target="_blank"
+                />
+              }
+              size="sm"
+              variant="outline"
+            >
+              T3 Code on GitHub
+            </Button>
+          }
+        />
       </SettingsSection>
       <SettingsSection title="Diagnostics">
         <SettingsRow

@@ -41,25 +41,23 @@ without expanding shell expressions.
 ## Where agents run
 
 Registry agents always run on the machine that hosts your SealCode server. That stays true when you
-connect through `app.t3.codes`, T3 Connect, or a relay.
+connect from another device.
 
-Agents install under `tools/<agent-id>/<version>/` inside T3 home. SealCode verifies SHA-256 when the Registry entry
+Agents install under `tools/<agent-id>/<version>/` inside SealCode home. SealCode verifies SHA-256 when the Registry entry
 provides one; entries without a checksum retain the Registry's HTTPS distribution guarantee.
-Registry `npx` and `uvx` packages use T3-owned npm prefixes and Python tool directories at the exact
+Registry `npx` and `uvx` packages use SealCode-owned npm prefixes and Python tool directories at the exact
 version published by the Registry. Their commands are available in a new server terminal for
-sign-in and direct use. Removing an agent's last provider instance removes T3-managed binary files
+sign-in and direct use. Removing an agent's last provider instance removes SealCode-managed binary files
 but keeps package installs. To use an existing local binary, set **Executable override** explicitly.
 
 ## Signing in
 
-Open the agent's account section in **Settings → Providers** on web or desktop. Choose
-**Sign in** and, if the agent offers several methods, select one. For an installed, configured
-provider, mobile also offers **Settings → Provider accounts**.
+Open the agent's account section in **Settings → Providers**. Choose
+**Sign in** and, if the agent offers several methods, select one.
 
 Browser sign-in shows the agent's URL and waits for you to open or copy it before telling the
 agent to proceed. The page opens on your device, while the agent runs on the environment.
-Terminal methods run in an in-app terminal on that environment. On mobile, send responses
-through the terminal response field. SealCode reconnects after terminal login and waits for the
+Terminal methods run in an in-app terminal on that environment. SealCode reconnects after terminal login and waits for the
 agent to confirm sign-in before reporting success. You can cancel or retry an expired attempt.
 
 Browser and terminal sign-in leave credentials in the agent's own store. Agents that use API keys
@@ -93,7 +91,7 @@ running. Commands the agent names with a `$` prefix appear in SealCode's `$` ski
 ## Native sessions
 
 When an agent advertises ACP session listing and import support, expand its provider card,
-choose a project, and select **List sessions**. Importing one creates a deterministic T3 thread
+choose a project, and select **List sessions**. Importing one creates a deterministic SealCode thread
 backed by that native session. Importing the same agent session again returns the existing thread,
 including when another client performs the import.
 
@@ -119,7 +117,7 @@ Devin runs its commands through SealCode's terminals, and those commands follow 
 permission mode. For other agents, SealCode shows the command, output, and exit status the agent
 reports but does not run or stop their terminals.
 
-Registry agents can schedule work and use T3's MCP tools. Child-task presentation depends on what
+Registry agents can schedule work and use SealCode's MCP tools. Child-task presentation depends on what
 the agent exposes: ACP has no portable native subagent-lineage contract, so richer delegation views
 remain agent-specific.
 
@@ -129,7 +127,7 @@ Checkpoint rollback restores your files as usual. ACP agents cannot rewind their
 so the next turn after a rollback starts a fresh agent session that no longer remembers the
 conversation from before the checkpoint.
 
-Registry instances are not used for T3's app-owned text generation, such as thread titles, commit
+Registry instances are not used for SealCode's app-owned text generation, such as thread titles, commit
 messages, branch names, or pull request descriptions. Configure a text-generation-capable provider
 for those actions.
 

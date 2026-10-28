@@ -3279,7 +3279,7 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
       "SealCode is an open-source desktop app for coding agents. Work with your existing agent subscriptions, review code changes, and run commands in your projects. Connect from desktop or web to continue working remotely.",
     license: "MIT",
     homepage: "https://github.com/epitaphwastakenn/SealCode",
-    author: "T3 Tools",
+    author: "SealCode contributors",
     main: "apps/desktop/dist-electron/boot.cjs",
     build: yield* createBuildConfig(
       options.platform,

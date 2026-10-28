@@ -71,7 +71,7 @@ const make = Effect.gen(function* () {
       ? Effect.fail(
           failure(
             "thread_credential_required",
-            "Worktree handoff and status act as the calling T3 thread, so they need an agent running inside SealCode.",
+            "Worktree handoff and status act as the calling SealCode thread, so they need an agent running inside SealCode.",
           ),
         )
       : Effect.succeed(scope as McpThreadInvocationScope);

@@ -157,8 +157,8 @@ export const checkCommandCodeProviderStatus = Effect.fn("checkCommandCodeProvide
         status: "error",
         auth: { status: "unknown" },
         message: missing
-          ? "CommandCode CLI (`commandcode`) was not found. Install it with `npm install -g command-code` and run `commandcode login` on this T3 server host."
-          : "Failed to execute CommandCode CLI. Check its binary path on this T3 server host.",
+          ? "CommandCode CLI (`commandcode`) was not found. Install it with `npm install -g command-code` and run `commandcode login` on this SealCode server host."
+          : "Failed to execute CommandCode CLI. Check its binary path on this SealCode server host.",
       });
     }
     if (Option.isNone(versionResult.success)) {

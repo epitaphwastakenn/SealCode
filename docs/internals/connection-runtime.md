@@ -1,6 +1,6 @@
 # Connection runtime
 
-Web, the desktop renderer, and mobile share one connection owner per environment
+Web and the desktop renderer share one connection owner per environment
 in `packages/client-runtime`. Platform code supplies storage, credentials, network
 signals, and application lifecycle events. React views consume the runtime.
 Keeping retries and session lifetime here prevents competing reconnect loops when

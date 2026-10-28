@@ -143,6 +143,7 @@ welcome as issues.
 
 ## Credits
 
-SealCode is built on [T3 Code](https://github.com/pingdotgg/t3code) by Ping (MIT). Its Roblox skills
-build on [roblox-brain](https://github.com/TabooHarmony/roblox-brain) by TabooHarmony (MIT). See
-[open source licenses](./docs/user/open-source-licenses.md).
+SealCode is a fork of [T3 Code](https://github.com/pingdotgg/t3code) by Theo Browne, Julius
+Marminge and the T3 Code contributors, released under the MIT license. Thank you for the foundation.
+Its Roblox skills build on [roblox-brain](https://github.com/TabooHarmony/roblox-brain) by
+TabooHarmony (MIT). See [open source licenses](./docs/user/open-source-licenses.md).

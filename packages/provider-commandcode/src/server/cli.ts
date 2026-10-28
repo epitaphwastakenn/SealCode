@@ -166,7 +166,7 @@ export function commandCodeFailure(input: {
         class: "permission_error",
         code,
         message:
-          "CommandCode is not signed in. Run `commandcode login` on the T3 server host, then retry.",
+          "CommandCode is not signed in. Run `commandcode login` on the SealCode server host, then retry.",
       });
     case COMMAND_CODE_EXIT.permissionDenied:
       return makeProviderFailure({ class: "permission_error", code, message });

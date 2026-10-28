@@ -1,23 +1,20 @@
 # Prompt links
 
-A prompt link opens SealCode with a prompt ready to send. Use one to share a prompt on social
-media, or to put a one-click fix in a pull request comment.
+A prompt link opens SealCode with a prompt ready to send. Use one to share a prompt, or to put a
+one-click fix in a pull request comment.
 
 A link never runs anything. It opens a draft. You read the prompt, then press Send. A link cannot
 change your permission mode, branch, or worktree. Your own defaults apply.
 
-## Make a link
+## Write a link
 
-Open the command palette and choose **Copy prompt link**. It copies the draft in the composer.
-When the project is on GitHub, **Copy prompt link with repo and model** also adds the repository
-and the model you picked. Sent messages have a **Copy prompt link** button too.
-
-You can also write a link by hand:
+Links use SealCode's `t3code://` scheme, so they open the desktop app (development builds use
+`t3code-dev://`). Write one by hand:
 
 ```
-https://app.t3.codes/new?prompt=Rate%20my%20swearing
-https://app.t3.codes/new?prompt=Fix%20the%20build&repo=owner/name&provider=codex&model=gpt-5.5
-https://app.t3.codes/new?pr=owner/name/123&prompt=Fix%20the%20failing%20check
+t3code://new?prompt=Rate%20my%20swearing
+t3code://new?prompt=Fix%20the%20build&repo=owner/name&provider=codex&model=gpt-5.5
+t3code://new?pr=owner/name/123&prompt=Fix%20the%20failing%20check
 ```
 
 | Parameter  | Meaning                                                                       |
@@ -32,9 +29,7 @@ Encode the prompt for a URL. In JavaScript, use `encodeURIComponent`.
 
 ## Open a link
 
-On app.t3.codes, the link first asks where to open it: the desktop or mobile app, this browser
-when it is connected to a machine, or the download page. Select **Remember my choice** to skip
-this step next time.
+Open the link from a browser, a terminal, or any other app. SealCode opens as a draft.
 
 - **No `repo`**: the draft opens without a project, on the machine you used last.
 - **`repo`**: the draft opens in your most recently used project for that repository. A fork
@@ -47,7 +42,7 @@ this step next time.
   worktree. SealCode checks the code out only after you confirm, because the checkout runs your
   setup script on it.
 
-A thread link with a prompt, such as `https://app.t3.codes/<environment>/<thread>?prompt=…`,
+A thread link with a prompt, such as `t3code://threads/<environment>/<thread>?prompt=…`,
 puts the prompt in that thread's composer. If you already typed a draft there, SealCode asks
 before it replaces it.
 

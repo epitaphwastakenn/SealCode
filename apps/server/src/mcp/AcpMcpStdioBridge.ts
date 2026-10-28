@@ -67,7 +67,7 @@ export interface McpToolSession {
 }
 
 /**
- * One initialized MCP session over T3 Code's HTTP endpoint, terminated when
+ * One initialized MCP session over SealCode's HTTP endpoint, terminated when
  * the scope closes. Used by the ACP terminal fallback and `t3 thread`.
  */
 export const mcpToolSession = (

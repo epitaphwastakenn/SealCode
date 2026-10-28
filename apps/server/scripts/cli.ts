@@ -142,7 +142,7 @@ const buildCmd = Command.make(
 ).pipe(Command.withDescription("Build the server package (tsdown + bundle web client)."));
 
 const cli = Command.make("cli").pipe(
-  Command.withDescription("T3 server build CLI."),
+  Command.withDescription("SealCode server build CLI."),
   Command.withSubcommands([buildCmd]),
 );
 

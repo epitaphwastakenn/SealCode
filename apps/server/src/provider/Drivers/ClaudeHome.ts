@@ -27,11 +27,23 @@ export const resolveClaudeHomePath = Effect.fn("resolveClaudeHomePath")(function
   return path.resolve(path.join(home, ".claude"));
 });
 
+// Requests labeled `sdk-*` drain the 5-hour window about 1.8x faster (anthropics/claude-code#97074,
+// pingdotgg/t3code#25597), and `claude -p` turns an inherited `cli` into `sdk-cli`. Any other
+// custom label counts like the interactive CLI, so only those values are replaced.
+export function resolveClaudeEntrypoint(inherited: string | undefined): string {
+  const value = inherited?.trim() ?? "";
+  return value === "" || value === "cli" || value.startsWith("sdk-") ? "harp" : value;
+}
+
 export const makeClaudeEnvironment = Effect.fn("makeClaudeEnvironment")(function* (
   config: Pick<ClaudeSettings, "homePath">,
   baseEnv?: NodeJS.ProcessEnv,
 ): Effect.fn.Return<NodeJS.ProcessEnv, never, Path.Path> {
-  const resolvedBaseEnv = baseEnv ?? process.env;
+  const inheritedEnv = baseEnv ?? process.env;
+  const resolvedBaseEnv = {
+    ...inheritedEnv,
+    CLAUDE_CODE_ENTRYPOINT: resolveClaudeEntrypoint(inheritedEnv.CLAUDE_CODE_ENTRYPOINT),
+  };
   const homePath = config.homePath.trim();
   if (homePath.length === 0) return resolvedBaseEnv;
   const resolvedHomePath = yield* resolveClaudeHomePath(config);

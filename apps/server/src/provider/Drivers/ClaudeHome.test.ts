@@ -9,10 +9,36 @@ import {
   makeClaudeCapabilitiesCacheKey,
   makeClaudeContinuationGroupKey,
   makeClaudeEnvironment,
+  resolveClaudeEntrypoint,
   resolveClaudeHomePath,
 } from "./ClaudeHome.ts";
 
 it.layer(NodeServices.layer)("ClaudeHome", (it) => {
+  describe("Claude client identity", () => {
+    it.effect("labels Claude requests as Harp without mutating the inherited environment", () =>
+      Effect.gen(function* () {
+        const environment = Object.freeze({ PATH: "/bin" });
+
+        for (const homePath of ["", "~/.claude-work"]) {
+          const resolved = yield* makeClaudeEnvironment({ homePath }, environment);
+
+          expect(resolved.CLAUDE_CODE_ENTRYPOINT).toBe("harp");
+          expect(resolved.PATH).toBe(environment.PATH);
+          expect(resolved).not.toBe(environment);
+        }
+
+        expect(environment).toEqual({ PATH: "/bin" });
+      }),
+    );
+
+    it("replaces inherited SDK and CLI labels but keeps a custom one", () => {
+      for (const inherited of [undefined, "", " ", "cli", "sdk-ts", "sdk-cli", "sdk-py"]) {
+        expect(resolveClaudeEntrypoint(inherited)).toBe("harp");
+      }
+      expect(resolveClaudeEntrypoint("custom-client")).toBe("custom-client");
+    });
+  });
+
   describe("Claude home resolution", () => {
     it.effect("resolves configured Claude HOME and stamps continuation/cache keys with it", () =>
       Effect.gen(function* () {

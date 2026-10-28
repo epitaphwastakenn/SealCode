@@ -8,4 +8,4 @@ Include what is affected, how to reproduce it, and the impact you see. We will c
 and coordinate a fix and disclosure with you.
 
 Vulnerabilities in upstream [T3 Code](https://github.com/pingdotgg/t3code) itself should go to its maintainers,
-following [its security policy](https://t3.codes/security-policy).
+following [its security policy](https://github.com/pingdotgg/t3code/security/policy).

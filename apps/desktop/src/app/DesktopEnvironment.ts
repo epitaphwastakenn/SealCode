@@ -81,7 +81,7 @@ export class DesktopEnvironment extends Context.Service<
   }
 >()("@t3tools/desktop/app/DesktopEnvironment") {}
 
-const APP_BASE_NAME = "SealCode";
+const APP_BASE_NAME = "Harp";
 
 function resolveDesktopAppStageLabel(input: {
   readonly isDevelopment: boolean;

@@ -26,7 +26,7 @@ export class DesktopLegacyLocalStorage extends Context.Service<
 >()("@t3tools/desktop/app/DesktopLegacyLocalStorage") {}
 
 const MARKER_FILE_NAME = "v1-local-storage-imported";
-// SealCode 1.x kept its profile in "sealcode"; the SealCode names cover installs
+// Harp 1.x kept its profile in "sealcode"; the T3 Code names cover installs
 // that predate the fork.
 const V1_PROFILE_NAMES = ["sealcode", "T3 Code (Alpha)", "t3code"];
 // A profile untouched for this long is not being written, so a malformed database will not heal.
@@ -100,7 +100,7 @@ const make = Effect.gen(function* () {
     yield* Ref.set(markerPath, Option.some(marker));
     const profile = yield* findV1LocalStorage;
     if (profile === null) return yield* writeMarker;
-    // SealCode 1.x wrote under its own origin; its entries win over T3 Code's.
+    // Harp 1.x wrote under its own origin; its entries win over T3 Code's.
     const origins = [
       ElectronProtocol.getDesktopUrl(false).replace(/\/$/, ""),
       ElectronProtocol.SEALCODE_V1_ORIGIN,

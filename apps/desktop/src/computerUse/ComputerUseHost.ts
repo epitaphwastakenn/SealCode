@@ -1,7 +1,7 @@
 // @effect-diagnostics globalTimers:off globalDate:off -- Input pacing and app-launch waits run in Electron callbacks, outside any Effect fiber.
 /**
  * Runs the server's computer-use actions on this machine. One thread drives
- * the computer at a time; while it does, the SealCode window shrinks into an
+ * the computer at a time; while it does, the Harp window shrinks into an
  * overlay that stays out of screenshots, and apps the agent was not granted
  * are minimized so they stay out of its way.
  */
@@ -171,7 +171,7 @@ export const make = Effect.gen(function* () {
   const ensureDriving = async (threadId: string, agentName: string) => {
     if (session !== undefined && session.threadId !== threadId) {
       throw new ComputerUseRefusal(
-        "Another SealCode thread is using the computer right now. Try again when it finishes.",
+        "Another Harp thread is using the computer right now. Try again when it finishes.",
       );
     }
     const current = session ?? { threadId, hidden: [], geometry: undefined, overlayShown: false };
@@ -231,9 +231,7 @@ export const make = Effect.gen(function* () {
     target: AppWindow | undefined,
   ) => {
     if (isOwnWindow(target)) {
-      throw new ComputerUseRefusal(
-        "That point is SealCode's own window, which the agent cannot use.",
-      );
+      throw new ComputerUseRefusal("That point is Harp's own window, which the agent cannot use.");
     }
     const verdict = authorizeComputerUseAction({ action, target, grants: grantsFor(threadId) });
     if (!verdict.ok) throw new ComputerUseRefusal(verdict.message);

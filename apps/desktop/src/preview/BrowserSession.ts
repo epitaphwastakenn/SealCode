@@ -26,7 +26,7 @@ const ALLOWED_PREVIEW_PERMISSIONS: ReadonlySet<string> = new Set([
   // DesktopWindow confines HTML fullscreen to the guest's webview.
   "fullscreen",
   // Deny local-fonts to untrusted previews: it exposes installed-font fingerprints and file bytes.
-  // Deny notifications: pages could impersonate SealCode; app notifications use the default session.
+  // Deny notifications: pages could impersonate Harp; app notifications use the default session.
 ]);
 
 const NEVER_EXTERNAL_PROTOCOLS: ReadonlySet<string> = new Set([

@@ -1338,7 +1338,7 @@ it.effect("flags revoked macOS permissions on read and re-registers once they re
       const revoked = yield* service.state;
       assert.equal(
         revoked.message,
-        "Allow Screen Recording in System Settings, then restart SealCode.",
+        "Allow Screen Recording in System Settings, then restart Harp.",
       );
       assert.deepEqual(revoked.macPermissions, { screenRecording: false, accessibility: true });
 
@@ -1351,7 +1351,7 @@ it.effect("flags revoked macOS permissions on read and re-registers once they re
       const blocked = yield* service.state;
       assert.equal(
         blocked.message,
-        "Allow Screen Recording in System Settings, then restart SealCode.",
+        "Allow Screen Recording in System Settings, then restart Harp.",
       );
       assert.isFalse(blocked.shortcutRegistered);
 
@@ -1523,7 +1523,7 @@ it.effect.each([false, true])(
       platform: "macos",
       id: 42,
       title: "Setup",
-      owner: { name: "SealCode", processId: 123, path: "/Applications/SealCode.app" },
+      owner: { name: "Harp", processId: 123, path: "/Applications/Harp.app" },
       bounds: { x: 0, y: 0, width: 800, height: 600 },
     };
     activeWindowMock.mockReset().mockResolvedValue(active);

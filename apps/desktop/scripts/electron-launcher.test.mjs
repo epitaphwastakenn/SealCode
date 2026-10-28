@@ -76,18 +76,18 @@ describe("electron development launcher", () => {
 
   it("keeps the native Electron executable name inside the branded macOS bundle", () => {
     const paths = resolveMacLauncherPaths(
-      "/repo/apps/desktop/.electron-runtime/SealCode (Dev).app",
-      "SealCode (Dev)",
+      "/repo/apps/desktop/.electron-runtime/Harp (Dev).app",
+      "Harp (Dev)",
     );
 
-    assert.equal(paths.launcherExecutableName, "SealCode (Dev) Launcher");
+    assert.equal(paths.launcherExecutableName, "Harp (Dev) Launcher");
     assert.equal(
       paths.launcherBinaryPath,
-      "/repo/apps/desktop/.electron-runtime/SealCode (Dev).app/Contents/MacOS/SealCode (Dev) Launcher",
+      "/repo/apps/desktop/.electron-runtime/Harp (Dev).app/Contents/MacOS/Harp (Dev) Launcher",
     );
     assert.equal(
       paths.runtimeElectronBinaryPath,
-      "/repo/apps/desktop/.electron-runtime/SealCode (Dev).app/Contents/MacOS/Electron",
+      "/repo/apps/desktop/.electron-runtime/Harp (Dev).app/Contents/MacOS/Electron",
     );
 
     const script = makeDevelopmentLauncherScript({
@@ -98,7 +98,7 @@ describe("electron development launcher", () => {
     });
     assert.include(
       script,
-      "exec '/repo/apps/desktop/.electron-runtime/SealCode (Dev).app/Contents/MacOS/Electron'",
+      "exec '/repo/apps/desktop/.electron-runtime/Harp (Dev).app/Contents/MacOS/Electron'",
     );
     assert.notInclude(script, "node_modules/electron");
   });

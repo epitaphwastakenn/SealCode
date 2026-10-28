@@ -113,7 +113,7 @@ function createWindow(
     resizable: false,
     show: false,
     skipTaskbar: true,
-    title: "SealCode Snapshot Animation",
+    title: "Harp Snapshot Animation",
     transparent: true,
     webPreferences: {
       backgroundThrottling: false,

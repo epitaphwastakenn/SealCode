@@ -86,7 +86,7 @@ export class ComputerUseOverlay {
       show: false,
       skipTaskbar: true,
       transparent: true,
-      title: "SealCode Computer Use",
+      title: "Harp Computer Use",
       webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true },
     });
     window.setAlwaysOnTop(true, "screen-saver");
@@ -198,7 +198,7 @@ export async function askForComputerAccess(input: {
           <div style="font-size:15px;font-weight:600">${escapeHtml(input.agentName)} wants to use these apps</div>
           ${input.reason ? `<div class="muted">${escapeHtml(input.reason)}</div>` : ""}
           <ul style="list-style:none;padding:0;flex:1;overflow:auto">${rows}</ul>
-          <div class="muted" style="font-size:12px">SealCode shrinks to a small panel while the agent works. Press Esc to stop it.</div>
+          <div class="muted" style="font-size:12px">Harp shrinks to a small panel while the agent works. Press Esc to stop it.</div>
           <div style="display:flex;justify-content:flex-end;gap:8px">
             <button id="deny">Deny</button><button id="allow" class="primary">Allow</button>
           </div>

@@ -99,9 +99,9 @@ export const make = Effect.gen(function* () {
       applicationName: environment.displayName,
       applicationVersion: environment.appVersion,
       version: Option.getOrElse(commitHash, () => "unknown"),
-      copyright: "Copyright (c) 2026 SealCode contributors and T3 Tools Inc. (MIT)",
+      copyright: "Copyright (c) 2026 Harp contributors (formerly SealCode) and T3 Tools Inc. (MIT)",
       credits:
-        "SealCode is a fork of T3 Code by Theo Browne, Julius Marminge and the T3 Code contributors, released under the MIT license. https://github.com/pingdotgg/t3code",
+        "Harp (formerly SealCode) is a fork of T3 Code by Theo Browne, Julius Marminge and the T3 Code contributors, released under the MIT license. https://github.com/pingdotgg/t3code",
       website: "https://github.com/epitaphwastakenn/SealCode",
     });
 

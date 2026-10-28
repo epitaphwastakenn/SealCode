@@ -13,11 +13,11 @@ const repoRoot = NodePath.resolve(desktopDir, "..", "..");
 const devBundleIdSuffix = NodePath.basename(repoRoot)
   .toLowerCase()
   .replaceAll(/[^a-z0-9]+/g, "");
-const APP_DISPLAY_NAME = isDevelopment ? "SealCode (Dev)" : "SealCode (Alpha)";
+const APP_DISPLAY_NAME = isDevelopment ? "Harp (Dev)" : "Harp (Alpha)";
 const APP_BUNDLE_ID = isDevelopment
   ? `com.sealcode.app.dev.${devBundleIdSuffix || "local"}`
   : "com.sealcode.app";
-// t3code:// stays registered so links minted before the SealCode rename still open.
+// t3code:// stays registered so links minted by T3 Code still open.
 const APP_PROTOCOL_SCHEMES = isDevelopment
   ? ["sealcode-dev", "t3code-dev"]
   : ["sealcode", "t3code"];
@@ -271,8 +271,8 @@ function resolveMacBundleInfoPlistStrings(executableName) {
     CFBundleExecutable: executableName,
     CFBundleIconFile: "icon.icns",
     NSScreenCaptureUsageDescription:
-      "SealCode captures the active window when you use the snapshot shortcut.",
-    NSDocumentsFolderUsageDescription: "SealCode reads project files you open in the desktop app.",
+      "Harp captures the active window when you use the snapshot shortcut.",
+    NSDocumentsFolderUsageDescription: "Harp reads project files you open in the desktop app.",
   };
 }
 

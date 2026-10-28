@@ -129,7 +129,7 @@ export const layer = Layer.effect(
           );
           yield* electronDialog.showErrorBox(
             "WSL backend is still unavailable",
-            `${reason}\n\nSealCode will use the Windows backend for this launch and retry WSL the next time the app starts.`,
+            `${reason}\n\nHarp will use the Windows backend for this launch and retry WSL the next time the app starts.`,
           );
           yield* appSettings.applyWslWindowsFallbackInMemory;
           return true;
@@ -140,7 +140,7 @@ export const layer = Layer.effect(
         });
         yield* electronDialog.showErrorBox(
           "WSL backend couldn't start",
-          `${reason}\n\nFalling back to the Windows backend so SealCode can open. Re-enable the WSL backend from Settings > Connections once the WSL distro is fixed.`,
+          `${reason}\n\nFalling back to the Windows backend so Harp can open. Re-enable the WSL backend from Settings > Connections once the WSL distro is fixed.`,
         );
         // Clear wslOnly too so enabling WSL cannot restore a failed mode.
         // Keep the in-memory fallback if persistence fails.
@@ -178,8 +178,8 @@ export const layer = Layer.effect(
       onStateDirOwned: () =>
         electronDialog
           .showErrorBox(
-            "This SealCode home is unavailable",
-            "Another SealCode server, such as the background service, is using this data directory, or an older background service is set up for it. Stop that server or try `t3 update`. If the older launcher cannot update, run `t3 service uninstall` and optionally reinstall with `t3 service install` from a current CLI. If `t3` is missing, turn on the SealCode command line in Settings. Pass `--base-dir` with the service's SealCode home to each command. Then reopen SealCode. You can also set a separate T3CODE_HOME and pair with the running server.",
+            "This Harp home is unavailable",
+            "Another Harp server, such as the background service, is using this data directory, or an older background service is set up for it. Stop that server or try `t3 update`. If the older launcher cannot update, run `t3 service uninstall` and optionally reinstall with `t3 service install` from a current CLI. If `t3` is missing, turn on the Harp command line in Settings. Pass `--base-dir` with the service's Harp home to each command. Then reopen Harp. You can also set a separate T3CODE_HOME and pair with the running server.",
           )
           .pipe(Effect.andThen(electronApp.quit)),
     });

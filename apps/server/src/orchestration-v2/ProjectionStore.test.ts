@@ -38,6 +38,10 @@ import * as SqlitePersistence from "../persistence/Sqlite.ts";
 import { CodexProviderCapabilitiesV2 } from "./Adapters/CodexAdapterV2.ts";
 import * as ProjectionStore from "./ProjectionStore.ts";
 import {
+  projectThreadProjectionForWire,
+  WIRE_COMMAND_OUTPUT_PREFIX_CHARS,
+} from "./WireProjection.ts";
+import {
   buildBoundedThreadProjection,
   decodeThreadHistoryCursor,
   encodeThreadHistoryCursor,
@@ -6337,3 +6341,128 @@ it.layer(layerTest)("ProjectionStoreV2", (it) => {
     }),
   );
 });
+
+it.effect(
+  "a windowed read leaves out what the wire drops and projects exactly as a full read does",
+  () =>
+    Effect.gen(function* () {
+      const store = yield* ProjectionStore.ProjectionStoreV2;
+      const threadId = yield* addRolledBackRecoveryCandidate("wire-window");
+      const initial = yield* store.getThreadProjection(threadId);
+      const at = initial.updatedAt;
+      const base = initial.turnItems.find((item) => item.type === "command_execution")!;
+      yield* store.apply({
+        id: EventId.make("event:wire-window:run-completed"),
+        type: "run.updated",
+        threadId,
+        occurredAt: at,
+        payload: { ...initial.runs[0]!, status: "completed", completedAt: at },
+      });
+      const filler = (length: number) => "x".repeat(length);
+      const limit = WIRE_COMMAND_OUTPUT_PREFIX_CHARS;
+      const commandOutputs = {
+        failureInPrefix: `ENOENT: no such file\n${filler(300_000)}`,
+        failureBeyondPrefix: `ok\n${filler(100_000)}\nENOENT: no such file`,
+        blankPrefix: `${" \n".repeat(30_000)}tail`,
+        blankThroughout: " ".repeat(60_000),
+        twoByte: "\u00e9".repeat(limit + 5_000),
+        astral: "\u{1F600}".repeat(limit + 5_000),
+        justUnderLimit: filler(limit),
+        justOverLimit: filler(limit + 1),
+        short: "hi",
+      } as const;
+      let ordinal = 1;
+      let sequence = 0;
+      const add = (payload: Record<string, unknown>) =>
+        store.apply({
+          id: EventId.make(`event:wire-window:item:${sequence++}`),
+          type: "turn-item.updated",
+          threadId,
+          runId: base.runId ?? undefined,
+          driver,
+          occurredAt: at,
+          payload: {
+            ...base,
+            id: TurnItemId.make(`item:wire-window:${sequence}`),
+            ordinal: ++ordinal,
+            status: "completed",
+            completedAt: at,
+            ...payload,
+          } as OrchestrationV2TurnItem,
+        });
+      for (const [name, output] of Object.entries(commandOutputs)) {
+        yield* add({ type: "command_execution", input: name, output });
+      }
+      yield* add({ type: "command_execution", input: "silent" });
+      const diff = filler(80_000);
+      yield* add({
+        type: "file_change",
+        fileName: "done.ts",
+        diffStr: diff,
+        oldStr: diff,
+        newStr: diff,
+      });
+      yield* add({
+        type: "file_change",
+        fileName: "broken.ts",
+        status: "failed",
+        diffStr: diff,
+        oldStr: diff,
+        newStr: diff,
+      });
+      yield* add({
+        type: "handoff",
+        contextHandoffId: "handoff:wire-window",
+        fromProviderThreadIds: [],
+        toProviderThreadId: "provider-thread:wire-window",
+        fromProviderInstanceIds: [],
+        toProviderInstanceId: providerInstanceId,
+        strategy: "manual_context",
+        summary: filler(50_000),
+      });
+
+      const full = yield* store.getThreadSnapshot(threadId);
+      const windowed = yield* store.getThreadSnapshotWindow(threadId, { rowLimit: 100 });
+
+      // What the client receives is identical.
+      assert.deepEqual(
+        projectThreadProjectionForWire(windowed.projection).turnItems,
+        projectThreadProjectionForWire(full.projection).turnItems,
+      );
+      assert.deepEqual(
+        projectThreadProjectionForWire(windowed.projection).visibleTurnItems,
+        projectThreadProjectionForWire(full.projection).visibleTurnItems,
+      );
+
+      // And the dropped bodies never left SQLite.
+      const raw = (name: string) =>
+        windowed.projection.turnItems.find(
+          (item) => item.type === "command_execution" && item.input === name,
+        );
+      const outputOf = (name: string) => {
+        const item = raw(name);
+        return item?.type === "command_execution" ? item.output : undefined;
+      };
+      assert.equal(Array.from(outputOf("failureInPrefix") ?? "").length, limit);
+      assert.equal(Array.from(outputOf("astral") ?? "").length, limit);
+      assert.equal(Array.from(outputOf("twoByte") ?? "").length, limit);
+      assert.equal(outputOf("blankPrefix")?.length, commandOutputs.blankPrefix.length);
+      assert.equal(outputOf("blankThroughout")?.length, 60_000);
+      assert.equal(outputOf("justUnderLimit")?.length, limit);
+      assert.equal(outputOf("short"), "hi");
+      assert.equal(outputOf("silent"), undefined);
+
+      const changes = windowed.projection.turnItems.flatMap((item) =>
+        item.type === "file_change" ? [item] : [],
+      );
+      assert.deepEqual(
+        changes.map((item) => [item.fileName, item.diffStr?.length, item.oldStr, item.newStr]),
+        [
+          ["done.ts", undefined, undefined, undefined],
+          ["broken.ts", 80_000, undefined, undefined],
+        ],
+      );
+      const handoff = windowed.projection.turnItems.find((item) => item.type === "handoff");
+      assert.equal(handoff?.type === "handoff" ? handoff.summary : "missing", undefined);
+    }).pipe(Effect.provide(layerTest)),
+);

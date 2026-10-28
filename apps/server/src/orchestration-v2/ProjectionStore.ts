@@ -1,5 +1,5 @@
 import { applyThreadPullRequestLinkUpdate } from "../sourceControl/threadPullRequests.ts";
-import { projectTurnItemForWire } from "./WireProjection.ts";
+import { projectTurnItemForWire, WIRE_COMMAND_OUTPUT_PREFIX_CHARS } from "./WireProjection.ts";
 import * as Stream from "effect/Stream";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
 import { makeThreadFind, findProjectedThreadItems } from "./ThreadFind.ts";
@@ -2889,6 +2889,33 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
           ),
       );
 
+    // The wire drops command output, diffs and handoff summaries, so a windowed read leaves them
+    // behind in SQL rather than decoding megabytes only to discard them. projectTurnItemForWire
+    // must come out the same: the output keeps the prefix it reads (and stays whole when that
+    // prefix is blank, which it would count differently), and a failed change keeps its diff.
+    const wireWindowPayload = sql`CASE item.type
+      WHEN 'command_execution' THEN (
+        SELECT CASE
+          WHEN length(output.value) > ${WIRE_COMMAND_OUTPUT_PREFIX_CHARS}
+            AND trim(substr(output.value, 1, ${WIRE_COMMAND_OUTPUT_PREFIX_CHARS}),
+              char(9, 10, 11, 12, 13, 32, 160, 5760, 8192, 8193, 8194, 8195,
+                8196, 8197, 8198, 8199, 8200, 8201, 8202, 8232, 8233, 8239, 8287, 12288, 65279)
+            ) <> ''
+          THEN json_set(item.payload_json, '$.output',
+            substr(output.value, 1, ${WIRE_COMMAND_OUTPUT_PREFIX_CHARS}))
+          ELSE item.payload_json
+        END
+        FROM (SELECT json_extract(item.payload_json, '$.output') AS value) AS output
+      )
+      WHEN 'file_change' THEN CASE
+        WHEN json_extract(item.payload_json, '$.status') = 'failed'
+          THEN json_remove(item.payload_json, '$.oldStr', '$.newStr')
+        ELSE json_remove(item.payload_json, '$.diffStr', '$.oldStr', '$.newStr')
+      END
+      WHEN 'handoff' THEN json_remove(item.payload_json, '$.summary')
+      ELSE item.payload_json
+    END`;
+
     // Share selection so counting discarded ancestry preserves payload-read positions.
     const retainedWindowRows = (
       threadId: ThreadId,
@@ -3123,7 +3150,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
                 -- CROSS JOIN keeps the sorted IDs as the outer loop, so SQLite
                 -- skips sorting again once the payloads are attached. Carry the
                 -- rowid through selection to avoid a second string-key index lookup.
-                SELECT item.payload_json
+                SELECT ${wireWindowPayload} AS payload_json
                 FROM retained
                 CROSS JOIN orchestration_v2_projection_turn_items AS item
                   ON item.rowid = retained.item_rowid

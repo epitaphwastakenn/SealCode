@@ -10,6 +10,20 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.17.14 · 2026-10-28
+
+> SealCode is now Harp, with a new icon and a seal mascot, and Claude Code no longer burns through its 5-hour limit faster in Harp.
+
+### New
+
+- **Harp** — SealCode is now called Harp, after the harp seal. The app, its icon, the installer and the Roblox Studio plugin all say Harp. Your projects, threads and settings stay exactly where they were, and updates keep working.
+- **A mascot** — Harp the seal rests above the new-thread prompt, types on a tiny laptop while an agent works, balances its ball while a worktree is set up, and naps when there is nothing to show.
+- **Sidebar header art** — The colored grid from the web version now sits behind the sidebar header, tinted by your theme. Turn it off in Settings → Appearance → Interface.
+
+### Fixed
+
+- **Claude Code usage drained faster** — Claude Code counted Harp's sessions as SDK traffic, which uses up the 5-hour limit roughly 1.8 times faster than the CLI. Harp now identifies its own Claude sessions, so the same work costs the usual share of your limit.
+
 ## 2.17.13 · 2026-10-27
 
 > SealCode opens faster, uses about a quarter less memory, and changes themes without freezing.

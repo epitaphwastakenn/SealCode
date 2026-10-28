@@ -9,6 +9,7 @@ import {
   McpError,
   ToolListChangedNotificationSchema,
 } from "@modelcontextprotocol/sdk/types.js";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
@@ -25,6 +26,13 @@ import * as Stream from "effect/Stream";
 import type * as McpInvocationContext from "./McpInvocationContext.ts";
 import { RobloxStudioConfig } from "../roblox/RobloxStudioConfig.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
+import {
+  digestFingerprint,
+  MCP_TOOL_CACHE_MAX_AGE_MS,
+  McpToolCache,
+  type CachedMcpTools,
+  type UpstreamTool,
+} from "./McpToolCache.ts";
 
 /**
  * A server that never answers `initialize` must not hold the settings reload (and with it every
@@ -46,22 +54,18 @@ const RECONNECT_BACKOFF = [
   Duration.seconds(30),
 ] as const;
 
+/**
+ * A stdio server that nobody has called for this long is stopped; its tools stay on offer from the
+ * saved list and the next call starts it again. Long enough that a conversation waiting on the
+ * user does not lose a server's session.
+ */
+const IDLE_STOP_AFTER_MS = 30 * 60_000;
+const IDLE_CHECK_INTERVAL = Duration.minutes(1);
+
 const KEPT_STDERR_LINES = 20;
 
 /** Lets a server tell which SealCode thread a call belongs to, so it can scope its skills and jobs. */
 export const THREAD_SCOPE_META_KEY = "sealcode/threadId";
-
-type UpstreamTool = {
-  readonly name: string;
-  readonly description?: string;
-  readonly inputSchema: Record<string, unknown>;
-  readonly outputSchema?: Record<string, unknown>;
-  readonly annotations?: Record<string, unknown>;
-  readonly execution?: Record<string, unknown>;
-  readonly _meta?: Record<string, unknown>;
-  readonly icons?: ReadonlyArray<Record<string, unknown>>;
-  readonly title?: string;
-};
 
 class GlobalMcpConnectionError extends Schema.TaggedError<GlobalMcpConnectionError>()(
   "GlobalMcpConnectionError",
@@ -248,7 +252,8 @@ const createTransport = (server: GlobalMcpServer): McpTransport => {
 type UpstreamConnection = {
   readonly fingerprint: string;
   readonly server: GlobalMcpServer;
-  readonly client: Client;
+  /** Undefined while the server is stopped but its saved tools are on offer. */
+  readonly client: Client | undefined;
   readonly tools: ReadonlyArray<UpstreamTool>;
   /** The process's recent stderr, which is the only account of why a stdio server died. */
   readonly output: () => string;
@@ -263,11 +268,28 @@ type ConnectionEvents = {
 /** Clients SealCode is closing on purpose, whose close is not a crash to recover from. */
 const closingClients = new WeakSet<Client>();
 
-const closeConnection = (connection: UpstreamConnection): Effect.Effect<void> =>
-  Effect.promise(() => {
-    closingClients.add(connection.client);
-    return connection.client.close().catch(() => undefined);
+type RunningConnection = UpstreamConnection & { readonly client: Client };
+
+const isRunning = (connection: UpstreamConnection): connection is RunningConnection =>
+  connection.client !== undefined;
+
+/** Only a stdio server costs a process to keep; a remote one is a socket. */
+const startsOnDemand = (server: GlobalMcpServer): boolean => server.transport === "stdio";
+
+const toolsDiffer = (left: ReadonlyArray<UpstreamTool>, right: ReadonlyArray<UpstreamTool>) =>
+  left.length !== right.length ||
+  left.some(
+    (tool, index) => stableMcpValueFingerprint(tool) !== stableMcpValueFingerprint(right[index]),
+  );
+
+const closeConnection = (connection: UpstreamConnection): Effect.Effect<void> => {
+  const client = connection.client;
+  if (client === undefined) return Effect.void;
+  return Effect.promise(() => {
+    closingClients.add(client);
+    return client.close().catch(() => undefined);
   });
+};
 
 const recentOutput = (transport: McpTransport) => {
   const lines: string[] = [];
@@ -304,7 +326,7 @@ const discoverTools = async (
 const connect = (
   server: GlobalMcpServer,
   events: ConnectionEvents,
-): Effect.Effect<UpstreamConnection, GlobalMcpConnectionError> =>
+): Effect.Effect<RunningConnection, GlobalMcpConnectionError> =>
   Effect.tryPromise({
     try: async (signal) => {
       const transport = createTransport(server);
@@ -328,7 +350,7 @@ const connect = (
           client,
           tools,
           output,
-        } satisfies UpstreamConnection;
+        } satisfies RunningConnection;
       } catch (cause) {
         closingClients.add(client);
         await client.close().catch(() => undefined);
@@ -365,7 +387,12 @@ const make = Effect.gen(function* () {
   const catalogRef = yield* Ref.make<McpToolCatalog>(emptyCatalog);
   const catalogChanges = yield* PubSub.unbounded<McpToolCatalog>();
   const statusChanges = yield* PubSub.sliding<ReadonlyArray<GlobalMcpStatus>>(1);
+  const toolCache = yield* McpToolCache;
   const connections = new Map<string, UpstreamConnection>();
+  /** What each stdio server offered when it last ran, so a start need not run it to list tools. */
+  const savedTools = new Map(yield* toolCache.load);
+  const startLocks = new Map<string, Semaphore.Semaphore>();
+  const activity = new Map<string, { inFlight: number; lastUsedAt: number }>();
   const statuses = new Map<string, GlobalMcpStatus>();
   const closedServers = yield* Queue.unbounded<{ readonly id: string; readonly client: Client }>();
   const changedTools = yield* Queue.unbounded<{ readonly id: string; readonly client: Client }>();
@@ -375,6 +402,51 @@ const make = Effect.gen(function* () {
   };
   /** Consecutive automatic reconnects per server, reset by a connection that stays up. */
   const reconnectAttempts = new Map<string, number>();
+
+  const startLockFor = (id: string) => {
+    let lock = startLocks.get(id);
+    if (lock === undefined) {
+      lock = Semaphore.makeUnsafe(1);
+      startLocks.set(id, lock);
+    }
+    return lock;
+  };
+
+  const touch = (id: string) =>
+    Clock.currentTimeMillis.pipe(
+      Effect.map((now) => {
+        activity.set(id, { inFlight: activity.get(id)?.inFlight ?? 0, lastUsedAt: now });
+      }),
+    );
+
+  /** Counted before the server is looked up, so the idle check can never stop one a call needs. */
+  const withCall = <A, E, R>(id: string, effect: Effect.Effect<A, E, R>) =>
+    Effect.suspend(() => {
+      const current = activity.get(id) ?? { inFlight: 0, lastUsedAt: 0 };
+      activity.set(id, { ...current, inFlight: current.inFlight + 1 });
+      return effect.pipe(
+        Effect.ensuring(
+          Clock.currentTimeMillis.pipe(
+            Effect.map((now) => {
+              const latest = activity.get(id) ?? { inFlight: 1, lastUsedAt: now };
+              activity.set(id, { inFlight: latest.inFlight - 1, lastUsedAt: now });
+            }),
+          ),
+        ),
+      );
+    });
+
+  const rememberTools = (connection: UpstreamConnection) =>
+    Effect.gen(function* () {
+      if (!startsOnDemand(connection.server)) return;
+      const discoveredAt = yield* Clock.currentTimeMillis;
+      savedTools.set(connection.server.id, {
+        fingerprint: digestFingerprint(connection.fingerprint),
+        discoveredAt,
+        tools: connection.tools,
+      });
+      yield* toolCache.save(savedTools);
+    });
 
   const currentStatuses = (): ReadonlyArray<GlobalMcpStatus> =>
     [...statuses.values()].sort((left, right) => left.id.localeCompare(right.id));
@@ -495,6 +567,11 @@ const make = Effect.gen(function* () {
         if (!configuredIds.has(id)) statuses.delete(id);
         else if (!configured[id]?.enabled && status.state !== "disabled") statuses.delete(id);
       }
+      const forgotten = [...savedTools.keys()].filter((id) => !configuredIds.has(id));
+      if (forgotten.length > 0) {
+        for (const id of forgotten) savedTools.delete(id);
+        yield* toolCache.save(savedTools);
+      }
 
       for (const server of Object.values(configured).sort((left, right) =>
         left.id.localeCompare(right.id),
@@ -513,6 +590,28 @@ const make = Effect.gen(function* () {
           continue;
         }
 
+        // A stdio server whose tools are known stays stopped until something calls one of them.
+        const saved = savedTools.get(server.id);
+        const now = yield* Clock.currentTimeMillis;
+        if (
+          forcedServerId !== server.id &&
+          startsOnDemand(server) &&
+          saved !== undefined &&
+          saved.fingerprint === digestFingerprint(serverFingerprint(server)) &&
+          now - saved.discoveredAt >= 0 &&
+          now - saved.discoveredAt < MCP_TOOL_CACHE_MAX_AGE_MS
+        ) {
+          connections.set(server.id, {
+            fingerprint: serverFingerprint(server),
+            server,
+            client: undefined,
+            tools: saved.tools,
+            output: () => "",
+          });
+          setStatus(server, "ready", saved.tools.length);
+          continue;
+        }
+
         setStatus(server, "connecting", 0);
         yield* publishStatuses();
         const result = yield* Effect.result(connect(server, events));
@@ -522,6 +621,8 @@ const make = Effect.gen(function* () {
         }
         connections.set(server.id, result.success);
         setStatus(server, "ready", result.success.tools.length);
+        yield* touch(server.id);
+        yield* rememberTools(result.success);
       }
 
       yield* rebuildCatalog();
@@ -556,6 +657,65 @@ const make = Effect.gen(function* () {
 
   const getCatalog = Ref.get(catalogRef);
 
+  /**
+   * The running connection for a server, starting it first when only its saved tools were on offer.
+   * Undefined means the server is not configured; a failure is why it would not start.
+   */
+  const running = Effect.fn("GlobalMcpManager.running")(function* (id: string) {
+    const known = connections.get(id);
+    if (known === undefined) return undefined;
+    if (isRunning(known)) return known;
+    return yield* startLockFor(id).withPermits(1)(
+      Effect.gen(function* () {
+        const dormant = connections.get(id);
+        if (dormant === undefined) return undefined;
+        if (isRunning(dormant)) return dormant;
+        setStatus(dormant.server, "connecting", dormant.tools.length);
+        yield* publishStatuses();
+        const result = yield* Effect.result(connect(dormant.server, events));
+        if (Result.isFailure(result)) {
+          setStatus(
+            dormant.server,
+            "error",
+            dormant.tools.length,
+            result.failure.cause,
+            result.failure.output,
+          );
+          yield* publishStatuses();
+          return yield* result.failure;
+        }
+        const opened = result.success;
+        const latest = connections.get(id);
+        // The configuration changed, or a reconnect won, while this one was starting.
+        if (latest === undefined || latest.fingerprint !== opened.fingerprint) {
+          yield* closeConnection(opened);
+          return undefined;
+        }
+        if (isRunning(latest)) {
+          yield* closeConnection(opened);
+          return latest;
+        }
+        connections.set(id, opened);
+        setStatus(opened.server, "ready", opened.tools.length);
+        yield* touch(id);
+        if (toolsDiffer(dormant.tools, opened.tools)) {
+          yield* rememberTools(opened);
+          yield* rebuildCatalog();
+        } else {
+          yield* publishStatuses();
+        }
+        return opened;
+      }),
+    );
+  });
+
+  const notStarted = (error: GlobalMcpConnectionError) =>
+    ({
+      isError: true,
+      content: [{ type: "text", text: errorMessage(error.cause, error.output) }],
+      structuredContent: { error: { message: errorMessage(error.cause, error.output) } },
+    }) satisfies McpCallResult;
+
   const callTool: GlobalMcpManager["Service"]["callTool"] = (input) =>
     Effect.gen(function* () {
       yield* Effect.annotateCurrentSpan({
@@ -572,75 +732,89 @@ const make = Effect.gen(function* () {
           content: [{ type: "text", text: "Unknown MCP tool." }],
         } satisfies McpCallResult;
       }
-      const connection = connections.get(entry.serverId);
-      if (!connection) {
-        return {
-          isError: true,
-          content: [{ type: "text", text: "MCP server is not connected." }],
-        } satisfies McpCallResult;
-      }
-      const threadId = input.scope.thread?.threadId;
-      const settled = yield* Effect.tryPromise({
-        try: (signal) =>
-          connection.client.callTool(
-            {
-              name: entry.upstreamToolName,
-              arguments: input.arguments,
-              ...(threadId === undefined ? {} : { _meta: { [THREAD_SCOPE_META_KEY]: threadId } }),
-            },
-            undefined,
-            { signal, timeout: TOOL_CALL_TIMEOUT_MS, resetTimeoutOnProgress: true },
-          ),
-        catch: (cause) => new GlobalMcpConnectionError({ serverId: entry.serverId, cause }),
-      }).pipe(Effect.result);
-      if (Result.isFailure(settled)) {
-        const failure = settled.failure.cause;
-        const message = errorMessage(failure);
-        if (isConnectionFailure(failure)) {
-          setStatus(
-            connection.server,
-            "error",
-            connection.tools.length,
-            failure,
-            connection.output(),
-          );
-          yield* publishStatuses();
-        }
-        return {
-          isError: true,
-          content: [{ type: "text", text: message }],
-          structuredContent: { error: { message } },
-        } satisfies McpCallResult;
-      }
-      return settled.success as McpCallResult;
+      return yield* withCall(
+        entry.serverId,
+        Effect.gen(function* () {
+          const started = yield* Effect.result(running(entry.serverId));
+          if (Result.isFailure(started)) return notStarted(started.failure);
+          const connection = started.success;
+          if (!connection) {
+            return {
+              isError: true,
+              content: [{ type: "text", text: "MCP server is not connected." }],
+            } satisfies McpCallResult;
+          }
+          const threadId = input.scope.thread?.threadId;
+          const settled = yield* Effect.tryPromise({
+            try: (signal) =>
+              connection.client.callTool(
+                {
+                  name: entry.upstreamToolName,
+                  arguments: input.arguments,
+                  ...(threadId === undefined
+                    ? {}
+                    : { _meta: { [THREAD_SCOPE_META_KEY]: threadId } }),
+                },
+                undefined,
+                { signal, timeout: TOOL_CALL_TIMEOUT_MS, resetTimeoutOnProgress: true },
+              ),
+            catch: (cause) => new GlobalMcpConnectionError({ serverId: entry.serverId, cause }),
+          }).pipe(Effect.result);
+          if (Result.isFailure(settled)) {
+            const failure = settled.failure.cause;
+            const message = errorMessage(failure);
+            if (isConnectionFailure(failure)) {
+              setStatus(
+                connection.server,
+                "error",
+                connection.tools.length,
+                failure,
+                connection.output(),
+              );
+              yield* publishStatuses();
+            }
+            return {
+              isError: true,
+              content: [{ type: "text", text: message }],
+              structuredContent: { error: { message } },
+            } satisfies McpCallResult;
+          }
+          return settled.success as McpCallResult;
+        }),
+      );
     });
 
   const callServerTool: GlobalMcpManager["Service"]["callServerTool"] = (input) =>
-    Effect.gen(function* () {
-      const connection = connections.get(input.serverId);
-      if (!connection) {
-        return {
-          isError: true,
-          content: [{ type: "text", text: "MCP server is not connected." }],
-        } satisfies McpCallResult;
-      }
-      const settled = yield* Effect.tryPromise({
-        try: (signal) =>
-          connection.client.callTool(
-            { name: input.toolName, arguments: input.arguments },
-            undefined,
-            { signal, timeout: 15_000 },
-          ),
-        catch: (cause) => new GlobalMcpConnectionError({ serverId: input.serverId, cause }),
-      }).pipe(Effect.result);
-      if (Result.isFailure(settled)) {
-        return {
-          isError: true,
-          content: [{ type: "text", text: errorMessage(settled.failure.cause) }],
-        } satisfies McpCallResult;
-      }
-      return settled.success as McpCallResult;
-    });
+    withCall(
+      input.serverId,
+      Effect.gen(function* () {
+        const started = yield* Effect.result(running(input.serverId));
+        if (Result.isFailure(started)) return notStarted(started.failure);
+        const connection = started.success;
+        if (!connection) {
+          return {
+            isError: true,
+            content: [{ type: "text", text: "MCP server is not connected." }],
+          } satisfies McpCallResult;
+        }
+        const settled = yield* Effect.tryPromise({
+          try: (signal) =>
+            connection.client.callTool(
+              { name: input.toolName, arguments: input.arguments },
+              undefined,
+              { signal, timeout: 15_000 },
+            ),
+          catch: (cause) => new GlobalMcpConnectionError({ serverId: input.serverId, cause }),
+        }).pipe(Effect.result);
+        if (Result.isFailure(settled)) {
+          return {
+            isError: true,
+            content: [{ type: "text", text: errorMessage(settled.failure.cause) }],
+          } satisfies McpCallResult;
+        }
+        return settled.success as McpCallResult;
+      }),
+    );
 
   /**
    * A server whose process exited, or whose remote connection dropped, leaves the catalog at once
@@ -689,14 +863,21 @@ const make = Effect.gen(function* () {
     reloadSemaphore.withPermits(1)(
       Effect.gen(function* () {
         const connection = connections.get(changed.id);
-        if (connection === undefined || connection.client !== changed.client) return;
+        if (
+          connection === undefined ||
+          !isRunning(connection) ||
+          connection.client !== changed.client
+        )
+          return;
         const tools = yield* Effect.tryPromise({
           try: (signal) => discoverTools(connection.client, signal),
           catch: (cause) => new GlobalMcpConnectionError({ serverId: changed.id, cause }),
         }).pipe(Effect.option);
         if (tools._tag === "None") return;
-        connections.set(changed.id, { ...connection, tools: tools.value });
+        const refreshed = { ...connection, tools: tools.value };
+        connections.set(changed.id, refreshed);
         setStatus(connection.server, "ready", tools.value.length);
+        yield* rememberTools(refreshed);
         yield* rebuildCatalog();
       }),
     );
@@ -708,6 +889,39 @@ const make = Effect.gen(function* () {
   );
   yield* Queue.take(changedTools).pipe(
     Effect.flatMap(refreshTools),
+    Effect.forever,
+    Effect.forkScoped,
+  );
+
+  const stopIdle = Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    for (const [id, connection] of [...connections]) {
+      if (!isRunning(connection) || !startsOnDemand(connection.server)) continue;
+      const used = activity.get(id);
+      if (used === undefined || used.inFlight > 0 || now - used.lastUsedAt < IDLE_STOP_AFTER_MS) {
+        continue;
+      }
+      yield* startLockFor(id).withPermits(1)(
+        Effect.gen(function* () {
+          const current = connections.get(id);
+          const latest = activity.get(id);
+          if (
+            current === undefined ||
+            !isRunning(current) ||
+            current.client !== connection.client ||
+            (latest?.inFlight ?? 0) > 0
+          ) {
+            return;
+          }
+          // Dormant first, so a call arriving now waits on this lock and starts a fresh server.
+          connections.set(id, { ...current, client: undefined });
+          yield* closeConnection(current);
+        }),
+      );
+    }
+  });
+  yield* stopIdle.pipe(
+    Effect.andThen(Effect.sleep(IDLE_CHECK_INTERVAL)),
     Effect.forever,
     Effect.forkScoped,
   );

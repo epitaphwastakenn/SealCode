@@ -4,6 +4,7 @@ import * as NodeOS from "node:os";
 import * as NodePath from "node:path";
 import * as NodeCrypto from "node:crypto";
 
+import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it } from "@effect/vitest";
 import {
   EnvironmentId,
@@ -14,10 +15,12 @@ import {
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import * as TestClock from "effect/testing/TestClock";
 
 import { RobloxStudioConfig } from "../roblox/RobloxStudioConfig.ts";
 import { ServerSettingsService } from "../serverSettings.ts";
 import * as GlobalMcpManager from "./GlobalMcpManager.ts";
+import { makeFileMcpToolCache, McpToolCache } from "./McpToolCache.ts";
 import type * as McpInvocationContext from "./McpInvocationContext.ts";
 
 const fakeMcpServerScript = [
@@ -242,5 +245,137 @@ describe("GlobalMcpManager", () => {
       Effect.provide(layer),
       Effect.ensuring(Effect.sync(() => NodeFS.rmSync(markerPath, { force: true }))),
     );
+  });
+
+  describe("servers started on demand", () => {
+    const scratchPath = (name: string) =>
+      NodePath.join(NodeOS.tmpdir(), `sealcode-mcp-${name}-${NodeCrypto.randomUUID()}`);
+    const starts = (markerPath: string) =>
+      NodeFS.existsSync(markerPath)
+        ? NodeFS.readFileSync(markerPath, "utf8").trim().split(/\r?\n/u).length
+        : 0;
+    const call = (manager: GlobalMcpManager.GlobalMcpManager["Service"], serverId: string) =>
+      manager.callTool({
+        scope,
+        canonicalToolName: `mcp__${serverId}__get_state`,
+        arguments: {},
+      });
+    const layerFor = (cachePath: string, servers: Readonly<Record<string, GlobalMcpServer>>) =>
+      Layer.unwrap(
+        makeFileMcpToolCache(cachePath).pipe(
+          Effect.map((store) =>
+            GlobalMcpManager.layer.pipe(
+              Layer.provideMerge(ServerSettingsService.layerTest({ mcpServers: servers })),
+              Layer.provide(Layer.succeed(McpToolCache, store)),
+            ),
+          ),
+          Effect.provide(NodeServices.layer),
+        ),
+      );
+    const cleanup = (...paths: ReadonlyArray<string>) =>
+      Effect.sync(() => {
+        for (const path of paths) NodeFS.rmSync(path, { force: true });
+      });
+
+    it.effect(
+      "offers saved tools without running the server, runs it for a call, and stops it when idle",
+      () => {
+        const markerPath = scratchPath("lazy-marker");
+        const cachePath = scratchPath("lazy-cache");
+        const server = fakeServer("studio", markerPath);
+        const layer = layerFor(cachePath, { [server.id]: server });
+        return Effect.gen(function* () {
+          // The first start has to run the server to learn its tools.
+          yield* Effect.gen(function* () {
+            const manager = yield* GlobalMcpManager.GlobalMcpManager;
+            yield* manager.reload;
+            expect(starts(markerPath)).toBe(1);
+          }).pipe(Effect.provide(layer));
+
+          yield* Effect.gen(function* () {
+            const manager = yield* GlobalMcpManager.GlobalMcpManager;
+            yield* manager.reload;
+            expect(starts(markerPath)).toBe(1);
+            expect(yield* manager.getStatuses).toMatchObject([
+              { id: "studio", state: "ready", toolCount: 1 },
+            ]);
+            expect((yield* manager.getCatalog).tools.map((entry) => entry.canonicalName)).toEqual([
+              "mcp__studio__get_state",
+            ]);
+
+            expect(yield* call(manager, "studio")).toMatchObject({
+              content: [{ type: "text", text: "ok" }],
+            });
+            expect(starts(markerPath)).toBe(2);
+            yield* call(manager, "studio");
+            expect(starts(markerPath)).toBe(2);
+
+            yield* TestClock.adjust("31 minutes");
+            expect(yield* manager.getStatuses).toMatchObject([{ state: "ready", toolCount: 1 }]);
+            expect(yield* call(manager, "studio")).toMatchObject({
+              content: [{ type: "text", text: "ok" }],
+            });
+            expect(starts(markerPath)).toBe(3);
+          }).pipe(Effect.provide(layer));
+        }).pipe(Effect.ensuring(cleanup(markerPath, cachePath)));
+      },
+    );
+
+    it.effect("starts the server again when its configuration changed", () => {
+      const markerPath = scratchPath("changed-marker");
+      const cachePath = scratchPath("changed-cache");
+      const server = fakeServer("studio", markerPath);
+      const changed = fakeServer("studio", markerPath, [
+        { name: "EXTRA", value: "1", sensitive: false },
+      ]);
+      return Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* (yield* GlobalMcpManager.GlobalMcpManager).reload;
+        }).pipe(Effect.provide(layerFor(cachePath, { [server.id]: server })));
+        expect(starts(markerPath)).toBe(1);
+
+        yield* Effect.gen(function* () {
+          yield* (yield* GlobalMcpManager.GlobalMcpManager).reload;
+        }).pipe(Effect.provide(layerFor(cachePath, { [changed.id]: changed })));
+        expect(starts(markerPath)).toBe(2);
+      }).pipe(Effect.ensuring(cleanup(markerPath, cachePath)));
+    });
+
+    it.effect("keeps no secret from the server's configuration in the saved tools", () => {
+      const markerPath = scratchPath("secret-marker");
+      const cachePath = scratchPath("secret-cache");
+      const server = fakeServer("studio", markerPath, [
+        { name: "API_TOKEN", value: "hunter2-secret-value", sensitive: true },
+      ]);
+      return Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* (yield* GlobalMcpManager.GlobalMcpManager).reload;
+        }).pipe(Effect.provide(layerFor(cachePath, { [server.id]: server })));
+        const saved = NodeFS.readFileSync(cachePath, "utf8");
+        expect(saved).toContain("get_state");
+        expect(saved).not.toContain("hunter2");
+      }).pipe(Effect.ensuring(cleanup(markerPath, cachePath)));
+    });
+
+    it.effect("starts a stopped server for an explicit reconnect", () => {
+      const markerPath = scratchPath("reconnect-marker");
+      const cachePath = scratchPath("reconnect-cache");
+      const server = fakeServer("studio", markerPath);
+      const layer = layerFor(cachePath, { [server.id]: server });
+      return Effect.gen(function* () {
+        yield* Effect.gen(function* () {
+          yield* (yield* GlobalMcpManager.GlobalMcpManager).reload;
+        }).pipe(Effect.provide(layer));
+        yield* Effect.gen(function* () {
+          const manager = yield* GlobalMcpManager.GlobalMcpManager;
+          yield* manager.reload;
+          expect(starts(markerPath)).toBe(1);
+          expect(yield* manager.reconnectServer("studio")).toMatchObject([
+            { id: "studio", state: "ready", toolCount: 1 },
+          ]);
+          expect(starts(markerPath)).toBe(2);
+        }).pipe(Effect.provide(layer));
+      }).pipe(Effect.ensuring(cleanup(markerPath, cachePath)));
+    });
   });
 });

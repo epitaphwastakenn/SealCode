@@ -60,6 +60,7 @@ import * as ProviderInstanceRegistryHydration from "./provider/ProviderInstanceR
 import * as ProjectSettingsOverrideSweep from "./provider/ProjectSettingsOverrideSweep.ts";
 import * as TerminalManager from "./terminal/Manager.ts";
 import * as GlobalMcpManager from "./mcp/GlobalMcpManager.ts";
+import * as McpToolCache from "./mcp/McpToolCache.ts";
 import * as RobloxStudioConfig from "./roblox/RobloxStudioConfig.ts";
 import * as RobloxStudioStatus from "./roblox/RobloxStudioStatus.ts";
 import * as StudioBridge from "./studioBridge/StudioBridge.ts";
@@ -507,7 +508,7 @@ const layerStudioBridge = StudioBridgeServer.layer.pipe(
 
 const layerRuntimeCoreDependenciesBase = Layer.mergeAll(
   RobloxStudioStatus.layer.pipe(
-    Layer.provideMerge(GlobalMcpManager.layer),
+    Layer.provideMerge(GlobalMcpManager.layer.pipe(Layer.provide(McpToolCache.layerFile))),
     Layer.provideMerge(layerStudioBridge),
   ),
   VoiceTranscription.layer,

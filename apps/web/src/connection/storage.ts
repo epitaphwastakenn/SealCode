@@ -28,6 +28,7 @@ import {
   pullRequestRoutingPermissionFor,
 } from "@t3tools/client-runtime/connection";
 import { EnvironmentId, ServerConfig, ThreadId, VcsListRefsResult } from "@t3tools/contracts";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -38,12 +39,20 @@ import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import { projectFaviconCache } from "../assets/projectFaviconCache";
+import {
+  makeThreadSaveTracker,
+  runWhenIdle,
+  selectThreadCacheEvictions,
+  THREAD_CACHE_MAX_ENTRY_CHARS,
+  type ThreadCacheIndexEntry,
+} from "./threadCachePolicy";
 
 const DATABASE_NAME = "t3code:connection-runtime";
-const DATABASE_VERSION = 4;
+const DATABASE_VERSION = 5;
 const CATALOG_STORE_NAME = "catalog";
 const SHELL_STORE_NAME = "shell";
 const THREAD_STORE_NAME = "thread";
+const THREAD_INDEX_STORE_NAME = "thread-index";
 const SERVER_CONFIG_STORE_NAME = "server-config";
 const VCS_REFS_STORE_NAME = "vcs-refs";
 const CATALOG_KEY = "document";
@@ -69,7 +78,7 @@ const decodeConnectionCatalogDocument = Schema.decodeUnknownEffect(ConnectionCat
 const encodeConnectionCatalogDocument = Schema.encodeEffect(ConnectionCatalogDocumentJson);
 const decodeStoredShellSnapshot = Schema.decodeUnknownEffect(StoredShellSnapshotJson);
 const decodeStoredThreadSnapshot = Schema.decodeUnknownEffect(StoredThreadSnapshotJson);
-const encodeStoredThreadSnapshot = Schema.encodeEffect(StoredThreadSnapshotJson);
+const encodeStoredThreadSnapshotSync = Schema.encodeSync(StoredThreadSnapshotJson);
 const decodeStoredServerConfig = Schema.decodeUnknownEffect(StoredServerConfigJson);
 const encodeStoredServerConfig = Schema.encodeEffect(StoredServerConfigJson);
 const decodeStoredVcsRefs = Schema.decodeUnknownEffect(StoredVcsRefsJson);
@@ -121,6 +130,7 @@ const openDatabase = Effect.fn("web.connectionStorage.openDatabase")(function* (
     try {
       const request = indexedDB.open(DATABASE_NAME, DATABASE_VERSION);
       request.addEventListener("upgradeneeded", () => {
+        const needsThreadIndex = !request.result.objectStoreNames.contains(THREAD_INDEX_STORE_NAME);
         if (!request.result.objectStoreNames.contains(CATALOG_STORE_NAME)) {
           request.result.createObjectStore(CATALOG_STORE_NAME);
         }
@@ -135,6 +145,12 @@ const openDatabase = Effect.fn("web.connectionStorage.openDatabase")(function* (
         }
         if (!request.result.objectStoreNames.contains(VCS_REFS_STORE_NAME)) {
           request.result.createObjectStore(VCS_REFS_STORE_NAME);
+        }
+        if (needsThreadIndex) {
+          request.result.createObjectStore(THREAD_INDEX_STORE_NAME);
+          // Entries saved before the index are unbounded and unranked; drop them so a miss
+          // reloads from the server.
+          request.transaction?.objectStore(THREAD_STORE_NAME).clear();
         }
       });
       request.addEventListener("error", () => {
@@ -358,6 +374,97 @@ function removeDatabaseValuesInRange(
 
 function threadCacheKey(environmentId: EnvironmentId, threadId: ThreadId) {
   return `${environmentId}:${threadId}`;
+}
+
+function environmentKeyRange(environmentId: EnvironmentId) {
+  return IDBKeyRange.bound(`${environmentId}:`, `${environmentId}:￿`);
+}
+
+// Thread values and their recency index change together, so one transaction covers both.
+function runThreadCacheTransaction(
+  database: IDBDatabase,
+  operation: string,
+  work: (stores: { readonly threads: IDBObjectStore; readonly index: IDBObjectStore }) => void,
+) {
+  return Effect.callback<void, ConnectionTransientError>((resume) => {
+    let transaction: IDBTransaction | undefined;
+    try {
+      const opened = database.transaction(
+        [THREAD_STORE_NAME, THREAD_INDEX_STORE_NAME],
+        "readwrite",
+      );
+      transaction = opened;
+      opened.addEventListener("abort", () => {
+        resume(
+          Effect.fail(catalogError(operation, opened.error ?? "Unknown IndexedDB write error")),
+        );
+      });
+      opened.addEventListener("complete", () => {
+        resume(Effect.void);
+      });
+      work({
+        threads: opened.objectStore(THREAD_STORE_NAME),
+        index: opened.objectStore(THREAD_INDEX_STORE_NAME),
+      });
+    } catch (cause) {
+      try {
+        transaction?.abort();
+      } catch {
+        // The transaction already finished.
+      }
+      resume(Effect.fail(catalogError(operation, cause)));
+    }
+  }).pipe(Effect.withSpan("web.connectionStorage.threadCacheTransaction"));
+}
+
+function readLastUsedAt(value: unknown): number {
+  if (typeof value === "object" && value !== null && "lastUsedAt" in value) {
+    return typeof value.lastUsedAt === "number" ? value.lastUsedAt : 0;
+  }
+  return 0;
+}
+
+function writeThreadEntryOnConnection(
+  database: IDBDatabase,
+  key: string,
+  encoded: string,
+  now: number,
+) {
+  return runThreadCacheTransaction(database, "write", ({ threads, index }) => {
+    threads.put(encoded, key);
+    index.put({ lastUsedAt: now }, key);
+    const entries: Array<ThreadCacheIndexEntry> = [];
+    const request = index.openCursor();
+    request.addEventListener("success", () => {
+      const cursor = request.result;
+      if (cursor !== null) {
+        entries.push({ key: String(cursor.key), lastUsedAt: readLastUsedAt(cursor.value) });
+        cursor.continue();
+        return;
+      }
+      for (const evicted of selectThreadCacheEvictions(entries, key)) {
+        threads.delete(evicted);
+        index.delete(evicted);
+      }
+    });
+  });
+}
+
+function touchThreadEntryOnConnection(database: IDBDatabase, key: string, now: number) {
+  return runThreadCacheTransaction(database, "write", ({ index }) => {
+    const request = index.get(key);
+    request.addEventListener("success", () => {
+      // A save or delete may have overtaken this read; only a live entry is refreshed.
+      if (request.result !== undefined) index.put({ lastUsedAt: now }, key);
+    });
+  });
+}
+
+function removeThreadEntriesOnConnection(database: IDBDatabase, target: IDBValidKey | IDBKeyRange) {
+  return runThreadCacheTransaction(database, "remove", ({ threads, index }) => {
+    threads.delete(target);
+    index.delete(target);
+  });
 }
 
 function vcsRefsCacheKey(environmentId: EnvironmentId, cwd: string) {
@@ -631,6 +738,27 @@ export const layer = Layer.effectContext(
     const encodeStoredShellSnapshot = makeStoredShellSnapshotEncoder({
       yieldToHost: yieldToBrowserTask,
     });
+    const threadSaves = makeThreadSaveTracker();
+    // Encoding is one synchronous pass over the whole projection, so it waits for an idle
+    // moment instead of landing on the thread-close path. `null` means the save was overtaken.
+    const encodeThreadWhenIdle = (
+      stored: typeof StoredThreadSnapshot.Type,
+      isCurrent: () => boolean,
+    ) =>
+      Effect.callback<string | null, Persistence.ConnectionPersistenceError>((resume) => {
+        const cancel = runWhenIdle(() => {
+          if (!isCurrent()) {
+            resume(Effect.succeed(null));
+            return;
+          }
+          try {
+            resume(Effect.succeed(encodeStoredThreadSnapshotSync(stored)));
+          } catch (cause) {
+            resume(Effect.fail(persistenceError("save-thread", cause)));
+          }
+        });
+        return Effect.sync(cancel);
+      });
 
     const targetStore = Persistence.ConnectionTargetStore.of({
       list: catalog.read.pipe(
@@ -792,6 +920,7 @@ export const layer = Layer.effectContext(
             if (typeof raw !== "string") {
               return Effect.succeedNone;
             }
+            const key = threadCacheKey(environmentId, threadId);
             return decodeOrDiscardOrchestrationCache(
               decodeStoredThreadSnapshot(raw).pipe(
                 Effect.mapError((cause) => persistenceError("load-thread", cause)),
@@ -801,10 +930,21 @@ export const layer = Layer.effectContext(
                     : Option.none(),
                 ),
               ),
-              removeDatabaseValue(
-                database,
-                THREAD_STORE_NAME,
-                threadCacheKey(environmentId, threadId),
+              withDatabase(database, (opened) => removeThreadEntriesOnConnection(opened, key)),
+            ).pipe(
+              // Opening a thread makes it the most recently used; the open does not wait for it.
+              Effect.tap((loaded) =>
+                Option.isSome(loaded)
+                  ? Clock.currentTimeMillis.pipe(
+                      Effect.flatMap((now) =>
+                        withDatabase(database, (opened) =>
+                          touchThreadEntryOnConnection(opened, key, now),
+                        ),
+                      ),
+                      Effect.ignore,
+                      Effect.forkDetach,
+                    )
+                  : Effect.void,
               ),
             );
           }),
@@ -812,18 +952,43 @@ export const layer = Layer.effectContext(
         ),
       saveThread: Effect.fn("storage.saveThread")(
         function* (environmentId, snapshot) {
-          const encoded = yield* encodeStoredThreadSnapshot({
-            schemaVersion: ORCHESTRATION_THREAD_CACHE_SCHEMA_VERSION,
-            environmentId,
-            threadId: snapshot.projection.thread.id,
-            snapshot,
-          }).pipe(Effect.mapError((cause) => persistenceError("save-thread", cause)));
-          yield* writeDatabaseValue(
-            database,
-            THREAD_STORE_NAME,
-            threadCacheKey(environmentId, snapshot.projection.thread.id),
-            encoded,
-          );
+          const threadId = snapshot.projection.thread.id;
+          const key = threadCacheKey(environmentId, threadId);
+          const token = threadSaves.begin(key);
+          yield* Effect.gen(function* () {
+            if (threadSaves.isKnownOversized(key, snapshot.snapshotSequence)) return;
+            const encoded = yield* encodeThreadWhenIdle(
+              {
+                schemaVersion: ORCHESTRATION_THREAD_CACHE_SCHEMA_VERSION,
+                environmentId,
+                threadId,
+                snapshot,
+              },
+              () => threadSaves.isCurrent(key, token),
+            );
+            if (encoded === null) return;
+            if (encoded.length > THREAD_CACHE_MAX_ENTRY_CHARS) {
+              // Drop the older, smaller copy too: it no longer describes this thread.
+              threadSaves.rememberOversized(key, snapshot.snapshotSequence);
+              yield* withDatabase(database, (opened) =>
+                Effect.suspend(() =>
+                  threadSaves.isCurrent(key, token)
+                    ? removeThreadEntriesOnConnection(opened, key)
+                    : Effect.void,
+                ),
+              );
+              return;
+            }
+            const now = yield* Clock.currentTimeMillis;
+            // Checked when the transaction opens: a delete may land while the database opens.
+            yield* withDatabase(database, (opened) =>
+              Effect.suspend(() =>
+                threadSaves.isCurrent(key, token)
+                  ? writeThreadEntryOnConnection(opened, key, encoded, now)
+                  : Effect.void,
+              ),
+            );
+          }).pipe(Effect.ensuring(Effect.sync(() => threadSaves.finish(key, token))));
         },
         Effect.mapError((cause) =>
           cause._tag === "ConnectionPersistenceError"
@@ -886,26 +1051,27 @@ export const layer = Layer.effectContext(
           IDBKeyRange.bound(`${environmentId}:`, `${environmentId}:\uffff`),
         ).pipe(Effect.mapError((cause) => persistenceError("clear-vcs-refs", cause))),
       removeThread: (environmentId, threadId) =>
-        removeDatabaseValue(
-          database,
-          THREAD_STORE_NAME,
-          threadCacheKey(environmentId, threadId),
-        ).pipe(Effect.mapError((cause) => persistenceError("remove-thread", cause))),
+        Effect.suspend(() => {
+          const key = threadCacheKey(environmentId, threadId);
+          threadSaves.cancel(key);
+          return withDatabase(database, (opened) => removeThreadEntriesOnConnection(opened, key));
+        }).pipe(Effect.mapError((cause) => persistenceError("remove-thread", cause))),
       clear: (environmentId) =>
         Effect.all(
           [
             Effect.promise(() => projectFaviconCache.clearEnvironment(environmentId)),
             removeDatabaseValue(database, SHELL_STORE_NAME, environmentId),
-            removeDatabaseValuesInRange(
-              database,
-              THREAD_STORE_NAME,
-              IDBKeyRange.bound(`${environmentId}:`, `${environmentId}:\uffff`),
-            ),
+            Effect.suspend(() => {
+              threadSaves.cancelWithPrefix(`${environmentId}:`);
+              return withDatabase(database, (opened) =>
+                removeThreadEntriesOnConnection(opened, environmentKeyRange(environmentId)),
+              );
+            }),
             removeDatabaseValue(database, SERVER_CONFIG_STORE_NAME, environmentId),
             removeDatabaseValuesInRange(
               database,
               VCS_REFS_STORE_NAME,
-              IDBKeyRange.bound(`${environmentId}:`, `${environmentId}:\uffff`),
+              environmentKeyRange(environmentId),
             ),
           ],
           { concurrency: "unbounded", discard: true },

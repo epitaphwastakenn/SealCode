@@ -44,7 +44,7 @@ describe("Self invocation", () => {
 describe("Node runtime selection", () => {
   it.effect("keeps the current Node or Electron runtime without requiring Node on PATH", () =>
     Effect.gen(function* () {
-      for (const executable of ["/runtime/node", "/Applications/SealCode.app/Electron"]) {
+      for (const executable of ["/runtime/node", "/Applications/Harp.app/Electron"]) {
         expect(
           yield* resolveNodeExecutable("Roblox Studio", { PATH: "" }).pipe(
             Effect.provideService(HostProcess.ExecutablePath, executable),

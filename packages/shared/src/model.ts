@@ -182,7 +182,7 @@ const RETIRED_ULTRATHINK_EFFORT = "ultrathink";
 const WORKFLOW_EFFORT_OPTION_IDS: ReadonlySet<string> = new Set(["ultracode"]);
 
 /**
- * SealCode offers no prompt-injected choices: typing "ultrathink" in a Claude
+ * Harp offers no prompt-injected choices: typing "ultrathink" in a Claude
  * prompt already does what that level did. Manifests, bundled or fetched from
  * upstream, still list them, so they are dropped where capabilities are read.
  */

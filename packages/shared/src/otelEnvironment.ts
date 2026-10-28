@@ -176,7 +176,7 @@ const exporter = (name: string): Config.Config<Setting<Exporter>> =>
         ? { value }
         : {
             value,
-            warning: `${name} names ${ignored.join(", ")}, which SealCode does not export to, so ${ignored.length === 1 ? "it was" : "they were"} ignored`,
+            warning: `${name} names ${ignored.join(", ")}, which Harp does not export to, so ${ignored.length === 1 ? "it was" : "they were"} ignored`,
           };
     }),
   );

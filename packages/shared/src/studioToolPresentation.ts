@@ -1,5 +1,5 @@
 /**
- * Readable timeline titles for SealCode's Roblox Studio tools (MCP server `studio`), so a thread
+ * Readable timeline titles for Harp's Roblox Studio tools (MCP server `studio`), so a thread
  * shows "Read script Greeter" instead of `mcp__studio__get_script_source`.
  */
 

@@ -15,6 +15,7 @@ describe("resolveT3McpToolPresentation", () => {
         "t3code:",
         "mcp_t3-code_",
         "T3 Code ",
+        "Harp ",
         "SealCode ",
         "t3-code · ",
       ]) {

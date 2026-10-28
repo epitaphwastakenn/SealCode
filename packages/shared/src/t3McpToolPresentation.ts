@@ -144,12 +144,12 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     "schedule-delete",
   ),
   request_secret: tool(["Ask for", "Asking for", "Asked for", "a secret"], "secret-request"),
-  create_threads: tool(["Create", "Creating", "Created", "SealCode threads"], "thread-create"),
-  t3_thread_start: tool(["Start", "Starting", "Started", "a SealCode thread"], "thread-create"),
-  t3_thread_list: tool(["List", "Listing", "Listed", "SealCode threads"], "thread-list"),
-  t3_thread_read: tool(["Read", "Reading", "Read", "a SealCode thread"], "thread-read"),
-  t3_thread_send: tool(["Send", "Sending", "Sent", "to a SealCode thread"], "thread-send"),
-  t3_thread_wait: tool(["Wait", "Waiting", "Waited", "for a SealCode thread"], "thread-wait"),
+  create_threads: tool(["Create", "Creating", "Created", "Harp threads"], "thread-create"),
+  t3_thread_start: tool(["Start", "Starting", "Started", "a Harp thread"], "thread-create"),
+  t3_thread_list: tool(["List", "Listing", "Listed", "Harp threads"], "thread-list"),
+  t3_thread_read: tool(["Read", "Reading", "Read", "a Harp thread"], "thread-read"),
+  t3_thread_send: tool(["Send", "Sending", "Sent", "to a Harp thread"], "thread-send"),
+  t3_thread_wait: tool(["Wait", "Waiting", "Waited", "for a Harp thread"], "thread-wait"),
   t3_workflow_stop: tool(
     ["Stop", "Stopping", "Requested a stop for", "a workflow"],
     "workflow-stop",
@@ -159,7 +159,7 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
     "background-wait",
   ),
   t3_thread_interrupt: tool(
-    ["Interrupt", "Interrupting", "Requested an interrupt of", "a SealCode thread"],
+    ["Interrupt", "Interrupting", "Requested an interrupt of", "a Harp thread"],
     "thread-interrupt",
   ),
   t3_worktree_handoff: tool(
@@ -294,7 +294,7 @@ const T3_MCP_TOOLS: Readonly<Record<string, T3McpToolDefinition>> = {
   t3_thread_transfers: tool(["Read", "Reading", "Read", "thread transfers"], "thread-transfers"),
   t3_thread_organize: tool(["Organize", "Organizing", "Organized", "a thread"], "thread-organize"),
   t3_thread_update: tool(
-    ["Update", "Updating", "Updated", "SealCode thread metadata"],
+    ["Update", "Updating", "Updated", "Harp thread metadata"],
     "thread-update",
   ),
   t3_worktree_list: tool(["List", "Listing", "Listed", "workspace branches"], "worktree-list"),
@@ -354,10 +354,9 @@ function resolveT3McpToolName(value: string): string | null {
     return namespaceMatch.groups.tool ?? null;
   }
 
-  // Agents that prefix with the server display name now see "SealCode".
-  const prefixed = /^(?:mcp[-_]{1,2})?(?:t3[-_ ]?code|sealcode)(?:__|[-_.:/ ])(?<tool>.+)$/i.exec(
-    label,
-  );
+  // Agents that prefix with the server display name see "Harp"; threads from before the rename say "SealCode".
+  const prefixed =
+    /^(?:mcp[-_]{1,2})?(?:t3[-_ ]?code|sealcode|harp)(?:__|[-_.:/ ])(?<tool>.+)$/i.exec(label);
   const candidate = prefixed?.groups?.tool ?? label;
   if (Object.hasOwn(T3_MCP_TOOLS, candidate)) return candidate;
   // OpenCode 2 thread prefixes can contain underscores; choose the longest known tool-name suffix.

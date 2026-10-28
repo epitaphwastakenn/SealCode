@@ -42,11 +42,11 @@
   "forwardPorts": [5733, 13773],
   "portsAttributes": {
     "5733": {
-      "label": "t3 web (open via the pairing URL, not the bare origin)",
+      "label": "SealCode web (open via the pairing URL, not the bare origin)",
       "onAutoForward": "notify"
     },
     "13773": {
-      "label": "t3 server",
+      "label": "SealCode server",
       "onAutoForward": "silent"
     }
   },

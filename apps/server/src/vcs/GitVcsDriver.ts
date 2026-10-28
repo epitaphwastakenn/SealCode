@@ -836,9 +836,9 @@ export const makeVcsDriverShape = Effect.fn("makeGitVcsDriverShape")(function* (
         ...process.env,
         GIT_INDEX_FILE: tempIndexPath,
         GIT_AUTHOR_NAME: "SealCode",
-        GIT_AUTHOR_EMAIL: "t3code@users.noreply.github.com",
+        GIT_AUTHOR_EMAIL: "sealcode@localhost",
         GIT_COMMITTER_NAME: "SealCode",
-        GIT_COMMITTER_EMAIL: "t3code@users.noreply.github.com",
+        GIT_COMMITTER_EMAIL: "sealcode@localhost",
       };
 
       const cleanupTempIndex = Effect.forEach(

@@ -70,7 +70,7 @@ export const cascadeRebaseStack = Effect.fn("cascadeRebaseStack")(function* (inp
     GIT_CONFIG_KEY_1: "user.name",
     GIT_CONFIG_VALUE_1: "SealCode",
     GIT_CONFIG_KEY_2: "user.email",
-    GIT_CONFIG_VALUE_2: "noreply@t3.codes",
+    GIT_CONFIG_VALUE_2: "sealcode@localhost",
   };
   const git = (args: ReadonlyArray<string>, allowNonZeroExit = false) =>
     process.run({

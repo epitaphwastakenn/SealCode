@@ -1,13 +1,13 @@
 # Installs the SealCode CLI from a GitHub Release archive on Windows. Needs
 # only PowerShell 5.1+; no Node, npm, or compiler.
 #
-#   irm https://t3.codes/install.ps1 | iex
+#   irm https://raw.githubusercontent.com/epitaphwastakenn/SealCode/main/scripts/install.ps1 | iex
 #
 # Environment:
 #   T3CODE_CHANNEL           release train to follow: stable, nightly, or preview
 #                            (default: stable; preview is a maintainers' test train)
 #   T3CODE_VERSION           exact version to install (overrides T3CODE_CHANNEL)
-#   T3CODE_HOME              T3 home directory (default: ~\.t3)
+#   T3CODE_HOME              SealCode home directory (default: ~\.t3)
 #   T3CODE_INSTALL_BIN_DIR   where t3.exe is linked (default: ~\.local\bin)
 #   T3CODE_RELEASE_BASE_URL  mirror for releases/download (default: GitHub)
 #

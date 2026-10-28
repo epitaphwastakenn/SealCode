@@ -160,7 +160,7 @@ function RootRouteBranch() {
   if (pathname === "/pair") {
     return (
       <>
-        <BrowserChromeThemeSync key={pathname} />
+        <BrowserChromeThemeSync key="pair" />
         <Outlet />
       </>
     );
@@ -170,7 +170,7 @@ function RootRouteBranch() {
   if (hostedPromptLinkLanding !== null) {
     return (
       <>
-        <BrowserChromeThemeSync key={pathname} />
+        <BrowserChromeThemeSync key="hosted-prompt-link" />
         {hostedPromptLinkLanding}
       </>
     );
@@ -179,7 +179,7 @@ function RootRouteBranch() {
   if (pathname === "/welcome") {
     return (
       <>
-        <BrowserChromeThemeSync key={pathname} />
+        <BrowserChromeThemeSync key="welcome" />
         <MotionAppearanceSync />
         <EnvironmentThemeSync />
         <AppBackdrop />
@@ -196,7 +196,7 @@ function RootRouteBranch() {
   if (authGateState.status !== "authenticated" && authGateState.status !== "hosted-static") {
     return (
       <>
-        <BrowserChromeThemeSync key={pathname} />
+        <BrowserChromeThemeSync key="unauthenticated" />
         <Outlet />
       </>
     );
@@ -212,7 +212,7 @@ function RootRouteBranch() {
 
   return (
     <>
-      <BrowserChromeThemeSync key={pathname} />
+      <BrowserChromeThemeSync key="app-shell" />
       <MotionAppearanceSync />
       <EnvironmentThemeSync />
       <AppBackdrop />
@@ -261,7 +261,8 @@ function MotionAppearanceSync() {
   return null;
 }
 
-// Each route paints its own surface for browser chrome to sample.
+// Each branch above paints its own surface for browser chrome to sample, so the key names the
+// surface: it resamples when the surface changes, not on every navigation inside one.
 function BrowserChromeThemeSync() {
   useEffect(() => {
     const frame = window.requestAnimationFrame(() => {

@@ -460,13 +460,17 @@ export function ThemeEditorPanel({
     setBrightness(mergeTarget ? (mergeTarget.brightness ?? 0) : (editingTheme?.brightness ?? 0));
   }
 
+  // A color picker drag edits many times per frame; only the last edit of a frame is painted.
   useEffect(() => {
     if (!open) return;
-    applyThemeColorPreview(
-      adjustThemeColorsBrightness(colorsByAppearance[activeAppearance], brightness),
-      activeAppearance,
-      gradient,
-    );
+    const frame = requestAnimationFrame(() => {
+      applyThemeColorPreview(
+        adjustThemeColorsBrightness(colorsByAppearance[activeAppearance], brightness),
+        activeAppearance,
+        gradient,
+      );
+    });
+    return () => cancelAnimationFrame(frame);
   }, [activeAppearance, brightness, colorsByAppearance, gradient, open]);
 
   useEffect(() => {

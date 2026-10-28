@@ -1,6 +1,7 @@
 import { DEFAULT_UNIFIED_SETTINGS, MAX_CORNER_RADIUS, MIN_CORNER_RADIUS } from "@t3tools/contracts";
 import type { CSSProperties } from "react";
 
+import { useThrottledRange } from "../../hooks/useThrottledRange";
 import { Switch } from "../ui/switch";
 import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
@@ -9,8 +10,11 @@ import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings"
 export function CornerSettingsSection() {
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
+  const cornerRadiusRange = useThrottledRange(settings.cornerRadius, (cornerRadius) =>
+    updateSettings({ cornerRadius }),
+  );
   const ratio =
-    (settings.cornerRadius - MIN_CORNER_RADIUS) / (MAX_CORNER_RADIUS - MIN_CORNER_RADIUS);
+    (cornerRadiusRange.value - MIN_CORNER_RADIUS) / (MAX_CORNER_RADIUS - MIN_CORNER_RADIUS);
 
   return (
     <SettingsSection id="appearance-corners" title="Corners">
@@ -33,7 +37,7 @@ export function CornerSettingsSection() {
               className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
               htmlFor="corner-radius-slider"
             >
-              {settings.cornerRadius}px
+              {cornerRadiusRange.value}px
             </output>
             <input
               aria-label="Corner roundness"
@@ -49,7 +53,10 @@ export function CornerSettingsSection() {
                   "--settings-slider-fill-offset": `${0.5 - ratio}rem`,
                 } as CSSProperties
               }
-              value={settings.cornerRadius}
+              value={cornerRadiusRange.value}
+              onPointerUp={cornerRadiusRange.onFinish}
+              onKeyUp={cornerRadiusRange.onFinish}
+              onBlur={cornerRadiusRange.onFinish}
               onChange={(event) => {
                 const cornerRadius = Number(event.currentTarget.value);
                 if (
@@ -57,7 +64,7 @@ export function CornerSettingsSection() {
                   cornerRadius >= MIN_CORNER_RADIUS &&
                   cornerRadius <= MAX_CORNER_RADIUS
                 ) {
-                  updateSettings({ cornerRadius });
+                  cornerRadiusRange.onChange(cornerRadius);
                 }
               }}
             />

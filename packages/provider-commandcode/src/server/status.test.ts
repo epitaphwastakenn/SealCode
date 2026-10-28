@@ -12,7 +12,7 @@ import * as HttpClientResponse from "effect/http/HttpClientResponse";
 
 import { CommandCodeSettings } from "../settings.ts";
 import { makeFakeCommandCode } from "./fakeCommandCode.testkit.ts";
-import { checkCommandCodeProviderStatus } from "./status.ts";
+import { checkCommandCodeProviderStatus, type CommandCodeStatusOptions } from "./status.ts";
 
 const settings = Schema.decodeSync(CommandCodeSettings);
 
@@ -52,6 +52,7 @@ const check = Effect.fnUntraced(function* (
   options: {
     readonly home?: string;
     readonly http?: HttpClient.HttpClient;
+    readonly status?: CommandCodeStatusOptions;
   } = {},
 ) {
   const environment = yield* HostProcess.Environment;
@@ -60,6 +61,7 @@ const check = Effect.fnUntraced(function* (
     settings(config),
     { ...environment, USERPROFILE: home, HOME: home },
     undefined,
+    options.status,
   ).pipe(Effect.provideService(HttpClient.HttpClient, options.http ?? noNetwork));
 });
 
@@ -176,6 +178,91 @@ it.layer(NodeServices.layer)("CommandCode status", (it) => {
         "high",
         "max",
       ]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("reads the version from the installed package instead of starting the CLI", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const fake = yield* makeFakeCommandCode({ version: "1.17.0", modelList: MODEL_LIST });
+      const packageDirectory = NodePath.join(fake.directory, "node_modules", "command-code");
+      yield* fileSystem.makeDirectory(packageDirectory, { recursive: true });
+      yield* fileSystem.writeFileString(
+        NodePath.join(packageDirectory, "package.json"),
+        JSON.stringify({ name: "command-code", version: "9.9.9" }),
+      );
+
+      const unattended = yield* check(
+        { enabled: true, binaryPath: fake.binaryPath },
+        { status: { reason: "interval" } },
+      );
+      expect(unattended.version).toBe("9.9.9");
+      expect(unattended.status).toBe("ready");
+      expect(yield* fake.probes).toEqual(["--list-models"]);
+
+      const requested = yield* check(
+        { enabled: true, binaryPath: fake.binaryPath },
+        { status: { reason: "requested" } },
+      );
+      expect(requested.version).toBe("1.17.0");
+      expect(yield* fake.probes).toEqual(["--list-models", "--version", "--list-models"]);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("lists models once per CLI version unless a refresh is requested", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const fake = yield* makeFakeCommandCode({ version: "1.17.0", modelList: MODEL_LIST });
+      const modelListCachePath = NodePath.join(
+        yield* fileSystem.makeTempDirectoryScoped({ prefix: "commandcode-cache-" }),
+        "commandcode-models",
+        "commandcode.json",
+      );
+      const config = { enabled: true, binaryPath: fake.binaryPath };
+      const slugs = (snapshot: { readonly models: ReadonlyArray<{ readonly slug: string }> }) =>
+        snapshot.models.map((model) => model.slug);
+
+      const first = yield* check(config, { status: { reason: "startup", modelListCachePath } });
+      const second = yield* check(config, { status: { reason: "interval", modelListCachePath } });
+      expect(slugs(second)).toEqual(slugs(first));
+      expect(slugs(first)).toContain("meta/muse-spark-1.2-contributor");
+      expect((yield* fake.probes).filter((probe) => probe === "--list-models")).toHaveLength(1);
+
+      yield* check(config, { status: { reason: "requested", modelListCachePath } });
+      expect((yield* fake.probes).filter((probe) => probe === "--list-models")).toHaveLength(2);
+    }).pipe(Effect.scoped),
+  );
+
+  it.effect("lists models again for a new CLI version and never saves an empty list", () =>
+    Effect.gen(function* () {
+      const fileSystem = yield* FileSystem.FileSystem;
+      const modelListCachePath = NodePath.join(
+        yield* fileSystem.makeTempDirectoryScoped({ prefix: "commandcode-cache-" }),
+        "commandcode.json",
+      );
+      const empty = yield* makeFakeCommandCode({ version: "1.17.0", modelList: "" });
+      yield* check(
+        { enabled: true, binaryPath: empty.binaryPath },
+        { status: { reason: "interval", modelListCachePath } },
+      );
+      yield* check(
+        { enabled: true, binaryPath: empty.binaryPath },
+        { status: { reason: "interval", modelListCachePath } },
+      );
+      expect((yield* empty.probes).filter((probe) => probe === "--list-models")).toHaveLength(2);
+
+      const older = yield* makeFakeCommandCode({ version: "1.17.0", modelList: MODEL_LIST });
+      const newer = yield* makeFakeCommandCode({ version: "1.18.0", modelList: MODEL_LIST });
+      yield* check(
+        { enabled: true, binaryPath: older.binaryPath },
+        { status: { reason: "interval", modelListCachePath } },
+      );
+      yield* check(
+        { enabled: true, binaryPath: newer.binaryPath },
+        { status: { reason: "interval", modelListCachePath } },
+      );
+      expect((yield* older.probes).filter((probe) => probe === "--list-models")).toHaveLength(1);
+      expect((yield* newer.probes).filter((probe) => probe === "--list-models")).toHaveLength(1);
     }).pipe(Effect.scoped),
   );
 

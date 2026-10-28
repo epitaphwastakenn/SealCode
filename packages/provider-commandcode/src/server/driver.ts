@@ -19,7 +19,10 @@ import { ProviderDriverError } from "@t3tools/provider-core/server/errors";
 import * as IdAllocator from "@t3tools/provider-core/server/IdAllocator";
 import { withInstanceIdentity } from "@t3tools/provider-core/server/instanceIdentity";
 import { mergeProviderInstanceEnvironment } from "@t3tools/provider-core/server/instanceEnvironment";
-import { makeManagedServerProvider } from "@t3tools/provider-core/server/managedProvider";
+import {
+  makeManagedServerProvider,
+  type ProviderCheckReason,
+} from "@t3tools/provider-core/server/managedProvider";
 import {
   enrichProviderSnapshotWithVersionAdvisory,
   makeCachedProviderMaintenanceResolution,
@@ -71,7 +74,7 @@ export const CommandCodeDriver: ProviderDriver<CommandCodeSettings, CommandCodeD
       const httpClient = yield* HttpClient.HttpClient;
       const latestVersions = yield* ProviderLatestVersions.ProviderLatestVersions;
       const host = yield* ProviderHost.ProviderHost;
-      const { cwd } = host.paths;
+      const { cwd, providerStatusCacheDir } = host.paths;
       const processEnvironment = yield* mergeProviderInstanceEnvironment(
         environment,
         yield* HostProcess.Environment,
@@ -98,6 +101,29 @@ export const CommandCodeDriver: ProviderDriver<CommandCodeSettings, CommandCodeD
           Effect.provideService(Path.Path, path),
         ),
       );
+      const checkProvider = Effect.fn("CommandCodeDriver.checkProvider")(function* (
+        reason: ProviderCheckReason,
+      ) {
+        const status = yield* checkCommandCodeProviderStatus(
+          effectiveConfig,
+          processEnvironment,
+          cwd,
+          {
+            reason,
+            modelListCachePath: path.join(
+              providerStatusCacheDir,
+              "commandcode-models",
+              `${instanceId}.json`,
+            ),
+          },
+        ).pipe(
+          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
+          Effect.provideService(FileSystem.FileSystem, fileSystem),
+          Effect.provideService(Path.Path, path),
+          Effect.provideService(HttpClient.HttpClient, httpClient),
+        );
+        return stampIdentity(status);
+      });
       const snapshotSettings = yield* makeProviderSnapshotSettingsSource(effectiveConfig);
       const snapshot = yield* makeManagedServerProvider<
         ProviderSnapshotSettings<CommandCodeSettings>
@@ -108,17 +134,8 @@ export const CommandCodeDriver: ProviderDriver<CommandCodeSettings, CommandCodeD
         haveSettingsChanged: haveProviderSnapshotSettingsChanged,
         initialSnapshot: (settings) =>
           makePendingCommandCodeProvider(settings.provider).pipe(Effect.map(stampIdentity)),
-        checkProvider: checkCommandCodeProviderStatus(
-          effectiveConfig,
-          processEnvironment,
-          cwd,
-        ).pipe(
-          Effect.map(stampIdentity),
-          Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
-          Effect.provideService(FileSystem.FileSystem, fileSystem),
-          Effect.provideService(Path.Path, path),
-          Effect.provideService(HttpClient.HttpClient, httpClient),
-        ),
+        checkProvider: checkProvider("requested"),
+        checkProviderFor: checkProvider,
         enrichSnapshot: ({ settings, snapshot: currentSnapshot, publishSnapshot }) =>
           resolveMaintenance().pipe(
             Effect.flatMap((maintenanceCapabilities) =>

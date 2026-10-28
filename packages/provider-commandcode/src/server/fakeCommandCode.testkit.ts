@@ -32,6 +32,9 @@ const SOURCE = `
 import { appendFileSync, existsSync, readFileSync } from "node:fs";
 const args = process.argv.slice(2);
 const config = JSON.parse(readFileSync(process.env.FAKE_CONFIG, "utf8"));
+if (args.includes("--version") || args.includes("--list-models")) {
+  appendFileSync(process.env.FAKE_PROBE_LOG, args.filter((arg) => arg !== "--no-auto-update").join(" ") + "\\n");
+}
 if (args.includes("--version")) {
   process.stdout.write(config.version + "\\n");
   process.exitCode = config.versionExitCode;
@@ -60,6 +63,7 @@ export const makeFakeCommandCode = Effect.fn("makeFakeCommandCode")(function* (
   const directory = yield* fileSystem.makeTempDirectoryScoped({ prefix: "commandcode-fake-" });
   const configPath = NodePath.join(directory, "config.json");
   const logPath = NodePath.join(directory, "invocations.jsonl");
+  const probeLogPath = NodePath.join(directory, "probes.log");
   NodeFS.writeFileSync(
     configPath,
     JSON.stringify({
@@ -74,7 +78,7 @@ export const makeFakeCommandCode = Effect.fn("makeFakeCommandCode")(function* (
     directory,
     name: "commandcode",
     source: SOURCE,
-    env: { FAKE_CONFIG: configPath, FAKE_LOG: logPath },
+    env: { FAKE_CONFIG: configPath, FAKE_LOG: logPath, FAKE_PROBE_LOG: probeLogPath },
   });
   const invocations = Effect.sync((): ReadonlyArray<FakeCommandCodeInvocation> => {
     if (!NodeFS.existsSync(logPath)) return [];
@@ -83,5 +87,12 @@ export const makeFakeCommandCode = Effect.fn("makeFakeCommandCode")(function* (
       .filter((line) => line.length > 0)
       .map((line) => JSON.parse(line) as FakeCommandCodeInvocation);
   });
-  return { directory, binaryPath, invocations };
+  /** Status probes (`--version`, `--list-models`), which `invocations` leaves out. */
+  const probes = Effect.sync((): ReadonlyArray<string> => {
+    if (!NodeFS.existsSync(probeLogPath)) return [];
+    return NodeFS.readFileSync(probeLogPath, "utf8")
+      .split("\n")
+      .filter((line) => line.length > 0);
+  });
+  return { directory, binaryPath, invocations, probes };
 });

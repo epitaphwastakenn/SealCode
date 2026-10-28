@@ -14,7 +14,7 @@ fail until you run `muse login` on the host.
 
 ## Sign-in and API keys
 
-SealCode ignores a `META_API_KEY` that the T3 server inherits from its own
+SealCode ignores a `META_API_KEY` that the SealCode server inherits from its own
 environment, so Muse uses the credential saved on the host by `muse login`. To
 use an API key instead, add `META_API_KEY` to the Muse instance's environment
 variables in **Settings → Providers**. Muse gives that key priority over the
@@ -22,7 +22,7 @@ saved login.
 
 ## Remote access and instances
 
-Connect from web, desktop, or mobile through [remote access](./remote-access.md).
+Connect from web or desktop through [remote access](./remote-access.md).
 Muse uses the selected environment's files and login; connecting devices do not
 need Muse installed. Install and sign in separately on each host where you want
 Muse to run.
@@ -35,8 +35,7 @@ becomes unavailable.
 ## Models
 
 Models and reasoning choices come from Muse on the selected host. After changing
-Muse configuration, refresh provider status in **Settings → Providers**. On
-mobile, pull down in thread settings to refresh models. If a saved model becomes
+Muse configuration, refresh provider status in **Settings → Providers**. If a saved model becomes
 unavailable, select an available model before sending another message.
 
 Muse can list models that your account cannot use. If a message fails with

@@ -38,7 +38,7 @@ custom server name as GitHub once it has a credential for that host.
 
 To start from nothing, choose **New project** in the command palette (`Cmd/Ctrl+K`), or
 **New project** under **Add Project** on any client, and type a name. SealCode makes a Git
-repository in `~/.t3/projects` (the `projects` folder of your T3 data directory) with a README,
+repository in `~/.t3/projects` (the `projects` folder of your SealCode data directory) with a README,
 an icon, and a first commit, then opens a new thread in it. Until the project has a thread, new
 threads work in its folder, even when your default is a new worktree. The folder is named after the project,
 like `pinball-stats` for "Pinball Stats". Turn on **Create private repository on GitHub** to also
@@ -49,7 +49,7 @@ Use **Add Project** in the command palette (`Cmd/Ctrl+K`) to clone a repository.
 provider or paste a Git URL, then choose where to save it. The project opens right away while the
 clone runs in the background: you can write your first prompt, and sending waits until the files
 are in place. A toast tracks progress and lets you cancel; if the clone fails, retry it from the
-toast or from the banner above the composer. When the host refuses the machine's SSH key, T3 Code
+toast or from the banner above the composer. When the host refuses the machine's SSH key, SealCode
 clones over HTTPS with Git's credentials for that host instead, and the project's remote uses the
 HTTPS URL.
 
@@ -75,15 +75,6 @@ uses the project's instructions and recent commit subjects.
 Open **Pull requests** to review changes and comments, request reviewers, check out a branch,
 or merge. You can edit review titles and descriptions and your own comments where the host allows it.
 
-On mobile, **Pull requests** lists reviews across your connected environments. Open a review
-to read its description, activity, commits, and changed files. Line comments stay as drafts
-until you submit the review. **Work on PR** opens a chat with the review attached; sending
-the first message prepares a worktree from the review's branch.
-
-Previously loaded lists, review details, guides, and diff pages remain readable on mobile
-without a connection, including after restarting the app. Saved content refreshes when the
-environment reconnects; submitting changes requires a connection.
-
 Enable **Remove agent credits when merging** in Settings → Source control to remove recognized
 agent co-author and generated-by lines from GitHub merge and squash commit messages. Human
 co-authors stay credited. The setting is off by default and projects can override it. It also
@@ -97,8 +88,7 @@ Press **Escape** before releasing to cancel. Failed closes stay in the list so y
 GitHub supports auto-merge while checks are outstanding, approving waiting fork workflows, and
 opening a revert pull request for a merged change.
 
-Pull request sharing is off by default. In Settings → Connections → Pull request sharing (Pull
-request routing under Environments on mobile), choose **Read PRs** or **Read and act** for each
+Pull request sharing is off by default. In Settings → Connections → Pull request sharing, choose **Read PRs** or **Read and act** for each
 environment you trust to share its source control access.
 Enable both the original environment and the environment answering its requests on this client.
 **Read and act** can use broader permissions than the original environment's credential;
@@ -108,7 +98,7 @@ environment clears its permission.
 Review details, linked PR status, and permitted review actions can then use another connected
 environment signed in to the same account on the same host. Each needs a project on that host.
 A connected local environment is preferred for actions and can answer slow or failed reads.
-Browsers and mobile clients need a paired environment to use its GitHub credentials.
+Browsers need a paired environment to use its GitHub credentials.
 Credentials stay on their machines. Previously verified credentials remain usable for routing
 for ten minutes during a GitHub outage; new credentials must be verified first. An action with
 an uncertain result is never automatically retried elsewhere. Listings, diffs, and checkout or
@@ -117,8 +107,7 @@ PR creation from Git actions continue to use the project's environment.
 ### Review guides
 
 Review guides are in beta. Turn on **Review guides** in Settings → Source control to add the
-**Guide** tab to pull requests on that server. On mobile, move between stops with **Next**
-and the back button; a stale guide offers a rewrite and hides excerpts that no longer match
+**Guide** tab to pull requests on that server. A stale guide offers a rewrite and hides excerpts that no longer match
 the current change.
 
 The **Guide** tab gives you a tour of a pull request without reading it line by line: stops
@@ -131,8 +120,7 @@ covers that layer only, and may point out what a lower layer introduced or what 
 Choose **Write guide** to have the review guide model from Settings → Source control read the
 change in a temporary checkout; without one set, the source control writer model is used. Nothing
 in the checkout is changed, and a large pull request takes a few minutes; you can go elsewhere in
-the app. On web, you are told when the guide is ready; on mobile, return to the guide to check
-its progress. Claude and Codex can write guides. The guide is
+the app. You are told when the guide is ready. Claude and Codex can write guides. The guide is
 kept for everyone using this server. To write it again, for example after a push or after changing
 the model or instructions, choose **Rewrite guide** from the pull request's **⋯** menu.
 
@@ -157,9 +145,6 @@ single commit keeps them. A file pushed to after you cleared it comes back marke
 These are GitHub's own viewed marks, so a review carries between SealCode and github.com in either
 direction.
 
-On mobile, open a changed file and mark it viewed from its header. Viewed files collapse,
-and their marks follow the same rules as on web and desktop.
-
 ## Troubleshooting
 
 - **Not authenticated:** run `gh auth login` on the server, or save a token in Settings → Source
@@ -183,7 +168,7 @@ on the Pull requests page, **Link to thread** lets you search for an active thre
 also lists the threads that link to it, including archived threads, so you can return to their context.
 
 Thread badges show a stack's layer count or the current review number with a count of additional
-links. Clicking a badge with more than one review opens the **Linked pull requests** panel. On mobile, the Git overview lists linked reviews and their stacks; tap a review to open it.
+links. Clicking a badge with more than one review opens the **Linked pull requests** panel.
 Linking and unlinking are available in the web and desktop clients.
 
 The **Linked pull requests** panel lists every review and groups stacks. Unlink a review from its

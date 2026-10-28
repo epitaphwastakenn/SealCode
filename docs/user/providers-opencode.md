@@ -52,8 +52,7 @@ does not stop the whole turn.
 ## Refresh models, commands, and skills
 
 After changing an OpenCode login or configuration, use **Refresh provider status**
-in **Settings > Providers** for that environment. On mobile, use **Refresh models**
-in the thread settings. Reconnecting also refreshes the catalog; periodic provider
+in **Settings > Providers** for that environment. Reconnecting also refreshes the catalog; periodic provider
 health checks do not.
 
 Credential changes are read on refresh. Native OpenCode configuration can remain

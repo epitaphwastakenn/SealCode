@@ -39,5 +39,3 @@ the desktop app prompts. Remote browsers need a microphone on the machine runnin
 on the server.
 
 Clips are limited to two minutes.
-
-The iOS and Android apps do not record voice notes yet. Use the web or desktop composer.

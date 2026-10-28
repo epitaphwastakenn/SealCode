@@ -88,7 +88,7 @@ supports async questions.
 ## Approve app access
 
 Codex tools can request access to another app. Respond to the named app's request
-in the thread on web, desktop, or mobile. Some tools offer access for one request,
+in the thread. Some tools offer access for one request,
 the current session, or permanently. See [Permission modes](./permission-modes.md)
 for command and file approvals.
 

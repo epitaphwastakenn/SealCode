@@ -1,29 +1,30 @@
 # Install SealCode
 
-SealCode runs coding agents on your computer and lets you control them from its
-desktop, web, or mobile app. Set up the machine where the agents will work first.
+SealCode runs coding agents on your computer and lets you control them from its desktop app, or
+from a browser on another device. Set up the machine where the agents will work first.
 
 ## Requirements
 
 You need an installed, authenticated provider before starting a thread. You can
 launch SealCode and configure providers afterwards.
 
-## Command line
+## Desktop app
 
-```bash
-curl -fsSL https://t3.codes/install.sh | sh
-```
+Download the Windows installer from
+[GitHub Releases](https://github.com/epitaphwastakenn/SealCode/releases). SealCode updates itself
+from there afterwards; see [Updating SealCode](./updating.md). The desktop app runs the server
+your agents work through.
 
-On Windows, in PowerShell:
+### The `t3` command
 
-```powershell
-irm https://t3.codes/install.ps1 | iex
-```
+The desktop app includes the `t3` command-line tool. To run it from any
+terminal, open **Settings → General → About** and choose **Install** next to
+**SealCode command line**. On macOS it adds a `t3` link to a folder on your
+`PATH`; on Windows it adds the app's command folder to your `PATH`. Open a new
+terminal afterwards. **Remove** takes it off again. If you already have a `t3`
+command, it stays as it is.
 
-This installs the `t3` binary to `~/.local/bin`. If your shell reports `command not found`
-afterwards, that directory is not on your `PATH` yet; the installer prints the
-line to add. Set `T3CODE_CHANNEL=nightly` to install the nightly train, or
-`T3CODE_VERSION` to pin an exact version.
+### Command line
 
 | Task                                             | Command                                                                 |
 | ------------------------------------------------ | ----------------------------------------------------------------------- |
@@ -42,44 +43,16 @@ If `t3` or `t3 start` reports an already running server, connect to that server
 instead. Stop it before starting a replacement, or use a different `--base-dir`
 for an independent server.
 
-To try SealCode once without installing it, run `npx t3@latest` instead (needs
-Node.js for `npx`).
+### Run from source
 
-### Intel Macs
-
-There is no `t3` executable for Intel Macs (the desktop app is available). To
-run a server there, build it from source with `vp`, which provides the Node version it needs
-([Install vp](https://github.com/pingdotgg/t3code#install-vp)):
+Install Node.js 24.13+ and [Vite+](https://viteplus.dev/guide/) (`vp`), then run:
 
 ```bash
-git clone https://github.com/pingdotgg/t3code
-cd t3code && vp i && vp run build:desktop
-node apps/server/dist/bin.mjs
+git clone https://github.com/epitaphwastakenn/SealCode
+cd SealCode && vp i && vp run dev
 ```
 
-`t3 update` and the background service do not apply to a server run this way;
-update it with `git pull` and a rebuild.
-
-## Desktop app
-
-Download a release from [GitHub Releases](https://github.com/pingdotgg/t3code/releases),
-or use a package manager:
-
-| Platform | Install                         |
-| -------- | ------------------------------- |
-| Windows  | `winget install T3Tools.T3Code` |
-| macOS    | `brew install --cask t3-code`   |
-
-The desktop app is available for Windows and macOS.
-
-### The `t3` command
-
-The desktop app includes the `t3` command-line tool. To run it from any
-terminal, open **Settings → General → About** and choose **Install** next to
-**t3 command**. On macOS it adds a `t3` link to a folder on your
-`PATH`; on Windows it adds the app's command folder to your `PATH`. Open a new
-terminal afterwards. **Remove** takes it off again. If you already have `t3`
-from npm, it stays as it is.
+To build the Windows installer, run `vp run dist:desktop:win:x64`.
 
 ### Windows Subsystem for Linux
 
@@ -101,33 +74,18 @@ Pass a path, such as `t3 app ../my-project`, to open another directory. It requi
 the desktop app, so a standalone server or an SSH session is not enough. If the
 command cannot reach the app, start or update the desktop app and try again.
 
-## Mobile app
+### If SealCode crashes on launch
 
-Install SealCode from the
-[App Store](https://apps.apple.com/us/app/t3-code-remote-claude-more/id6787819824) or
-[Google Play](https://play.google.com/store/apps/details?id=com.t3tools.t3code).
-The phone connects to a server on another machine. Follow
-[remote access](./remote-access.md) to link it through T3 Connect or a pairing URL.
-
-Store links and QR codes are also available in **Settings → General → Mobile app**
-on web and desktop. The store apps work with both stable and Nightly servers. Test builds are optional:
-
-- **iPhone and iPad:** TestFlight is invite-only.
-- **Android:** download an APK from the
-  [Android beta releases](https://github.com/pingdotgg/t3code/releases?q=android-beta-).
-
-If the app crashes during launch, open Settings → Diagnostics on the next launch
+Open Settings → Diagnostics on the next launch
 that succeeds. It lists startup crashes from the last 7 days with the error and
-component stack that store crash reports leave out. Copy the report and paste it
-into a GitHub issue. Error messages can quote values from the app, so read it over
-before sharing.
+component stack. Copy the report and paste it into a GitHub issue. Error messages
+can quote values from the app, so read it over before sharing.
 
 ## Providers
 
 Open **Settings → Providers** in the web or desktop app, select the environment,
 and enable the provider you want. Installation, login, and configuration belong
-to that environment's machine, even when you connect from a phone or another
-computer.
+to that environment's machine, even when you connect from another computer.
 
 | Provider    | Install and authenticate                                                                                                                                  |
 | ----------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |

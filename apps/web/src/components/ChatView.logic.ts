@@ -1350,7 +1350,7 @@ export function formatOutgoingPrompt(params: {
   effort: string | null;
   text: string;
 }): string {
-  // SealCode sends the prompt as typed: Ultrathink is not an effort level, so
+  // Harp sends the prompt as typed: Ultrathink is not an effort level, so
   // nothing prefixes the text.
   return params.text.trim();
 }

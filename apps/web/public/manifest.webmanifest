@@ -1,7 +1,7 @@
 {
   "id": "/",
-  "name": "SealCode",
-  "short_name": "SealCode",
+  "name": "Harp",
+  "short_name": "Harp",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

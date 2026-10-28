@@ -194,7 +194,7 @@ function FirstRunRecovery({
         <p className="mt-2 text-sm text-muted-foreground">
           {settingsReadFailed
             ? "Your saved settings could not be loaded."
-            : "SealCode could not confirm this workspace."}
+            : "Harp could not confirm this workspace."}
         </p>
         <Button
           className="mt-5"

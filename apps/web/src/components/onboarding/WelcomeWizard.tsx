@@ -224,12 +224,12 @@ export function WelcomeWizard({
         initialFocus={() => document.getElementById("onboarding-pairing-url") ?? true}
       >
         <WizardHeader
-          title="Set up SealCode"
+          title="Set up Harp"
           identity={
-            <div className="flex items-center gap-2" role="img" aria-label="SealCode">
+            <div className="flex items-center gap-2" role="img" aria-label="Harp">
               <SealCodeMark className="size-7 shrink-0 object-contain" aria-hidden />
               <span className="text-2xl font-medium tracking-tight text-muted-foreground">
-                SealCode
+                Harp
               </span>
             </div>
           }
@@ -533,7 +533,7 @@ function PairingForm({
             </p>
             <CommandBlock command="t3 pair" className="mt-2" />
             <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
-              Start SealCode first, or run <code className="font-mono">t3 serve</code>. Add{" "}
+              Start Harp first, or run <code className="font-mono">t3 serve</code>. Add{" "}
               <code className="font-mono">--tailscale</code> to use your tailnet.
             </p>
           </CollapsiblePanel>

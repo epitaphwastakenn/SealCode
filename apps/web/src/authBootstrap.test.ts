@@ -71,7 +71,7 @@ function installTestBrowser(url: string) {
   };
 
   vi.stubGlobal("window", testWindow);
-  vi.stubGlobal("document", { title: "SealCode" });
+  vi.stubGlobal("document", { title: "Harp" });
 
   return testWindow;
 }

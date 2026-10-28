@@ -33,7 +33,7 @@ export function HostedEmptyState() {
             <EmptyDescription>
               {localEnvironmentOff
                 ? "Turn it back on, or connect a different computer."
-                : "Your agents run on your computer. Start SealCode there first."}
+                : "Your agents run on your computer. Start Harp there first."}
             </EmptyDescription>
           </EmptyHeader>
           <EmptyContent>

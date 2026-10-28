@@ -2373,7 +2373,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
       <div className="group/project-header relative">
         <SidebarMenuButton
           ref={isManualProjectSorting ? dragHandleProps?.setActivatorNodeRef : undefined}
-          // oxlint-disable-next-line shadcn/no-restyle, shadcn/no-arbitrary-values -- SealCode's taller bold project header has no SidebarMenuButton variant.
+          // oxlint-disable-next-line shadcn/no-restyle, shadcn/no-arbitrary-values -- Harp's taller bold project header has no SidebarMenuButton variant.
           className={`min-h-10 rounded-lg border border-transparent px-2.5 py-2 text-[0.9375rem] font-bold group-hover/project-header:border-sidebar-border/70 group-hover/project-header:bg-sidebar-row-hover group-hover/project-header:text-sidebar-foreground ${
             isManualProjectSorting ? "cursor-grab active:cursor-grabbing" : ""
           }`}
@@ -2416,7 +2416,7 @@ const SidebarProjectItem = memo(function SidebarProjectItem(props: SidebarProjec
             <ProjectFavicon project={project} />
           </span>
           <span className="flex min-w-0 flex-1 items-center gap-2">
-            {/* oxlint-disable-next-line shadcn/no-arbitrary-values -- SealCode's project title sits between the text-sm and text-base steps. */}
+            {/* oxlint-disable-next-line shadcn/no-arbitrary-values -- Harp's project title sits between the text-sm and text-base steps. */}
             <span className="truncate text-[0.9375rem] font-bold text-sidebar-foreground">
               {project.displayName}
             </span>

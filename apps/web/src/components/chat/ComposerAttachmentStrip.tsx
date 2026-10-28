@@ -677,7 +677,7 @@ export function ComposerAttachButton({
 }: {
   readonly addComposerAttachments: (files: File[]) => Promise<boolean>;
   readonly focusComposer: () => void;
-  /** SealCode's footer shows a "+" control beside the model controls; the resting composer keeps the paperclip. */
+  /** Harp's footer shows a "+" control beside the model controls; the resting composer keeps the paperclip. */
   readonly variant?: "paperclip" | "control";
   readonly size?: ComposerControlSize;
   readonly disabled?: boolean;

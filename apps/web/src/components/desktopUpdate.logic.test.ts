@@ -66,7 +66,7 @@ describe("desktop update button state", () => {
 
 describe("desktop update UI helpers", () => {
   it.each(["owner/repo/extra", "owner#notes/repo", "owner/repo?tab=notes"])(
-    "falls back to SealCode for an invalid configured repository: %s",
+    "falls back to Harp for an invalid configured repository: %s",
     (repository) => {
       expect(getDesktopUpdateReleaseHistoryUrl(repository)).toBe(
         "https://github.com/epitaphwastakenn/SealCode/releases",

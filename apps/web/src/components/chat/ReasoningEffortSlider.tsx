@@ -71,7 +71,7 @@ export const ReasoningEffortSlider = memo(function ReasoningEffortSlider({
     if (option) onSelect(option.id);
   };
 
-  // Number keys pick a level while the picker is open, as in SealCode 1.x.
+  // Number keys pick a level while the picker is open, as in Harp 1.x.
   useEffect(() => {
     if (disabled) return;
     const onKeyDown = (event: KeyboardEvent) => {

@@ -125,7 +125,7 @@ export function RightPanelSurfaceContent(props: {
         return (
           <PullRequestsUnavailableState
             title="Pull requests unavailable"
-            error="Update this environment's SealCode server to browse pull requests."
+            error="Update this environment's Harp server to browse pull requests."
           />
         );
       }

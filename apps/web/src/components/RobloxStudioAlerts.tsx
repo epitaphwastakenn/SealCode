@@ -14,7 +14,7 @@ const alertTitle = (alert: RobloxStudioAlert) =>
     ? `Roblox Studio disconnected: ${alert.placeName}`
     : `Playtest error in ${alert.placeName}${alert.count > 1 ? ` (${String(alert.count)} errors)` : ""}`;
 
-/** Tells the user when a SealCode-linked Studio goes away or a playtest errors. */
+/** Tells the user when a Harp-linked Studio goes away or a playtest errors. */
 function EnvironmentStudioAlerts({ environmentId }: { readonly environmentId: EnvironmentId }) {
   const mode = useClientSettings((settings) => settings.notificationMode);
   const inApp = useClientSettings((settings) => settings.inAppNotificationsEnabled);

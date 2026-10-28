@@ -790,7 +790,7 @@ function useSidebarLookups() {
   };
 }
 
-// SealCode groups the inbox into one folder per project. A project scope
+// Harp groups the inbox into one folder per project. A project scope
 // already narrows the list to one project, so folders would only repeat it.
 function useSidebarFolderLayout(input: {
   readonly projectGroups: readonly SidebarProjectSnapshot[];
@@ -895,7 +895,7 @@ function SidebarProjectFolderHeader(props: {
           type="button"
           aria-expanded={props.expanded}
           onClick={props.onToggle}
-          // oxlint-disable-next-line shadcn/no-arbitrary-values -- SealCode's folder title sits between the text-sm and text-base steps.
+          // oxlint-disable-next-line shadcn/no-arbitrary-values -- Harp's folder title sits between the text-sm and text-base steps.
           className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[0.9375rem] font-bold text-sidebar-foreground outline-none hover:text-sidebar-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
         >
           <ChevronDownIcon

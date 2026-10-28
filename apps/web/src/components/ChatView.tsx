@@ -407,7 +407,7 @@ const noopHeldTurnDiff = (_turnId: RunId, _filePath?: string) => {};
 const noopHeldRevert = (_targetTurnCount: number) => {};
 const noopHeldAttachment = (_attachment: ChatFileAttachment) => {};
 
-// SealCode's Project diffs tab reads `orchestration.getProjectDiffIndex`.
+// Harp's Project diffs tab reads `orchestration.getProjectDiffIndex`.
 const PROJECT_DIFF_CENTER_AVAILABLE = true;
 
 // The right panel and its surfaces (diffs, pull requests, files) load when a panel first opens.
@@ -3112,7 +3112,7 @@ export default function ChatView(props: ChatViewProps) {
       .join(" · "),
     contextWindow: activeContextWindow,
     backgroundWork: presentPendingBackgroundWork(pendingBackgroundTasks)?.items ?? [],
-    // Pi gets only SealCode's own tools, and the newer OpenCode runtime reports no MCP support.
+    // Pi gets only Harp's own tools, and the newer OpenCode runtime reports no MCP support.
     receivesMcpServers:
       sessionProvider?.driver !== "pi" &&
       serverProjection?.providerSessions.findLast(

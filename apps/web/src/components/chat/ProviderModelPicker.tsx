@@ -101,10 +101,10 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   onOpenProviderSetup?: (instanceId: ProviderInstanceId) => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
-  /** SealCode: the reasoning level shown beside the model name in the trigger. */
+  /** Harp: the reasoning level shown beside the model name in the trigger. */
   effortLabel?: string | null;
   isMaximumEffort?: boolean;
-  /** SealCode: when set, the popup hosts the reasoning slider and model options. */
+  /** Harp: when set, the popup hosts the reasoning slider and model options. */
   models?: ReadonlyArray<ServerProviderModel>;
   modelOptions?: ReadonlyArray<ProviderOptionSelection> | null | undefined;
   onModelOptionsChange?: (nextOptions: ReadonlyArray<ProviderOptionSelection> | undefined) => void;

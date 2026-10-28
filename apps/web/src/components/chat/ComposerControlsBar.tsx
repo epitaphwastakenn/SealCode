@@ -15,7 +15,7 @@ import { cn } from "~/lib/utils";
 
 /**
  * The composer footer controls: attach, mode controls, agent presets and the overflow menu for
- * blocks that do not fit. Rendered in the expanded footer or the resting controls host. SealCode
+ * blocks that do not fit. Rendered in the expanded footer or the resting controls host. Harp
  * keeps the model picker (with its reasoning level) and the usage meter on the right of the
  * expanded footer, so they render here only while the composer rests.
  */

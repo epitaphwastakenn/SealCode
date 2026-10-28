@@ -390,7 +390,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
   onOpenProviderSetup?: (instanceId: ProviderInstanceId) => void;
   getModelDisabledReason?: (instanceId: ProviderInstanceId, model: string) => string | null;
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
-  /** SealCode: traits of the active model, edited in place below the list. */
+  /** Harp: traits of the active model, edited in place below the list. */
   models?: ReadonlyArray<ServerProviderModel> | undefined;
   modelOptions?: ReadonlyArray<ProviderOptionSelection> | null | undefined;
   onModelOptionsChange?:

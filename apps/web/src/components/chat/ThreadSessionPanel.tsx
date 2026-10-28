@@ -31,7 +31,7 @@ export interface ThreadSessionInfo {
   readonly modelDetail: string | null;
   readonly contextWindow: ContextWindowSnapshot | null;
   readonly backgroundWork: ReadonlyArray<PendingBackgroundWorkItem>;
-  /** Whether the provider is handed SealCode's MCP servers at all. */
+  /** Whether the provider is handed Harp's MCP servers at all. */
   readonly receivesMcpServers: boolean;
 }
 
@@ -214,7 +214,7 @@ function ThreadMcpServers(props: {
 /**
  * What the thread's session knows beyond its workspace: the model, the context
  * window the provider last reported, background work still running, and the
- * MCP servers SealCode hands its agent. A provider that reports none of it
+ * MCP servers Harp hands its agent. A provider that reports none of it
  * leaves its row out.
  */
 export function ThreadSessionPanel(props: {

@@ -39,7 +39,7 @@ export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind
   return (
     <>
       <div className="relative min-w-0 px-1 py-0.5">
-        <MessageAuthorHeading>SealCode</MessageAuthorHeading>
+        <MessageAuthorHeading>Harp</MessageAuthorHeading>
         {!row.showAssistantMeta && messageText.trim().length > 0 ? (
           <div
             aria-hidden

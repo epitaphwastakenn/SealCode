@@ -194,7 +194,8 @@ export function threadReadTargetId(entry: Pick<WorkLogEntry, "structuredPayload"
   return typeof threadId === "string" && threadId.trim().length > 0 ? threadId.trim() : null;
 }
 
-const THREAD_READ_OBJECT = " a SealCode thread";
+// Threads recorded before the rename carry the old product name in their labels.
+const THREAD_READ_OBJECTS = [" a Harp thread", " a SealCode thread"] as const;
 
 export function threadReadTargetTitle(
   shell: Pick<ThreadShell, "title" | "archivedAt" | "deletedAt"> | null,
@@ -204,9 +205,8 @@ export function threadReadTargetTitle(
 }
 
 export function threadReadLabelPrefix(label: string) {
-  return label.endsWith(THREAD_READ_OBJECT)
-    ? `${label.slice(0, -THREAD_READ_OBJECT.length)} thread`
-    : null;
+  const object = THREAD_READ_OBJECTS.find((suffix) => label.endsWith(suffix));
+  return object === undefined ? null : `${label.slice(0, -object.length)} thread`;
 }
 
 export function workEntryReadOutput(
@@ -638,7 +638,7 @@ type MessagesTimelineRowContent =
       label: string;
       tokenCounts: ReturnType<typeof contextCompactionTokenCounts>;
       active: boolean;
-      /** Replaces "Context compacted" when SealCode compacted without being asked. */
+      /** Replaces "Context compacted" when Harp compacted without being asked. */
       title?: string;
       failed?: true;
       /** The provider's reason, when a failed compaction gave one. */

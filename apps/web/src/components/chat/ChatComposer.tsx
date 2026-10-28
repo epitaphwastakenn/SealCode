@@ -1284,7 +1284,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     scheduleComposerFocus();
   };
 
-  // SealCode keeps the reasoning level inside the model picker; the trigger
+  // Harp keeps the reasoning level inside the model picker; the trigger
   // shows it next to the model name instead of a separate traits control.
   const setComposerDraftModelSelection = useComposerDraftStore((store) => store.setModelSelection);
   const setComposerDraftProviderModelOptions = useComposerDraftStore(

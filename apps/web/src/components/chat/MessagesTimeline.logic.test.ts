@@ -31,6 +31,7 @@ import {
   deriveMessagesTimelineRowsWithState,
   shouldCollapseUserMessage,
   resolveAssistantMessageCopyState,
+  threadReadLabelPrefix,
   type MessagesTimelineRow,
   workEntryDisplayLabel,
 } from "./MessagesTimeline.logic";
@@ -260,7 +261,7 @@ describe("deriveMessagesTimelineRows", () => {
       toolSource: { key: "mcp:node_repl", name: "node repl", kind: "integration" as const },
       input: {
         title: "Restrict the breakpoint to Git actions",
-        code: "await sky.type_text({app:'SealCode (Nightly)',text:'debug(ga.run)'});",
+        code: "await sky.type_text({app:'Harp (Nightly)',text:'debug(ga.run)'});",
       },
     };
     const entries = deriveTimelineEntriesFromVisibleTurnItems({
@@ -4227,5 +4228,13 @@ describe("shouldCollapseUserMessage", () => {
 
     expect(shouldCollapseUserMessage(`${citation} Can you expand on this?`)).toBe(false);
     expect(shouldCollapseUserMessage(`${citation} ${"More text. ".repeat(60)}`)).toBe(true);
+  });
+});
+
+describe("threadReadLabelPrefix", () => {
+  it("reads labels recorded under either product name, and ignores other labels", () => {
+    expect(threadReadLabelPrefix("Read a Harp thread")).toBe("Read thread");
+    expect(threadReadLabelPrefix("Reading a SealCode thread")).toBe("Reading thread");
+    expect(threadReadLabelPrefix("Read a file")).toBeNull();
   });
 });

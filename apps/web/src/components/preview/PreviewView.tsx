@@ -1022,7 +1022,7 @@ export function PreviewView({
           ) : (
             <div className="flex h-full items-center justify-center p-8 text-center">
               <p className="max-w-sm text-sm text-muted-foreground">
-                This tab is open in the SealCode desktop app.
+                This tab is open in the Harp desktop app.
               </p>
             </div>
           )

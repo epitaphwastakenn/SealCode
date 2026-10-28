@@ -97,7 +97,7 @@ describe("subscription usage entries", () => {
     expect(entry?.unavailableReason).toBeNull();
   });
 
-  it("explains an empty report only for providers SealCode reads itself", () => {
+  it("explains an empty report only for providers Harp reads itself", () => {
     const antigravity = subscriptionUsageEntry(
       provider("antigravity", { auth: { status: "unauthenticated" } }),
       environmentId,

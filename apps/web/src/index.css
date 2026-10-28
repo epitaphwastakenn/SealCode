@@ -785,7 +785,7 @@ html[data-ui-motion="off"]
     background-color: color-mix(in oklab, var(--primary) 45%, transparent);
   }
   :root {
-    /* Keep the original SealCode artwork palettes as the defaults. Built-in
+    /* Keep the original Harp artwork palettes as the defaults. Built-in
        themes override them with their own pigments in the components layer. */
     --stage-art-top: #d8b4fe;
     --stage-art-mid: #8b5cf6;
@@ -1295,7 +1295,7 @@ html[data-ui-motion="off"]
 
   @variant dark {
     color-scheme: dark;
-    /* SealCode dark: deep violet surfaces with lavender actions. */
+    /* Harp dark: deep violet surfaces with lavender actions. */
     --background: #120a1f;
     --surface-raised: color-mix(in srgb, var(--background) 97%, var(--color-white));
     --foreground: var(--color-neutral-100);
@@ -1337,7 +1337,7 @@ html[data-ui-motion="off"]
 }
 
 /* Keep both sidebar implementations (default and legacy) on the same quiet
-   SealCode violet hierarchy: tinted navigation and hover, white selected and
+   Harp violet hierarchy: tinted navigation and hover, white selected and
    raised surfaces. */
 [data-app-sidebar] {
   --background: #ffffff;
@@ -2722,7 +2722,7 @@ code {
   }
 }
 
-/* SealCode: glass sidebar (Appearance > Glass sidebar). Off-Windows and in the
+/* Harp: glass sidebar (Appearance > Glass sidebar). Off-Windows and in the
    browser it is a CSS blur; on Windows desktop the rules above swap it for the
    native acrylic tint. */
 @layer components {
@@ -2767,7 +2767,7 @@ html[data-theme-gradient="true"] [data-slot="sidebar-inset"] {
   );
 }
 
-/* SealCode: reasoning effort slider. One-shot motion only: the fill and thumb
+/* Harp: reasoning effort slider. One-shot motion only: the fill and thumb
    glide between steps, and reaching the top level plays a single sheen. */
 .reasoning-slider-glide {
   transition-property: left, clip-path, filter, box-shadow, border-color, scale;
@@ -2837,7 +2837,7 @@ html[data-theme-gradient="true"] [data-slot="sidebar-inset"] {
   animation: reasoning-slider-label-in 220ms cubic-bezier(0.22, 1, 0.36, 1) 1 both;
 }
 
-/* SealCode: top reasoning level frames the composer with a quiet violet
+/* Harp: top reasoning level frames the composer with a quiet violet
    border that fades in once. Static afterwards. */
 @keyframes max-effort-border-in {
   from {
@@ -2895,7 +2895,7 @@ html[data-theme-gradient="true"] [data-slot="sidebar-inset"] {
   }
 }
 
-/* SealCode color-codes permission levels so the composer shows at a glance how
+/* Harp color-codes permission levels so the composer shows at a glance how
    much an agent may do without asking. */
 [data-runtime-mode="approval-required"] {
   color: var(--foreground);
@@ -2921,7 +2921,7 @@ html[data-theme-gradient="true"] [data-slot="sidebar-inset"] {
   opacity: 0.7;
 }
 
-/* SealCode: the whole app as glass (Appearance > Background). The window
+/* Harp: the whole app as glass (Appearance > Background). The window
    surfaces go transparent and each panel keeps only a tint, so the backdrop
    image or the native acrylic shows through. `--panel-glass-opacity` is how
    much the panels cover what is behind them. No backdrop-filter on the panels:
@@ -2970,7 +2970,7 @@ html.electron-windows .app-backdrop-base {
   background-color: transparent;
 }
 
-/* SealCode: smooth corners (Appearance > Corners). A squircle keeps the curve
+/* Harp: smooth corners (Appearance > Corners). A squircle keeps the curve
    continuous where an arc meets the straight edge, so rounded surfaces read as
    soft rather than boxy. Only paints where a border-radius already exists. */
 html[data-smooth-corners="true"] *,
@@ -2979,7 +2979,7 @@ html[data-smooth-corners="true"] ::after {
   corner-shape: squircle;
 }
 
-/* SealCode: floating panels. The sidebar and the main area become separate
+/* Harp: floating panels. The sidebar and the main area become separate
    rounded cards with a gap of window behind them, instead of edge-to-edge
    rectangles. */
 html[data-floating-panels="true"] {

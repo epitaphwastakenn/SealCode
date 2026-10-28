@@ -46,7 +46,7 @@ export type ThemeColorOverrides = Readonly<Partial<Record<ThemeColorRole, string
 export type ThemeVariantOverrides = Readonly<Partial<Record<ThemeAppearance, ThemeColorOverrides>>>;
 export type ThemePreferenceMode = ThemeAppearance | "system";
 export type ThemeCollection = Readonly<{ id: string; label: string }>;
-/** SealCode adds `gradient` on top of the shared palette shape. */
+/** Harp adds `gradient` on top of the shared palette shape. */
 export type ThemeDefinition = SharedThemeDefinition &
   Readonly<{
     /** Blends the theme canvas toward its accent across the workspace. */

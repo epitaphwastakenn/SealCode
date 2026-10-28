@@ -48,7 +48,7 @@ export interface SubscriptionUsageEntry {
 }
 
 /**
- * Drivers whose subscription state SealCode reads itself. For the rest, the limits view already
+ * Drivers whose subscription state Harp reads itself. For the rest, the limits view already
  * explains an empty state, so a card here would only repeat it.
  */
 const SELF_REPORTED_DRIVERS: ReadonlySet<string> = new Set([
@@ -63,7 +63,7 @@ export function subscriptionUnavailableReason(provider: ServerProvider): string 
     return provider.unavailableReason ?? "This provider is unavailable in the current environment.";
   }
   if (!provider.enabled || provider.status === "disabled") {
-    return "This provider is disabled in SealCode settings. Enable it to read account usage.";
+    return "This provider is disabled in Harp settings. Enable it to read account usage.";
   }
   if (!provider.installed) {
     return "The provider CLI is not installed or could not be found on this environment.";
@@ -90,7 +90,7 @@ export function subscriptionUnavailableReason(provider: ServerProvider): string 
 /**
  * What a provider's subscription report adds to the limits view. Quota windows the limits view
  * already draws are dropped so the same percentage never appears twice; activity metrics and
- * providers only SealCode can read stay.
+ * providers only Harp can read stay.
  */
 export function subscriptionUsageEntry(
   provider: ServerProvider,

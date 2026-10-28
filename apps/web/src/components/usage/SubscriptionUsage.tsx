@@ -21,7 +21,7 @@ import { PROVIDER_PRESENTATION } from "./usageProviders";
 
 /**
  * Provider-reported quota windows and activity that the limits view above does not already
- * draw. Percentages and reset times come from the provider account; SealCode never estimates
+ * draw. Percentages and reset times come from the provider account; Harp never estimates
  * a quota from token counts.
  */
 export function SubscriptionUsageSection({

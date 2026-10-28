@@ -36,7 +36,7 @@ const COPY_ICON = icon(
 const CHECK_ICON = icon('<path d="M20 6 9 17l-5-5"/>');
 
 export function showBootError(error: unknown) {
-  console.error("SealCode failed to start.", error);
+  console.error("Harp failed to start.", error);
   const bootShell = document.getElementById("boot-shell");
   if (!bootShell) return;
 
@@ -45,7 +45,7 @@ export function showBootError(error: unknown) {
   content.setAttribute("role", "alert");
 
   const title = document.createElement("h1");
-  title.textContent = "SealCode could not load";
+  title.textContent = "Harp could not load";
   content.append(title);
 
   if (import.meta.env.DEV && error instanceof Error) {

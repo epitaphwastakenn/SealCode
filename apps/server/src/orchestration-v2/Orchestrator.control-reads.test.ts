@@ -1408,3 +1408,83 @@ it.effect("dispatch records the command outcome and its duration", () =>
     assert.strictEqual((yield* durations).count - durationsBefore, 1);
   }).pipe(Effect.provide(layerTest)),
 );
+
+it.effect("records a prompt suggestion on the newest run and ignores one for an older run", () =>
+  Effect.gen(function* () {
+    const orchestrator = yield* Orchestrator.OrchestratorV2;
+    const projections = yield* ProjectionStore.ProjectionStoreV2;
+    const threadId = ThreadId.make("thread:prompt-suggestion");
+    yield* orchestrator.dispatch({
+      type: "thread.create",
+      commandId: CommandId.make("create-prompt-suggestion"),
+      threadId,
+      projectId: ProjectId.make("project:prompt-suggestion"),
+      title: "Prompt suggestion",
+      modelSelection,
+      runtimeMode: "full-access",
+      interactionMode: "default",
+      branch: null,
+      worktreePath: null,
+      createdBy: "user",
+      creationSource: "web",
+    });
+    const addRun = Effect.fnUntraced(function* (ordinal: number) {
+      const now = yield* DateTime.now;
+      const runId = RunId.make(`run:prompt-suggestion:${ordinal}`);
+      yield* projections.apply({
+        id: EventId.make(`run:prompt-suggestion:${ordinal}:created`),
+        type: "run.created",
+        threadId,
+        occurredAt: now,
+        payload: {
+          id: runId,
+          threadId,
+          ordinal,
+          providerInstanceId: instanceId,
+          modelSelection,
+          providerThreadId: null,
+          userMessageId: MessageId.make(`message:prompt-suggestion:${ordinal}`),
+          rootNodeId: null,
+          activeAttemptId: null,
+          status: "completed",
+          requestedAt: now,
+          startedAt: now,
+          completedAt: now,
+          checkpointId: null,
+          contextHandoffId: null,
+        },
+      });
+      return runId;
+    });
+    const record = (name: string, runId: RunId, text: string) =>
+      orchestrator.dispatch({
+        type: "thread.prompt-suggestion.record",
+        commandId: CommandId.make(name),
+        threadId,
+        runId,
+        text,
+      });
+    const firstRun = yield* addRun(1);
+    const before = (yield* projections.getThreadProjection(threadId)).thread;
+
+    yield* record("suggest-first", firstRun, "  run the tests  ");
+    const recorded = yield* projections.getThreadProjection(threadId);
+    assert.deepEqual(recorded.thread.promptSuggestion, { runId: firstRun, text: "run the tests" });
+    assert.equal(
+      DateTime.toEpochMillis(recorded.thread.updatedAt),
+      DateTime.toEpochMillis(before.updatedAt),
+    );
+
+    const secondRun = yield* addRun(2);
+    yield* record("suggest-stale", firstRun, "commit this");
+    assert.deepEqual((yield* projections.getThreadProjection(threadId)).thread.promptSuggestion, {
+      runId: firstRun,
+      text: "run the tests",
+    });
+    yield* record("suggest-second", secondRun, "commit this");
+    assert.deepEqual((yield* projections.getThreadProjection(threadId)).thread.promptSuggestion, {
+      runId: secondRun,
+      text: "commit this",
+    });
+  }).pipe(Effect.provide(layerTest)),
+);

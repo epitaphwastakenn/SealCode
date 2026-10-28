@@ -55,6 +55,7 @@ import {
   AuthSourceControlWriteScope,
   AuthPreviewOperateScope,
   AuthTerminalOperateScope,
+  currentPromptSuggestion,
   type AssistantCitation,
   type ChatFileAttachment,
   isProviderNativeSubagentThread,
@@ -3634,6 +3635,14 @@ export default function ChatView(props: ChatViewProps) {
                               activePendingDraftAnswers={activePendingDraftAnswers}
                               activePendingQuestionIndex={activePendingQuestionIndex}
                               respondingRequestIds={respondingRequestIds}
+                              promptSuggestion={
+                                serverProjection === null
+                                  ? null
+                                  : currentPromptSuggestion(
+                                      serverProjection.thread,
+                                      serverProjection.runs,
+                                    )
+                              }
                               showPlanFollowUpPrompt={showPlanFollowUpPrompt}
                               activeProposedPlan={activeProposedPlan}
                               threadSyncPhase={

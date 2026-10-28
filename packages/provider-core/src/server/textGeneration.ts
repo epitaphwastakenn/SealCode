@@ -83,6 +83,17 @@ export interface ImageDescriptionResult {
   description: string;
 }
 
+export interface PromptSuggestionGenerationInput {
+  cwd: string;
+  userMessage: string;
+  assistantMessage: string;
+  modelSelection: ModelSelection;
+}
+
+export interface PromptSuggestionGenerationResult {
+  suggestion: string;
+}
+
 export interface ReviewGuideStackLayer {
   readonly number: number;
   readonly title: string | null;
@@ -128,6 +139,11 @@ export interface ProviderTextGeneration {
   readonly generateReviewGuide: (
     input: ReviewGuideGenerationInput,
   ) => Effect.Effect<ReviewGuideGenerationResult, TextGenerationError>;
+
+  /** Absent on providers that cannot suggest the next prompt. */
+  readonly generatePromptSuggestion?: (
+    input: PromptSuggestionGenerationInput,
+  ) => Effect.Effect<PromptSuggestionGenerationResult, TextGenerationError>;
 
   /** Absent on providers that cannot read image attachments. */
   readonly describeImages?: (

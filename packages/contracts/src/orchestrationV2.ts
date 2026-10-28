@@ -395,6 +395,32 @@ const LenientThreadOpens = Schema.NullOr(OrchestrationV2ThreadOpens).pipe(
   Schema.catchDecoding(() => Effect.succeedSome(null)),
 );
 
+/** The next message Harp offers the user after `runId` finished. It is a hint, never part of the conversation. */
+export const OrchestrationV2PromptSuggestion = Schema.Struct({
+  runId: RunId,
+  text: Schema.String,
+});
+export type OrchestrationV2PromptSuggestion = typeof OrchestrationV2PromptSuggestion.Type;
+
+export const MAX_PROMPT_SUGGESTION_LENGTH = 240;
+
+/** One line of at most MAX_PROMPT_SUGGESTION_LENGTH characters, or null when nothing usable is left. */
+export function normalizePromptSuggestionText(raw: string): string | null {
+  const collapsed = raw
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^["'`“”]+|["'`“”]+$/g, "")
+    .trim();
+  if (collapsed.length === 0) return null;
+  if (collapsed.length <= MAX_PROMPT_SUGGESTION_LENGTH) return collapsed;
+  return `${collapsed.slice(0, MAX_PROMPT_SUGGESTION_LENGTH - 3).trimEnd()}...`;
+}
+
+// A suggestion is disposable, so a shape this build cannot read becomes null instead of failing the thread.
+const LenientPromptSuggestion = Schema.NullOr(OrchestrationV2PromptSuggestion).pipe(
+  Schema.catchDecoding(() => Effect.succeedSome(null)),
+);
+
 export const OrchestrationV2AppThread = Schema.Struct({
   ...OrchestrationV2CreationFields,
   id: ThreadId,
@@ -445,6 +471,8 @@ export const OrchestrationV2AppThread = Schema.Struct({
     Schema.withDecodingDefault(Effect.succeed(null)),
   ),
   opens: Schema.optional(LenientThreadOpens),
+  /** Shown only while `runId` is the thread's newest, finished run: see currentPromptSuggestion. */
+  promptSuggestion: Schema.optional(LenientPromptSuggestion),
   titleRegeneration: Schema.optional(
     Schema.NullOr(
       Schema.Struct({
@@ -630,6 +658,31 @@ export function orchestrationV2RunWorkStartedAt(
   run: Pick<OrchestrationV2Run, "workStartedAt" | "startedAt" | "requestedAt">,
 ): OrchestrationV2Run["requestedAt"] {
   return run.workStartedAt ?? run.startedAt ?? run.requestedAt;
+}
+
+type PromptSuggestionRun = Pick<OrchestrationV2Run, "id" | "ordinal" | "status">;
+
+/** The run a prompt suggestion can follow: the thread's newest one that was not rolled back. */
+export function latestPromptSuggestionRun<Run extends PromptSuggestionRun>(
+  runs: ReadonlyArray<Run>,
+): Run | undefined {
+  let latest: Run | undefined;
+  for (const run of runs) {
+    if (run.status === "rolled_back") continue;
+    if (latest === undefined || run.ordinal > latest.ordinal) latest = run;
+  }
+  return latest;
+}
+
+/** The suggestion to offer: the one that followed the thread's newest run, once that run has finished. */
+export function currentPromptSuggestion(
+  thread: { readonly promptSuggestion?: OrchestrationV2PromptSuggestion | null | undefined },
+  runs: ReadonlyArray<PromptSuggestionRun>,
+): string | null {
+  const suggestion = thread.promptSuggestion;
+  if (suggestion == null || suggestion.text.length === 0) return null;
+  const latest = latestPromptSuggestionRun(runs);
+  return latest?.id === suggestion.runId && latest.status === "completed" ? suggestion.text : null;
 }
 
 export const OrchestrationV2RunAttempt = Schema.Struct({
@@ -3197,6 +3250,14 @@ const OrchestrationV2InternalCommand = Schema.Union([
     threadId: ThreadId,
     requestId: CommandId,
     message: TrimmedNonEmptyString,
+  }),
+  /** Rejected unless `runId` is still the thread's newest run, so a late suggestion cannot outlive the next message. */
+  Schema.Struct({
+    type: Schema.Literal("thread.prompt-suggestion.record"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    runId: RunId,
+    text: Schema.String,
   }),
   /** Delivering the answer to request `requestId` failed on its last attempt. */
   Schema.Struct({

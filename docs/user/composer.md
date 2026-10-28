@@ -132,6 +132,23 @@ the text is an unedited recalled prompt, with the caret on the first visual line
 the last visual line for `ArrowDown`, counting wrapped lines. Editing a recalled prompt turns it
 into a normal draft.
 
+## Suggested next prompt
+
+When an agent finishes a turn, an empty composer can show a dimmed suggestion for your next
+message. Press `Tab` to fill the composer with it, then edit or send it. Typing anything,
+sending, or starting another turn hides it. It does not appear while a turn is running, while the
+agent is waiting for an approval, a question, or plan feedback, or when the composer holds text
+or an attachment.
+
+Claude writes the suggestion inside its own session, so it costs almost nothing, though Claude
+skips the first turn of a session and some other cases. Turn it off under **Settings > General >
+Suggest the next prompt**. A change reaches Claude sessions started afterwards; sessions already
+running stop showing suggestions at once.
+
+**Also suggest for other providers** asks your text generation model for one suggestion after each
+turn of Codex, Cursor, and the other providers. That is a separate request with no shared prompt
+cache, so it uses extra quota and is off by default.
+
 ## Edit an earlier prompt
 
 On web and desktop, choose **Edit from here** beneath a sent message to rewind

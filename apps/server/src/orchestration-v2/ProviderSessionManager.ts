@@ -1889,6 +1889,25 @@ export const layerWithOptions = (
             if (event.type === "command_output.delta") {
               return commandOutput.append(event);
             }
+            if (event.type === "prompt_suggestion.updated") {
+              // A hint arrives long after the turn, so it must not extend the session's activity.
+              return providerEventIngestor
+                .ingestNormalized({
+                  providerSessionId: entry.runtime.providerSessionId,
+                  providerInstanceId: entry.runtime.instanceId,
+                  threadId: event.threadId,
+                  event,
+                })
+                .pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.logWarning("orchestration-v2.prompt-suggestion.record-failed", {
+                      threadId: event.threadId,
+                      cause,
+                    }),
+                  ),
+                  Effect.asVoid,
+                );
+            }
             const releaseLiveOutput =
               event.type === "turn_item.updated" &&
               event.turnItem.type === "command_execution" &&

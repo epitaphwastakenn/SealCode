@@ -105,6 +105,7 @@ import {
 import { collectInlineContextIds } from "~/lib/composerContextReferences";
 import { resolveDiffThemeName } from "~/lib/diffRendering";
 import { cn, isMacPlatform } from "~/lib/utils";
+import { Kbd } from "./ui/kbd";
 import { basenameOfPath } from "~/pierre-icons";
 import { WorkspaceEntryTooltip } from "./chat/WorkspaceEntryIcon";
 import { FileTagChipContent } from "./chat/FileTagChip";
@@ -161,6 +162,8 @@ export interface ComposerPromptEditorProps {
   skills: ReadonlyArray<ServerProviderSkill>;
   disabled: boolean;
   placeholder: string;
+  /** Dimmed in place of the placeholder while the editor is empty; the parent accepts it on Tab. */
+  suggestion?: string | null | undefined;
   ariaLabel?: string | undefined;
   suggestionListId?: string | undefined;
   activeSuggestionId?: string | undefined;
@@ -956,6 +959,7 @@ function ComposerPromptEditorTiptapInner(
     skills,
     disabled,
     placeholder,
+    suggestion,
     ariaLabel,
     suggestionListId,
     activeSuggestionId,
@@ -1118,7 +1122,9 @@ function ComposerPromptEditorTiptapInner(
             : {}),
         }
       : {}),
-    "aria-placeholder": placeholder,
+    "aria-placeholder": suggestion
+      ? `Suggested message: “${suggestion}” Press Tab to use it.`
+      : placeholder,
   };
 
   const editor = useEditor(
@@ -1833,14 +1839,26 @@ function ComposerPromptEditorTiptapInner(
               onCopyCapture={(event) => handleCopyCut(event, false)}
               onCutCapture={(event) => handleCopyCut(event, true)}
             />
-            {isEmpty && contextRecords.size === 0 && placeholder && !voicePreviewText ? (
+            {isEmpty &&
+            contextRecords.size === 0 &&
+            (suggestion || placeholder) &&
+            !voicePreviewText ? (
               <div
                 className={cn(
                   "pointer-events-none absolute inset-0 leading-relaxed text-placeholder",
                   placeholderClassName,
                 )}
               >
-                {placeholder}
+                {suggestion ? (
+                  <>
+                    <span>{suggestion}</span>
+                    <Kbd aria-hidden="true" className="ml-2 align-middle">
+                      Tab
+                    </Kbd>
+                  </>
+                ) : (
+                  placeholder
+                )}
               </div>
             ) : null}
           </div>

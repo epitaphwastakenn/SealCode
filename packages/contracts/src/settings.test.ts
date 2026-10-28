@@ -452,3 +452,18 @@ describe("ServerSettings.robloxStudio mode", () => {
     expect(encodeServerSettings(settings).robloxStudio?.mode).toBe(mode);
   });
 });
+
+describe("next prompt suggestion settings", () => {
+  it("suggests for Claude and not for other providers in settings saved before they existed", () => {
+    expect(decodeServerSettings({})).toMatchObject({
+      suggestNextPrompt: true,
+      suggestNextPromptOtherProviders: false,
+    });
+  });
+
+  it("keeps what the user chose and accepts it in a patch", () => {
+    const patch = { suggestNextPrompt: false, suggestNextPromptOtherProviders: true };
+    expect(decodeServerSettingsPatch(patch)).toEqual(patch);
+    expect(decodeServerSettings(patch)).toMatchObject(patch);
+  });
+});

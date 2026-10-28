@@ -3,6 +3,8 @@ import {
   CommandId,
   OrchestrationV2DomainEvent,
   OrchestrationV2StoredEvent,
+  latestPromptSuggestionRun,
+  normalizePromptSuggestionText,
   type OrchestrationV2PlanArtifact,
   type OrchestrationV2Run,
   type OrchestrationV2Subagent,
@@ -612,6 +614,31 @@ export const layer: Layer.Layer<
             case "command_output.delta":
               // Live output is routed to the command output hub before ingestion.
               return [];
+            case "prompt_suggestion.updated": {
+              const text = normalizePromptSuggestionText(input.event.suggestion);
+              if (text === null) return [];
+              const { thread, runs } = yield* projections.getThreadRecords(input.event.threadId, [
+                "runs",
+              ]);
+              // Only the newest run can be followed; a later message has already moved on.
+              if (
+                thread.archivedAt !== null ||
+                thread.deletedAt !== null ||
+                latestPromptSuggestionRun(runs)?.id !== input.event.runId ||
+                (thread.promptSuggestion?.runId === input.event.runId &&
+                  thread.promptSuggestion.text === text)
+              ) {
+                return [];
+              }
+              return [
+                yield* makeDomainEvent(input, {
+                  type: "thread.metadata-updated",
+                  threadId: thread.id,
+                  // updatedAt stays: a hint is not activity, so it must not reorder or unread the thread.
+                  payload: { ...thread, promptSuggestion: { runId: input.event.runId, text } },
+                }),
+              ];
+            }
             case "turn.terminal":
               const dismissed = yield* dismissNativeUserInputs(input, input.event.providerTurnId);
               if (input.event.status !== "failed") {
@@ -765,7 +792,9 @@ export const layer: Layer.Layer<
               (effect) =>
                 input.event.type === "app_thread.created"
                   ? threadCommands.withLock(input.event.appThread.id, effect)
-                  : effect,
+                  : input.event.type === "prompt_suggestion.updated"
+                    ? threadCommands.withLock(input.event.threadId, effect)
+                    : effect,
             ),
         ),
     });

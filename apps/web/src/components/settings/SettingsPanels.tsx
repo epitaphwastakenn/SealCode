@@ -765,6 +765,13 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.followUpBehavior !== DEFAULT_UNIFIED_SETTINGS.followUpBehavior
       ? ["Follow-up behavior"]
       : []),
+    ...(settings.suggestNextPrompt !== DEFAULT_UNIFIED_SETTINGS.suggestNextPrompt
+      ? ["Suggest the next prompt"]
+      : []),
+    ...(settings.suggestNextPromptOtherProviders !==
+    DEFAULT_UNIFIED_SETTINGS.suggestNextPromptOtherProviders
+      ? ["Suggest for other providers"]
+      : []),
     ...(settings.contextWindowMeterEnabled !== DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled
       ? ["Context window indicator"]
       : []),
@@ -886,6 +893,8 @@ export function useSettingsRestore(onRestored?: () => void) {
       voiceLivePreviewEnabled: DEFAULT_UNIFIED_SETTINGS.voiceLivePreviewEnabled,
       sendShortcut: DEFAULT_UNIFIED_SETTINGS.sendShortcut,
       followUpBehavior: DEFAULT_UNIFIED_SETTINGS.followUpBehavior,
+      suggestNextPrompt: DEFAULT_UNIFIED_SETTINGS.suggestNextPrompt,
+      suggestNextPromptOtherProviders: DEFAULT_UNIFIED_SETTINGS.suggestNextPromptOtherProviders,
       contextWindowMeterEnabled: DEFAULT_UNIFIED_SETTINGS.contextWindowMeterEnabled,
       environmentIdentificationMode: DEFAULT_UNIFIED_SETTINGS.environmentIdentificationMode,
       glassSidebarEnabled: DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled,
@@ -1916,6 +1925,63 @@ export function GeneralSettingsPanel() {
                 <SelectItem value="steer">Steer</SelectItem>
               </SelectPopup>
             </Select>
+          }
+        />
+
+        <SettingsRow
+          serverScoped
+          settingKeys={["suggestNextPrompt"]}
+          {...searchableSetting("suggest-next-prompt")}
+          description="Show a dimmed suggestion for your next message once an agent finishes. Press Tab to use it. Claude predicts it inside its own session, so it costs almost nothing."
+          resetAction={
+            settings.suggestNextPrompt !== DEFAULT_UNIFIED_SETTINGS.suggestNextPrompt ? (
+              <SettingResetButton
+                label="suggest the next prompt"
+                onClick={() =>
+                  updateSettings({ suggestNextPrompt: DEFAULT_UNIFIED_SETTINGS.suggestNextPrompt })
+                }
+              />
+            ) : null
+          }
+          control={
+            <ScopedSwitch
+              settingKeys={["suggestNextPrompt"]}
+              checked={settings.suggestNextPrompt}
+              onCheckedChange={(checked) => updateSettings({ suggestNextPrompt: Boolean(checked) })}
+              aria-label="Suggest the next prompt"
+            />
+          }
+        />
+
+        <SettingsRow
+          serverScoped
+          settingKeys={["suggestNextPromptOtherProviders"]}
+          {...searchableSetting("suggest-next-prompt-other-providers")}
+          description="Also suggest for Codex, Cursor, and other providers. After every turn this sends one request to your text generation model, with no shared prompt cache, so it uses extra quota."
+          resetAction={
+            settings.suggestNextPromptOtherProviders !==
+            DEFAULT_UNIFIED_SETTINGS.suggestNextPromptOtherProviders ? (
+              <SettingResetButton
+                label="suggestions for other providers"
+                onClick={() =>
+                  updateSettings({
+                    suggestNextPromptOtherProviders:
+                      DEFAULT_UNIFIED_SETTINGS.suggestNextPromptOtherProviders,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <ScopedSwitch
+              settingKeys={["suggestNextPromptOtherProviders"]}
+              checked={settings.suggestNextPromptOtherProviders}
+              disabled={!settings.suggestNextPrompt}
+              onCheckedChange={(checked) =>
+                updateSettings({ suggestNextPromptOtherProviders: Boolean(checked) })
+              }
+              aria-label="Also suggest for other providers"
+            />
           }
         />
 

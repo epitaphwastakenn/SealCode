@@ -39,6 +39,8 @@ export function composerCommandKeyHandler(input: {
   readonly planModeUiEnabled: boolean;
   readonly isLiteralPendingAnswer: boolean;
   readonly pendingUserInputs: ReadonlyArray<PendingUserInput>;
+  /** The suggestion the composer is showing, which Tab accepts; null when none is visible. */
+  readonly promptSuggestion: string | null;
   readonly promptHistoryMessages: ChatComposerProps["promptHistoryMessages"];
   readonly promptHistoryPositionRef: RefObject<{
     targetKey: string;
@@ -91,6 +93,7 @@ export function composerCommandKeyHandler(input: {
     planModeUiEnabled,
     isLiteralPendingAnswer,
     pendingUserInputs,
+    promptSuggestion,
     promptHistoryMessages,
     promptHistoryPositionRef,
     composerDraftTarget,
@@ -211,6 +214,21 @@ export function composerCommandKeyHandler(input: {
         onSelectComposerItem(selectedItem);
         return true;
       }
+    }
+    if (
+      key === "Tab" &&
+      promptSuggestion !== null &&
+      submissionIntent === null &&
+      !menuIsActive &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey &&
+      !event.isComposing &&
+      promptRef.current.length === 0
+    ) {
+      replacePromptFromHistory(promptSuggestion);
+      return true;
     }
     if ((key === "ArrowUp" || key === "ArrowDown") && submissionIntent === null) {
       return navigatePromptHistory(key === "ArrowUp" ? "backward" : "forward", event);

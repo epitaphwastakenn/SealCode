@@ -1353,6 +1353,7 @@ export function makeClaudeQueryOptions(input: {
   readonly appendSystemPromptFileText?: string;
   // Flag settings, because a user's settings.json env beats the process env in Claude Code.
   readonly toolSearchOverride?: "true";
+  readonly promptSuggestions?: boolean;
 }): ClaudeAgentSdkQueryOptions {
   const compiledSelection = compileClaudeModelSelection(input.modelSelection);
   const {
@@ -1404,6 +1405,13 @@ export function makeClaudeQueryOptions(input: {
           ...compactQuerySettings,
           env: { ...compactQuerySettings?.env, ENABLE_TOOL_SEARCH: input.toolSearchOverride },
         } as ClaudeSdkSettings);
+  // Claude Code withholds suggestions from SDK sessions without this, even far below the usage limit.
+  const environment =
+    input.promptSuggestions === true &&
+    input.environment !== undefined &&
+    input.environment.CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION === undefined
+      ? { ...input.environment, CLAUDE_CODE_ENABLE_PROMPT_SUGGESTION: "true" }
+      : input.environment;
   const options: ClaudeAgentSdkQueryOptions = {
     model: compiledSelection.apiModelId,
     tools: claudeAgentSdkQueryToolsForSdk(selectedTools),
@@ -1413,6 +1421,7 @@ export function makeClaudeQueryOptions(input: {
         ? "bypassPermissions"
         : (input.permissionMode ?? "default")),
     includePartialMessages: true,
+    ...(input.promptSuggestions === true ? { promptSuggestions: true } : {}),
     ...(compiledSelection.effort === undefined
       ? {}
       : {
@@ -1447,7 +1456,7 @@ export function makeClaudeQueryOptions(input: {
     ...(input.settings?.binaryPath
       ? { pathToClaudeCodeExecutable: input.settings.binaryPath }
       : {}),
-    ...(input.environment === undefined ? {} : { env: input.environment }),
+    ...(environment === undefined ? {} : { env: environment }),
     ...(input.mcpServers === undefined ? {} : { mcpServers: input.mcpServers }),
     systemPrompt: {
       type: "preset" as const,
@@ -4370,6 +4379,15 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
       return claudeToolSearchOverride(adapterOptions.environment.ENABLE_TOOL_SEARCH);
     },
   );
+
+  // Claude Code reads the flag once when its process starts, so a change reaches new sessions; the
+  // check at emit time makes turning it off take effect at once.
+  const resolvePromptSuggestions = Option.isSome(serverSettings)
+    ? serverSettings.value.getSettings.pipe(
+        Effect.map((settings) => settings.suggestNextPrompt),
+        Effect.orElseSucceed(() => true),
+      )
+    : Effect.succeed(true);
 
   const userInvocableSkills = (cwd: string | null) =>
     discoverClaudeSkills(
@@ -7830,6 +7848,23 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           return subagent?.task.status === "running" ? settled : null;
         });
 
+        const emitPromptSuggestion = Effect.fn("ClaudeAdapterV2.emitPromptSuggestion")(function* (
+          liveQuery: ClaudeLiveQueryContext,
+          suggestion: string,
+        ) {
+          const turn = liveQuery.lastTurn;
+          // It answers the turn that just ended; a turn already running has moved the conversation on.
+          if (turn === null || (yield* Ref.get(activeTurn)) !== null) return;
+          if (!(yield* resolvePromptSuggestions)) return;
+          yield* emitProviderEvent({
+            type: "prompt_suggestion.updated",
+            driver: CLAUDE_PROVIDER,
+            threadId: turn.input.threadId,
+            runId: turn.input.runId,
+            suggestion,
+          });
+        });
+
         const handleSdkMessageFrame = Effect.fnUntraced(function* (input: {
           readonly query: ClaudeAgentSdkQuerySession;
           readonly message: SDKMessage;
@@ -7853,6 +7888,10 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             yield* Ref.update(nestedSubagentTaskIds, (current) =>
               current.has(message.task_id) ? current : new Set(current).add(message.task_id),
             );
+          }
+          if (message.type === "prompt_suggestion") {
+            yield* emitPromptSuggestion(liveQuery, message.suggestion);
+            return;
           }
           if (message.type === "rate_limit_event") {
             const rateLimitInfo = message.rate_limit_info;
@@ -9728,6 +9767,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
           const shouldResume =
             resumeSessionAt !== undefined || openedWithResume || hasPersistedProviderTurn;
           const toolSearchOverride = yield* resolveToolSearchOverride(turnInput.runtimePolicy.cwd);
+          const promptSuggestions = yield* resolvePromptSuggestions;
           const queryOptions = makeClaudeQueryOptions({
             modelSelection: turnInput.modelSelection,
             nativeThreadId,
@@ -9761,6 +9801,7 @@ export const makeClaudeAdapterV2 = Effect.fn("makeClaudeAdapterV2")(function* (
             supportedDialogKinds: ["resume_return"],
             ...(appendSystemPromptFileText === undefined ? {} : { appendSystemPromptFileText }),
             ...(toolSearchOverride === undefined ? {} : { toolSearchOverride }),
+            promptSuggestions,
           });
           const querySession = yield* queryRunner
             .open({

@@ -22,8 +22,10 @@ import {
   CommandId,
   isOrchestrationV2WorkActive,
   isProviderNativeSubagentThread,
+  latestPromptSuggestionRun,
   MessageId,
   type NodeId,
+  normalizePromptSuggestionText,
   type ModelSelection,
   OrchestrationV2Command,
   type OrchestrationV2InternalCommand,
@@ -492,6 +494,7 @@ function commandThreadId(command: OrchestrationV2ServerCommand): ThreadId {
     case "queued-run.edit":
     case "runtime-request.respond":
     case "runtime-request.delivery.fail":
+    case "thread.prompt-suggestion.record":
     case "thread.user-input.dismiss":
     case "checkpoint.rollback":
     case "checkpoint.rollback.fail":
@@ -8039,6 +8042,41 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
     });
   });
 
+  const dispatchPromptSuggestionRecord = Effect.fn("Orchestrator.dispatchPromptSuggestionRecord")(
+    function* (
+      command: Extract<
+        OrchestrationV2InternalCommand,
+        { readonly type: "thread.prompt-suggestion.record" }
+      >,
+      events: Ref.Ref<Array<OrchestrationV2DomainEvent>>,
+    ) {
+      const text = normalizePromptSuggestionText(command.text);
+      const { thread, runs } = yield* projectionStore
+        .getThreadRecords(command.threadId, ["runs"])
+        .pipe(mapDispatchError(command));
+      // A newer message or run makes the suggestion stale, which is not a failure.
+      if (
+        text === null ||
+        thread.archivedAt !== null ||
+        thread.deletedAt !== null ||
+        latestPromptSuggestionRun(runs)?.id !== command.runId
+      ) {
+        return;
+      }
+      yield* emit(
+        events,
+        command,
+      )({
+        type: "thread.metadata-updated",
+        threadId: command.threadId,
+        runId: command.runId,
+        occurredAt: yield* DateTime.now,
+        // updatedAt stays: a hint is not activity, so it must not reorder or unread the thread.
+        payload: { ...thread, promptSuggestion: { runId: command.runId, text } },
+      });
+    },
+  );
+
   const dispatchThreadUserInputDismiss = Effect.fn("Orchestrator.dispatchThreadUserInputDismiss")(
     function* (
       command: Extract<OrchestrationV2Command, { readonly type: "thread.user-input.dismiss" }>,
@@ -11712,6 +11750,9 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
       case "runtime-request.delivery.fail":
         yield* dispatchRuntimeRequestDeliveryFail(command, events);
         break;
+      case "thread.prompt-suggestion.record":
+        yield* dispatchPromptSuggestionRecord(command, events);
+        break;
       case "thread.background-work.settle":
         yield* dispatchBackgroundWorkSettle(command, events, effects);
         break;
@@ -11828,6 +11869,7 @@ const makeOrchestrator = Effect.fn("orchestrationV2.Orchestrator.layer")(functio
         (planned) =>
           planned.events.length > 0 ||
           command.type === "thread.background-work.settle" ||
+          command.type === "thread.prompt-suggestion.record" ||
           command.type === "thread.stop" ||
           command.type === "subagent.stop",
         (_planned) =>

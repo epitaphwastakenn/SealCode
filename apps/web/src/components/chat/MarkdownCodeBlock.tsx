@@ -1,7 +1,7 @@
 import { Check, Copy } from "lucide";
 import { PlayIcon, WrapTextIcon } from "lucide-react";
 import { toHtml } from "hast-util-to-html";
-import React, { use, useEffect, useState, type ReactNode } from "react";
+import React, { startTransition, use, useEffect, useState, type ReactNode } from "react";
 
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { getClientSettings } from "../../hooks/useSettings";
@@ -11,6 +11,7 @@ import {
   highlightCodeToHast,
 } from "../../lib/incrementalHighlighting";
 import { LRUCache } from "../../lib/lruCache";
+import { scheduleIdle } from "../../lib/scheduleIdle";
 import { getSyntaxHighlighterPromise } from "../../lib/syntaxHighlighting";
 import { cn } from "../../lib/utils";
 import {
@@ -25,12 +26,12 @@ import {
   createHighlightCacheKey,
   estimateHighlightedSize,
   extractFenceLanguage,
+  isLargeCodeBlock,
+  MAX_HIGHLIGHT_CACHE_ENTRIES,
+  MAX_HIGHLIGHT_CACHE_MEMORY_BYTES,
 } from "./MarkdownCodeBlock.logic";
 import { reportMarkdownActionFailure } from "./markdownActionFailure";
 import { PierreEntryIcon } from "./PierreEntryIcon";
-
-const MAX_HIGHLIGHT_CACHE_ENTRIES = 500;
-const MAX_HIGHLIGHT_CACHE_MEMORY_BYTES = 50 * 1024 * 1024;
 
 const highlightedCodeCache = new LRUCache<string>(
   MAX_HIGHLIGHT_CACHE_ENTRIES,
@@ -288,6 +289,16 @@ export function SuspenseShikiCodeBlock({
   // finishes so switching to cached HTML cannot clear an existing selection.
   const cachedHighlightedHtml =
     !isStreaming && !hasStreamed ? highlightedCodeCache.get(cacheKey) : null;
+  // Tokenizing a huge block inside render would hold up the frame, so it shows as plain text
+  // first and is highlighted once the page is idle.
+  const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
+  const deferHighlight =
+    cachedHighlightedHtml == null && isLargeCodeBlock(code) && highlightedKey !== cacheKey;
+  // oxlint-disable-next-line t3code/react-effect-budget -- Schedules the deferred highlight on browser idle time, which only exists outside React.
+  useEffect(() => {
+    if (!deferHighlight) return;
+    return scheduleIdle(() => startTransition(() => setHighlightedKey(cacheKey)));
+  }, [cacheKey, deferHighlight]);
 
   if (cachedHighlightedHtml != null) {
     return (
@@ -295,6 +306,16 @@ export function SuspenseShikiCodeBlock({
         className="chat-markdown-shiki"
         dangerouslySetInnerHTML={{ __html: cachedHighlightedHtml }}
       />
+    );
+  }
+
+  if (deferHighlight) {
+    return (
+      <div className="chat-markdown-shiki">
+        <pre>
+          <code>{code}</code>
+        </pre>
+      </div>
     );
   }
 

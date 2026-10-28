@@ -117,3 +117,13 @@ export function createHighlightCacheKey(
 export function estimateHighlightedSize(html: string, code: string): number {
   return Math.max(html.length * 2, code.length * 3);
 }
+
+/** Past this many characters, tokenizing takes long enough to hold up the frame it runs in. */
+export const LARGE_CODE_HIGHLIGHT_THRESHOLD = 20_000;
+
+export const MAX_HIGHLIGHT_CACHE_ENTRIES = 200;
+export const MAX_HIGHLIGHT_CACHE_MEMORY_BYTES = 12 * 1024 * 1024;
+
+export function isLargeCodeBlock(code: string): boolean {
+  return code.length > LARGE_CODE_HIGHLIGHT_THRESHOLD;
+}

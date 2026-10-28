@@ -85,7 +85,6 @@ import type {
   ExtraProps as ReactMarkdownExtraProps,
   Options as ReactMarkdownOptions,
 } from "react-markdown";
-import ReactMarkdown from "react-markdown";
 import { createIncrementalMarkdownPlugin } from "../markdown-incremental";
 import { defaultUrlTransform } from "react-markdown";
 import { parseAssistantCitationHref } from "@t3tools/shared/assistantCitations";
@@ -189,6 +188,7 @@ import { PullRequestLinkPreview } from "./pullRequest/PullRequestLinkPreview";
 import { MarkdownCodeBlock, SuspenseShikiCodeBlock } from "./chat/MarkdownCodeBlock";
 import { MarkdownMermaidCodeBlock } from "./chat/MarkdownMermaidCodeBlock";
 import { MarkdownTable } from "./chat/MarkdownTable";
+import { markdownTreeCacheKey, renderMarkdownTree } from "./chat/markdownTreeCache";
 import { MarkdownDetails } from "./chat/MarkdownDetails";
 import {
   authoredImageSizeStyle,
@@ -1621,6 +1621,26 @@ function ChatMarkdown({
   ];
   if (componentState.mathEnabled)
     remarkPlugins.unshift([remarkMath, { singleDollarTextMath: true }]);
+  // Fixed plugins mean the tree depends on the text and flags alone, so a finished message reuses it.
+  const markdownTree = renderMarkdownTree(
+    {
+      children: text,
+      remarkPlugins,
+      rehypePlugins: parseRawHtml
+        ? CHAT_MARKDOWN_RENDER_REHYPE_PLUGINS
+        : CHAT_MARKDOWN_LITERAL_HTML_REHYPE_PLUGINS,
+      skipHtml: false,
+      components: CHAT_MARKDOWN_COMPONENTS,
+      urlTransform: markdownUrlTransform,
+    },
+    props.isStreaming !== true && extraRemarkPlugins.length === 0
+      ? markdownTreeCacheKey(text, {
+          lineBreaks,
+          parseRawHtml,
+          math: componentState.mathEnabled,
+        })
+      : null,
+  );
 
   return (
     <Root
@@ -1635,21 +1655,7 @@ function ChatMarkdown({
       onCopy={handleCopy}
     >
       <ChatMarkdownRendererContext value={componentState}>
-        <ChatMarkdownTextContext value={text}>
-          <ReactMarkdown
-            remarkPlugins={remarkPlugins}
-            rehypePlugins={
-              parseRawHtml
-                ? CHAT_MARKDOWN_RENDER_REHYPE_PLUGINS
-                : CHAT_MARKDOWN_LITERAL_HTML_REHYPE_PLUGINS
-            }
-            skipHtml={false}
-            components={CHAT_MARKDOWN_COMPONENTS}
-            urlTransform={markdownUrlTransform}
-          >
-            {text}
-          </ReactMarkdown>
-        </ChatMarkdownTextContext>
+        <ChatMarkdownTextContext value={text}>{markdownTree}</ChatMarkdownTextContext>
       </ChatMarkdownRendererContext>
       {localMediaPreview ? (
         <ExpandedImageDialog preview={localMediaPreview} onClose={closeLocalMediaPreview} />

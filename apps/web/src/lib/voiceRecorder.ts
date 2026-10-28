@@ -7,6 +7,11 @@ const TARGET_SAMPLE_RATE = VOICE_RECORDING_TARGET_SAMPLE_RATE_HZ;
 const BUFFER_SIZE = 2_048;
 const MAX_WAVEFORM_SAMPLES = 160;
 
+export interface VoiceRecordingOptions {
+  /** Each captured mono buffer. The recorder keeps it for the WAV, so do not mutate it. */
+  readonly onAudioChunk?: (samples: Float32Array, sampleRateHz: number) => void;
+}
+
 export interface VoiceRecordingPayload {
   readonly audioBase64: string;
   readonly mimeType: "audio/wav";
@@ -112,7 +117,7 @@ export function useVoiceRecorder() {
     };
   }, [clearTimer]);
 
-  const startRecording = useCallback(async () => {
+  const startRecording = useCallback(async (options?: VoiceRecordingOptions) => {
     if (runtimeRef.current || isStartingRef.current) {
       throw new Error("Voice recording is already running.");
     }
@@ -200,6 +205,7 @@ export function useVoiceRecorder() {
         }
 
         runtime.chunks.push(monoSamples);
+        options?.onAudioChunk?.(monoSamples, runtime.sampleRateHz);
 
         const rmsLevel = Math.min(
           1,

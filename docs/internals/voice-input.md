@@ -19,3 +19,16 @@ fires would race that work. The [transcription contract](../../packages/client-r
 therefore requires implementations to settle only after their work has stopped;
 the [Apple binding](../../apps/mobile/src/native/voiceTranscription.ios.ts) checks
 cancellation between native calls and discards late results.
+
+## Live preview
+
+The dimmed words while recording come from Whisper running in a [web worker](../../apps/web/src/lib/liveTranscription/liveTranscription.worker.ts),
+never from the server, and they are not the transcript: the server answer replaces them, and they
+only stand in when the server fails. Three constraints shape it:
+
+- The ONNX runtime is bundled with the app. The desktop CSP allows neither CDN scripts nor `blob:`
+  modules, so `env.useWasmCache` stays off and `wasmPaths` points at the emitted assets.
+- The app is not cross-origin isolated, so the WASM fallback is single-threaded. Enabling COOP/COEP
+  would block the cross-origin images and frames the app embeds.
+- transformers.js has no language detection and silently decodes multilingual Whisper as English.
+  The worker asks the model for the language token itself and keeps it for the recording.

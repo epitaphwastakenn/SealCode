@@ -1403,11 +1403,13 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     isVoiceTranscribing,
     voiceWaveformLevels,
     voiceRecordingDurationLabel,
+    voicePreviewText,
     submitComposerVoiceRecording,
     cancelComposerVoiceRecording,
     toggleComposerVoiceRecording,
   } = useComposerVoiceController({
     disabled: voiceDisabled,
+    livePreviewEnabled: settings.voiceLivePreviewEnabled,
     pendingUserInputCount: pendingUserInputs.length,
     transcribeRecording: useStableCallback(transcribeRecording),
     onTranscriptReady: useStableCallback(handleVoiceTranscript),
@@ -3976,6 +3978,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                       isComposerResting &&
                         "flex items-center overflow-hidden whitespace-nowrap leading-8",
                     )}
+                    voicePreviewText={voicePreviewText}
                     onChange={onPromptChangeStable}
                     onVisibleSelectionChange={expandComposerForEditorChangeStable}
                     onCommandKeyDown={onComposerCommandKeyStable}

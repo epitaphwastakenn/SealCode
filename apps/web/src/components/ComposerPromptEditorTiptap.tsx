@@ -126,6 +126,8 @@ import { resolveAssistantCitationCommentDismissal } from "./chat/assistantCitati
 import { composerCodeBlockHighlight } from "./composerCodeBlockHighlight";
 import { importPastedComposerText } from "./composerInlineTokenPaste";
 import { didComposerSelectionChangeVisibly } from "./composerSelection";
+import { ComposerVoicePreviewExtension } from "./composerVoicePreview";
+import { useComposerVoicePreview } from "./useComposerVoicePreview";
 import type { ComposerDraftContextRecords } from "./composerContextPresentation";
 
 export interface ComposerPromptEditorHandle {
@@ -166,6 +168,8 @@ export interface ComposerPromptEditorProps {
   containerClassName?: string;
   className?: string;
   placeholderClassName?: string;
+  /** Live voice guess shown dimmed after the draft; never part of the document. */
+  voicePreviewText?: string;
   onChange: (
     nextValue: string,
     nextCursor: number,
@@ -857,6 +861,7 @@ function createComposerExtensions(richText: boolean) {
     ComposerCitationExtension,
     ComposerContextReferenceExtension,
     ComposerMarkersExtension,
+    ComposerVoicePreviewExtension,
     ...(richText
       ? [
           ComposerBoldSelectionOnlyExtension,
@@ -958,6 +963,7 @@ function ComposerPromptEditorTiptapInner(
     containerClassName,
     className,
     placeholderClassName,
+    voicePreviewText = "",
     onChange,
     onVisibleSelectionChange,
     onCommandKeyDown,
@@ -1462,6 +1468,8 @@ function ComposerPromptEditorTiptapInner(
     [],
   );
 
+  useComposerVoicePreview(editor, voicePreviewText);
+
   useEffect(() => {
     editor?.setEditable(!disabled);
   }, [disabled, editor]);
@@ -1825,7 +1833,7 @@ function ComposerPromptEditorTiptapInner(
               onCopyCapture={(event) => handleCopyCut(event, false)}
               onCutCapture={(event) => handleCopyCut(event, true)}
             />
-            {isEmpty && contextRecords.size === 0 && placeholder ? (
+            {isEmpty && contextRecords.size === 0 && placeholder && !voicePreviewText ? (
               <div
                 className={cn(
                   "pointer-events-none absolute inset-0 leading-relaxed text-placeholder",

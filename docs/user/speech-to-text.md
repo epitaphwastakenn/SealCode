@@ -12,8 +12,8 @@ the usual way.
 
 ## How transcription works
 
-Chrome, Edge, and the desktop app can transcribe in the browser while you record. No audio is
-uploaded in that case.
+Chrome and Edge can transcribe in the browser while you record. No audio is uploaded in that
+case. The desktop app does not have a browser speech service, so it always uses the server.
 
 If the browser cannot transcribe, Harp sends the clip to a speech-to-text API on the machine
 running the server. Configure one of these on that machine:
@@ -29,8 +29,24 @@ repo). Restart Harp after changing that file.
 A custom endpoint is used first when both the key and URL are set. Otherwise Groq is preferred when
 both Groq and OpenAI keys are present.
 
-If neither browser transcription nor a server key is available, the microphone still records, then
-explains that Chrome/Edge or a Groq/OpenAI key is needed.
+If neither browser transcription nor a server key is available, the microphone still records. Harp
+inserts the live preview text when it has any (see below), and otherwise explains that Chrome/Edge
+or a Groq/OpenAI key is needed.
+
+## Live preview
+
+While you record, the words Harp hears appear dimmed at the end of the draft, so you can see what
+is being captured. When you stop, the real transcript replaces them. If the server cannot
+transcribe, Harp inserts the preview text instead of losing what you said.
+
+The preview runs a small Whisper model in the app itself, on your GPU when there is one. The first
+recording downloads the model from Hugging Face (about 200 MB, less without a GPU) and keeps it
+for later; recording works meanwhile and the preview starts once the download finishes. The
+download happens on the machine running the browser or desktop app, even when the server is
+remote. The preview is a guide, so it can differ from the final transcript, and it may be wrong
+on quiet audio or less common languages.
+
+Turn it off in **Settings > General > Live transcription preview**.
 
 ## Permissions
 

@@ -33,6 +33,7 @@ import * as HostProcess from "@t3tools/shared/HostProcess";
 
 import { signalProcessGroup } from "@t3tools/provider-core/server/processGroup";
 import { appendAcpStderrTail, sanitizeAcpStderrExcerpt } from "./stderr.ts";
+import { ownedProcessSpawnOptions } from "./processSpawnOptions.ts";
 import {
   collectSessionConfigOptionValues,
   decideToolCallUpdateEmission,
@@ -1446,13 +1447,7 @@ export const make = Effect.fn("AcpSessionRuntime.make")(function* (
         ...(options.spawn.cwd ? { cwd: options.spawn.cwd } : {}),
         ...(spawnEnvironment ? { env: spawnEnvironment } : {}),
         extendEnv: options.spawn.extendEnv ?? true,
-        ...(options.ownDetachedProcessGroup === undefined
-          ? {}
-          : {
-              detached: options.ownDetachedProcessGroup,
-              // Node gives a detached Windows child its own visible console.
-              windowsHide: true,
-            }),
+        ...ownedProcessSpawnOptions(options.ownDetachedProcessGroup, options.processGroupPlatform),
         shell: containedSpawnCommand.shell,
       }),
     )

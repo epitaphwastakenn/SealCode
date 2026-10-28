@@ -38,7 +38,7 @@ function startVoicePreview(onText: (text: string) => void): LiveTranscriptionSes
         type: "info",
         title: "Downloading the live transcription model",
         description:
-          "About 200 MB, once. Recording works meanwhile; the preview starts when it is ready.",
+          "About 600 MB, once. Recording works meanwhile; the preview starts when it is ready.",
       });
     },
   });

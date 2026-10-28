@@ -40,7 +40,7 @@ is being captured. When you stop, the real transcript replaces them. If the serv
 transcribe, Harp inserts the preview text instead of losing what you said.
 
 The preview runs a small Whisper model in the app itself, on your GPU when there is one. The first
-recording downloads the model from Hugging Face (about 200 MB, less without a GPU) and keeps it
+recording downloads the model from Hugging Face (about 600 MB, 40 MB without a GPU) and keeps it
 for later; recording works meanwhile and the preview starts once the download finishes. The
 download happens on the machine running the browser or desktop app, even when the server is
 remote. The preview is a guide, so it can differ from the final transcript, and it may be wrong

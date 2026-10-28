@@ -1774,7 +1774,7 @@ export function GeneralSettingsPanel() {
 
         <SettingsRow
           {...searchableSetting("voice-live-preview")}
-          description="Show the words you speak, dimmed in the composer, while a voice note records. Downloads a speech model (about 200 MB) the first time and runs it on your GPU. The final transcript still comes from the server."
+          description="Show the words you speak, dimmed in the composer, while a voice note records. Downloads a speech model (about 600 MB) the first time and runs it on your GPU. The final transcript still comes from the server."
           resetAction={
             settings.voiceLivePreviewEnabled !==
             DEFAULT_UNIFIED_SETTINGS.voiceLivePreviewEnabled ? (

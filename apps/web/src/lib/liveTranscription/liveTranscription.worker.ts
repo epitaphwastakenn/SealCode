@@ -1,5 +1,6 @@
 import { LIVE_TRANSCRIPTION_SAMPLE_RATE_HZ, StreamingResampler } from "./audio";
 import { LiveTranscriptEngine, type WindowTranscription } from "./engine";
+import { openModelFileCache } from "./modelCache";
 import type {
   LiveTranscriptionDevice,
   LiveTranscriptionEvent,
@@ -8,11 +9,12 @@ import type {
 
 type Transformers = typeof import("@huggingface/transformers");
 
-// Whisper base keeps names and Portuguese usable; the GPU absorbs its cost. Without WebGPU the
-// 8-bit tiny model is the largest one that still answers within a couple of seconds.
+// Whisper base garbles Portuguese and drifts into other languages; small transcribes it cleanly and
+// keeps up on a GPU. Without WebGPU the 8-bit tiny model is the largest one that still answers
+// within a couple of seconds.
 const MODELS = {
   webgpu: {
-    model: "onnx-community/whisper-base",
+    model: "onnx-community/whisper-small",
     dtype: { encoder_model: "fp32", decoder_model_merged: "q4" },
   },
   wasm: { model: "onnx-community/whisper-tiny", dtype: "q8" },
@@ -20,6 +22,8 @@ const MODELS = {
 
 const MAX_NEW_TOKENS = 192;
 const MAX_DETECTION_ATTEMPTS = 3;
+// Shorter clips are often heard as the wrong language, which then sticks for the whole recording.
+const MIN_DETECTION_SECONDS = 2.5;
 
 async function createSpeechPipeline(transformers: Transformers, device: LiveTranscriptionDevice) {
   const config = MODELS[device];
@@ -74,13 +78,19 @@ async function hasWebGpuAdapter(): Promise<boolean> {
 // The runtime is bundled next to the app: the desktop CSP forbids remote and blob: modules, and
 // transformers.js would otherwise fetch it from a CDN.
 async function configureRuntime(transformers: Transformers): Promise<void> {
-  const [{ default: factoryUrl }, { default: binaryUrl }] = await Promise.all([
+  const [{ default: factoryUrl }, { default: binaryUrl }, modelCache] = await Promise.all([
     import("onnxruntime-web/ort-wasm-simd-threaded.asyncify.mjs?url"),
     import("onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm?url"),
+    openModelFileCache(),
   ]);
   const { env } = transformers;
   env.allowLocalModels = false;
   env.useWasmCache = false;
+  if (modelCache) {
+    env.useBrowserCache = false;
+    env.useCustomCache = true;
+    env.customCache = modelCache;
+  }
   const wasm = env.backends.onnx.wasm;
   if (wasm) {
     wasm.wasmPaths = {
@@ -177,6 +187,9 @@ async function resolveLanguage(
   if (state.language) {
     return state.language;
   }
+  if (audio.length < MIN_DETECTION_SECONDS * LIVE_TRANSCRIPTION_SAMPLE_RATE_HZ) {
+    return null;
+  }
   state.attempts += 1;
   state.language = await detectLanguage(speech, audio);
   if (!state.language && state.attempts >= MAX_DETECTION_ATTEMPTS) {
@@ -197,12 +210,21 @@ async function transcribeWindow(
   if (!language) {
     return null;
   }
-  const result = await model.speech(audio, {
-    language,
-    task: "transcribe",
-    return_timestamps: true,
-    max_new_tokens: MAX_NEW_TOKENS,
-  });
+  let result;
+  try {
+    result = await model.speech(audio, {
+      language,
+      task: "transcribe",
+      return_timestamps: true,
+      max_new_tokens: MAX_NEW_TOKENS,
+    });
+  } catch (error) {
+    // transformers.js throws instead of returning nothing when a window decodes to no text tokens.
+    if (error instanceof Error && error.message.includes("token_ids must be a non-empty array")) {
+      return null;
+    }
+    throw error;
+  }
   return {
     text: result.text,
     segments: (result.chunks ?? []).map((chunk) => {

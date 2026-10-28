@@ -10,6 +10,14 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.17.11 · 2026-10-27
+
+> Antigravity starts on Windows PCs where it used to get stuck, and starts faster everywhere.
+
+### Fixed
+
+- **Antigravity stuck on "starting"** — Google's Antigravity program unpacked about 7,400 files into the temporary folder every time it started, and on some Windows PCs that never finished. SealCode now unpacks it once, in the background, and it starts in about 3 seconds without touching the temporary folder.
+
 ## 2.17.10 · 2026-10-27
 
 > Antigravity starts on slow machines and tells you exactly why it cannot connect.

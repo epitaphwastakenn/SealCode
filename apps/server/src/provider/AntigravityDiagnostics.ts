@@ -58,6 +58,7 @@ export interface AntigravityInstallationInfo {
   readonly harnessPath: string;
   readonly version: string | null;
   readonly managedVersionDirectory: string | null;
+  readonly unpackedDirectory?: string;
 }
 
 export interface AntigravityDiagnosticsInput {
@@ -290,7 +291,7 @@ const agentTest = Effect.fn("AntigravityDiagnostics.agentTest")(function* (
       onStderrText: (text) => {
         if (!sawOutput) {
           sawOutput = true;
-          mark("first output (files unpacked)");
+          mark("first output");
         }
         output = `${output}${text}`.slice(-OUTPUT_TAIL_CHARS);
       },
@@ -313,6 +314,11 @@ const agentTest = Effect.fn("AntigravityDiagnostics.agentTest")(function* (
     );
   }).pipe(Effect.scoped);
   mark("stopped the agent");
+  const selfUnpacked = yield* fs.readDirectory(path.join(root, "t")).pipe(
+    Effect.map((entries) => entries.some((entry) => entry.startsWith("_MEI"))),
+    Effect.orElseSucceed(() => false),
+  );
+  if (selfUnpacked) mark("(the agent unpacked itself into the temp folder)");
   const reachedGoogle = /invalid_client|RefreshError|OAuth client was not found/i.test(output);
   const lines = [...timeline];
   if (Exit.isSuccess(result)) {
@@ -366,6 +372,11 @@ export const runAntigravityDiagnostics = Effect.fn("runAntigravityDiagnostics")(
       `Antigravity runtime: ${installation.version ?? "unknown version"} at ${redact(
         installation.managedVersionDirectory ?? installation.executablePath,
       )}`,
+    );
+    report.push(
+      installation.unpackedDirectory === undefined
+        ? "  launch: unpacks itself into the temp folder on every start"
+        : `  launch: unpacked once at ${redact(installation.unpackedDirectory)}`,
     );
     for (const [label, file, expected] of [
       ["agent", installation.executablePath, release?.executable.bytes],

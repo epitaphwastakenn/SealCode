@@ -106,6 +106,38 @@ describe("Antigravity process environment", () => {
     });
   });
 
+  it("starts an unpacked Windows release in place and ignores inherited PyInstaller state", () => {
+    const windowsProfile: AntigravityProfile = { ...profile, platform: "win32" };
+    const executablePath = "C:\\t3\\tools\\agy_acp_server.exe";
+    const baseEnv = {
+      PATH: "C:\\Windows",
+      _PYI_ARCHIVE_FILE: "C:\\other\\app.exe",
+      _PYI_APPLICATION_HOME_DIR: "C:\\Temp\\_MEI1234abcd",
+      _PYI_PARENT_PROCESS_LEVEL: "1",
+    };
+    const envFor = (unpackedDirectory?: string) =>
+      buildAntigravityAcpSpawnInput({
+        installation: {
+          executablePath,
+          harnessPath: "C:\\t3\\tools\\localharness_external.exe",
+          ...(unpackedDirectory === undefined ? {} : { unpackedDirectory }),
+        },
+        profile: windowsProfile,
+        cwd: "C:\\project",
+        baseEnv,
+      }).env ?? {};
+
+    const selfUnpacking = envFor();
+    expect(selfUnpacking._PYI_ARCHIVE_FILE).toBeUndefined();
+    expect(selfUnpacking._PYI_APPLICATION_HOME_DIR).toBeUndefined();
+    expect(selfUnpacking._PYI_PARENT_PROCESS_LEVEL).toBeUndefined();
+    expect(envFor("C:\\t3\\tools\\_MEI00000000.unpacked")).toMatchObject({
+      _PYI_ARCHIVE_FILE: executablePath,
+      _PYI_PARENT_PROCESS_LEVEL: "0",
+      _PYI_APPLICATION_HOME_DIR: "C:\\t3\\tools\\_MEI00000000.unpacked",
+    });
+  });
+
   it("passes only the configured method's credential and keeps the GCP pair out of the environment", () => {
     const baseEnv = { PATH: "/usr/bin", GOOGLE_API_KEY: "ambient-key" };
     const spawnFor = (auth: AntigravityAuthConfig) =>

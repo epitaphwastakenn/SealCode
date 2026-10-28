@@ -82,7 +82,14 @@ const removedEnvironmentKeys = new Set([
   "BROWSER",
   "PYTHONUNBUFFERED",
   "ELECTRON_RUN_AS_NODE",
+  "_PYI_ARCHIVE_FILE",
+  "_PYI_APPLICATION_HOME_DIR",
+  "_PYI_PARENT_PROCESS_LEVEL",
+  "PYINSTALLER_RESET_ENVIRONMENT",
 ]);
+
+// The PyInstaller bootloader treats this as its onefile parent's level and skips unpacking.
+const PYINSTALLER_PARENT_PROCESS_LEVEL = "0";
 
 export interface AntigravityProfile {
   readonly platform: NodeJS.Platform;
@@ -464,6 +471,7 @@ export function buildAntigravityAcpSpawnInput(input: {
   readonly installation: {
     readonly executablePath: string;
     readonly harnessPath: string;
+    readonly unpackedDirectory?: string;
   };
   readonly profile: AntigravityProfile;
   readonly cwd: string;
@@ -471,8 +479,9 @@ export function buildAntigravityAcpSpawnInput(input: {
   readonly auth?: AntigravityAuthConfig;
   readonly runtimeTempDirectory?: string;
 }): AcpSessionRuntime.AcpSpawnInput {
+  const { executablePath, harnessPath, unpackedDirectory } = input.installation;
   return {
-    command: input.installation.executablePath,
+    command: executablePath,
     args: input.profile.platform === "linux" ? ["--uid="] : [],
     cwd: input.cwd,
     env: {
@@ -482,7 +491,15 @@ export function buildAntigravityAcpSpawnInput(input: {
         input.auth ?? ANTIGRAVITY_PERSONAL_AUTH,
         input.runtimeTempDirectory,
       ),
-      ANTIGRAVITY_HARNESS_PATH: input.installation.harnessPath,
+      ANTIGRAVITY_HARNESS_PATH: harnessPath,
+      // The bootloader compares this byte for byte with its own path before trusting the rest.
+      ...(unpackedDirectory === undefined
+        ? {}
+        : {
+            _PYI_ARCHIVE_FILE: executablePath,
+            _PYI_PARENT_PROCESS_LEVEL: PYINSTALLER_PARENT_PROCESS_LEVEL,
+            _PYI_APPLICATION_HOME_DIR: unpackedDirectory,
+          }),
     },
     extendEnv: false,
   };

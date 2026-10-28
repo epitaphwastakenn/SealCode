@@ -11,7 +11,7 @@ export interface ConnectionDiagnosisHop {
 }
 
 export interface ConnectionDiagnosis {
-  /** Names the part that failed, e.g. "SealCode on Mac mini did not answer". */
+  /** Names the part that failed, e.g. "Harp on Mac mini did not answer". */
   readonly headline: string;
   readonly hops: ReadonlyArray<ConnectionDiagnosisHop>;
   readonly steps: ReadonlyArray<string>;
@@ -52,7 +52,7 @@ function headline(host: string, located: Located, failure: ConnectionAttemptErro
     case "offline":
       return "This device is offline";
     case "outdated":
-      return `${host} runs an older SealCode`;
+      return `${host} runs an older Harp`;
     case null:
       break;
   }
@@ -61,29 +61,29 @@ function headline(host: string, located: Located, failure: ConnectionAttemptErro
       return "This device could not prepare the connection";
     case "server":
       return failure?.reason === "authentication" || failure?.reason === "permission"
-        ? `SealCode on ${host} did not accept this device`
-        : `SealCode on ${host} did not answer`;
+        ? `Harp on ${host} did not accept this device`
+        : `Harp on ${host} did not answer`;
   }
 }
 
 function steps(host: string, located: Located): string[] {
   switch (located.cause) {
     case "offline":
-      return ["Connect this device to the internet. SealCode reconnects on its own."];
+      return ["Connect this device to the internet. Harp reconnects on its own."];
     case "outdated":
-      return [`Update SealCode on ${host}.`];
+      return [`Update Harp on ${host}.`];
     case null:
       break;
   }
   switch (located.hop) {
     case "device":
       return [
-        "Restart SealCode on this device.",
+        "Restart Harp on this device.",
         `If it keeps failing, remove ${host} from this device and add it again.`,
       ];
     case "server":
       return [
-        `Make sure SealCode is running on ${host}.`,
+        `Make sure Harp is running on ${host}.`,
         "Retry. If it keeps failing, copy the diagnostics.",
       ];
   }
@@ -96,7 +96,7 @@ function hopLabel(hop: ConnectionHop, host: string): string {
     case "device":
       return "This device";
     case "server":
-      return `SealCode on ${host}`;
+      return `Harp on ${host}`;
   }
 }
 
@@ -149,7 +149,7 @@ const HOP_MARK = { ok: "ok", failed: "FAILED", unchecked: "not checked" } as con
 /** One plain-text block for bug reports. */
 export function connectionDiagnosisText(hostLabel: string, diagnosis: ConnectionDiagnosis): string {
   return [
-    `SealCode connection to ${hostLabel}: ${diagnosis.headline}`,
+    `Harp connection to ${hostLabel}: ${diagnosis.headline}`,
     "",
     ...diagnosis.hops.map((hop) => `${hop.label}: ${HOP_MARK[hop.result]}`),
     "",

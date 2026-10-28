@@ -66,7 +66,7 @@ export const ConnectionBlockedReason = Schema.Literals([
 ]);
 export type ConnectionBlockedReason = typeof ConnectionBlockedReason.Type;
 
-/** A part of the path to an environment: this device, or SealCode on the host. */
+/** A part of the path to an environment: this device, or Harp on the host. */
 export const ConnectionHop = Schema.Literals(["device", "server"]);
 export type ConnectionHop = typeof ConnectionHop.Type;
 

@@ -44,7 +44,7 @@ describe("presentConnectionDiagnosis", () => {
       }),
     );
     const diagnosis = diagnose(backoff(failure));
-    expect(diagnosis?.headline).toBe("SealCode on Mac mini did not answer");
+    expect(diagnosis?.headline).toBe("Harp on Mac mini did not answer");
     expect(diagnosis?.hops.map((hop) => `${hop.hop}:${hop.result}`)).toEqual([
       "device:ok",
       "server:failed",

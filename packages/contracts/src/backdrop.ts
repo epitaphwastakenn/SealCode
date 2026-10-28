@@ -4,7 +4,7 @@ import * as Schema from "effect/Schema";
 import { TrimmedNonEmptyString, TrimmedString } from "./baseSchemas.ts";
 
 /**
- * SealCode's window backdrop: an image or GIF behind the app's glass, with the
+ * Harp's window backdrop: an image or GIF behind the app's glass, with the
  * look SealScreen offers (framing, pixel effects, a fade into a color, a
  * vignette and a mouse drift). The image bytes stay on the device; settings
  * only carry the key they are stored under.

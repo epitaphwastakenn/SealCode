@@ -43,7 +43,7 @@ const layerClientPresentation = Layer.succeed(
   ClientCapabilities.ClientPresentation,
   ClientCapabilities.ClientPresentation.of({
     metadata: {
-      label: "SealCode Test",
+      label: "Harp Test",
       deviceType: "desktop",
       os: "Test OS",
     },
@@ -263,7 +263,7 @@ describe("connection onboarding", () => {
       const tokenParams = new URLSearchParams(tokenBody);
       expect(tokenParams.get("subject_token")).toBe("pairing-token");
       expect(tokenParams.has("scope")).toBe(false);
-      expect(tokenParams.get("client_label")).toBe("SealCode Test");
+      expect(tokenParams.get("client_label")).toBe("Harp Test");
       expect(tokenParams.get("client_device_type")).toBe("desktop");
       expect(tokenParams.get("client_os")).toBe("Test OS");
     }),

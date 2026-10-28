@@ -62,7 +62,7 @@ describe("RemoteEnvironmentAuthorization", () => {
               ClientCapabilities.ClientPresentation,
               ClientCapabilities.ClientPresentation.of({
                 metadata: {
-                  label: "SealCode Test",
+                  label: "Harp Test",
                   deviceType: "mobile",
                   os: "test",
                 },

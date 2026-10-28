@@ -1834,7 +1834,7 @@ export class RpcScopeAuthorization extends RpcMiddleware.Service<RpcScopeAuthori
 ) {}
 
 /**
- * SealCode's own RPCs. They live in their own group so the server can build their
+ * Harp's own RPCs. They live in their own group so the server can build their
  * handlers apart from the core object, which otherwise passes TypeScript's
  * instantiation depth. `WsRpcGroup` still serves every method.
  */

@@ -493,7 +493,7 @@ export function isCompactionCommandMessage(message: CompactionMessageFields): bo
   );
 }
 
-/** Why SealCode sent this `/compact` on its own, or undefined for one someone asked for. */
+/** Why Harp sent this `/compact` on its own, or undefined for one someone asked for. */
 export function idleCompactionOf(
   message: CompactionMessageFields,
 ): OrchestrationV2IdleCompaction | undefined {
@@ -1152,7 +1152,7 @@ export const OrchestrationV2Notification = Schema.Struct({
 });
 export type OrchestrationV2Notification = typeof OrchestrationV2Notification.Type;
 
-/** Why SealCode compacted a thread on its own, on the `/compact` it sent. */
+/** Why Harp compacted a thread on its own, on the `/compact` it sent. */
 export const OrchestrationV2IdleCompaction = Schema.Literals(["beforeCacheExpires", "onReturn"]);
 export type OrchestrationV2IdleCompaction = typeof OrchestrationV2IdleCompaction.Type;
 

@@ -23,7 +23,7 @@ export type UsageProviderKind = typeof UsageProviderKind.Type;
 /**
  * A provider-reported subscription quota window.
  *
- * Providers own the limits and reset schedule. SealCode only normalizes the
+ * Providers own the limits and reset schedule. Harp only normalizes the
  * values they report, so the client never has to guess a plan's quota.
  */
 export const SubscriptionUsageWindow = Schema.Struct({

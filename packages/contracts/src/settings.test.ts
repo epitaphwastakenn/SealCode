@@ -190,7 +190,7 @@ describe("resolveIdleCompaction", () => {
 });
 
 describe("ClientSettings notifications", () => {
-  it("plays SealCode sounds when existing settings omit notification preferences", () => {
+  it("plays Harp sounds when existing settings omit notification preferences", () => {
     expect(decodeClientSettings({}).notificationMode).toBe("sound");
     expect(decodeClientSettings({}).harnessSoundVolume).toBe(70);
     expect(decodeClientSettings({}).inAppNotificationsEnabled).toBe(false);

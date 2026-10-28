@@ -19,8 +19,8 @@ describe("resolveUserMessagePresentation", () => {
     }
   });
 
-  it("attributes older server-sent restart continuations to SealCode, not another agent", () => {
-    const text = "Note: the SealCode server restarted.";
+  it("attributes older server-sent restart continuations to Harp, not another agent", () => {
+    const text = "Note: the Harp server restarted.";
     expect(
       resolveUserMessagePresentation({
         role: "user",

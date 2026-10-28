@@ -47,7 +47,7 @@ export const RobloxStudioStatus = Schema.Struct({
   mode: RobloxStudioMode,
   studioInstalled: Schema.Boolean,
   officialMcpAvailable: Schema.Boolean,
-  /** Status of every MCP server these settings run, by the ids SealCode gave them. */
+  /** Status of every MCP server these settings run, by the ids Harp gave them. */
   servers: Schema.Array(GlobalMcpStatus),
   bridge: Schema.optionalKey(RobloxStudioBridgeStatus),
   blender: Schema.Struct({

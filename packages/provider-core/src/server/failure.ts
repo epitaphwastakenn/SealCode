@@ -96,7 +96,7 @@ function curatedCauseMessages(cause: unknown): {
         case "ContextHandoffDeliveryUncertainError":
           return {
             known:
-              "SealCode could not confirm whether conversation history reached the provider. Retry the turn to recover the session.",
+              "Harp could not confirm whether conversation history reached the provider. Retry the turn to recover the session.",
             category: categoryMessage(),
           };
         case "ProviderAdapterProtocolError": {

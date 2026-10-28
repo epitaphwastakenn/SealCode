@@ -69,7 +69,7 @@ export const makePendingCommandCodeProvider = Effect.fn("makePendingCommandCodeP
         auth: { status: "unknown" },
         message: settings.enabled
           ? "Checking CommandCode CLI availability..."
-          : "CommandCode is disabled in SealCode settings.",
+          : "CommandCode is disabled in Harp settings.",
       },
     });
   },
@@ -282,8 +282,8 @@ export const checkCommandCodeProviderStatus = Effect.fn("checkCommandCodeProvide
           status: "error",
           auth: { status: "unknown" },
           message: missing
-            ? "CommandCode CLI (`commandcode`) was not found. Install it with `npm install -g command-code` and run `commandcode login` on this SealCode server host."
-            : "Failed to execute CommandCode CLI. Check its binary path on this SealCode server host.",
+            ? "CommandCode CLI (`commandcode`) was not found. Install it with `npm install -g command-code` and run `commandcode login` on this Harp server host."
+            : "Failed to execute CommandCode CLI. Check its binary path on this Harp server host.",
         });
       }
       if (Option.isNone(versionResult.success)) {

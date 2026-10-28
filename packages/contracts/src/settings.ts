@@ -357,7 +357,7 @@ export type ModelPreferences = {
   readonly providerModelPreferences: typeof ProviderModelPreferences.Type;
 };
 
-// SealCode: a named snapshot of the app's look (Settings > Appearance >
+// Harp: a named snapshot of the app's look (Settings > Appearance >
 // Presets). The settings are a patch, so a preset saved before a field existed
 // leaves that field as it is when applied.
 export const AppearancePresetSettings = Schema.Struct({
@@ -413,7 +413,7 @@ const AppearancePresets = Schema.Array(AppearancePreset).check(
 );
 
 export const ClientSettingsSchema = Schema.Struct({
-  // SealCode plays its harness sounds out of the box.
+  // Harp plays its harness sounds out of the box.
   notificationMode: NotificationMode.pipe(
     Schema.withDecodingDefault(Effect.succeed("sound" as const)),
   ),
@@ -981,7 +981,7 @@ export const SourceControlWritingStyleSettings = Schema.Struct({
 export type SourceControlWritingStyleSettings = typeof SourceControlWritingStyleSettings.Type;
 
 /**
- * How SealCode connects agents to Roblox Studio. `sealcode` runs SealCode's own bridge inside the
+ * How Harp connects agents to Roblox Studio. `sealcode` runs Harp's own bridge inside the
  * server with its own plugin; `official` connects only the MCP server Roblox Studio ships
  * (`%LOCALAPPDATA%\Roblox\mcp.bat`).
  */
@@ -989,7 +989,7 @@ export const RobloxStudioMode = Schema.Literals(["off", "sealcode", "official"])
 export type RobloxStudioMode = typeof RobloxStudioMode.Type;
 
 // A mode saved by an older version that no longer exists was a Studio connection, so it reads
-// back as SealCode's own.
+// back as Harp's own.
 const isRobloxStudioMode = Schema.is(RobloxStudioMode);
 const RobloxStudioModeSetting = Schema.String.pipe(
   Schema.decodeTo(

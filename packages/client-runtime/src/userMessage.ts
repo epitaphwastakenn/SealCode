@@ -5,7 +5,7 @@ import {
   ScheduledTaskId,
 } from "@t3tools/contracts";
 
-/** The working row while SealCode's own compaction runs. */
+/** The working row while Harp's own compaction runs. */
 export const IDLE_COMPACTING_LABELS = {
   beforeCacheExpires: "Compacting before the cache expires…",
   onReturn: "Compacting after being idle…",

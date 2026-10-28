@@ -86,7 +86,7 @@ it.layer(NodeServices.layer)("CommandCode status", (it) => {
       expect(snapshot.installed).toBe(false);
       expect(snapshot.status).toBe("error");
       expect(snapshot.message).toContain("commandcode login");
-      expect(snapshot.message).toContain("this SealCode server host");
+      expect(snapshot.message).toContain("this Harp server host");
     }),
   );
 

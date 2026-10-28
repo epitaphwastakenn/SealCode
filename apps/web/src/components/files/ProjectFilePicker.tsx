@@ -2,7 +2,7 @@ import { useAtomValue } from "@effect/atom-react";
 import { useState, type ReactNode } from "react";
 
 import { useActiveProjectTarget, type ActiveProjectTarget } from "~/hooks/useActiveProjectTarget";
-import { useTheme } from "~/hooks/useTheme";
+import { useResolvedAppearance } from "~/hooks/useTheme";
 import { useRightPanelStore } from "~/rightPanelStore";
 import { primaryServerKeybindingsAtom } from "~/state/server";
 
@@ -78,7 +78,7 @@ function OpenProjectFilePicker(props: ProjectFilePickerProps & { target: ActiveP
     query,
     PROJECT_FILE_PICKER_RESULT_LIMIT,
   );
-  const { resolvedTheme } = useTheme();
+  const resolvedTheme = useResolvedAppearance();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const matches = getProjectFilePickerMatches(result.entries, result.matchedQuery);
   const hasMatchedQuery = /\S/.test(result.matchedQuery);

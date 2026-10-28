@@ -74,7 +74,7 @@ import { useBrowserDefaults } from "~/browser/browserDefaults";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { PanelTabCloseButton } from "~/components/ui/panel-tab-close-button";
 import { faviconUrlForOrigin } from "~/lib/favicon";
-import { useTheme } from "~/hooks/useTheme";
+import { useResolvedAppearance } from "~/hooks/useTheme";
 import type { PreviewPanelInlineSize } from "~/hooks/usePreviewPanelInlineSize";
 import {
   newestPullRequestSummary,
@@ -896,7 +896,7 @@ function RightPanelTab(
 export function RightPanelTabs(props: RightPanelTabsProps) {
   const ownsDesktopTitleBar = isElectron && props.mode === "inline";
   const browserProfiles = useBrowserDefaults().profiles;
-  const { resolvedTheme } = useTheme();
+  const resolvedTheme = useResolvedAppearance();
   const tabListRef = useRef<HTMLDivElement>(null);
   const addSurfaceTriggerRef = useRef<HTMLButtonElement>(null);
   const panelHostRef = useRef<HTMLDivElement | null>(null);

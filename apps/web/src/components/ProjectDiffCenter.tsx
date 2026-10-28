@@ -3,7 +3,7 @@ import { FileDiff, RefreshCw, TriangleAlert } from "lucide-react";
 import { FileDiff as PierreFileDiff } from "@pierre/diffs/react";
 import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thread-checkpoints";
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
-import { useTheme } from "../hooks/useTheme";
+import { useResolvedAppearance } from "../hooks/useTheme";
 import { useClientSettings } from "../hooks/useSettings";
 import { useCheckpointDiff } from "../lib/checkpointDiffState";
 import { orchestrationEnvironment } from "../state/orchestration";
@@ -92,7 +92,7 @@ function entryKey(entry: ProjectDiffEntry): string {
 }
 
 export function ProjectDiffCenter({ environmentId, projectId }: ProjectDiffCenterProps) {
-  const { resolvedTheme } = useTheme();
+  const resolvedTheme = useResolvedAppearance();
   const settings = useClientSettings();
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const index = useProjectDiffIndex(environmentId, projectId);

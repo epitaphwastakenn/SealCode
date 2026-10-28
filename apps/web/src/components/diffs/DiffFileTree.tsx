@@ -4,7 +4,7 @@ import { ChevronsDownUp, ChevronsUpDown } from "lucide";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { useStableCallback } from "~/hooks/useStableCallback";
-import { useTheme } from "~/hooks/useTheme";
+import { useResolvedAppearance } from "~/hooks/useTheme";
 import { cn } from "~/lib/utils";
 import { PIERRE_TREE_UNSAFE_CSS, pierreTreeStyle } from "~/pierre-tree-theme";
 
@@ -44,7 +44,7 @@ export function DiffFileTree({
   footer,
   className,
 }: DiffFileTreeProps) {
-  const { resolvedTheme } = useTheme();
+  const resolvedTheme = useResolvedAppearance();
   const paths = entries.map((entry) => entry.path);
   const presented = diffFileTreeModel(paths);
   const modelPaths = presented.paths;

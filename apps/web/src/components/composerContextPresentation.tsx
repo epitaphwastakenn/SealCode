@@ -10,7 +10,7 @@ import type { EnvironmentId } from "@t3tools/contracts";
 
 import type { ComposerFileAttachment, ComposerImageAttachment } from "~/composerDraftStore";
 import { composerFileNeedsReattach } from "~/composerDraftStore";
-import { useTheme } from "~/hooks/useTheme";
+import { useResolvedAppearance } from "~/hooks/useTheme";
 import {
   formatAttachmentUploadProgress,
   type AttachmentUploadState,
@@ -215,7 +215,7 @@ function FileContextChip(props: {
   upload: AttachmentUploadState | undefined;
 }) {
   const actions = use(ComposerContextActionsContext);
-  const { resolvedTheme } = useTheme();
+  const resolvedTheme = useResolvedAppearance();
   const needsReattach = composerFileNeedsReattach(props.record);
   const suffix = needsReattach ? "attach again" : uploadStatusSuffix(props.upload);
   const size = formatAttachmentSize(props.record.sizeBytes);

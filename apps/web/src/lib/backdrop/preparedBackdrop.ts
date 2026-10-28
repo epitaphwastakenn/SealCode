@@ -63,6 +63,16 @@ export function pixelLookKey(look: BackdropLook): string {
   return JSON.stringify(pixel);
 }
 
+/**
+ * Changes exactly when the effects worker has to run again. The theme colors only reach the
+ * pixels through the duotone, so a light/dark flip leaves every other look alone.
+ */
+export function backdropProcessKey(backdrop: AppBackdrop, theme: string): string {
+  if (backdrop.animated) return `${backdrop.imageId}:animated`;
+  const look = backdropLook(backdrop);
+  return `${backdrop.imageId}:${pixelLookKey(look)}${look.duotone > 0 ? `:${theme}` : ""}`;
+}
+
 /** Two backdrops with the same key come out of the effects worker as the same picture. */
 function preparedBackdropKey(backdrop: AppBackdrop, palette: BackdropPalette): string {
   if (backdrop.animated) return `${backdrop.imageId}:animated`;

@@ -4,7 +4,7 @@ import { isWindowsAbsolutePath } from "@t3tools/shared/path";
 import { useState } from "react";
 
 import { primaryServerKeybindingsAtom } from "~/state/server";
-import { useTheme } from "~/hooks/useTheme";
+import { useResolvedAppearance } from "~/hooks/useTheme";
 import { getLocalFileManagerName, isWindowsPlatform } from "~/lib/utils";
 import { CommandPaletteContent } from "../CommandPaletteContent";
 import type { CommandPaletteActionItem } from "../CommandPalette.logic";
@@ -47,7 +47,7 @@ export function ProjectFaviconPickerDialog(props: {
     PROJECT_FILE_PICKER_RESULT_LIMIT,
     { imageOnly: true },
   );
-  const { resolvedTheme } = useTheme();
+  const resolvedTheme = useResolvedAppearance();
   const keybindings = useAtomValue(primaryServerKeybindingsAtom);
   const { onPickExternal: pickExternal, onSelect } = props;
   const fileManagerName = getLocalFileManagerName(

@@ -16,7 +16,7 @@ import {
   MenuTrigger,
 } from "~/components/ui/menu";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { useTheme } from "~/hooks/useTheme";
+import { useResolvedAppearance } from "~/hooks/useTheme";
 import { useWorkspaceMutationRefresh } from "~/hooks/useWorkspaceMutationRefresh";
 import { cn } from "~/lib/utils";
 import { isHostPath } from "@t3tools/shared/path";
@@ -91,7 +91,7 @@ function BreadcrumbMenuContent(props: {
     refresh: entriesQuery.refresh,
     resourceKey: `files:${props.environmentId}:${props.cwd}`,
   });
-  const { resolvedTheme } = useTheme();
+  const resolvedTheme = useResolvedAppearance();
   const entries = entriesQuery.data?.entries ?? [];
   const entriesTruncated = entriesQuery.data?.truncated ?? false;
   const children = fileBreadcrumbChildren(entries, props.directoryPath);

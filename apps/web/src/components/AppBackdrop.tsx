@@ -9,9 +9,9 @@ import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import { isElectron } from "~/env";
 import { useClientSettings } from "~/hooks/useSettings";
-import { useTheme } from "~/hooks/useTheme";
+import { useResolvedAppearance } from "~/hooks/useTheme";
 import {
-  pixelLookKey,
+  backdropProcessKey,
   type PreparedBackdrop,
   prepareBackdrop,
 } from "~/lib/backdrop/preparedBackdrop";
@@ -146,16 +146,13 @@ export function AppBackdrop() {
   const glassAppEnabled = useClientSettings((settings) => settings.glassAppEnabled);
   const backdrop = useClientSettings((settings) => settings.backdrop);
   const floatingPanels = useClientSettings((settings) => settings.floatingPanels);
-  const { resolvedTheme } = useTheme();
+  const resolvedTheme = useResolvedAppearance();
   const [container, setContainer] = useState<HTMLDivElement | null>(null);
   const [shown, setShown] = useState<ShownImage | null>(null);
   const imageRef = useRef<HTMLImageElement>(null);
 
   const wanted = glassAppEnabled ? backdrop : null;
-  const processKey =
-    wanted === null
-      ? null
-      : `${wanted.imageId}:${wanted.animated ? "animated" : pixelLookKey(backdropLook(wanted))}:${resolvedTheme}`;
+  const processKey = wanted === null ? null : backdropProcessKey(wanted, resolvedTheme);
 
   const shownUrlRef = useRef<string | null>(null);
   const shownImageIdRef = useRef<string | null>(null);

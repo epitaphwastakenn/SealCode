@@ -541,8 +541,24 @@ export function getRenderedAppearance(): ThemeAppearance {
   return getThemePreviewAppearance() ?? getSnapshot().resolvedTheme;
 }
 
+function getResolvedAppearance(): ThemeAppearance {
+  return getSnapshot().resolvedTheme;
+}
+
+function getServerResolvedAppearance(): ThemeAppearance {
+  return DEFAULT_THEME_SNAPSHOT.resolvedTheme;
+}
+
+/**
+ * Light or dark, nothing else. The snapshot changes with every palette, mode or mix edit; this
+ * primitive only changes when the appearance flips, so consumers skip the rest.
+ */
+export function useResolvedAppearance(): ThemeAppearance {
+  return useSyncExternalStore(subscribe, getResolvedAppearance, getServerResolvedAppearance);
+}
+
 export function useRenderedAppearance() {
-  const { resolvedTheme } = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
+  const resolvedTheme = useResolvedAppearance();
   const previewAppearance = useSyncExternalStore(
     subscribeToThemePreview,
     getThemePreviewAppearance,

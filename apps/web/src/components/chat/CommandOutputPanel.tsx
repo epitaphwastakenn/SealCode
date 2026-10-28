@@ -3,7 +3,7 @@ import type { EnvironmentId, ThreadId, TurnItemId } from "@t3tools/contracts";
 import { TERMINAL_PALETTES, terminalOutputSpans } from "@t3tools/shared/terminalOutput";
 import { useLayoutEffect, useRef } from "react";
 
-import { useTheme } from "../../hooks/useTheme";
+import { useResolvedAppearance } from "../../hooks/useTheme";
 import { useServerConfigs } from "../../state/entities";
 import { orchestrationEnvironment } from "../../state/orchestration";
 import { useEnvironmentQuery } from "../../state/query";
@@ -38,7 +38,7 @@ export function CommandOutputPanel(props: {
   const scrollRef = useRef<HTMLDivElement>(null);
   const followRef = useRef(true);
   const text = data?.output.text ?? "";
-  const { resolvedTheme } = useTheme();
+  const resolvedTheme = useResolvedAppearance();
 
   useLayoutEffect(() => {
     const element = scrollRef.current;

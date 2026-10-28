@@ -9,7 +9,7 @@ local Input = require(script.Parent.Input)
 
 local Runtime = {}
 
--- Set by the main script: leaves the bridge once the test is ending, so SealCode sees the
+-- Set by the main script: leaves the bridge once the test is ending, so Harp sees the
 -- play server go at once instead of waiting for it to time out.
 Runtime.afterEndTest = nil
 
@@ -29,7 +29,7 @@ function Runtime.start(args)
 	if mode ~= "play" and mode ~= "run" then
 		return { error = 'mode must be "play" or "run"' }
 	end
-	-- SealCode checks that no playtest peer is connected first; the previous test's call may
+	-- Harp checks that no playtest peer is connected first; the previous test's call may
 	-- still be unwinding, which must not block the next one.
 	if args.noRuntimePeers == true or (test.running and not RunService:IsRunning() and test.startedAt and os.clock() - test.startedAt > 5) then
 		test.running = false
@@ -39,7 +39,7 @@ function Runtime.start(args)
 	end
 	local service = studioTest()
 	if service == nil then
-		return { error = "This Studio has no StudioTestService, so SealCode cannot start a playtest. Press Play in Studio." }
+		return { error = "This Studio has no StudioTestService, so Harp cannot start a playtest. Press Play in Studio." }
 	end
 	test.running = true
 	test.mode = mode

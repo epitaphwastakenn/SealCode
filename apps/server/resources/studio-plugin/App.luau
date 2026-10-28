@@ -1,10 +1,10 @@
 --!nocheck
--- SealCode's Studio plugin. One copy runs in every DataModel Studio creates: the edit window
+-- Harp's Studio plugin. One copy runs in every DataModel Studio creates: the edit window
 -- (with the panel), and the play server while a playtest runs. Client DataModels cannot make
 -- HTTP requests and are reached through the play server.
 --
 -- The installed loader (Main.server.luau) starts this module and can stop it and start a newer
--- copy fetched from SealCode, so an update never needs the place reopened.
+-- copy fetched from Harp, so an update never needs the place reopened.
 
 local App = {}
 
@@ -130,7 +130,7 @@ Transport.configure({
 		task.spawn(updateFromSealCode)
 	end,
 	onNotify = function(message)
-		local text = "[SealCode] " .. tostring(message.title) .. (if message.body then ": " .. tostring(message.body) else "")
+		local text = "[Harp] " .. tostring(message.title) .. (if message.body then ": " .. tostring(message.body) else "")
 		if message.level == "error" or message.level == "warning" then
 			warn(text)
 		else
@@ -147,7 +147,7 @@ Transport.configure({
 	end,
 })
 
--- Swaps in SealCode's newer plugin code once nothing is running here.
+-- Swaps in Harp's newer plugin code once nothing is running here.
 local reloading = false
 updateFromSealCode = function()
 	if reloading or host.reload == nil then
@@ -161,14 +161,14 @@ updateFromSealCode = function()
 	local bundle, err = Transport.fetchBundle()
 	if bundle == nil or bundle.pluginHash == Config.pluginHash then
 		if bundle == nil then
-			warn("[SealCode] Could not fetch the updated plugin: " .. tostring(err))
+			warn("[Harp] Could not fetch the updated plugin: " .. tostring(err))
 		end
 		task.delay(30, function()
 			reloading = false
 		end)
 		return
 	end
-	print("[SealCode] Updating the Studio plugin in place (" .. tostring(Config.pluginHash) .. " -> " .. tostring(bundle.pluginHash) .. ")")
+	print("[Harp] Updating the Studio plugin in place (" .. tostring(Config.pluginHash) .. " -> " .. tostring(bundle.pluginHash) .. ")")
 	host.reload(bundle.files, bundle.pluginHash)
 end
 
@@ -223,10 +223,10 @@ State.onChanged(function()
 	local phase = State.connection.phase
 	if (phase == "refused" or (phase == "retrying" and State.connection.failures == 6)) and warnedPhase ~= phase then
 		warnedPhase = phase
-		warn("[SealCode] Studio is not linked to SealCode: " .. tostring(State.connection.detail) .. " (open the SealCode panel from the Plugins tab for details)")
+		warn("[Harp] Studio is not linked to Harp: " .. tostring(State.connection.detail) .. " (open the Harp panel from the Plugins tab for details)")
 	elseif phase == "connected" and warnedPhase ~= nil then
 		warnedPhase = nil
-		print("[SealCode] Studio is linked to SealCode.")
+		print("[Harp] Studio is linked to Harp.")
 	end
 end)
 
@@ -253,7 +253,7 @@ Lifetime.connect(game:GetPropertyChangedSignal("PlaceId"), checkIdentity)
 Lifetime.connect(game:GetPropertyChangedSignal("Name"), checkIdentity)
 Lifetime.loop(2, checkIdentity)
 
--- Events for SealCode: the user's selection (debounced, compact) and new errors.
+-- Events for Harp: the user's selection (debounced, compact) and new errors.
 local selectionVersion = 0
 local function activeScriptPath()
 	local ok, active = pcall(function()
@@ -288,7 +288,8 @@ sessionHooks.selection = emitSelection
 local errorsThisSecond = 0
 local errorWindow = 0
 Logs.onEntry(function(entry)
-	if entry.level ~= "ERR" or string.sub(entry.message, 1, 10) == "[SealCode]" then
+	-- The plugin's own lines are not the place's errors; copies loaded before the rename still say "[SealCode]".
+	if entry.level ~= "ERR" or string.sub(entry.message, 1, 6) == "[Harp]" or string.sub(entry.message, 1, 10) == "[SealCode]" then
 		return
 	end
 	local now = os.clock()

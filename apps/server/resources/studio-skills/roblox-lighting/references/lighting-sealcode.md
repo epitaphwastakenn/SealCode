@@ -1,11 +1,11 @@
-# Lighting playbook (SealCode)
+# Lighting playbook (Harp)
 
-Written by SealCode from live research in Roblox Studio on 2026-10-23. Eight atmosphere presets
+Written by Harp from live research in Roblox Studio on 2026-10-23. Eight atmosphere presets
 were tuned on three test sets (a low-poly village with terrain, a fireplace room and a neon
 corridor), each with a character as the subject. Every preset was checked in a screenshot and
 measured from the rendered pixels (CaptureService plus EditableImage, section 6). Graphics quality
 levels, skyboxes, a day-night cycle and the cost of each effect were measured too. Everything marked
-"verified" was seen working in that session. Numbers marked "guideline" are SealCode defaults, not
+"verified" was seen working in that session. Numbers marked "guideline" are Harp defaults, not
 benchmarks.
 
 Load this file when you must set up, change or review the look of a place. The property reference

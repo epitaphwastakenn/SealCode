@@ -1,10 +1,10 @@
-# Animation playbook (SealCode)
+# Animation playbook (Harp)
 
-Written by SealCode from live research in Roblox Studio on 2026-10-20: toolbox animation models
+Written by Harp from live research in Roblox Studio on 2026-10-20: toolbox animation models
 were inserted and inspected, animations were played on R15 humanoids, a non-humanoid rig and
 Motor6D props in a playtest, KeyframeSequences were built by code and by the bridge `animation`
 tool, and every R15 joint axis was checked on screen. Items marked "verified" were seen working in
-that session. Ranges and timings marked "guideline" are SealCode defaults, not measurements.
+that session. Ranges and timings marked "guideline" are Harp defaults, not measurements.
 
 Load this file when you must play, find, make, publish, review or procedurally animate something.
 The generic API notes (loading, priorities, blending, markers) are in `full.md` sections 1 to 3.
@@ -256,8 +256,8 @@ for publishing; a sequence that is only registered at runtime is lost when the p
 `node mcp.mjs list` shows `animation` when the bridge has it. Actions:
 
 - `create`: `{ action: "create", rig: "game.Workspace.R15Test", name, looped, priority,
-easingStyle, easingDirection, keyframes: [{ time, name?, markers?, poses: { Joint:
-{ rotation: [x, y, z], position: [x, y, z] } } }] }`. A joint may be the Motor6D name
+  easingStyle, easingDirection, keyframes: [{ time, name?, markers?, poses: { Joint:
+  { rotation: [x, y, z], position: [x, y, z] } } }] }`. A joint may be the Motor6D name
   (`RightShoulder`) or the part it moves (`RightUpperArm`). Rotations are degrees offset from the
   rest pose (section 5), positions are studs, times rise from 0. It returns the saved path, a
   `temporaryId`, `duration` and the joints touched. The default peer is edit; for a rig that exists
@@ -305,7 +305,7 @@ preview until the user publishes it.
 8. Loop: make the last keyframe equal the first and set `Loop = true`; check there is no pop at
    the seam. An idle should never be fully still: breathe in 3 s, `UpperTorso` X +-1.5, `Head` X
    the opposite by -1 offset 0.3 s later, shoulders Z +-2, root position +-0.04 studs, all `Cubic
-InOut` (guideline).
+   InOut` (guideline).
 9. Walk cycle starting points (guideline, 0.7 to 0.8 s loop): hips X +-30 opposite, knee -70 on
    the swing phase and about -15 on contact, arms X +-25 opposite to the legs with elbows +15 to
    +30, waist Y +-8 counter to the hips, root bob 0.12 studs twice per cycle, head level.

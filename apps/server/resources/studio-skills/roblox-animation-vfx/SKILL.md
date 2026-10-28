@@ -39,9 +39,9 @@ Load when implementing character animation, particle or beam effects, tweens, ca
 
 **Need the details?** Load `references/full.md` for animation and effect recipes.
 
-## SealCode playbooks
+## Harp playbooks
 
-Two practical playbooks written by SealCode from live Studio research (verified in Studio on
+Two practical playbooks written by Harp from live Studio research (verified in Studio on
 2026-10-20). Load them in addition to `references/full.md` when the task matches:
 
 - `references/vfx-sealcode.md`: building, adapting, triggering and reviewing visual effects:

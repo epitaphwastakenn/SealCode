@@ -25,7 +25,7 @@ sources:
 
 Load for player saves, migrations, retries, shutdowns, or session ownership. Leaderboards/messaging/world data: `roblox-server-data`; Open Cloud: `roblox-cloud`.
 
-## SealCode default: DataService (typed)
+## Harp default: DataService (typed)
 
 For any player data or DataStore work, use **DataService (typed) by Leif** unless the user explicitly asks for another approach. Load [references/dataservice-typed.md](references/dataservice-typed.md) first: it covers install (Wally), the template, `Data.Service:init()`, reads/writes/listeners, client replication, migrations, and a coins + inventory example. Do not write your own DataStore wrapper or session-locking system for player data. When in doubt about how it works, read the docs at https://leifstout.github.io/dataServiceTyped/docs/intro/ instead of guessing or reading the library's code.
 

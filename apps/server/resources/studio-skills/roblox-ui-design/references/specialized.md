@@ -1,6 +1,6 @@
 # Specialised widgets: wheel and reel
 
-Two layouts are shipped as finished scripts with a small config table, not generated: the prize wheel (`layouts/wheel-spin.md`) and the vertical reel (`layouts/vertical-reel-roll.md`). They are original SealCode code, plain Luau, built from native `Frame`s, `UIGradient`s and `TweenService`: no wedge art, no ring pictures, nothing to download. You change content by editing the tables at the top; you change geometry only if the user asks for a different mechanic.
+Two layouts are shipped as finished scripts with a small config table, not generated: the prize wheel (`layouts/wheel-spin.md`) and the vertical reel (`layouts/vertical-reel-roll.md`). They are original Harp code, plain Luau, built from native `Frame`s, `UIGradient`s and `TweenService`: no wedge art, no ring pictures, nothing to download. You change content by editing the tables at the top; you change geometry only if the user asks for a different mechanic.
 
 | Widget | Template (source of truth)    | Same text as a loadable file | Layout contract                            |
 | ------ | ----------------------------- | ---------------------------- | ------------------------------------------ |

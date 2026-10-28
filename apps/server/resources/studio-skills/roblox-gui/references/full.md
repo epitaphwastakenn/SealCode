@@ -568,7 +568,7 @@ Check every new or restyled screen on at least these, both in edit and in a play
 
 Use the device presets the place already uses where it has them (`get_device_simulator_state` lists them).
 
-With SealCode's Studio tools:
+With Harp's Studio tools:
 
 1. `capture_device_matrix` with up to six of these settings captures the screen on each, side by side. Read every capture for clipping, overlap, text outside its box, and controls off the screen.
 2. Start a playtest and, for each device, `set_device_simulator` on the client and run `inspect_ui {mode: 'audit'}` on the screen. Fix every `text_obscured`, `text_straddles_edge`, `text_overflow` and `content_beyond_scroll` finding, then audit again until none remain.

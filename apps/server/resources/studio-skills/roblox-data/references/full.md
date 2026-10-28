@@ -2,7 +2,7 @@
 
 > Code examples are illustrative. Adapt them to your project and verify in Studio before production use.
 
-This guide uses raw `DataStoreService` concepts and does not require a particular profile library. **For new player data in SealCode projects, use DataService (typed) and follow `dataservice-typed.md`; do not build the wrapper, session lock, or save lifecycle described below yourself.** Use this guide for non-player data, for the limits and budgets, and when the user asks for a different approach. If the project already uses a session-locking wrapper, keep its lifecycle and failure semantics instead of mixing two ownership systems.
+This guide uses raw `DataStoreService` concepts and does not require a particular profile library. **For new player data in Harp projects, use DataService (typed) and follow `dataservice-typed.md`; do not build the wrapper, session lock, or save lifecycle described below yourself.** Use this guide for non-player data, for the limits and budgets, and when the user asks for a different approach. If the project already uses a session-locking wrapper, keep its lifecycle and failure semantics instead of mixing two ownership systems.
 
 ## 1. Choose the storage primitive
 

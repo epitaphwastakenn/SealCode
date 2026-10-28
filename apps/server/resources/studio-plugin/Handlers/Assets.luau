@@ -42,7 +42,7 @@ function Assets.insert(args)
 		}
 	end
 
-	local recording = Util.beginRecording("SealCode: insert asset " .. tostring(id))
+	local recording = Util.beginRecording("Harp: insert asset " .. tostring(id))
 	local root
 	if #objects == 1 then
 		root = objects[1]

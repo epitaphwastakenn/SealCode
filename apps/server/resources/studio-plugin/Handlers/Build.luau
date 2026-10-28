@@ -282,7 +282,7 @@ function Build.run(args)
 	for index, step in operations do
 		local op = type(step) == "table" and step.op or nil
 		if op == "scatter" then
-			return fail(index, op, "scatter is not supported by this version of the SealCode bridge.")
+			return fail(index, op, "scatter is not supported by this version of the Harp bridge.")
 		elseif op == "create" then
 			if type(step.className) ~= "string" then
 				return fail(index, op, "className is required.")

@@ -20,7 +20,7 @@ sources:
 
 Load for leaderboards, messaging, MemoryStore coordination, world state, seasons, or guilds. Player persistence: `roblox-data`; Open Cloud: `roblox-cloud`.
 
-SealCode default: per-player saves use DataService (typed) by Leif (`roblox-data`, `references/dataservice-typed.md`); this skill is for cross-server and non-player data only.
+Harp default: per-player saves use DataService (typed) by Leif (`roblox-data`, `references/dataservice-typed.md`); this skill is for cross-server and non-player data only.
 
 ## Quick Reference
 

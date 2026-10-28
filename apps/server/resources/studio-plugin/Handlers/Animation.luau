@@ -344,7 +344,7 @@ function Animation.play(args)
 		stopTracks(animator, false, 0)
 	end
 	local animation = Instance.new("Animation")
-	animation.Name = if args.sequence ~= nil then sequence.Name else "SealCodePreview"
+	animation.Name = if args.sequence ~= nil then sequence.Name else "HarpPreview"
 	animation.AnimationId = id
 	local loaded, track = pcall(function()
 		return animator:LoadAnimation(animation)
@@ -540,7 +540,7 @@ function Animation.create(args)
 		end
 		parent = target
 	end
-	local sequenceName = if type(args.name) == "string" and args.name ~= "" then args.name else "SealCodeAnimation"
+	local sequenceName = if type(args.name) == "string" and args.name ~= "" then args.name else "HarpAnimation"
 
 	local recording = Util.beginRecording("create animation " .. sequenceName)
 	local ok, built = pcall(function()

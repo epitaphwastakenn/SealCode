@@ -105,16 +105,16 @@ end
 local function refusal(endpoint: string, tool: string?)
 	local toggles = State.currentToggles()
 	if toggles.paused then
-		return "The user paused the agent in Studio's SealCode panel. Ask them to resume it."
+		return "The user paused the agent in Studio's Harp panel. Ask them to resume it."
 	end
 	if not State.toolEnabled(tool) then
-		return "The user turned off the " .. tostring(tool) .. " tool in Studio's SealCode panel. Work without it, or ask them to turn it back on."
+		return "The user turned off the " .. tostring(tool) .. " tool in Studio's Harp panel. Work without it, or ask them to turn it back on."
 	end
 	if MUTATING[endpoint] and toggles.readOnly then
-		return "The user set Studio's SealCode panel to read-only, so changes are refused."
+		return "The user set Studio's Harp panel to read-only, so changes are refused."
 	end
 	if (endpoint == "execute-luau" or endpoint == "eval-runtime") and not toggles.allowLuau then
-		return "The user turned off Luau execution in Studio's SealCode panel."
+		return "The user turned off Luau execution in Studio's Harp panel."
 	end
 	return nil
 end

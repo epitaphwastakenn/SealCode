@@ -1,5 +1,5 @@
 --!nocheck
--- The connection to SealCode: hello, then long-polls for work. A failed poll is the
+-- The connection to Harp: hello, then long-polls for work. A failed poll is the
 -- disconnect signal; every answer is retried until the bridge acknowledges it.
 
 local HttpService = game:GetService("HttpService")
@@ -56,17 +56,17 @@ end
 local function explain(err: string?, status: number?): string
 	local text = tostring(err or "")
 	if status == 426 then
-		return "Restart Studio: the SealCode plugin was updated while Studio was open."
+		return "Restart Studio: the Harp plugin was updated while Studio was open."
 	elseif status == 401 then
-		return "SealCode did not recognise this plugin's key. Restart Studio to load the plugin SealCode installed."
+		return "Harp did not recognise this plugin's key. Restart Studio to load the plugin Harp installed."
 	elseif status == 409 then
 		return "Another Studio window is linked for this place."
 	elseif status and status >= 500 then
-		return "SealCode's bridge reported an error."
+		return "Harp's bridge reported an error."
 	elseif string.find(text, "not enabled", 1, true) or string.find(text, "permission", 1, true) or string.find(text, "not allowed", 1, true) then
-		return "Studio blocked the plugin's HTTP requests. Allow them in Plugins > Manage Plugins > SealCode > Allow HTTP Requests."
+		return "Studio blocked the plugin's HTTP requests. Allow them in Plugins > Manage Plugins > Harp > Allow HTTP Requests."
 	elseif string.find(text, "ConnectFail", 1, true) or string.find(text, "refused", 1, true) or string.find(text, "Timedout", 1, true) then
-		return "Nothing answered at " .. Config.baseUrl .. ". Open SealCode and set Roblox Studio to the SealCode bridge."
+		return "Nothing answered at " .. Config.baseUrl .. ". Open Harp and set Roblox Studio to the Harp bridge."
 	end
 	return text
 end
@@ -85,14 +85,14 @@ local function sendResponse(id: string, response)
 			local ok, status, body = post("/studio/v1/response", { requestId = id, response = response })
 			if ok and type(body) == "table" then
 				if body.disposition == "unknown" then
-					warn("[SealCode] The bridge no longer waited for a result (request " .. id .. "); it was dropped.")
+					warn("[Harp] The bridge no longer waited for a result (request " .. id .. "); it was dropped.")
 				end
 				pendingResponses[id] = nil
 				break
 			end
 			if status == 413 then
 				-- Too large ever to arrive: say so instead of retrying forever.
-				response = { error = "The result was too large to send to SealCode." }
+				response = { error = "The result was too large to send to Harp." }
 			end
 			task.wait(delay)
 			delay = math.min(delay * 2, 5)
@@ -287,7 +287,7 @@ function Transport.retryNow()
 	wakeRetry = true
 end
 
--- Batched, rate-limited events; their text is data for SealCode, never instructions.
+-- Batched, rate-limited events; their text is data for Harp, never instructions.
 local eventQueue = {}
 local droppedEvents = 0
 function Transport.emit(event)
@@ -315,7 +315,7 @@ Lifetime.loop(1, function()
 		return true
 end)
 
--- SealCode's current plugin code, for a hot reload: { pluginHash, files = { { path, source } } }.
+-- Harp's current plugin code, for a hot reload: { pluginHash, files = { { path, source } } }.
 function Transport.fetchBundle()
 	-- Only the install key is needed: a plugin too old for the bridge's protocol can still update.
 	local ok, status, body, err = post("/studio/v1/bundle", {})

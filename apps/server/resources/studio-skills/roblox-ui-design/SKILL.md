@@ -5,7 +5,7 @@ when_to_use: "Whenever the request is about how a UI looks: a style (cartoon, si
 last_reviewed: 2026-10-20
 ---
 
-# Roblox UI design (SealCode)
+# Roblox UI design (Harp)
 
 This skill owns how a screen **looks**. `roblox-gui` owns how it **behaves** (scaling, text fitting, input, safe areas, devices). For a new screen load both: this one first, in the same `load_skill` call.
 

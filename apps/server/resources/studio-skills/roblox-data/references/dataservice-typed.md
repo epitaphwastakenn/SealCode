@@ -1,6 +1,6 @@
-# DataService (typed) by Leif: the SealCode default for player data
+# DataService (typed) by Leif: the Harp default for player data
 
-> SealCode addition, not part of the roblox-brain upstream. Checked on 2026-10-20 against the repo
+> Harp addition, not part of the roblox-brain upstream. Checked on 2026-10-20 against the repo
 > (`wally.toml`, `docs/intro.md`, `docs/service-functions.md`, `src/*.luau`, version 1.1.0, committed
 > 2026-10-03) and the Wally registry. Repo: https://github.com/leifstout/dataServiceTyped. Docs:
 > https://leifstout.github.io/dataServiceTyped/docs/intro/

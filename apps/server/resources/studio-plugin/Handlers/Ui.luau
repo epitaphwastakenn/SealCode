@@ -1,5 +1,5 @@
 --!nocheck
--- Live UI in a playtest client: raw facts for inspect_ui (SealCode computes visibility, clipping
+-- Live UI in a playtest client: raw facts for inspect_ui (Harp computes visibility, clipping
 -- and the audit from them), and interact_ui, which resolves one element, proves it can take
 -- input with the engine's own hit test, and then acts with real input.
 

@@ -1,6 +1,6 @@
 --!nocheck
 -- The installed loader. It owns what must outlive an update (the dock widget and the toolbar
--- button) and runs App from the modules beside it. When SealCode has newer plugin code, App
+-- button) and runs App from the modules beside it. When Harp has newer plugin code, App
 -- hands the new sources to `reload`, which stops this copy and starts the new one in place, so
 -- the user never reopens the place and Studio windows do not pile up.
 
@@ -33,7 +33,7 @@ local function boot(root: Instance): boolean
 		return require(root.App).start(plugin, host)
 	end)
 	if not ok then
-		warn("[SealCode] The Studio plugin failed to start: " .. tostring(result))
+		warn("[Harp] The Studio plugin failed to start: " .. tostring(result))
 		return false
 	end
 	current = result
@@ -46,7 +46,7 @@ function host.reload(files, pluginHash: string)
 		return
 	end
 	local root = Instance.new("Folder")
-	root.Name = "SealCodeStudio_" .. tostring(pluginHash)
+	root.Name = "HarpStudio_" .. tostring(pluginHash)
 	local built, err = pcall(function()
 		for _, file in files do
 			local parent = root
@@ -71,7 +71,7 @@ function host.reload(files, pluginHash: string)
 	end)
 	if not built then
 		failedHash = pluginHash
-		warn("[SealCode] Could not build the updated plugin: " .. tostring(err))
+		warn("[Harp] Could not build the updated plugin: " .. tostring(err))
 		return
 	end
 	if current then
@@ -80,7 +80,7 @@ function host.reload(files, pluginHash: string)
 	end
 	host.reloaded = true
 	if boot(root) then
-		print("[SealCode] Studio plugin updated in place.")
+		print("[Harp] Studio plugin updated in place.")
 	else
 		failedHash = pluginHash
 		boot(script)
@@ -99,16 +99,16 @@ end)
 if RunService:IsEdit() then
 	task.delay(1, function()
 		local ok, toolbar = pcall(function()
-			return plugin:CreateToolbar("SealCode")
+			return plugin:CreateToolbar("Harp")
 		end)
 		if not ok then
 			return
 		end
 		local button = toolbar:CreateButton(
 			"SealCodeStudioToggle",
-			"Show the SealCode panel: connection, agent activity, safety and tool switches",
+			"Show the Harp panel: connection, agent activity, safety and tool switches",
 			"",
-			"SealCode"
+			"Harp"
 		)
 		button.ClickableWhenViewportHidden = true
 		button.Click:Connect(function()

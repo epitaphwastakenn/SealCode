@@ -31,7 +31,7 @@ It saves a lot of work there: a hand-built version needs the window, drag, tabs,
 
 `loadstring(game:HttpGet("https://raw.githubusercontent.com/..."))()` is what the README and docs show. It does not work in a published game: `HttpGet` and `loadstring` are not available to normal scripts, and fetching code at runtime is not allowed. The library must live in the place as a ModuleScript.
 
-1. **Get the bundle.** Download the single-file build once (shell, `curl -L -o <scratch>/WindUI.lua <url>`), into a scratch folder, never into the SealCode repository:
+1. **Get the bundle.** Download the single-file build once (shell, `curl -L -o <scratch>/WindUI.lua <url>`), into a scratch folder, never into the Harp repository:
    - `https://raw.githubusercontent.com/Footagesus/WindUI/main/dist/main.lua` (main branch, about 1.35 MB, icon packs embedded: it works without any HTTP). Pin a commit instead of `main` for reproducibility, for example `https://raw.githubusercontent.com/Footagesus/WindUI/9e589eab5756f5f61a4b4531fa9e77672847a917/dist/main.lua` (commit of 2026-10-06; v1.6.66 in `package.json`).
    - Not the release asset (`releases/download/<tag>/main.lua`, about 270 KB): that build asks the server for icons through a `GetIcons` RemoteFunction fed by `HttpService` and `loadstring`, which a published game cannot do.
    - Do not use the Rojo source tree (`src/` mapped to `ReplicatedStorage.WindUI`) for the same reason: its icon loader and its server scripts need `loadstring` on the server.

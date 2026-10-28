@@ -620,7 +620,7 @@ local ChangeHistoryService = game:GetService("ChangeHistoryService")
 -- One undo step per agent operation; nil when Studio cannot record (play DataModels).
 function Util.beginRecording(name: string): string?
 	local ok, id = pcall(function()
-		return ChangeHistoryService:TryBeginRecording("SealCode: " .. name)
+		return ChangeHistoryService:TryBeginRecording("Harp: " .. name)
 	end)
 	return if ok then id else nil
 end

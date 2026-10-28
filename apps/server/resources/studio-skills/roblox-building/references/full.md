@@ -84,7 +84,7 @@ Roblox's [Studio Assistant guide](https://create.roblox.com/docs/assistant/guide
 
 Use native Parts or CSG for simple collision and blockout geometry. Use a separate low-cost collision model when the visible mesh is large, detailed, or non-interactive. Let measured playtests and profiling, not class counts, decide performance changes.
 
-## Modeling a custom mesh (SealCode additions)
+## Modeling a custom mesh (Harp additions)
 
 These rules apply when you model a prop yourself (for example in Blender through a Blender MCP) rather than reuse or generate one.
 

@@ -1,6 +1,6 @@
 --!nocheck
 -- Everything this copy of the plugin started, so a hot reload can stop it completely: the
--- loader swaps in SealCode's newer code without the user reopening the place.
+-- loader swaps in Harp's newer code without the user reopening the place.
 
 local Lifetime = {}
 

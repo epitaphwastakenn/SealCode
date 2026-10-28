@@ -50,7 +50,7 @@ function Mesh.import(args)
 			return { error = "parentPath not found: " .. args.parentPath }
 		end
 	end
-	local recording = Util.beginRecording("SealCode: import mesh")
+	local recording = Util.beginRecording("Harp: import mesh")
 	local model = Instance.new("Model")
 	model.Name = tostring(args.name or "ImportedMesh")
 	local problems = {}

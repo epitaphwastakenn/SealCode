@@ -3,6 +3,8 @@
 
 local State = {}
 
+-- Studio keeps every local plugin's settings in one shared file under these names, not per
+-- plugin file. Changing the prefix would drop the user's saved switches, so it keeps the old name.
 local SETTINGS_PREFIX = "SealCodeStudio.v1."
 
 State.plugin = nil

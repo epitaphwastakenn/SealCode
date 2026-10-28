@@ -1,9 +1,9 @@
-# VFX playbook (SealCode)
+# VFX playbook (Harp)
 
-Written by SealCode from live research in Roblox Studio on 2026-10-20: 20 Creator Store VFX packs
+Written by Harp from live research in Roblox Studio on 2026-10-20: 20 Creator Store VFX packs
 were inserted, dumped property by property and rendered, and a from-scratch effect was built and
 reviewed in a playtest. Everything marked "verified" was seen working in Studio in that session.
-Numbers marked "guideline" are SealCode defaults, not benchmarks.
+Numbers marked "guideline" are Harp defaults, not benchmarks.
 
 Load this file when you must build, adapt, trigger or review a visual effect. The generic API notes
 are in `full.md` (section 4 onward); this file is the practical layer on top of it.
@@ -50,7 +50,7 @@ draw dark smoky shapes on top of bright ones (see "Properties worth knowing").
 ## 3. Concrete recipes by effect type
 
 Values are starting points taken from packs that rendered well; lines marked (guideline) are
-SealCode defaults that were not taken from a pack. Scale Size, Speed and Acceleration together
+Harp defaults that were not taken from a pack. Scale Size, Speed and Acceleration together
 (section 6) for bigger or smaller versions.
 
 ### Explosion
@@ -109,7 +109,7 @@ SealCode defaults that were not taken from a pack. Scale Size, Speed and Acceler
 ### Lightning
 
 - Bolt: flipbook of a bolt (14862694841 Grid4x4, 12390063093 Grid8x8) on `Orientation =
-VelocityParallel`, Speed 313 to 448 with Drag 25, Lifetime 0.1 to 0.15, Size 6 to 8, SpreadAngle 2
+  VelocityParallel`, Speed 313 to 448 with Drag 25, Lifetime 0.1 to 0.15, Size 6 to 8, SpreadAngle 2
   to 5, `Squash` alternating -0.19 to 0.9 to 1.1 (jitter), EmissionDirection Bottom for a strike
   from above, `EmitDelay 0.06`. Emit 1 to 3 copies.
 - Add a ground flash (core layer), 5 to 10 thin sparks and a Neon mesh column for a hero strike

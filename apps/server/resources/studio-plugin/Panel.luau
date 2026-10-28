@@ -195,7 +195,7 @@ local function status(): (Color3, string)
 	elseif phase == "connecting" then
 		return STATUS.waiting, "Connecting…"
 	elseif phase == "retrying" then
-		return STATUS.waiting, "Waiting for SealCode"
+		return STATUS.waiting, "Waiting for Harp"
 	elseif phase == "refused" or phase == "duplicate" then
 		return STATUS.error, "Not linked"
 	end
@@ -218,7 +218,7 @@ function Panel.create(plugin, widget, actions)
 		AutomaticSize = Enum.AutomaticSize.Y,
 		Parent = root,
 	}, { pad(10, 10, 8, 10), list(6) })
-	text({ text = "SealCode Studio", font = FONT_BOLD, size = 15, align = Enum.TextXAlignment.Center, parent = header, order = 1 })
+	text({ text = "Harp Studio", font = FONT_BOLD, size = 15, align = Enum.TextXAlignment.Center, parent = header, order = 1 })
 	local statusRow = new("Frame", { BackgroundTransparency = 1, Size = UDim2.new(1, 0, 0, 16), LayoutOrder = 2, Parent = header })
 	local statusLayout = list(6, true)
 	statusLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
@@ -338,7 +338,7 @@ function Panel.create(plugin, widget, actions)
 		local phase = State.connection.phase
 		section(parent, order, "connection", "Connection", if phase == "connected" then "linked" else nil, function(body)
 			if State.server.pluginOutdated or State.server.pluginUpdated then
-				local note = text({ text = "Updating the plugin from SealCode…", size = 12, parent = body, order = 0 })
+				local note = text({ text = "Updating the plugin from Harp…", size = 12, parent = body, order = 0 })
 				note.TextColor3 = STATUS.waiting
 			end
 			if State.notice then
@@ -359,7 +359,7 @@ function Panel.create(plugin, widget, actions)
 				text({ text = "Peers: " .. table.concat(peerNames, ", "), size = 12, parent = body, order = 4, color = C.DimmedText })
 			end
 			text({
-				text = string.format("SealCode %s · %s · protocol %s", tostring(State.server.build or "?"), Config.baseUrl, tostring(Config.protocol)),
+				text = string.format("Harp %s · %s · protocol %s", tostring(State.server.build or "?"), Config.baseUrl, tostring(Config.protocol)),
 				size = 11,
 				parent = body,
 				order = 5,
@@ -371,7 +371,7 @@ function Panel.create(plugin, widget, actions)
 				button({ text = "Retry now", parent = buttons, order = 2, onClick = actions.retryNow })
 			end
 			button({ text = "Diagnostics", parent = buttons, order = 3, onClick = function()
-				print("[SealCode] Diagnostics\n" .. table.concat(State.transportLog, "\n"))
+				print("[Harp] Diagnostics\n" .. table.concat(State.transportLog, "\n"))
 			end })
 		end)
 	end

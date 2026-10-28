@@ -85,9 +85,9 @@ end)
 
 - Mood presets (Day, Golden Hour, Night, Horror, Underwater, Sci-Fi), zone tweens, full examples: `references/full.md`
 
-## SealCode playbooks
+## Harp playbooks
 
-A practical playbook written by SealCode from live Studio research (verified in Studio on
+A practical playbook written by Harp from live Studio research (verified in Studio on
 2026-10-23). Load it in addition to `references/full.md` when the task matches:
 
 - `references/lighting-sealcode.md`: eight tested atmosphere presets (sunny day, sunset, night,

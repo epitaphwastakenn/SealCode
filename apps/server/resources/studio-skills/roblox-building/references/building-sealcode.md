@@ -1,10 +1,10 @@
-# Building playbook (SealCode)
+# Building playbook (Harp)
 
-Written by SealCode from live research in Roblox Studio on 2026-10-23: 20 free Creator Store assets
+Written by Harp from live research in Roblox Studio on 2026-10-23: 20 free Creator Store assets
 were inserted and measured, a small village (terrain, four kit houses, a well, 105 props, tree
 clusters, a pond and three paths) was built and reviewed from four camera angles, character
 traversal was measured in a playtest, and streaming was checked on the client. Everything marked
-"verified" was seen working in that session. Numbers marked "guideline" are SealCode defaults, not
+"verified" was seen working in that session. Numbers marked "guideline" are Harp defaults, not
 benchmarks.
 
 Load this file when you must build, dress or review a map or scene that has to look good. The

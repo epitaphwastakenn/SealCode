@@ -9,7 +9,11 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import type * as Path from "effect/Path";
+import * as Fiber from "effect/Fiber";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -21,17 +25,15 @@ type EnvironmentPatch = Record<string, string>;
 interface ShellEnvironmentConfig {
   readonly env: NodeJS.ProcessEnv;
   readonly platform: NodeJS.Platform;
-}
-
-interface WindowsProbeOptions {
-  readonly loadProfile: boolean;
+  readonly path: Path.Path;
+  readonly windowsCache: { readonly directory: string; readonly path: string };
+  readonly runInBackground: (effect: Effect.Effect<void>) => Effect.Effect<void>;
 }
 
 const DesktopShellEnvironmentProbe = Schema.Literals([
   "login-shell",
   "launchctl-path",
   "powershell-profile",
-  "powershell-no-profile",
 ]);
 type DesktopShellEnvironmentProbe = typeof DesktopShellEnvironmentProbe.Type;
 
@@ -70,6 +72,8 @@ export class DesktopShellEnvironment extends Context.Service<
   {
     // Reuses the installation result; false leaves server hydration enabled.
     readonly installIntoProcess: Effect.Effect<boolean>;
+    // Completes once the profile probe that follows a cached install has finished.
+    readonly backgroundRefresh: Effect.Effect<void>;
   }
 >()("@t3tools/desktop/shell/DesktopShellEnvironment") {}
 
@@ -97,9 +101,19 @@ const LOGIN_SHELL_ENV_NAMES = [
   "__MISE_DIFF",
 ] as const;
 const WINDOWS_PROFILE_ENV_NAMES = ["PATH", "FNM_DIR", "FNM_MULTISHELL_PATH"] as const;
+const WINDOWS_SHELL_CACHE_FILE = "shell-environment.json";
+const WindowsShellCache = Schema.Struct({
+  version: Schema.Literal(1),
+  environment: Schema.Record(Schema.String, Schema.String),
+});
+const decodeWindowsShellCache = Schema.decodeUnknownOption(
+  Schema.fromJsonString(WindowsShellCache),
+);
+const encodeWindowsShellCache = Schema.encodeSync(Schema.fromJsonString(WindowsShellCache));
 const LOCALE_ENV_NAMES = ["LANG", "LC_ALL", "LC_CTYPE"] as const;
 const FALLBACK_LC_CTYPE = "en_US.UTF-8";
 const WINDOWS_SHELL_CANDIDATES = ["pwsh.exe", "powershell.exe"] as const;
+const OPTIONAL_WINDOWS_SHELLS: ReadonlySet<string> = new Set(["pwsh.exe"]);
 const LOGIN_SHELL_TIMEOUT = Duration.seconds(5);
 const LAUNCHCTL_TIMEOUT = Duration.seconds(2);
 const PROCESS_TERMINATE_GRACE = Duration.seconds(1);
@@ -323,66 +337,164 @@ const readLaunchctlPath = runCommandOutput({
   timeout: LAUNCHCTL_TIMEOUT,
 }).pipe(Effect.map(trimNonEmpty));
 
-const readWindowsEnvironment = Effect.fn("desktop.shellEnvironment.readWindowsEnvironment")(
-  function* (
-    names: ReadonlyArray<string>,
-    options: WindowsProbeOptions,
-  ): Effect.fn.Return<EnvironmentPatch, never, ChildProcessSpawner.ChildProcessSpawner> {
-    if (names.length === 0) return {};
-
-    const args = [
-      "-NoLogo",
-      ...(options.loadProfile ? ([] as const) : (["-NoProfile"] as const)),
-      "-NonInteractive",
-      "-Command",
-      captureWindowsEnvironmentCommand(names),
-    ];
-
-    for (const command of WINDOWS_SHELL_CANDIDATES) {
-      const output = yield* runCommandOutput({
-        probe: options.loadProfile ? "powershell-profile" : "powershell-no-profile",
-        command,
-        args,
-        timeout: LOGIN_SHELL_TIMEOUT,
-      });
-      const environment = extractEnvironment(output, names);
-      if (Object.keys(environment).length > 0) {
-        return environment;
-      }
+// Only an install that is positively absent is skipped; an unreadable entry still gets a try.
+const isOnPath = Effect.fn("desktop.shellEnvironment.isOnPath")(function* (
+  name: string,
+  config: Pick<ShellEnvironmentConfig, "env" | "path">,
+): Effect.fn.Return<boolean, never, FileSystem.FileSystem> {
+  const fileSystem = yield* FileSystem.FileSystem;
+  for (const entry of readEnvPath(config.env).pipe(
+    Option.map((value) => value.split(";")),
+    Option.getOrElse(() => [] as string[]),
+  )) {
+    const directory = sanitizePathEntry(entry.trim(), "win32");
+    if (directory.length === 0) continue;
+    if (
+      yield* fileSystem
+        .exists(config.path.join(directory, name))
+        .pipe(Effect.orElseSucceed(() => true))
+    ) {
+      return true;
     }
+  }
+  return false;
+});
 
-    return {};
+const readWindowsProfileEnvironment = Effect.fn(
+  "desktop.shellEnvironment.readWindowsProfileEnvironment",
+)(function* (
+  config: Pick<ShellEnvironmentConfig, "env" | "path">,
+): Effect.fn.Return<
+  EnvironmentPatch,
+  never,
+  ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem
+> {
+  const args = [
+    "-NoLogo",
+    "-NonInteractive",
+    "-Command",
+    captureWindowsEnvironmentCommand(WINDOWS_PROFILE_ENV_NAMES),
+  ];
+
+  for (const command of WINDOWS_SHELL_CANDIDATES) {
+    if (OPTIONAL_WINDOWS_SHELLS.has(command) && !(yield* isOnPath(command, config))) continue;
+    const output = yield* runCommandOutput({
+      probe: "powershell-profile",
+      command,
+      args,
+      timeout: LOGIN_SHELL_TIMEOUT,
+    });
+    const environment = extractEnvironment(output, WINDOWS_PROFILE_ENV_NAMES);
+    if (Object.keys(environment).length > 0) {
+      return environment;
+    }
+  }
+
+  return {};
+});
+
+const applyWindowsProfileEnvironment = (
+  env: NodeJS.ProcessEnv,
+  profile: EnvironmentPatch,
+): void => {
+  const mergedPath = mergePaths("win32", [
+    trimNonEmpty(profile.PATH),
+    trimNonEmpty(knownWindowsCliDirs(env).join(";")),
+    readEnvPath(env),
+  ]);
+
+  if (Option.isSome(mergedPath)) {
+    setWindowsPath(env, mergedPath.value);
+  }
+  if (!env.FNM_DIR && profile.FNM_DIR) {
+    env.FNM_DIR = profile.FNM_DIR;
+  }
+  if (!env.FNM_MULTISHELL_PATH && profile.FNM_MULTISHELL_PATH) {
+    env.FNM_MULTISHELL_PATH = profile.FNM_MULTISHELL_PATH;
+  }
+};
+
+const readWindowsShellCache = Effect.fn("desktop.shellEnvironment.readWindowsShellCache")(
+  function* (
+    cachePath: string,
+  ): Effect.fn.Return<Option.Option<EnvironmentPatch>, never, FileSystem.FileSystem> {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const contents = yield* fileSystem
+      .readFileString(cachePath)
+      .pipe(Effect.orElseSucceed(() => ""));
+    return decodeWindowsShellCache(contents).pipe(
+      Option.map(({ environment }) => {
+        const profile: EnvironmentPatch = {};
+        for (const name of WINDOWS_PROFILE_ENV_NAMES) {
+          const value = environment[name];
+          if (value !== undefined && value.length > 0) profile[name] = value;
+        }
+        return profile;
+      }),
+      Option.filter((profile) => profile.PATH !== undefined),
+    );
   },
 );
 
+const writeWindowsShellCache = Effect.fn("desktop.shellEnvironment.writeWindowsShellCache")(
+  function* (
+    cache: ShellEnvironmentConfig["windowsCache"],
+    profile: EnvironmentPatch,
+  ): Effect.fn.Return<void, never, FileSystem.FileSystem> {
+    const fileSystem = yield* FileSystem.FileSystem;
+    yield* fileSystem.makeDirectory(cache.directory, { recursive: true }).pipe(
+      Effect.andThen(
+        fileSystem.writeFileString(
+          cache.path,
+          encodeWindowsShellCache({ version: 1, environment: profile }),
+        ),
+      ),
+      Effect.catch((error) =>
+        Effect.logWarning("Could not cache the PowerShell profile environment.", error),
+      ),
+    );
+  },
+);
+
+// A cached environment is applied immediately and the profile is probed again in the background: a slow profile must not hold the launch.
 const installWindowsEnvironment = Effect.fn("desktop.shellEnvironment.installWindowsEnvironment")(
   function* (
     config: ShellEnvironmentConfig,
-  ): Effect.fn.Return<boolean, never, ChildProcessSpawner.ChildProcessSpawner> {
-    const [noProfile, profile] = yield* Effect.all(
-      [
-        readWindowsEnvironment(["PATH"], { loadProfile: false }),
-        readWindowsEnvironment(WINDOWS_PROFILE_ENV_NAMES, { loadProfile: true }),
-      ],
-      { concurrency: 2 },
+  ): Effect.fn.Return<
+    boolean,
+    never,
+    ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem
+  > {
+    const fileSystem = yield* FileSystem.FileSystem;
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+    const probe = readWindowsProfileEnvironment(config).pipe(
+      Effect.provideService(FileSystem.FileSystem, fileSystem),
+      Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
     );
-    const mergedPath = mergePaths("win32", [
-      trimNonEmpty(profile.PATH),
-      trimNonEmpty(knownWindowsCliDirs(config.env).join(";")),
-      trimNonEmpty(noProfile.PATH),
-      readEnvPath(config.env),
-    ]);
 
-    if (Option.isSome(mergedPath)) {
-      setWindowsPath(config.env, mergedPath.value);
+    const cached = yield* readWindowsShellCache(config.windowsCache.path);
+    if (Option.isSome(cached)) {
+      applyWindowsProfileEnvironment(config.env, cached.value);
+      yield* config.runInBackground(
+        probe.pipe(
+          Effect.flatMap((profile) =>
+            profile.PATH === undefined
+              ? Effect.void
+              : Effect.sync(() => applyWindowsProfileEnvironment(config.env, profile)).pipe(
+                  Effect.andThen(writeWindowsShellCache(config.windowsCache, profile)),
+                  Effect.provideService(FileSystem.FileSystem, fileSystem),
+                ),
+          ),
+        ),
+      );
+      return true;
     }
-    if (!config.env.FNM_DIR && profile.FNM_DIR) {
-      config.env.FNM_DIR = profile.FNM_DIR;
-    }
-    if (!config.env.FNM_MULTISHELL_PATH && profile.FNM_MULTISHELL_PATH) {
-      config.env.FNM_MULTISHELL_PATH = profile.FNM_MULTISHELL_PATH;
-    }
-    return Boolean(noProfile.PATH && profile.PATH);
+
+    const profile = yield* probe;
+    applyWindowsProfileEnvironment(config.env, profile);
+    if (profile.PATH === undefined) return false;
+    yield* writeWindowsShellCache(config.windowsCache, profile);
+    return true;
   },
 );
 
@@ -511,11 +623,22 @@ export const make = Effect.gen(function* () {
   const environment = yield* DesktopEnvironment.DesktopEnvironment;
   const fileSystem = yield* FileSystem.FileSystem;
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const scope = yield* Scope.Scope;
+  const backgroundFiber = yield* Ref.make(Option.none<Fiber.Fiber<void>>());
   const installIntoProcess: DesktopShellEnvironment["Service"]["installIntoProcess"] =
     yield* Effect.cached(
       installShellEnvironment({
         env: process.env,
         platform: environment.platform,
+        path: environment.path,
+        windowsCache: {
+          directory: environment.stateDir,
+          path: environment.path.join(environment.stateDir, WINDOWS_SHELL_CACHE_FILE),
+        },
+        runInBackground: (effect) =>
+          Effect.forkIn(effect, scope).pipe(
+            Effect.flatMap((fiber) => Ref.set(backgroundFiber, Option.some(fiber))),
+          ),
       }).pipe(
         Effect.provideService(FileSystem.FileSystem, fileSystem),
         Effect.provideService(ChildProcessSpawner.ChildProcessSpawner, spawner),
@@ -523,7 +646,12 @@ export const make = Effect.gen(function* () {
       ),
     );
 
-  return DesktopShellEnvironment.of({ installIntoProcess });
+  return DesktopShellEnvironment.of({
+    installIntoProcess,
+    backgroundRefresh: Ref.get(backgroundFiber).pipe(
+      Effect.flatMap(Option.match({ onNone: () => Effect.void, onSome: Fiber.join })),
+    ),
+  });
 });
 
 export const layer = Layer.effect(DesktopShellEnvironment, make);

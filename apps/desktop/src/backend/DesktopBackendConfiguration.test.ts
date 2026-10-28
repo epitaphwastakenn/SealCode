@@ -22,6 +22,7 @@ import * as DesktopWslServerTree from "../wsl/DesktopWslServerTree.ts";
 const layerShellEnvironment = (prepared = true) =>
   Layer.succeed(DesktopShellEnvironment.DesktopShellEnvironment, {
     installIntoProcess: Effect.succeed(prepared),
+    backgroundRefresh: Effect.void,
   });
 
 const layerBackendConfiguration = (prepared = true) =>

@@ -541,6 +541,22 @@ export const SETTINGS_SEARCH_ITEMS = [
     searchTerms: ["queue steer running turn send default behavior composer"],
   },
   {
+    id: "suggest-next-prompt",
+    title: "Suggest the next prompt",
+    to: "/settings/general",
+    searchTerms: ["autocomplete ghost text tab accept predicted follow-up composer claude"],
+    scope: "environment-defaults",
+  },
+  {
+    id: "suggest-next-prompt-other-providers",
+    title: "Also suggest for other providers",
+    to: "/settings/general",
+    searchTerms: [
+      "next prompt suggestion text generation model codex cursor grok opencode antigravity usage cost",
+    ],
+    scope: "environment-defaults",
+  },
+  {
     id: "diff-presentation",
     title: "Diff presentation",
     to: "/settings/general",

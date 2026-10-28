@@ -449,6 +449,8 @@ export interface ChatComposerProps {
 
   showPlanFollowUpPrompt: boolean;
   activeProposedPlan: LatestProposedPlanState | null;
+  /** The agent's suggested next message, once its newest turn has finished; null otherwise. */
+  promptSuggestion: string | null;
   activeTasksProgress: ComposerTasksProgress | null;
   activeTaskSteps: readonly ComposerTaskStep[] | null;
   threadSyncPhase: ThreadSyncPhase | null;
@@ -591,6 +593,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     activePendingQuestionIndex,
     respondingRequestIds,
     showPlanFollowUpPrompt,
+    promptSuggestion,
     activeProposedPlan,
     runtimeMode,
     interactionMode: requestedInteractionMode,
@@ -1244,6 +1247,21 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
   const nonPersistedComposerImageIdSet = new Set(nonPersistedComposerImageIds);
 
   const isComposerApprovalState = activePendingApproval !== null;
+  // Only a quiet, empty composer offers it, so it never competes with a question, a plan, or a draft.
+  const visiblePromptSuggestion =
+    promptSuggestion !== null &&
+    settings.suggestNextPrompt &&
+    phase !== "running" &&
+    !isConnecting &&
+    !projectSelectionRequired &&
+    !isEditingQueuedMessage &&
+    !isComposerApprovalState &&
+    pendingUserInputs.length === 0 &&
+    !showPlanFollowUpPrompt &&
+    prompt.length === 0 &&
+    !composerDraftHasUserContent(composerDraft)
+      ? promptSuggestion
+      : null;
   // A send declines the approvals shown here to redirect the agent, so it steers the waiting
   // turn instead of queueing behind it. Approvals the typing guard holds stay unseen and pending.
   const followUpBehavior = pendingApprovals.some(
@@ -2407,6 +2425,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       planModeUiEnabled,
       isLiteralPendingAnswer,
       pendingUserInputs,
+      promptSuggestion: visiblePromptSuggestion,
       promptHistoryMessages,
       promptHistoryPositionRef,
       composerDraftTarget,
@@ -3985,6 +4004,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     onCitationSubmitAndSend={submitCitationAndSendStable}
                     onCitationDraftSave={saveCitationDraftToPromptStable}
                     onPaste={onComposerPasteStable}
+                    suggestion={visiblePromptSuggestion}
                     placeholder={
                       isComposerApprovalState
                         ? activePendingApproval?.supportsFeedback

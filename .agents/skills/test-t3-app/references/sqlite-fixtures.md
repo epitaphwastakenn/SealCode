@@ -1,6 +1,6 @@
 # SQLite fixtures
 
-Load this reference only when inspecting or seeding local SealCode state directly.
+Load this reference only when inspecting or seeding local Harp state directly.
 
 ## Select the correct database
 

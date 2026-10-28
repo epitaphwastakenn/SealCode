@@ -1,11 +1,11 @@
 ---
-description: Cursor Cloud environment setup and run notes for SealCode (Cursor-specific; not for other editors/CI)
+description: Cursor Cloud environment setup and run notes for Harp (Cursor-specific; not for other editors/CI)
 alwaysApply: true
 ---
 
 # Cursor Cloud specific instructions
 
-These notes apply only to Cursor Cloud agents (kept out of the shared `AGENTS.md` since SealCode is
+These notes apply only to Cursor Cloud agents (kept out of the shared `AGENTS.md` since Harp is
 developed in many places). They cover the pre-provisioned VM environment and non-obvious run caveats.
 
 ## Toolchain

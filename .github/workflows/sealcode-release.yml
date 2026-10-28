@@ -1,4 +1,4 @@
-name: SealCode release
+name: Harp release
 
 # Pushing a vX.Y.Z tag builds the Windows installer and publishes it as this
 # repository's latest GitHub Release. Installed copies read that release's
@@ -114,7 +114,7 @@ jobs:
             --build-version "$VERSION" --skip-build --verbose
           # Without the feed manifest installed copies would never see this release.
           test -f release/latest.yml
-          test -f "release/SealCode-$VERSION-x64.exe"
+          test -f "release/Harp-$VERSION-x64.exe"
 
       - name: Publish GitHub Release
         shell: bash
@@ -123,7 +123,7 @@ jobs:
           GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
-          assets=("release/SealCode-$VERSION-x64.exe" "release/SealCode-$VERSION-x64.exe.blockmap" release/latest.yml)
+          assets=("release/Harp-$VERSION-x64.exe" "release/Harp-$VERSION-x64.exe.blockmap" release/latest.yml)
           # The version's CHANGELOG.md section is the release body, the same notes What's New shows.
           awk -v v="$VERSION" '$0 ~ "^## " { if (found) exit; found = ($2 == v); next } found'             CHANGELOG.md > release-notes.md
           if [ -s release-notes.md ]; then
@@ -135,5 +135,5 @@ jobs:
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" "${assets[@]}" --clobber
           else
-            gh release create "$TAG" "${assets[@]}" --title "SealCode $VERSION" "${notes[@]}" --latest
+            gh release create "$TAG" "${assets[@]}" --title "Harp $VERSION" "${notes[@]}" --latest
           fi

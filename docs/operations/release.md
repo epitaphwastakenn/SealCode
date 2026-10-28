@@ -1,8 +1,8 @@
 # Release Checklist
 
-> For maintainers. Using SealCode? See [docs/user](../user/).
+> For maintainers. Using Harp? See [docs/user](../user/).
 
-SealCode ships a Windows x64 NSIS installer through `.github/workflows/sealcode-release.yml`.
+Harp ships a Windows x64 NSIS installer through `.github/workflows/sealcode-release.yml`.
 Pushing a `vX.Y.Z` tag (or dispatching the workflow with an existing tag) builds the installer,
 stamps the tag's version into the app and server, and publishes it as the repository's latest
 GitHub Release with `latest.yml` and the blockmap. The release notes are the version's section of

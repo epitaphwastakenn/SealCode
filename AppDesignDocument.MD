@@ -1,8 +1,8 @@
-# SealCode — App Design Document
+# Harp — App Design Document
 
 ## Objetivo
 
-Reconstruir o SealCode sobre a base do T3Code como um aplicativo desktop/web para desenvolvimento assistido por múltiplos agentes de IA. O produto deve manter o usuário em uma thread única do SealCode, mesmo quando a sessão nativa do provider muda.
+Reconstruir o Harp sobre a base do T3Code como um aplicativo desktop/web para desenvolvimento assistido por múltiplos agentes de IA. O produto deve manter o usuário em uma thread única do Harp, mesmo quando a sessão nativa do provider muda.
 
 Este documento descreve o produto-alvo, os contratos funcionais e as prioridades de reconstrução. A versão Android foi removida do escopo.
 
@@ -32,12 +32,12 @@ Fora do escopo:
 
 ## Identidade
 
-Toda a identidade pública deve usar SealCode:
+Toda a identidade pública deve usar Harp:
 
-- nome do produto: `SealCode`;
-- variante atual: `SealCode (Alpha)`;
-- executável e instalador com nome SealCode;
-- ícone SealCode no aplicativo, instalador, atalhos, notificações e telas de erro;
+- nome do produto: `Harp`;
+- variante atual: `Harp (Alpha)`;
+- executável e instalador com nome Harp;
+- ícone Harp no aplicativo, instalador, atalhos, notificações e telas de erro;
 - nenhuma menção visível a T3Code ou T3 Code.
 
 Referências técnicas legadas só podem permanecer quando forem necessárias para compatibilidade, e devem ser documentadas.
@@ -46,7 +46,7 @@ Referências técnicas legadas só podem permanecer quando forem necessárias pa
 
 Separar os conceitos abaixo:
 
-- `SealCode thread`: conversa visual persistente do produto;
+- `Harp thread`: conversa visual persistente do produto;
 - `provider`: Codex, Antigravity, Claude, Cursor, Grok, OpenCode ou CommandCode;
 - `native session`: sessão real mantida pelo provider;
 - `model`: modelo atualmente usado na sessão;
@@ -56,13 +56,13 @@ Separar os conceitos abaixo:
 Uma thread pode conter várias sessões nativas:
 
 ```text
-SealCode thread
+Harp thread
 ├── Codex native session
 ├── Antigravity native session
 └── OpenCode native session
 ```
 
-O SealCode não deve criar uma thread de orquestração separada para cada provider.
+O Harp não deve criar uma thread de orquestração separada para cada provider.
 
 ## Providers e harnesses
 
@@ -106,7 +106,7 @@ Adicionar adapters usando o contrato comum, preservando provider, modelo, autent
 
 ### Objetivo
 
-O usuário permanece na mesma thread do SealCode, enquanto cada provider mantém sua própria sessão nativa. Ao trocar de provider e enviar uma mensagem, o contexto mais recente deve ser transferido antes do novo prompt ser processado.
+O usuário permanece na mesma thread do Harp, enquanto cada provider mantém sua própria sessão nativa. Ao trocar de provider e enviar uma mensagem, o contexto mais recente deve ser transferido antes do novo prompt ser processado.
 
 ### Exemplo
 
@@ -131,7 +131,7 @@ Fluxo obrigatório:
 5. O prompt original fica pendente e não é enviado ao destino ainda.
 6. O provider anterior recebe uma instrução interna de handoff.
 7. O provider anterior gera um resumo estruturado sem editar arquivos e sem executar ferramentas.
-8. O destino inicia ou recupera sua sessão nativa dentro da mesma thread do SealCode.
+8. O destino inicia ou recupera sua sessão nativa dentro da mesma thread do Harp.
 9. O destino recebe o resumo e o prompt original no mesmo `sendTurn`.
 10. A resposta do destino aparece normalmente no histórico visual.
 
@@ -190,7 +190,7 @@ O runtime, os adapters e o armazenamento devem respeitar essa finalidade.
 Persistir o handoff associado a:
 
 - mensagem original;
-- thread do SealCode;
+- thread do Harp;
 - provider de origem;
 - modelo de origem;
 - provider destino;
@@ -429,7 +429,7 @@ Gerar:
 - instalador NSIS Windows x64;
 - artefato portable quando possível.
 
-O instalador deve conter o app compilado, assets, runtime necessário e branding SealCode. A versão deve ser verificável no executável e no instalador.
+O instalador deve conter o app compilado, assets, runtime necessário e branding Harp. A versão deve ser verificável no executável e no instalador.
 
 ## Testes de aceitação
 
@@ -503,4 +503,4 @@ abrir projeto
 
 ## Critério de conclusão
 
-O SealCode está reconstruído quando o usuário consegue trabalhar em uma única thread, alternar entre providers sem perder contexto, usar modelos customizados, interpretar imagens via visualizador Codex, recuperar sessões após falhas, trabalhar em pastas sem Git, personalizar a interface e controlar a instância desktop remotamente.
+O Harp está reconstruído quando o usuário consegue trabalhar em uma única thread, alternar entre providers sem perder contexto, usar modelos customizados, interpretar imagens via visualizador Codex, recuperar sessões após falhas, trabalhar em pastas sem Git, personalizar a interface e controlar a instância desktop remotamente.

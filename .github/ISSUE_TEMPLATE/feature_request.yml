@@ -1,5 +1,5 @@
 name: Feature request
-description: Suggest a tool, workflow, or improvement for game development with SealCode.
+description: Suggest a tool, workflow, or improvement for game development with Harp.
 title: "[Idea]: "
 labels:
   - enhancement
@@ -7,7 +7,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        SealCode aims to be the tool every Roblox developer can rely on, with UEFN next.
+        Harp aims to be the tool every Roblox developer can rely on, with UEFN next.
         Tell us what would make your game development faster or better. One idea per issue.
 
   - type: textarea
@@ -23,7 +23,7 @@ body:
     id: idea
     attributes:
       label: What would help?
-      description: How you imagine SealCode helping. Screenshots or examples from other tools are welcome.
+      description: How you imagine Harp helping. Screenshots or examples from other tools are welcome.
     validations:
       required: true
 

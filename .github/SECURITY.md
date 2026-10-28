@@ -1,6 +1,6 @@
 # Security policy
 
-Please report security vulnerabilities in SealCode privately, through
+Please report security vulnerabilities in Harp privately, through
 [Report a vulnerability](https://github.com/epitaphwastakenn/SealCode/security/advisories/new) on this
 repository's Security tab. Do not open a public issue for them.
 

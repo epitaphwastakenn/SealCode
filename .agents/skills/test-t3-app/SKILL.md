@@ -1,11 +1,11 @@
 ---
 name: test-t3-app
-description: Test SealCode's web and desktop UI through its built-in Browser panel against isolated development state. Use for browser verification, browser pairing recovery, and test fixtures.
+description: Test Harp's web and desktop UI through its built-in Browser panel against isolated development state. Use for browser verification, browser pairing recovery, and test fixtures.
 ---
 
-# Test SealCode web and desktop
+# Test Harp web and desktop
 
-Use SealCode's built-in Browser panel for verification. If its tools are absent or
+Use Harp's built-in Browser panel for verification. If its tools are absent or
 the panel reports unavailable, explain the blocker and stop verification.
 Do not install or switch to another automation system.
 
@@ -24,7 +24,7 @@ inspecting or seeding SQLite. Stop the test server before direct fixture writes.
 
 Call `preview_status`, then `preview_open` if the Browser panel is
 closed. Navigate to the complete startup pairing URL once with
-`preview_navigate`, then use `preview_snapshot` and SealCode's interaction tools.
+`preview_navigate`, then use `preview_snapshot` and Harp's interaction tools.
 If the token was consumed or expired, run `node apps/server/src/bin.ts pair`
 for a fresh one. Keep using the same tab.
 

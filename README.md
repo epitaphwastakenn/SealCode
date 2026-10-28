@@ -1,18 +1,20 @@
-# SealCode
+# Harp
 
 **Made by a game developer, for game developers.**
 
-SealCode is a desktop app for working with AI coding agents on games. It started as a fork of
+Harp is a desktop app for working with AI coding agents on games. It started as a fork of
 [T3 Code](https://github.com/pingdotgg/t3code) and grew into a workspace for game development: Roblox Studio,
 Blender and your agents in one window. Projects, threads, diffs, terminals and usage all stay together.
 
-Bring your own subscriptions. SealCode runs the agents you already pay for, on your own machine:
+Harp was formerly called SealCode. It is the same app, and installed copies update in place.
+
+Bring your own subscriptions. Harp runs the agents you already pay for, on your own machine:
 Claude Code, Codex, Antigravity, Cursor, Grok Build, OpenCode and CommandCode.
 
-## Why SealCode
+## Why Harp
 
 Generic coding agents know code, but they don't know your engine. They can't see your place in Studio,
-check the UI they just built on a phone screen, or tell whether a mesh will import cleanly. SealCode
+check the UI they just built on a phone screen, or tell whether a mesh will import cleanly. Harp
 gives agents the tools and the know-how to work inside your game, not just next to it.
 
 You stay the designer and decide what the game should be. The agent does the repetitive work: building,
@@ -20,7 +22,7 @@ scripting, wiring up UI, testing and checking. You review each change in a diff 
 
 ## Roblox development
 
-SealCode has its own Roblox Studio plugin and connector, built for agents. Any agent can work directly in
+Harp has its own Roblox Studio plugin and connector, built for agents. Any agent can work directly in
 your open place, and you watch and steer it from a panel inside Studio:
 
 - **Live Studio tools.** Read and edit the place, run atomic builds that are one undo step, and edit
@@ -34,13 +36,13 @@ your open place, and you watch and steer it from a panel inside Studio:
   sci-fi and fantasy styles, plus checks on phones, tablets, PCs and TV with Studio's device simulator.
 - **A Studio panel you control.** See every action as it happens, pause the agent, make the place
   read-only, or switch off any single tool.
-- **Updates without restarts.** The plugin updates itself in place when SealCode updates, and agents
+- **Updates without restarts.** The plugin updates itself in place when Harp updates, and agents
   close old Studio windows instead of piling new ones up.
 - **31 Roblox skills.** Luau and types, architecture, networking and security, DataStores, UI design,
   game design, monetization, performance, lighting, audio, physics, NPC AI, localization, analytics and
   a publish checklist, loaded only when a task needs them.
 - **Rojo aware.** When your workspace has a Rojo project, script edits are saved to your files.
-- **Roblox's own Studio MCP** can run next to SealCode's for mesh, texture and material generation.
+- **Roblox's own Studio MCP** can run next to Harp's for mesh, texture and material generation.
 
 Only Roblox projects get the Studio tools, so other projects don't pay for them. See
 [Roblox Studio](./docs/user/roblox-studio.md).
@@ -75,7 +77,7 @@ The tools you work in all day should feel like yours:
   terminal and checkpoints, so you can roll any turn back.
 - **Usage at a glance.** A usage ring in the composer, plus a thread panel showing the session, the context
   window and the MCP servers in use.
-- **Automatic updates.** SealCode updates itself from GitHub releases. After every update, **What's new**
+- **Automatic updates.** Harp updates itself from GitHub releases. After every update, **What's new**
   shows what changed.
 - **Remote ready.** Drive your desktop's agents from a phone or another machine. See
   [Remote access](./docs/user/remote-access.md).
@@ -102,7 +104,7 @@ Then install and sign in to at least one agent:
 - **OpenCode:** install [OpenCode](https://opencode.ai) and run `opencode auth login`
 - **CommandCode:** install its `commandcode` CLI and sign in
 
-For Roblox, open **Settings → Connections → Roblox Studio** and choose **SealCode**. The Studio plugin installs itself.
+For Roblox, open **Settings → Connections → Roblox Studio** and choose **Harp**. The Studio plugin installs itself.
 
 ### Run from source
 
@@ -132,18 +134,18 @@ User guides live in [docs/user](./docs/user):
 - [Keyboard shortcuts](./docs/user/keybindings.md)
 - [Remote access](./docs/user/remote-access.md)
 
-Working on SealCode itself? Start at [docs/internals/overview.md](./docs/internals/overview.md).
+Working on Harp itself? Start at [docs/internals/overview.md](./docs/internals/overview.md).
 
 ## Status
 
-SealCode is early and changes quickly, so expect rough edges.
+Harp is early and changes quickly, so expect rough edges.
 
 We are not accepting contributions yet: please don't open pull requests for now. Bug reports and ideas are
 welcome as issues.
 
 ## Credits
 
-SealCode is a fork of [T3 Code](https://github.com/pingdotgg/t3code) by Theo Browne, Julius
+Harp is a fork of [T3 Code](https://github.com/pingdotgg/t3code) by Theo Browne, Julius
 Marminge and the T3 Code contributors, released under the MIT license. Thank you for the foundation.
 Its Roblox skills build on [roblox-brain](https://github.com/TabooHarmony/roblox-brain) by
 TabooHarmony (MIT). See [open source licenses](./docs/user/open-source-licenses.md).

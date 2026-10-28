@@ -16,7 +16,7 @@ Project
 
 The central separation is:
 
-- `AppThread`: the user-visible conversation in SealCode.
+- `AppThread`: the user-visible conversation in Harp.
 - `Run`: a counted user-visible turn on an app thread.
 - `ExecutionNode`: a unit of provider/runtime work inside a run.
 - `ProviderThread`: a provider-native conversation handle.

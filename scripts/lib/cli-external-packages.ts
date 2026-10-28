@@ -54,8 +54,14 @@ export function selectCliRuntimeExternalDependencies(
   );
 }
 
-/** regionCount distinguishes a clean bundle from a changed marker format the scan cannot see. */
-export function findInlinedExternalPackages(source: string): {
+/**
+ * regionCount distinguishes a clean bundle from a changed marker format the scan cannot see.
+ * A minified bundle has no region comments; its source map lists the same modules.
+ */
+export function findInlinedExternalPackages(
+  source: string,
+  sourceMap?: string,
+): {
   readonly regionCount: number;
   readonly inlined: ReadonlyArray<string>;
   readonly inlinedPackages: ReadonlyArray<string>;
@@ -68,9 +74,16 @@ export function findInlinedExternalPackages(source: string): {
   let regionCount = 0;
   const inlined = new Set<string>();
   const inlinedPackages = new Set<string>();
-  for (const region of source.matchAll(regionPattern)) {
+  const regionPaths = [...source.matchAll(regionPattern)].map((region) => region[1] ?? "");
+  if (sourceMap !== undefined) {
+    const parsed: unknown = JSON.parse(sourceMap);
+    const sources = (parsed as { readonly sources?: unknown }).sources;
+    if (Array.isArray(sources)) {
+      regionPaths.push(...sources.filter((entry): entry is string => typeof entry === "string"));
+    }
+  }
+  for (const regionPath of regionPaths) {
     regionCount += 1;
-    const regionPath = region[1] ?? "";
     for (const candidate of regionPath.matchAll(packagePattern)) {
       const name = candidate[1];
       if (name === undefined || name === ".pnpm") continue;

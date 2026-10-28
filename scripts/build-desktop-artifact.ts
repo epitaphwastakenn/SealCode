@@ -3122,7 +3122,9 @@ const buildDesktopArtifactUnlocked = Effect.fn("buildDesktopArtifactUnlocked")(f
     const inlinedPackages = new Set<string>();
     for (const chunkName of chunkNames) {
       const source = yield* fs.readFileString(path.join(distDirs.serverDist, chunkName));
-      const scan = findInlinedExternalPackages(source);
+      const mapPath = path.join(distDirs.serverDist, `${chunkName}.map`);
+      const sourceMap = (yield* fs.exists(mapPath)) ? yield* fs.readFileString(mapPath) : undefined;
+      const scan = findInlinedExternalPackages(source, sourceMap);
       totalRegions += scan.regionCount;
       for (const name of scan.inlined) inlined.add(name);
       for (const name of scan.inlinedPackages) inlinedPackages.add(name);

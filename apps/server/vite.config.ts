@@ -47,6 +47,12 @@ export default mergeConfig(
       entry: ["src/bin.ts", "src/claude-history-worker.ts"],
       outDir: "dist",
       sourcemap: true,
+      // One non-Latin-1 character makes V8 hold the whole bundle in two bytes per character, so the
+      // output is escaped to ASCII. `undici`'s `constructor.name` check is the reason class names stay.
+      minify: {
+        mangle: { keepNames: { function: false, class: true } },
+        codegen: { asciiOnly: true },
+      },
       clean: true,
       deps: {
         // alwaysBundle=false has no opinion; neverBundle must retain transitive native acceleration.

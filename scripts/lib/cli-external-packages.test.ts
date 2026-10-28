@@ -148,6 +148,22 @@ var x = 1;
     assert.deepStrictEqual(result.inlined, []);
   });
 
+  it("reads a minified bundle's modules from its source map", () => {
+    const sourceMap = JSON.stringify({
+      version: 3,
+      sources: [
+        "../../../node_modules/.pnpm/effect@4.0.5/node_modules/effect/dist/Effect.js",
+        "../../../node_modules/.pnpm/node-addon-api@7.1.1/node_modules/node-addon-api/index.js",
+        "../src/bin.ts",
+      ],
+    });
+    const result = findInlinedExternalPackages("var a=1;", sourceMap);
+
+    assert.strictEqual(result.regionCount, 3);
+    assert.deepStrictEqual(result.inlinedPackages, ["effect", "node-addon-api"]);
+    assert.deepStrictEqual(result.inlined, ["node-addon-api"]);
+  });
+
   it("reads the plain `// <path>` markers newer Rolldown emits", () => {
     const source = [
       "// \0rolldown/runtime.js",

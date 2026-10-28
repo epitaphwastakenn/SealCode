@@ -10,6 +10,19 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
+## 2.17.13 · 2026-10-27
+
+> SealCode opens faster, uses about a quarter less memory, and changes themes without freezing.
+
+### Improved
+
+- **Lighter while opening** — SealCode no longer starts a full Claude Code session, the CommandCode CLI or MCP servers such as Blender's while it opens. Status comes from quick checks and saved results, and an MCP server starts on its first tool call. In our tests, memory right after opening went from about 980 MB to 730 MB, and idle memory from about 880 MB to 600 MB.
+- **The window shows sooner** — The window is prepared while the server starts, the Windows PATH lookup is remembered between launches, and the first screen loads 11% less code.
+- **Smooth theme changes** — Changing the theme or applying a preset happens in one step: colors apply at once, only what depends on light or dark repaints, and the backdrop image is not processed again.
+- **Threads open faster** — Messages are parsed once and reused, very large code blocks appear right away and get their colors afterwards, and the server no longer reads command output and diffs the thread view doesn't show.
+- **Quieter in the background** — Updates are checked every 4 hours instead of every 4 minutes, and the app no longer polls itself every few seconds.
+- **SealCode everywhere** — The app, its messages and its docs now say SealCode, with credit to T3 Code's creators in Settings → About. Command hints use SealCode's own `t3` command instead of `npx t3`, which installed T3 Code.
+
 ## 2.17.12 · 2026-10-27
 
 > SealCode drops the parts of T3 Code that have nothing to do with making games, and no longer sends usage data to T3.

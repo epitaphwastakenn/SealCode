@@ -239,4 +239,11 @@ const layerDesktopRuntime = layerDesktopAppLinks.pipe(
   Layer.provideMerge(DesktopPreReadyPlatform.layer),
 );
 
+// The network service in the browser process saves ~45 MB; Chrome does the same on low-memory devices.
+const enabledFeatures = Electron.app.commandLine.getSwitchValue("enable-features");
+Electron.app.commandLine.appendSwitch(
+  "enable-features",
+  [enabledFeatures, "NetworkServiceInProcess2"].filter(Boolean).join(","),
+);
+
 DesktopApp.program.pipe(Effect.provide(layerDesktopRuntime), NodeRuntime.runMain);

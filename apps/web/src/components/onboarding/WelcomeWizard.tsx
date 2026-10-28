@@ -78,7 +78,7 @@ import { readCodexSetupMode } from "../settings/CodexSetupSection.logic";
 import { buildProviderInstanceUpdatePatch } from "../settings/SettingsPanels.logic";
 import { TerminalViewport } from "../ThreadTerminalDrawer";
 import { ProviderInstanceIcon } from "../chat/ProviderInstanceIcon";
-import { SealCodeMark } from "../SealCodeMark";
+import { HarpGlyph } from "../HarpMark";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Button } from "../ui/button";
 import { CommandBlock } from "../CommandBlock";
@@ -227,7 +227,7 @@ export function WelcomeWizard({
           title="Set up SealCode"
           identity={
             <div className="flex items-center gap-2" role="img" aria-label="SealCode">
-              <SealCodeMark className="size-7 shrink-0 object-contain" aria-hidden />
+              <HarpGlyph className="size-7" />
               <span className="text-2xl font-medium tracking-tight text-muted-foreground">
                 SealCode
               </span>

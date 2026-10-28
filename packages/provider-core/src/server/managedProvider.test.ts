@@ -299,6 +299,43 @@ describe("makeManagedServerProvider", () => {
     ).pipe(Effect.provide(layerAlwaysRunTest)),
   );
 
+  it.effect("tells a reason-aware check why each run happens", () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const settingsRef = yield* Ref.make<TestSettings>({ enabled: true });
+        const settingsChanges = yield* PubSub.unbounded<TestSettings>();
+        const reasons = yield* Ref.make<ReadonlyArray<string>>([]);
+        const provider = yield* makeManagedServerProvider<TestSettings>({
+          resolveMaintenance: () => Effect.succeed(maintenanceCapabilities),
+          getSettings: Ref.get(settingsRef),
+          streamSettings: Stream.fromPubSub(settingsChanges),
+          haveSettingsChanged: (previous, next) => previous.enabled !== next.enabled,
+          initialSnapshot: () => Effect.succeed(initialSnapshot),
+          checkProvider: Effect.die("checkProviderFor replaces it"),
+          checkProviderFor: (reason) =>
+            Ref.update(reasons, (current) => [...current, reason]).pipe(
+              Effect.as(refreshedSnapshot),
+            ),
+          refreshInterval: "1 second",
+        });
+        yield* Effect.yieldNow;
+
+        yield* TestClock.adjust("1 second");
+        yield* provider.refresh;
+        yield* Ref.set(settingsRef, { enabled: false });
+        yield* PubSub.publish(settingsChanges, { enabled: false });
+        yield* Effect.yieldNow;
+
+        assert.deepStrictEqual(yield* Ref.get(reasons), [
+          "startup",
+          "interval",
+          "requested",
+          "settings",
+        ]);
+      }),
+    ).pipe(Effect.provide(Layer.mergeAll(layerAlwaysRunTest, TestClock.layer()))),
+  );
+
   it.effect("streams supplemental snapshot updates after the base provider check completes", () =>
     Effect.scoped(
       Effect.gen(function* () {

@@ -13,6 +13,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
+import * as Schema from "effect/Schema";
 import { ChildProcess, ChildProcessSpawner } from "effect/process";
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
@@ -190,6 +191,7 @@ function claudeAuthStatus(
 const CAPABILITIES_PROBE_TIMEOUT_MS = 25_000;
 // Native CLI startup on Windows can exceed the shared probe deadline.
 const CLAUDE_VERSION_CHECK_TIMEOUT_MS = 20_000;
+const CLAUDE_AUTH_STATUS_TIMEOUT_MS = 20_000;
 
 const CLAUDE_CAPABILITIES_PROBE_SETTING_SOURCES = [
   "user",
@@ -403,7 +405,61 @@ const probeClaudeCapabilities = (
   );
 };
 
-type ClaudeCapabilitiesProbeError = Effect.Error<ReturnType<typeof probeClaudeCapabilities>>;
+export type ClaudeCapabilitiesProbeError = Effect.Error<ReturnType<typeof probeClaudeCapabilities>>;
+
+const OptionalText = Schema.optionalKey(Schema.NullOr(Schema.String));
+const decodeClaudeAuthStatusOutput = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({
+      loggedIn: Schema.Boolean,
+      authMethod: OptionalText,
+      apiProvider: OptionalText,
+      email: OptionalText,
+      orgId: OptionalText,
+      subscriptionType: OptionalText,
+    }),
+  ),
+);
+
+/** What `claude auth status --json` reports; it never starts a Claude Code session. */
+export type ClaudeAuthStatusProbe = {
+  readonly loggedIn: boolean;
+  readonly authMethod: string | undefined;
+  readonly apiProvider: string | undefined;
+  readonly email: string | undefined;
+  readonly subscriptionType: string | undefined;
+};
+
+const textOrUndefined = (value: string | null | undefined) =>
+  value ? nonEmptyProbeString(value) : undefined;
+
+/** Undefined means the CLI could not answer (too old, timed out, odd output), not signed out. */
+export const probeClaudeAuthStatus = Effect.fn("probeClaudeAuthStatus")(function* (
+  claudeSettings: ClaudeSettings,
+  environment?: NodeJS.ProcessEnv,
+  cwd?: string,
+) {
+  const result = yield* runClaudeCommand(
+    claudeSettings,
+    ["auth", "status", "--json"],
+    environment,
+    cwd,
+  ).pipe(Effect.timeoutOption(CLAUDE_AUTH_STATUS_TIMEOUT_MS), Effect.result);
+  if (Result.isFailure(result) || Option.isNone(result.success)) return undefined;
+  const { stdout } = result.success.value;
+  const start = stdout.indexOf("{");
+  const end = stdout.lastIndexOf("}");
+  if (start === -1 || end < start) return undefined;
+  const parsed = decodeClaudeAuthStatusOutput(stdout.slice(start, end + 1));
+  if (Option.isNone(parsed)) return undefined;
+  return {
+    loggedIn: parsed.value.loggedIn,
+    authMethod: textOrUndefined(parsed.value.authMethod),
+    apiProvider: textOrUndefined(parsed.value.apiProvider),
+    email: textOrUndefined(parsed.value.email),
+    subscriptionType: textOrUndefined(parsed.value.subscriptionType),
+  } satisfies ClaudeAuthStatusProbe;
+});
 
 const runClaudeCommand = Effect.fn("runClaudeCommand")(function* (
   claudeSettings: ClaudeSettings,
@@ -428,17 +484,23 @@ export const probeClaudeWorkspaceSnapshot = Effect.fn("probeClaudeWorkspaceSnaps
   machineSnapshot: ServerProvider,
   cwd: string,
   environment?: NodeJS.ProcessEnv,
+  /** Commands from an earlier probe of this cwd; they replace the Claude Code session. */
+  knownSlashCommands?: ReadonlyArray<ServerProviderSlashCommand>,
 ): Effect.fn.Return<ProviderWorkspaceSnapshot, never, FileSystem.FileSystem | Path.Path> {
   if (!claudeSettings.enabled) return machineSnapshot;
   const skills = yield* discoverClaudeSkills(claudeSettings, cwd, environment);
   const fileSystem = yield* FileSystem.FileSystem;
   // A deleted worktree can never answer the probe. Pending would make clients rescan it forever.
   const cwdExists = yield* fileSystem.exists(cwd).pipe(Effect.orElseSucceed(() => true));
-  const probeResult = cwdExists
-    ? yield* probeClaudeCapabilities(claudeSettings, environment, cwd, false).pipe(Effect.result)
-    : undefined;
-  const capabilities =
-    probeResult && Result.isSuccess(probeResult) ? probeResult.success : undefined;
+  const probeResult =
+    cwdExists && !knownSlashCommands
+      ? yield* probeClaudeCapabilities(claudeSettings, environment, cwd, false).pipe(Effect.result)
+      : undefined;
+  const capabilities = knownSlashCommands
+    ? { slashCommands: knownSlashCommands }
+    : probeResult && Result.isSuccess(probeResult)
+      ? probeResult.success
+      : undefined;
   return {
     ...machineSnapshot,
     skills,
@@ -454,6 +516,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   claudeSettings: ClaudeSettings,
   resolveCapabilities?: (
     claudeSettings: ClaudeSettings,
+    cliVersion: string | null,
   ) => Effect.Effect<ClaudeCapabilitiesProbe | undefined, ClaudeCapabilitiesProbeError>,
   environment?: NodeJS.ProcessEnv,
   cwd?: string,
@@ -568,7 +631,7 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
   const versionUpgradeMessage = formatClaudeVersionUpgradeMessage(modelCatalog, parsedVersion);
 
   const probeResult = resolveCapabilities
-    ? yield* resolveCapabilities(claudeSettings).pipe(Effect.result)
+    ? yield* resolveCapabilities(claudeSettings, parsedVersion).pipe(Effect.result)
     : undefined;
   const capabilities =
     probeResult && Result.isSuccess(probeResult) ? probeResult.success : undefined;

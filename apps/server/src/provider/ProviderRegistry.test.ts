@@ -39,7 +39,7 @@ import { createModelCapabilities } from "@t3tools/shared/model";
 import { applyServerSettingsPatch } from "@t3tools/shared/serverSettings";
 
 import { checkCodexProviderStatus, type CodexAppServerProviderSnapshot } from "./CodexProvider.ts";
-import { checkClaudeProviderStatus } from "./ClaudeProvider.ts";
+import { checkClaudeProviderStatus, probeClaudeAuthStatus } from "./ClaudeProvider.ts";
 import * as BackgroundPolicy from "../background/BackgroundPolicy.ts";
 import * as AntigravityInstallation from "./AntigravityInstallation.ts";
 import { AntigravityConnectProxy } from "./AntigravityConnectProxy.ts";
@@ -2275,6 +2275,54 @@ it.layer(
           assert.include(unavailable, "ghost_current");
           assert.notInclude(unavailable, "ghost_stale");
         }),
+    );
+  });
+
+  describe("probeClaudeAuthStatus", () => {
+    const authStatusOutput = (stdout: string, code = 0) =>
+      layerMockSpawner((args) => {
+        if (args.join(" ") === "auth status --json") return { stdout, stderr: "", code };
+        throw new Error(`Unexpected args: ${args.join(" ")}`);
+      });
+
+    it.effect("maps the CLI's account report without starting a session", () =>
+      Effect.gen(function* () {
+        const status = yield* probeClaudeAuthStatus(defaultClaudeSettings);
+        assert.deepStrictEqual(status, {
+          loggedIn: true,
+          authMethod: "claude.ai",
+          apiProvider: "firstParty",
+          email: "me@example.com",
+          subscriptionType: "max",
+        });
+      }).pipe(
+        Effect.provide(
+          authStatusOutput(
+            JSON.stringify({
+              loggedIn: true,
+              authMethod: "claude.ai",
+              apiProvider: "firstParty",
+              email: "me@example.com",
+              orgId: "org-1",
+              subscriptionType: "max",
+            }),
+          ),
+        ),
+      ),
+    );
+
+    it.effect("reads a signed-out report even though the CLI exits non-zero", () =>
+      Effect.gen(function* () {
+        const status = yield* probeClaudeAuthStatus(defaultClaudeSettings);
+        assert.strictEqual(status?.loggedIn, false);
+        assert.strictEqual(status?.email, undefined);
+      }).pipe(Effect.provide(authStatusOutput('{"loggedIn": false, "subscriptionType": null}', 1))),
+    );
+
+    it.effect("reports nothing when the CLI predates the command or prints something else", () =>
+      Effect.gen(function* () {
+        assert.isUndefined(yield* probeClaudeAuthStatus(defaultClaudeSettings));
+      }).pipe(Effect.provide(authStatusOutput("error: unknown command 'auth'", 1))),
     );
   });
 

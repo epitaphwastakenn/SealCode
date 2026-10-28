@@ -2,7 +2,8 @@ import { assert, describe, it } from "@effect/vitest";
 import {
   MessageId,
   type ServerSettings as ContractServerSettings,
-  type OrchestrationV2Command,
+  type OrchestrationV2ServerCommand,
+  CommandId,
   ProjectId,
   ProviderInstanceId,
   RunId,
@@ -11,7 +12,6 @@ import {
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Stream from "effect/Stream";
 
@@ -37,7 +37,7 @@ const makeHarness = Effect.fn("makePromptSuggestionHarness")(function* (options:
   readonly generated?: string;
 }) {
   const generations = yield* Ref.make<ReadonlyArray<PromptSuggestionGenerationInput>>([]);
-  const commands = yield* Ref.make<ReadonlyArray<OrchestrationV2Command>>([]);
+  const commands = yield* Ref.make<ReadonlyArray<OrchestrationV2ServerCommand>>([]);
   const instanceId = ProviderInstanceId.make("codex");
   const thread = {
     id: THREAD_ID,
@@ -79,15 +79,16 @@ const makeHarness = Effect.fn("makePromptSuggestionHarness")(function* (options:
     Layer.mock(Orchestrator.OrchestratorV2)({
       streamDomainEvents: Stream.empty,
       dispatch: (command) =>
-        Ref.update(commands, (recorded) => [...recorded, command as OrchestrationV2Command]).pipe(
-          Effect.as({ sequence: 1, storedEvents: [] }),
-        ),
+        Ref.update(commands, (recorded) => [
+          ...recorded,
+          command as OrchestrationV2ServerCommand,
+        ]).pipe(Effect.as({ sequence: 1, storedEvents: [] })),
     }),
     Layer.mock(ProjectionStore.ProjectionStoreV2)({
       getThreadRecords: () => Effect.succeed({ thread, runs: [run], messages } as never),
     }),
     Layer.mock(ProjectStore.ProjectStoreV2)({
-      get: () => Effect.succeed(Option.some({ workspaceRoot: "/game" } as never)),
+      get: () => Effect.succeedSome({ workspaceRoot: "/game" } as never),
     }),
     Layer.mock(ProviderInstanceRegistry.ProviderInstanceRegistry)({
       getInstance: () => Effect.succeed({ driverKind: options.driverKind } as never),
@@ -143,7 +144,7 @@ describe("PromptSuggestionService", () => {
       assert.deepEqual(yield* Ref.get(harness.commands), [
         {
           type: "thread.prompt-suggestion.record",
-          commandId: `server:prompt-suggestion:${THREAD_ID}:${RUN_ID}`,
+          commandId: CommandId.make(`server:prompt-suggestion:${THREAD_ID}:${RUN_ID}`),
           threadId: THREAD_ID,
           runId: RUN_ID,
           text: "playtest it",

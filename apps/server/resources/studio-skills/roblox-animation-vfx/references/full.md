@@ -38,7 +38,7 @@ Predicted effects must be reversible. A client can briefly predict an impact, ex
 
 ## 2. Priorities and markers
 
-Use animation priority to define which tracks may override the same joints. Keep locomotion and action tracks separate. Use marker signals for synchronized effects instead of guessing a timestamp that changes when an animation is retuned. In Server Authority, resolve the current track after rollback rather than assuming a cached track handle still represents the visible animation.
+Use animation priority to define which tracks may override the same joints. Keep locomotion and action tracks separate. Use marker signals for synchronized effects instead of guessing a timestamp that changes when an animation is retuned. When an animation has no markers and you cannot republish it, do not guess either: sample it in Edit with `Animator:StepAnimations` and time the effect to the measured peaks (Harp, verified 2026-10-29: `vfx-sealcode.md` section 15). In Server Authority, resolve the current track after rollback rather than assuming a cached track handle still represents the visible animation.
 
 ### Track control surface: Play parameters, weight, and event semantics
 
@@ -87,7 +87,7 @@ task.delay(2, function()
 end)
 ```
 
-Use `NumberSequence` and `ColorSequence` to move size, transparency, and color over lifetime. Keep lifetime and rate low enough that a repeated effect cannot accumulate unbounded particles. Prefer a small set of reusable templates over creating new textures and emitters for every hit.
+Use `NumberSequence` and `ColorSequence` to move size, transparency, and color over lifetime. Changing an emitter's `Color` also recolours the particles already alive, so clone the emitter's host when two colours or two hits must show at once (Harp, verified 2026-10-29). Keep lifetime and rate low enough that a repeated effect cannot accumulate unbounded particles. Prefer a small set of reusable templates over creating new textures and emitters for every hit.
 
 ### Textures, flipbooks and non-particle effects
 
@@ -95,7 +95,7 @@ A flipbook is one image containing frames of motion. For a native `ParticleEmitt
 
 Not every effect with a sequence of textures is a native particle flipbook. A model can hold individually textured decals, mesh frames, or UI images advanced by a separate player or plugin. Inspect its object types, animation script and asset IDs before assuming `ParticleEmitter.Flipbook*` settings will control it. An `.rbxm` may only contain templates while a place file carries the playback machinery. Treat imported effect scripts as untrusted; inspect them before running, check whether textures are owned and usable by the target experience, and recreate the idea with your own assets when reuse rights are unclear. A visual preview alone does not prove the model will play after insertion.
 
-For one-shot hit feedback, an expanding mesh ring or a short screen-space image can make the first frame readable while particles supply texture and motion afterward. Keep screen effects local, brief and optional; do not let an overlay obscure the player's next input or an enemy's telegraph. Mesh-based shockwaves and custom image players can require more scripting than a native emitter, so prefer built-in effects when they achieve the same read.
+For one-shot hit feedback, a flat particle ring (`VelocityPerpendicular` with a Speed of 0.01 to 0.5, so it follows the attachment's tilt) or a short screen-space image can make the first frame readable while particles supply texture and motion afterward. Keep screen effects local, brief and optional; do not let an overlay obscure the player's next input or an enemy's telegraph. An expanding mesh ring or dome is a style choice to confirm with the user: in a production rework the user rejected visible parts as the effect and approved particles, trails and beams (Harp, verified 2026-10-29). Mesh-based shockwaves and custom image players also require more scripting than a native emitter, so prefer built-in effects when they achieve the same read.
 
 ## 5. Beams and trails
 
@@ -117,6 +117,8 @@ Debris:AddItem(beam, 0.35)
 ```
 
 A trail records movement between its attachments. If the attachments are destroyed or teleported unexpectedly, the visual can stretch or disappear. Remove the trail with the owning projectile or character.
+
+A hitscan tracer is the exception to "stable parts": parent both attachments to `workspace.Terrain` at world positions fixed where the shot happened. Tying the start to the moving barrel makes the tracer swing with the gun (Harp, verified 2026-10-29). Projectiles themselves render on each client, never as server-moved parts; see `vfx-sealcode.md` section 16.
 
 ## 6. Tweening
 

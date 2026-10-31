@@ -36,18 +36,21 @@ function subscribeViewerSize(onChange: () => void) {
 
 export interface ZoomableImageHandle {
   pan: (key: string) => boolean;
+  isZoomed: () => boolean;
 }
 
 export function ZoomableImage({
   src,
   name,
   mimeType,
+  reservedHeight = 0,
   onError,
   ref,
 }: {
   src: string;
   name: string;
   mimeType?: string | undefined;
+  reservedHeight?: number;
   onError: () => void;
   ref?: Ref<ZoomableImageHandle>;
 }) {
@@ -70,7 +73,10 @@ export function ZoomableImage({
   } | null>(null);
   const suppressClickRef = useRef(false);
   const [dragging, setDragging] = useState(false);
-  const maxHeight = Math.max(1, Math.min(viewerSize.height * 0.86, viewerSize.height - 160));
+  const maxHeight = Math.max(
+    1,
+    Math.min(viewerSize.height * 0.86, viewerSize.height - 160 - reservedHeight),
+  );
   const fit = Math.min(
     1,
     (viewerSize.width * 0.92 - (viewerSize.width >= 640 ? 96 : 0)) / (naturalSize.width || 1),
@@ -82,6 +88,7 @@ export function ZoomableImage({
   useImperativeHandle(
     ref,
     () => ({
+      isZoomed: () => zoom > 1,
       pan(key) {
         const viewport = viewportRef.current;
         if (!viewport || zoom <= 1) return false;
@@ -166,6 +173,7 @@ export function ZoomableImage({
           height: height || undefined,
           maxHeight,
           cursor: zoom > 1 ? (dragging ? "grabbing" : "grab") : "zoom-in",
+          touchAction: zoom > 1 ? "pan-x pan-y" : "pan-y",
         }}
         onClick={(event) => {
           // Pointer capture emits a click after dragging; preserve zoom.

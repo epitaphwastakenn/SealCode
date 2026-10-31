@@ -14,6 +14,7 @@ import {
   setLastOpenThreadRoute,
   setProjectExpanded,
   setProjectPinned,
+  setTimelineGalleryCollapsed,
   type UiState,
 } from "./uiStateStore";
 
@@ -27,6 +28,7 @@ function makeUiState(overrides: Partial<UiState> = {}): UiState {
     threadLastVisitedAtById: {},
     threadChangedFilesExpandedById: {},
     timelineExpandedTurnIdsByThread: {},
+    timelineCollapsedGalleryRunIdsByThread: {},
     defaultAdvertisedEndpointKey: null,
     pullRequestMergeMethod: "merge",
     lastOpenThreadRoute: null,
@@ -133,6 +135,7 @@ describe("parsePersistedState", () => {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
       timelineExpandedTurnIdsByThread: {},
+      timelineCollapsedGalleryRunIdsByThread: {},
       lastOpenThreadRoute: null,
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
       sidebarProjectScopeKey: null,
@@ -172,6 +175,21 @@ describe("parsePersistedState", () => {
     expect(resolveProjectExpanded(parsed.projectExpandedById, [projectAKey])).toBe(true);
     expect(resolveProjectExpanded(parsed.projectExpandedById, [projectBKey])).toBe(false);
     expect(resolveProjectExpanded(parsed.projectExpandedById, ["unknown"])).toBe(true);
+  });
+
+  it("collapses and restores a thread's screenshot galleries per run", () => {
+    const initialState = makeUiState();
+    const collapsed = setTimelineGalleryCollapsed(initialState, "thread-1", "run-1", true);
+
+    expect(collapsed.timelineCollapsedGalleryRunIdsByThread).toEqual({ "thread-1": ["run-1"] });
+    expect(setTimelineGalleryCollapsed(collapsed, "thread-1", "run-1", true)).toBe(collapsed);
+    expect(setTimelineGalleryCollapsed(initialState, "thread-1", "run-1", false)).toBe(
+      initialState,
+    );
+    expect(
+      setTimelineGalleryCollapsed(collapsed, "thread-1", "run-1", false)
+        .timelineCollapsedGalleryRunIdsByThread,
+    ).toEqual({});
   });
 
   it("stores the last open thread route without rewriting equal values", () => {
@@ -236,6 +254,9 @@ describe("uiStateStore persistence", () => {
       timelineExpandedTurnIdsByThread: {
         "environment:thread-1": ["turn-1", "turn-2"],
       },
+      timelineCollapsedGalleryRunIdsByThread: {
+        "environment:thread-1": ["run-1"],
+      },
       threadLastVisitedAtById: {
         "environment:thread-1": "2026-02-25T12:35:00.000Z",
       },
@@ -265,6 +286,9 @@ describe("uiStateStore persistence", () => {
       },
       timelineExpandedTurnIdsByThread: {
         "environment:thread-1": ["turn-1", "turn-2"],
+      },
+      timelineCollapsedGalleryRunIdsByThread: {
+        "environment:thread-1": ["run-1"],
       },
       defaultAdvertisedEndpointKey: "desktop-core:lan:http",
       sidebarProjectScopeKey: null,

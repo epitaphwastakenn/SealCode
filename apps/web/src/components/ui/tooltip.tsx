@@ -129,7 +129,7 @@ function TooltipPopup({
   align?: TooltipPrimitive.Positioner.Props["align"];
   side?: TooltipPrimitive.Positioner.Props["side"];
   sideOffset?: TooltipPrimitive.Positioner.Props["sideOffset"];
-  variant?: "default" | "glass" | "code";
+  variant?: "default" | "code";
   anchor?: TooltipPrimitive.Positioner.Props["anchor"];
 }) {
   return (

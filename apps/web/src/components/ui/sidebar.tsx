@@ -598,17 +598,6 @@ function SidebarInset({ className, ...props }: React.ComponentProps<"main">) {
   );
 }
 
-function SidebarHeader({ className, ...props }: React.ComponentProps<"div">) {
-  return (
-    <div
-      className={cn("flex flex-col gap-2 p-2", className)}
-      data-sidebar="header"
-      data-slot="sidebar-header"
-      {...props}
-    />
-  );
-}
-
 function SidebarFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
@@ -702,11 +691,10 @@ const sidebarMenuButtonVariants = cva(
         default:
           "h-8 rounded-[var(--control-radius)] px-[var(--sidebar-row-content-inset)] py-1.5 text-sm",
         icon: "size-8 justify-center rounded-[var(--control-radius)] p-0",
-        lg: "h-12 rounded-[var(--control-radius)] p-2 text-sm group-data-[collapsible=icon]:p-0!",
         sm: "h-7 rounded-[var(--control-radius)] p-2 text-xs",
       },
       variant: {
-        default: "font-medium text-sidebar-muted-foreground/80",
+        default: "font-medium text-sidebar-muted-foreground",
         outline: "bg-sidebar-control-surface ring-1 ring-sidebar-border",
       },
     },
@@ -766,78 +754,16 @@ function SidebarMenuButton({
   );
 }
 
-function SidebarMenuSub({ className, ...props }: React.ComponentProps<"ul">) {
-  return (
-    <ul
-      className={cn(
-        "mx-3.5 flex min-w-0 translate-x-px flex-col gap-1 border-sidebar-border border-l px-2.5 py-0.5",
-        "group-data-[collapsible=icon]:hidden",
-        className,
-      )}
-      data-sidebar="menu-sub"
-      data-slot="sidebar-menu-sub"
-      {...props}
-    />
-  );
-}
-
-function SidebarMenuSubItem({ className, ...props }: React.ComponentProps<"li">) {
-  return (
-    <li
-      className={cn("group/menu-sub-item relative", className)}
-      data-sidebar="menu-sub-item"
-      data-slot="sidebar-menu-sub-item"
-      {...props}
-    />
-  );
-}
-
-function SidebarMenuSubButton({
-  size = "md",
-  isActive = false,
-  className,
-  render,
-  ...props
-}: useRender.ComponentProps<"a"> & {
-  size?: "sm" | "md";
-  isActive?: boolean;
-}) {
-  const defaultProps = {
-    className: cn(
-      "-translate-x-px flex h-7 min-w-0 cursor-pointer items-center gap-2 overflow-hidden rounded-[var(--control-radius)] px-2 text-sidebar-foreground outline-hidden ring-ring hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-inset active:bg-sidebar-row-active active:text-sidebar-foreground disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50 [&>span:last-child]:truncate [&>svg:not([class*='size-'])]:size-4 [&>svg]:shrink-0 [&>svg]:text-sidebar-muted-foreground",
-      "data-[active=true]:bg-sidebar-row-selected data-[active=true]:text-sidebar-foreground",
-      size === "sm" && "text-xs",
-      size === "md" && "text-sm",
-      "group-data-[collapsible=icon]:hidden",
-      className,
-    ),
-    "data-active": isActive,
-    "data-sidebar": "menu-sub-button",
-    "data-size": size,
-    "data-slot": "sidebar-menu-sub-button",
-  };
-
-  return useRender({
-    defaultTagName: "a",
-    props: mergeProps<"a">(defaultProps, props),
-    render,
-  });
-}
-
 export {
   SidebarInput,
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarGroup,
-  SidebarHeader,
   SidebarInset,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,

@@ -159,7 +159,7 @@ function StudioConnectionStatus({
   );
 }
 
-export function RobloxStudioSettings() {
+function RobloxStudioSettings() {
   const primaryEnvironment = usePrimaryEnvironment();
   const environmentId = primaryEnvironment?.environmentId ?? null;
   const settings = usePrimarySettings();

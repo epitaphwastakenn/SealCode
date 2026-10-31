@@ -159,13 +159,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
   );
 }
 
-function DialogFooter({
-  className,
-  variant: _variant,
-  ...props
-}: React.ComponentProps<"div"> & {
-  variant?: "default" | "bare";
-}) {
+function DialogFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn(

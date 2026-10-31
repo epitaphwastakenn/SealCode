@@ -2002,7 +2002,7 @@ export default function GitActionsControl({
               />
             </div>
           </DialogPanel>
-          <DialogFooter variant="bare">
+          <DialogFooter>
             <Button
               variant="outline"
               size="sm"
@@ -2058,7 +2058,7 @@ export default function GitActionsControl({
               <p className="text-xs text-muted-foreground">{featureBranchUnavailableReason}</p>
             )}
           </DialogHeader>
-          <DialogFooter variant="bare" className="sm:flex-wrap sm:items-center">
+          <DialogFooter className="sm:flex-wrap sm:items-center">
             <Button
               className="w-full sm:mr-auto sm:w-auto"
               variant="outline"

@@ -86,13 +86,7 @@ function AlertDialogHeader({ className, ...props }: React.ComponentProps<"div">)
   );
 }
 
-function AlertDialogFooter({
-  className,
-  variant: _variant,
-  ...props
-}: React.ComponentProps<"div"> & {
-  variant?: "default" | "bare";
-}) {
+function AlertDialogFooter({ className, ...props }: React.ComponentProps<"div">) {
   return (
     <div
       className={cn("flex flex-col-reverse gap-2 px-6 pb-6 sm:flex-row sm:justify-end", className)}

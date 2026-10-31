@@ -174,7 +174,7 @@ export const layer = Layer.effect(
             studioDelivered.delete(studioDelivered.keys().next().value ?? conversation);
           }
         }
-        // Unlike the instructions, the Studio selection and the thread's limits change between turns, so they ride on each.
+        // Unlike the instructions, the Studio selection changes between turns, so it rides on each.
         const studioApplies =
           studioBridge._tag === "Some" &&
           current.robloxStudio.mode === "sealcode" &&

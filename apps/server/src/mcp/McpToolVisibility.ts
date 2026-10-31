@@ -9,7 +9,6 @@ export interface McpToolVisibilityShape {
   readonly hiddenServers: (
     thread: Pick<McpThreadCaller, "threadId">,
   ) => Effect.Effect<ReadonlySet<string>>;
-  /** The same, for a thread that does not exist yet, such as a draft in this project. */
   readonly hiddenServersForProject: (projectId: ProjectId) => Effect.Effect<ReadonlySet<string>>;
 }
 

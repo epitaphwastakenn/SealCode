@@ -104,7 +104,6 @@ export type McpInvocation = {
   readonly scope: McpInvocationContext.McpInvocationScope;
   readonly canonicalToolName: string;
   readonly arguments: Record<string, unknown>;
-  /** Harp-side metadata for the upstream server; the thread id key always wins. */
   readonly meta?: Readonly<Record<string, unknown>>;
 };
 

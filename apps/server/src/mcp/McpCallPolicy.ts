@@ -8,7 +8,6 @@ export type McpCallPolicyResult =
   | { readonly _tag: "Refuse"; readonly message: string };
 
 export interface McpCallPolicyShape {
-  /** What a feature adds to, or refuses of, one thread's call to one server. */
   readonly forCall: (input: {
     readonly thread: Pick<McpThreadCaller, "threadId">;
     readonly serverId: string;

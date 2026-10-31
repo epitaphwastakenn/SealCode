@@ -15,10 +15,7 @@ import {
   STUDIO_BRIDGE_SERVER_ID,
 } from "./RobloxStudioConfig.ts";
 
-/**
- * Hides the Roblox servers from threads outside Roblox projects, by the thread's project root.
- * A thread with Studio controls also loses the official Roblox server, which would bypass them.
- */
+/** Hides the Roblox servers from threads outside Roblox projects, by the thread's project root. */
 const visibilityLayer = Layer.effect(
   McpToolVisibility,
   Effect.gen(function* () {
@@ -52,7 +49,6 @@ const visibilityLayer = Layer.effect(
   }),
 );
 
-/** The Studio bridge sits below the orchestrator, so the thread's limits travel in `_meta`. */
 const callPolicyLayer = Layer.effect(
   McpCallPolicy,
   Effect.gen(function* () {

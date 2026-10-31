@@ -366,7 +366,6 @@ export class StudioBridge extends Context.Service<
       { readonly payload: unknown; readonly peer: StudioPeer },
       StudioRequestError
     >;
-    /** Connected peers minus the places the calling thread turned off (see StudioCallScope). */
     readonly peers: Effect.Effect<ReadonlyArray<StudioPeer>>;
     /** Peers of one place, through aliases and the numeric place id. */
     readonly peersOf: (instanceId: string) => Effect.Effect<ReadonlyArray<StudioPeer>>;
@@ -445,13 +444,6 @@ const make = Effect.gen(function* () {
           ),
         );
 
-  const visiblePeers = Effect.gen(function* () {
-    const scope = yield* StudioCallScope;
-    const peers = allPeers();
-    const hidden = new Set(excludedPeers(scope, peers));
-    return hidden.size === 0 ? peers : peers.filter((peer) => !hidden.has(peer));
-  });
-
   const allPeers = (): StudioPeer[] =>
     [...sessions.values()].flatMap((session) => [
       session.peer,
@@ -460,6 +452,13 @@ const make = Effect.gen(function* () {
         lastSeenAt: session.peer.lastSeenAt,
       })),
     ]);
+
+  const visiblePeers = Effect.gen(function* () {
+    const scope = yield* StudioCallScope;
+    const peers = allPeers();
+    const hidden = new Set(excludedPeers(scope, peers));
+    return hidden.size === 0 ? peers : peers.filter((peer) => !hidden.has(peer));
+  });
 
   /** The peer of this session (itself or a relayed client) that a request targets. */
   const servingPeer = (session: Session, request: Pending): StudioPeer | undefined => {

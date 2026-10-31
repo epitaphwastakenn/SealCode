@@ -23,6 +23,7 @@ import {
 import { loadStudioSkills, renderSkillResources } from "./studioSkills.ts";
 import { StudioEndpoints, type StudioRole } from "./protocol.ts";
 import * as StudioBridge from "./StudioBridge.ts";
+import { playtestGate, type StudioControlsPolicy } from "./studioControls.ts";
 import { placeKey, preferRuntimeClient } from "./StudioRouter.ts";
 import {
   auditUi,
@@ -43,6 +44,7 @@ export type StudioRisk = "read" | "mutation" | "irreversible";
 
 export interface StudioToolContext {
   readonly threadId?: string | undefined;
+  readonly controls?: StudioControlsPolicy | undefined;
 }
 
 type Args = Record<string, unknown>;
@@ -1457,6 +1459,9 @@ const make = Effect.gen(function* () {
   const connected = (_args: Args): Effect.Effect<StudioToolResult> =>
     Effect.gen(function* () {
       const peers = yield* bridge.peers;
+      const turnedOff =
+        new Set((yield* bridge.snapshot).peers.map(placeKey)).size -
+        new Set(peers.map(placeKey)).size;
       const places = new Map<string, Record<string, unknown> & { roles: string[] }>();
       for (const peer of peers) {
         const key = placeKey(peer);
@@ -1478,12 +1483,21 @@ const make = Effect.gen(function* () {
           luau_allowed: peer.toggles.allowLuau,
         });
       }
-      return jsonResult({ instances: [...places.values()] });
+      return jsonResult({
+        instances: [...places.values()],
+        ...(turnedOff > 0
+          ? {
+              turned_off_for_this_thread: turnedOff,
+              note: "The user turned off some Studio places for this thread in Harp. They are not listed and cannot be used; do not try to reach them.",
+            }
+          : {}),
+      });
     });
 
   const status = (_args: Args): Effect.Effect<StudioToolResult> =>
     Effect.gen(function* () {
       const snapshot = yield* bridge.snapshot;
+      const visible = yield* bridge.peers;
       return jsonResult({
         bridge: {
           state: snapshot.lifecycle.state,
@@ -1498,18 +1512,25 @@ const make = Effect.gen(function* () {
             ? {}
             : { pluginRejected: snapshot.lastRejection }),
         },
-        peers: snapshot.peers.map((peer) => ({
-          instance_id: peer.instanceId,
-          role: peer.role,
-          place_name: peer.placeName,
-          running: peer.isRunning,
-          plugin_build: peer.build,
-          toggles: peer.toggles,
-        })),
+        peers: snapshot.peers
+          .filter((peer) =>
+            visible.some(
+              (candidate) =>
+                candidate.instanceId === peer.instanceId && candidate.role === peer.role,
+            ),
+          )
+          .map((peer) => ({
+            instance_id: peer.instanceId,
+            role: peer.role,
+            place_name: peer.placeName,
+            running: peer.isRunning,
+            plugin_build: peer.build,
+            toggles: peer.toggles,
+          })),
         pendingRequests: snapshot.pendingRequests,
         hint: snapshot.pluginReloadNeeded
           ? "Harp just updated the Studio plugin. Connected places update themselves in place within a few seconds; a place that stays on the old copy can be reopened with manage_studio (open with closeOthers)."
-          : snapshot.peers.length === 0
+          : visible.length === 0
             ? "No Studio is connected: ask the user to open the place in Roblox Studio and check the Harp panel (Plugins tab)."
             : undefined,
       });
@@ -1647,8 +1668,21 @@ const make = Effect.gen(function* () {
   const manageStudio = (args: Args): Effect.Effect<StudioToolResult> =>
     Effect.gen(function* () {
       const action = str(args.action) ?? "status";
+      const scope = yield* StudioBridge.StudioCallScope;
+      const turnedOffNames = new Set(
+        scope.excludedPlaces.map((place) => normalizePlaceName(place.placeName).toLowerCase()),
+      );
+      const isTurnedOff = (place: string | undefined) =>
+        place !== undefined && turnedOffNames.has(normalizePlaceName(place).toLowerCase());
+      const placeTurnedOff = (place: string) =>
+        errorResult(
+          "place_excluded",
+          `The user turned off the Studio place "${place}" for this thread in Harp (Studio places switch). Do not close, reopen or otherwise touch it; ask the user to turn it back on.`,
+        );
       if (action === "status") {
-        const windows = yield* listStudioWindows(platform);
+        const windows = (yield* listStudioWindows(platform)).filter(
+          (window) => !isTurnedOff(window.place),
+        );
         const peers = (yield* bridge.peers).filter((peer) => peer.role === "edit");
         return jsonResult({
           success: true,
@@ -1671,6 +1705,10 @@ const make = Effect.gen(function* () {
         const windows = yield* listStudioWindows(platform);
         if (!windows.some((window) => window.pid === pid)) {
           return errorResult("not_found", `No Roblox Studio process has pid ${String(pid)}.`);
+        }
+        const target = windows.find((window) => window.pid === pid);
+        if (target !== undefined && isTurnedOff(target.place)) {
+          return placeTurnedOff(target.place ?? target.title);
         }
         const force = args.force === true;
         yield* closeStudio(pid, force);
@@ -1711,6 +1749,7 @@ const make = Effect.gen(function* () {
         // so with closeOthers the older windows of that file close first.
         if (placeFile !== undefined && args.closeOthers === true) {
           const fileName = normalizePlaceName(placeFile.split(/[\\/]/u).at(-1) ?? "");
+          if (isTurnedOff(fileName)) return placeTurnedOff(fileName);
           const holders = (yield* listStudioWindows(platform)).filter(
             (window) => window.place === fileName,
           );
@@ -3441,8 +3480,14 @@ const make = Effect.gen(function* () {
             `The user turned off ${name} in Studio's Harp panel. Work without it, or ask them to switch it back on.`,
           );
         }
-        return yield* tool.run(normalizeArgs(name, args), context);
+        const normalized = normalizeArgs(name, args);
+        const blocked = playtestGate(name, normalized, context.controls);
+        if (blocked !== undefined) return blocked;
+        return yield* tool.run(normalized, context);
       }).pipe(
+        Effect.provideService(StudioBridge.StudioCallScope, {
+          excludedPlaces: context.controls?.excludedPlaces ?? [],
+        }),
         Effect.catchDefect((defect) =>
           Effect.logError("Studio tool failed", { tool: name, defect }).pipe(
             Effect.as(

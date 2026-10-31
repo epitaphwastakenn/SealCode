@@ -1,6 +1,10 @@
 import { describe, expect, it } from "@effect/vitest";
 
-import { studioBridgeInstructions, studioSelectionContext } from "./instructions.ts";
+import {
+  studioBridgeInstructions,
+  studioControlsContext,
+  studioSelectionContext,
+} from "./instructions.ts";
 
 describe("studioSelectionContext", () => {
   it("names the selection and the open script, and nothing when there is neither", () => {
@@ -36,5 +40,20 @@ describe("studioBridgeInstructions", () => {
     expect(studioBridgeInstructions({ ...base, skillCatalog: "- `roblox-gui`: UI" })).toContain(
       "## Roblox skills",
     );
+  });
+});
+
+describe("studioControlsContext", () => {
+  it("says nothing for an unrestricted thread and states each limit otherwise", () => {
+    expect(studioControlsContext(undefined)).toBeUndefined();
+    expect(studioControlsContext({ allowPlaytests: true, excludedPlaces: [] })).toBeUndefined();
+    const text = studioControlsContext({
+      allowPlaytests: false,
+      excludedPlaces: [{ placeKey: "place:1" }, { placeKey: "place:2" }],
+    });
+    expect(text).toContain("<studio_controls>");
+    expect(text).toContain("Playtests are off");
+    expect(text).toContain("2 Studio places are turned off");
+    expect(text).not.toContain("place:1");
   });
 });

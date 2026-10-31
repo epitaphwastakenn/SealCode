@@ -2,6 +2,7 @@ import { applyThreadPullRequestLinkUpdate } from "../sourceControl/threadPullReq
 import { projectTurnItemForWire, WIRE_COMMAND_OUTPUT_PREFIX_CHARS } from "./WireProjection.ts";
 import * as Stream from "effect/Stream";
 import * as NodeSqliteClient from "@t3tools/shared/nodeSqliteClient";
+import { studioControlsField } from "@t3tools/shared/studioControls";
 import { makeThreadFind, findProjectedThreadItems } from "./ThreadFind.ts";
 import type {
   OrchestrationV2SearchThreadInput,
@@ -851,6 +852,7 @@ export function applyToProjection(
     case "thread.metadata-updated":
     case "thread.runtime-mode-updated":
     case "thread.interaction-mode-updated":
+    case "thread.studio-controls-updated":
     case "thread.model-selection-updated":
     case "thread.provider-switched":
     case "thread.guest-share-updated":
@@ -1641,6 +1643,7 @@ export function threadShellFromProjection(
     modelSelection: projection.thread.modelSelection,
     runtimeMode: projection.thread.runtimeMode,
     interactionMode: projection.thread.interactionMode,
+    ...studioControlsField(projection.thread.studioControls),
     branch: projection.thread.branch,
     worktreePath: projection.thread.worktreePath,
     pullRequests: threadPullRequestsOf(projection.thread),
@@ -1916,6 +1919,7 @@ function shellFromState(input: {
     modelSelection: input.state.thread.modelSelection,
     runtimeMode: input.state.thread.runtimeMode,
     interactionMode: input.state.thread.interactionMode,
+    ...studioControlsField(input.state.thread.studioControls),
     branch: input.state.thread.branch,
     worktreePath: input.state.thread.worktreePath,
     pullRequests: threadPullRequestsOf(input.state.thread),
@@ -2029,6 +2033,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             case "thread.pull-request-synced":
             case "thread.runtime-mode-updated":
             case "thread.interaction-mode-updated":
+            case "thread.studio-controls-updated":
             case "thread.model-selection-updated":
             case "thread.provider-switched":
             case "thread.guest-share-updated": {
@@ -2863,6 +2868,7 @@ export const layer: Layer.Layer<ProjectionStoreV2, never, SqlClient.SqlClient> =
             event.type !== "thread.pull-request-link-updated" &&
             event.type !== "thread.runtime-mode-updated" &&
             event.type !== "thread.interaction-mode-updated" &&
+            event.type !== "thread.studio-controls-updated" &&
             event.type !== "thread.model-selection-updated" &&
             event.type !== "thread.provider-switched" &&
             event.type !== "thread.guest-share-updated"

@@ -6,6 +6,7 @@ import { RobloxStudioMode } from "./settings.ts";
 /** One place the Studio plugin connected, as the bridge reports it. */
 export const RobloxStudioPlace = Schema.Struct({
   instanceId: Schema.String,
+  placeKey: Schema.optionalKey(Schema.String),
   role: Schema.optionalKey(Schema.String),
   placeId: Schema.optionalKey(Schema.Number),
   placeName: Schema.optionalKey(Schema.String),

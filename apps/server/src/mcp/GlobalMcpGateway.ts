@@ -5,6 +5,7 @@ import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
 
 import packageJson from "../../package.json" with { type: "json" };
 import * as GlobalMcpManager from "./GlobalMcpManager.ts";
+import { McpCallPolicy } from "./McpCallPolicy.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
 import { McpToolVisibility } from "./McpToolVisibility.ts";
 
@@ -122,6 +123,25 @@ const post = HttpRouter.add(
             rpcError(message.id, -32602, "tools/call requires a tool name."),
           );
         }
+        const entry = (yield* manager.getCatalog).byCanonicalName.get(params.name);
+        let meta: Readonly<Record<string, unknown>> | undefined;
+        if (entry !== undefined) {
+          const hidden = yield* (yield* McpToolVisibility).hiddenServers(invocation.thread);
+          if (hidden.has(entry.serverId)) {
+            return reply({
+              isError: true,
+              content: [{ type: "text", text: "Unknown MCP tool." }],
+            });
+          }
+          const policy = yield* (yield* McpCallPolicy).forCall({
+            thread: invocation.thread,
+            serverId: entry.serverId,
+          });
+          if (policy._tag === "Refuse") {
+            return reply({ isError: true, content: [{ type: "text", text: policy.message }] });
+          }
+          meta = policy.meta;
+        }
         const result = yield* manager.callTool({
           scope: invocation,
           canonicalToolName: params.name,
@@ -129,6 +149,7 @@ const post = HttpRouter.add(
             typeof params.arguments === "object" && params.arguments !== null
               ? (params.arguments as Record<string, unknown>)
               : {},
+          ...(meta === undefined ? {} : { meta }),
         });
         return reply(result);
       }

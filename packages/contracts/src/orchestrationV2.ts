@@ -421,6 +421,18 @@ const LenientPromptSuggestion = Schema.NullOr(OrchestrationV2PromptSuggestion).p
   Schema.catchDecoding(() => Effect.succeedSome(null)),
 );
 
+export const OrchestrationV2StudioExcludedPlace = Schema.Struct({
+  placeKey: TrimmedNonEmptyString,
+  placeName: Schema.String,
+});
+export type OrchestrationV2StudioExcludedPlace = typeof OrchestrationV2StudioExcludedPlace.Type;
+
+export const OrchestrationV2StudioControls = Schema.Struct({
+  allowPlaytests: Schema.optional(Schema.Boolean),
+  excludedPlaces: Schema.optional(Schema.Array(OrchestrationV2StudioExcludedPlace)),
+});
+export type OrchestrationV2StudioControls = typeof OrchestrationV2StudioControls.Type;
+
 export const OrchestrationV2AppThread = Schema.Struct({
   ...OrchestrationV2CreationFields,
   id: ThreadId,
@@ -430,6 +442,7 @@ export const OrchestrationV2AppThread = Schema.Struct({
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  studioControls: Schema.optional(OrchestrationV2StudioControls),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
@@ -1764,6 +1777,7 @@ export const OrchestrationV2DomainEvent = Schema.Union([
       "thread.pull-request-synced",
       "thread.runtime-mode-updated",
       "thread.interaction-mode-updated",
+      "thread.studio-controls-updated",
       "thread.model-selection-updated",
       "thread.provider-switched",
       // Retained so events stored by earlier versions still decode; applied as a plain thread update.
@@ -1954,6 +1968,7 @@ export const OrchestrationV2ThreadShell = Schema.Struct({
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  studioControls: Schema.optional(OrchestrationV2StudioControls),
   branch: Schema.NullOr(TrimmedNonEmptyString),
   worktreePath: Schema.NullOr(TrimmedNonEmptyString),
   linkedPullRequest: Schema.optional(Schema.NullOr(ThreadLinkedPullRequest)),
@@ -2645,6 +2660,7 @@ export const OrchestrationV2DomainEventJson = Schema.Union([
       "thread.metadata-updated",
       "thread.runtime-mode-updated",
       "thread.interaction-mode-updated",
+      "thread.studio-controls-updated",
       "thread.model-selection-updated",
       "thread.provider-switched",
       // Retained so events stored by earlier versions still decode; applied as a plain thread update.
@@ -2794,6 +2810,7 @@ export const OrchestrationV2Command = Schema.Union([
     modelSelection: ModelSelection,
     runtimeMode: RuntimeMode,
     interactionMode: ProviderInteractionMode,
+    studioControls: Schema.optional(OrchestrationV2StudioControls),
     branch: Schema.NullOr(TrimmedNonEmptyString),
     worktreePath: Schema.NullOr(TrimmedNonEmptyString),
     importedNativeThread: Schema.optional(
@@ -2985,6 +3002,14 @@ export const OrchestrationV2Command = Schema.Union([
     commandId: CommandId,
     threadId: ThreadId,
     interactionMode: ProviderInteractionMode,
+  }),
+  Schema.Struct({
+    type: Schema.Literal("thread.studio-controls.set"),
+    commandId: CommandId,
+    threadId: ThreadId,
+    allowPlaytests: Schema.optional(Schema.Boolean),
+    excludePlaces: Schema.optional(Schema.Array(OrchestrationV2StudioExcludedPlace)),
+    includePlaces: Schema.optional(Schema.Array(TrimmedNonEmptyString)),
   }),
   Schema.Struct({
     type: Schema.Literal("thread.model-selection.set"),
@@ -3394,6 +3419,7 @@ export const OrchestrationV2ThreadLaunchInput = Schema.Struct({
   modelSelection: ModelSelection,
   runtimeMode: RuntimeMode,
   interactionMode: ProviderInteractionMode,
+  studioControls: Schema.optional(OrchestrationV2StudioControls),
   workspaceStrategy: OrchestrationV2ThreadLaunchWorkspaceStrategy,
   initialMessage: Schema.optional(
     Schema.Struct({

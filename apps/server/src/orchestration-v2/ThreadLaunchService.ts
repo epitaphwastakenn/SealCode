@@ -2,6 +2,7 @@ import * as WorktreeSetupTracker from "../project/WorktreeSetupTracker.ts";
 import * as ProjectCloneTracker from "../project/ProjectCloneTracker.ts";
 import * as TerminalManager from "../terminal/Manager.ts";
 import { resolveProjectSettings } from "@t3tools/shared/projectSettings";
+import { studioControlsField } from "@t3tools/shared/studioControls";
 import {
   CommandId,
   type ChatAttachment,
@@ -10,6 +11,7 @@ import {
   type OrchestrationV2Actor,
   type OrchestrationV2CreationSource,
   type OrchestrationV2ProviderThreadNativeMetadata,
+  type OrchestrationV2StudioControls,
   type OrchestrationV2ThreadProjection,
   type ProviderDriverKind,
   type ProviderInteractionMode,
@@ -84,6 +86,7 @@ export interface ThreadLaunchInput {
   readonly modelSelection: ModelSelection;
   readonly runtimeMode: RuntimeMode;
   readonly interactionMode: ProviderInteractionMode;
+  readonly studioControls?: OrchestrationV2StudioControls | undefined;
   readonly workspaceStrategy: ThreadLaunchWorkspaceStrategy;
   readonly initialMessage?: ThreadLaunchInitialMessage;
   readonly importedNativeThread?: {
@@ -906,6 +909,7 @@ const make = Effect.gen(function* () {
                 modelSelection: input.modelSelection,
                 runtimeMode: input.runtimeMode,
                 interactionMode: input.interactionMode,
+                ...studioControlsField(input.studioControls),
                 branch: initialBranch,
                 worktreePath: initialWorktreePath,
                 ...(input.importedNativeThread === undefined

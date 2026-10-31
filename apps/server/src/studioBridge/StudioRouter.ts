@@ -13,6 +13,7 @@ export type RoutingErrorCode =
   | "no_studio_connected"
   | "unrecognized_instance_id"
   | "multiple_instances_connected"
+  | "place_excluded"
   | "ambiguous_target"
   | "target_role_required"
   | "target_role_not_present_on_instance";

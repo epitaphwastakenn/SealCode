@@ -246,6 +246,7 @@ import * as PairingGrantStore from "./auth/PairingGrantStore.ts";
 import * as SessionStore from "./auth/SessionStore.ts";
 import { failEnvironmentAuthInvalid, failEnvironmentInternal } from "./auth/http.ts";
 import { isNetworkPath } from "@t3tools/shared/path";
+import { studioControlsField } from "@t3tools/shared/studioControls";
 import {
   sameUsageLimitCommandCoverage,
   withUsageLimitsCommands,
@@ -2007,6 +2008,7 @@ const layerWsCoreRpc = (
                     modelSelection: input.modelSelection,
                     runtimeMode: input.runtimeMode,
                     interactionMode: input.interactionMode,
+                    ...studioControlsField(input.studioControls),
                     workspaceStrategy: input.workspaceStrategy,
                     ...(input.initialMessage === undefined
                       ? {}

@@ -2463,6 +2463,131 @@ describe("OrchestratorMcpService provider resolution", () => {
       }),
   );
 
+  it.effect("keeps ultracode out of the options agents see, set and inherit", () =>
+    Effect.gen(function* () {
+      const claudeInstanceId = ProviderInstanceId.make("claudeAgent");
+      const model = "claude-opus-5-5";
+      const inherited = {
+        instanceId: claudeInstanceId,
+        model,
+        options: [
+          { id: "effort", value: "ultracode" },
+          { id: "fastMode", value: true },
+        ],
+      } as const;
+      const modern = {
+        ...inherited,
+        options: [
+          { id: "effort", value: "high" },
+          { id: "ultracode", value: true },
+        ],
+      } as const;
+      for (const parent of [inherited, modern]) {
+        const commands: Array<unknown> = [];
+        const task = {
+          id: taskId,
+          threadId: parentThreadId,
+          origin: "app_owned",
+          childThreadId,
+          providerInstanceId: claudeInstanceId,
+          model,
+          status: "running",
+          result: null,
+        };
+        const dependencies = Layer.mergeAll(
+          NodeServices.layer,
+          Layer.mock(ThreadManagementService.ThreadManagementService)({
+            hasReceipt: () => Effect.succeed(false),
+            assertProviderInstanceEnabled: () => Effect.void,
+            getThreadRecords: (threadId) =>
+              Effect.succeed(
+                threadId === parentThreadId
+                  ? parentProjection(commands.length > 0 ? [task] : [], parent)
+                  : childProjection,
+              ),
+            dispatch: (command) =>
+              Effect.sync(() => {
+                commands.push(command);
+                return {
+                  sequence: 1,
+                  storedEvents: [{ event: { type: "subagent.updated", payload: task } }],
+                } as never;
+              }),
+          }),
+          ServerSettings.layerTest(),
+          providerRegistryLayer([
+            {
+              ...providerSnapshot({
+                instanceId: claudeInstanceId,
+                driver: ProviderDriverKind.make("claudeAgent"),
+                model,
+              }),
+              models: [
+                {
+                  slug: model,
+                  name: model,
+                  isCustom: false,
+                  capabilities: {
+                    optionDescriptors: [
+                      {
+                        id: "effort",
+                        label: "Reasoning",
+                        type: "select",
+                        options: [
+                          { id: "high", label: "High", isDefault: true },
+                          { id: "xhigh", label: "Extra High" },
+                        ],
+                      },
+                      { id: "fastMode", label: "Fast Mode", type: "boolean" },
+                      { id: "ultracode", label: "Ultracode", type: "boolean" },
+                    ],
+                  },
+                },
+              ],
+            },
+          ]),
+          adapterRegistryLayer([claudeInstanceId]),
+          Layer.mock(ProjectService.ProjectService)({}),
+          Layer.mock(SecretRequests.SecretRequests)({}),
+          Layer.mock(ScheduledTaskService.ScheduledTaskService)({}),
+        );
+        yield* Effect.gen(function* () {
+          const service = yield* OrchestratorMcpService.OrchestratorMcpService;
+          const capabilities = yield* service.capabilities(scope);
+          assert.notInclude(
+            capabilities.inheritedOptions?.map((option) => option.id) ?? [],
+            "ultracode",
+          );
+          assert.deepEqual(
+            capabilities.providers[0]?.models[0]?.options?.map((option) => option.id),
+            ["effort", "fastMode"],
+          );
+          yield* service.delegateTask(scope, {
+            task: "Review the change.",
+            target: yield* decodeTarget({}),
+            mode: "async",
+            clientRequestId: "inherit",
+          });
+          const childOptions = (
+            commands[0] as { modelSelection: { options?: ReadonlyArray<{ id: string }> } }
+          ).modelSelection.options;
+          assert.notInclude(childOptions?.map((option) => option.id) ?? [], "ultracode");
+          const rejected = yield* service
+            .delegateTask(scope, {
+              task: "Review the change.",
+              target: yield* decodeTarget({ options: { ultracode: true } }),
+              mode: "async",
+              clientRequestId: "set",
+            })
+            .pipe(Effect.flip);
+          assert.equal(rejected.code, "invalid_request");
+          assert.include(rejected.message, "Unknown option ultracode");
+          assert.lengthOf(commands, 1);
+        }).pipe(Effect.provide(layerOrchestratorService.pipe(Layer.provide(dependencies))));
+      }
+    }),
+  );
+
   describe("resolveRuntimeMode", () => {
     const muse = {
       modelSelection: { instanceId: ProviderInstanceId.make("muse"), model: "muse-model" },

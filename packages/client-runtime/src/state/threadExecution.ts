@@ -22,7 +22,11 @@ import {
   backgroundWorkHoldsCompletion,
   derivePendingBackgroundWork,
 } from "@t3tools/shared/orchestrationV2PendingBackgroundWork";
-import { getProviderOptionCurrentLabel, getProviderOptionStatedValue } from "@t3tools/shared/model";
+import {
+  getProviderOptionCurrentLabel,
+  getProviderOptionStatedValue,
+  migrateLegacyUltracodeSelection,
+} from "@t3tools/shared/model";
 import { formatDuration } from "@t3tools/shared/orchestrationTiming";
 import * as DateTime from "effect/DateTime";
 
@@ -154,10 +158,14 @@ export const REASONING_EFFORT_OPTION_IDS: ReadonlyArray<string> = [
 ];
 
 export function formatModelSelectionEffort(
-  selection: ModelSelection,
+  rawSelection: ModelSelection,
   models: ReadonlyArray<ServerProviderModel> = [],
-  reportedSelection?: ModelSelection | null,
+  rawReportedSelection?: ModelSelection | null,
 ): string | null {
+  const selection = migrateLegacyUltracodeSelection(rawSelection);
+  const reportedSelection = rawReportedSelection
+    ? migrateLegacyUltracodeSelection(rawReportedSelection)
+    : rawReportedSelection;
   const caps = models.find((model) => model.slug === selection.model)?.capabilities;
   if (!caps) return null;
   for (const id of REASONING_EFFORT_OPTION_IDS) {
@@ -172,7 +180,15 @@ export function formatModelSelectionEffort(
       selection,
       reportedSelection,
     );
-    if (label) return label;
+    if (label) {
+      const ultracode = caps.optionDescriptors?.some(
+        (candidate) => candidate.id === "ultracode" && candidate.type === "boolean",
+      );
+      return ultracode &&
+        getProviderOptionStatedValue("ultracode", selection, reportedSelection) === true
+        ? `${label} · Ultracode`
+        : label;
+    }
   }
   return null;
 }

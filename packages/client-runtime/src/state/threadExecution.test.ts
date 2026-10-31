@@ -12,6 +12,7 @@ import {
   ThreadId,
   type OrchestrationV2ExecutionNode,
   type OrchestrationV2RunStatus,
+  type ServerProviderModel,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
 import { usageLimitBlockedRun } from "@t3tools/shared/orchestrationV2ThreadError";
@@ -25,6 +26,7 @@ import {
   deriveRunlessWorkStartedAt,
   deriveThreadActivityRun,
   deriveThreadRuntime,
+  formatModelSelectionEffort,
   threadRuntimeHasInterruptibleRun,
 } from "./threadExecution.ts";
 
@@ -256,6 +258,63 @@ describe("thread execution presentation", () => {
       activeRunId: null,
     });
     expect(threadRuntimeHasInterruptibleRun(runtime)).toBe(false);
+  });
+});
+
+describe("formatModelSelectionEffort", () => {
+  const claudeModel: ServerProviderModel = {
+    slug: "claude-opus-5-5",
+    name: "Claude Opus 5.5",
+    isCustom: false,
+    capabilities: {
+      optionDescriptors: [
+        {
+          id: "effort",
+          label: "Reasoning",
+          type: "select",
+          options: [
+            { id: "high", label: "High", isDefault: true },
+            { id: "xhigh", label: "Extra High" },
+          ],
+        },
+        { id: "ultracode", label: "Ultracode", type: "boolean" },
+      ],
+    },
+  };
+  const selection = (options: ReadonlyArray<{ id: string; value: string | boolean }>) => ({
+    instanceId: ProviderInstanceId.make("claudeAgent"),
+    model: claudeModel.slug,
+    options,
+  });
+
+  it("adds Ultracode to the effort label only when the toggle is on", () => {
+    expect(
+      formatModelSelectionEffort(selection([{ id: "effort", value: "high" }]), [claudeModel]),
+    ).toBe("High");
+    expect(
+      formatModelSelectionEffort(
+        selection([
+          { id: "effort", value: "high" },
+          { id: "ultracode", value: false },
+        ]),
+        [claudeModel],
+      ),
+    ).toBe("High");
+    expect(
+      formatModelSelectionEffort(
+        selection([
+          { id: "effort", value: "high" },
+          { id: "ultracode", value: true },
+        ]),
+        [claudeModel],
+      ),
+    ).toBe("High · Ultracode");
+  });
+
+  it("labels a thread saved with the old Ultracode level as Extra High with Ultracode", () => {
+    expect(
+      formatModelSelectionEffort(selection([{ id: "effort", value: "ultracode" }]), [claudeModel]),
+    ).toBe("Extra High · Ultracode");
   });
 });
 

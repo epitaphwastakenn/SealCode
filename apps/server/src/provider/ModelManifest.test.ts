@@ -182,6 +182,87 @@ const layerService = (input: {
     Layer.provideMerge(layerHttpClient(input.response)),
   );
 
+describe("resolveProviderCatalog Ultracode", () => {
+  it("offers a manifest Ultracode effort level as a toggle next to the remaining levels", () => {
+    const manifest: ModelManifest.ModelManifestData = {
+      version: 1,
+      currentModels: {},
+      providers: {
+        synthetic: {
+          profiles: {
+            upstream: {
+              capabilities: {
+                optionDescriptors: [
+                  {
+                    id: "effort",
+                    label: "Reasoning",
+                    type: "select",
+                    options: [
+                      { id: "high", label: "High", isDefault: true },
+                      { id: "max", label: "Max" },
+                      { id: "ultracode", label: "Ultracode" },
+                      { id: "ultrathink", label: "Ultrathink" },
+                    ],
+                    promptInjectedValues: ["ultrathink"],
+                  },
+                ],
+              },
+            },
+          },
+          models: [{ slug: "model", name: "Model", status: "current", profile: "upstream" }],
+        },
+      },
+    };
+    const descriptors = ModelManifest.resolveProviderCatalog(
+      manifest,
+      ProviderDriverKind.make("synthetic"),
+    )?.models[0]?.capabilities?.optionDescriptors;
+    assert.deepEqual(
+      descriptors?.map((descriptor) => `${descriptor.id}:${descriptor.type}`),
+      ["effort:select", "ultracode:boolean"],
+    );
+    const effort = descriptors?.[0];
+    assert.deepEqual(effort?.type === "select" ? effort.options.map((option) => option.id) : [], [
+      "high",
+      "max",
+    ]);
+  });
+
+  it("ships the toggle on the bundled Claude models that support it", () => {
+    const catalog = ModelManifest.resolveProviderCatalog(
+      ModelManifest.BUNDLED_MODEL_MANIFEST,
+      ProviderDriverKind.make("claudeAgent"),
+    );
+    const toggled = catalog?.models
+      .filter((model) =>
+        model.capabilities?.optionDescriptors?.some(
+          (descriptor) => descriptor.id === "ultracode" && descriptor.type === "boolean",
+        ),
+      )
+      .map((model) => model.slug);
+    assert.deepEqual(toggled?.toSorted(), [
+      "claude-fable-5",
+      "claude-fable-5-1",
+      "claude-haiku-5-5",
+      "claude-opus-4-7",
+      "claude-opus-4-8",
+      "claude-opus-5",
+      "claude-opus-5-5",
+      "claude-sonnet-5",
+      "claude-sonnet-5-5",
+    ]);
+    for (const model of catalog?.models ?? []) {
+      const effort = model.capabilities?.optionDescriptors?.find(
+        (descriptor) => descriptor.id === "effort",
+      );
+      assert.notInclude(
+        effort?.type === "select" ? effort.options.map((option) => option.id) : [],
+        "ultracode",
+      );
+    }
+  });
+});
+
 describe("ModelManifest service", () => {
   it.live("prefers a fetched manifest over the bundle and caches it to disk", () =>
     Effect.gen(function* () {

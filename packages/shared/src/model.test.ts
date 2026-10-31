@@ -6,14 +6,18 @@ import {
   buildProviderOptionSelectionsFromDescriptors,
   createModelCapabilities,
   createModelSelection,
+  draftModelPickMatchesThread,
   getProviderOptionCurrentLabel,
   getProviderOptionDescriptors,
+  migrateLegacyUltracodeOptions,
+  migrateLegacyUltracodeSelection,
   readCustomModelEntries,
   normalizeCustomModelSlug,
   normalizeModelSlug,
   modelHasVision,
   modelSelectionsEqual,
   withoutPromptInjectedOptions,
+  withUltracodeToggle,
 } from "./model.ts";
 
 const codexCaps: ModelCapabilities = createModelCapabilities({
@@ -55,7 +59,6 @@ const claudeCaps: ModelCapabilities = createModelCapabilities({
         { id: "medium", label: "Medium" },
         { id: "high", label: "High", isDefault: true },
         { id: "max", label: "Max" },
-        { id: "ultracode", label: "Ultracode" },
       ],
       currentValue: "high",
     },
@@ -91,7 +94,6 @@ describe("descriptor helpers", () => {
           { id: "medium", label: "Medium" },
           { id: "high", label: "High", isDefault: true },
           { id: "max", label: "Max" },
-          { id: "ultracode", label: "Ultracode" },
         ],
         currentValue: "medium",
       },
@@ -183,6 +185,158 @@ describe("retired Ultrathink effort", () => {
       { id: "fastMode", label: "Fast Mode", type: "boolean" },
     ]);
     expect(withoutPromptInjectedOptions(claudeCaps)).toBe(claudeCaps);
+  });
+});
+
+describe("Ultracode as a toggle next to the effort level", () => {
+  const upstreamCaps: ModelCapabilities = createModelCapabilities({
+    optionDescriptors: [
+      {
+        id: "effort",
+        label: "Reasoning",
+        type: "select",
+        options: [
+          { id: "high", label: "High", isDefault: true },
+          { id: "max", label: "Max" },
+          { id: "ultracode", label: "Ultracode" },
+        ],
+      },
+      { id: "fastMode", label: "Fast Mode", type: "boolean" },
+    ],
+  });
+  const toggleCaps = withUltracodeToggle(upstreamCaps);
+  const claude = ProviderInstanceId.make("claudeAgent");
+
+  it("turns an upstream Ultracode effort level into a boolean option", () => {
+    expect(toggleCaps.optionDescriptors).toEqual([
+      {
+        id: "effort",
+        label: "Reasoning",
+        type: "select",
+        options: [
+          { id: "high", label: "High", isDefault: true },
+          { id: "max", label: "Max" },
+        ],
+      },
+      { id: "fastMode", label: "Fast Mode", type: "boolean" },
+      {
+        id: "ultracode",
+        label: "Ultracode",
+        type: "boolean",
+        description: expect.stringContaining("any effort level"),
+      },
+    ]);
+  });
+
+  it("leaves capabilities that already carry the toggle or never had the level", () => {
+    expect(withUltracodeToggle(toggleCaps)).toBe(toggleCaps);
+    expect(withUltracodeToggle(claudeCaps)).toBe(claudeCaps);
+    const both = createModelCapabilities({
+      optionDescriptors: [
+        ...(upstreamCaps.optionDescriptors ?? []),
+        ...(toggleCaps.optionDescriptors ?? []).slice(-1),
+      ],
+    });
+    expect(
+      withUltracodeToggle(both).optionDescriptors?.filter((entry) => entry.id === "ultracode"),
+    ).toHaveLength(1);
+  });
+
+  it("moves saved Ultracode effort selections to Extra High with the toggle on", () => {
+    expect(
+      migrateLegacyUltracodeOptions([
+        { id: "effort", value: "ultracode" },
+        { id: "fastMode", value: true },
+      ]),
+    ).toEqual([
+      { id: "effort", value: "xhigh" },
+      { id: "fastMode", value: true },
+      { id: "ultracode", value: true },
+    ]);
+    expect(migrateLegacyUltracodeOptions([{ id: "effort", value: "high" }])).toEqual([
+      { id: "effort", value: "high" },
+    ]);
+    expect(migrateLegacyUltracodeOptions(undefined)).toBeUndefined();
+    expect(migrateLegacyUltracodeOptions(null)).toBeUndefined();
+  });
+
+  it("keeps an explicit toggle and returns the same options when nothing is legacy", () => {
+    const modern = [
+      { id: "effort", value: "high" },
+      { id: "ultracode", value: true },
+    ];
+    expect(migrateLegacyUltracodeOptions(modern)).toBe(modern);
+    expect(
+      migrateLegacyUltracodeOptions([
+        { id: "effort", value: "ultracode" },
+        { id: "ultracode", value: false },
+      ]),
+    ).toEqual([
+      { id: "effort", value: "xhigh" },
+      { id: "ultracode", value: false },
+    ]);
+    const selection = createModelSelection(claude, "claude-opus-5-5", modern);
+    expect(migrateLegacyUltracodeSelection(selection)).toBe(selection);
+  });
+
+  it("resolves a legacy selection to the effort level and the toggle in descriptors", () => {
+    const withXhigh = createModelCapabilities({
+      optionDescriptors: [
+        {
+          id: "effort",
+          label: "Reasoning",
+          type: "select",
+          options: [
+            { id: "high", label: "High", isDefault: true },
+            { id: "xhigh", label: "Extra High" },
+            { id: "max", label: "Max" },
+          ],
+        },
+        ...(toggleCaps.optionDescriptors ?? []).slice(-1),
+      ],
+    });
+    const [effort, ultracode] = getProviderOptionDescriptors({
+      caps: withXhigh,
+      selections: [{ id: "effort", value: "ultracode" }],
+    });
+    expect(effort?.currentValue).toBe("xhigh");
+    expect(ultracode?.currentValue).toBe(true);
+  });
+
+  it("treats a switched-off toggle as unset when comparing a draft pick to its thread", () => {
+    const thread = createModelSelection(claude, "claude-opus-5-5", [
+      { id: "effort", value: "high" },
+    ]);
+    expect(
+      draftModelPickMatchesThread(
+        createModelSelection(claude, "claude-opus-5-5", [
+          { id: "effort", value: "high" },
+          { id: "ultracode", value: false },
+        ]),
+        thread,
+      ),
+    ).toBe(true);
+    expect(
+      draftModelPickMatchesThread(
+        createModelSelection(claude, "claude-opus-5-5", [
+          { id: "effort", value: "high" },
+          { id: "ultracode", value: true },
+        ]),
+        thread,
+      ),
+    ).toBe(false);
+  });
+
+  it("matches a thread saved with the old Ultracode level to the migrated draft pick", () => {
+    expect(
+      draftModelPickMatchesThread(
+        createModelSelection(claude, "claude-opus-5-5", [
+          { id: "effort", value: "xhigh" },
+          { id: "ultracode", value: true },
+        ]),
+        createModelSelection(claude, "claude-opus-5-5", [{ id: "effort", value: "ultracode" }]),
+      ),
+    ).toBe(true);
   });
 });
 

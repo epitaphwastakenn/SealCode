@@ -66,7 +66,10 @@ import {
   ThreadId,
   isOrchestrationV2WorkActive,
 } from "@t3tools/contracts";
-import { getProviderOptionCurrentValue } from "@t3tools/shared/model";
+import {
+  getProviderOptionCurrentValue,
+  migrateLegacyUltracodeOptions,
+} from "@t3tools/shared/model";
 import { runRanAfter } from "@t3tools/shared/orchestrationV2ThreadError";
 import { formatThreadLink } from "@t3tools/shared/threadLinks";
 import {
@@ -345,6 +348,17 @@ function listCapabilityModels(input: {
   );
   const listed = visible.filter((model) => input.isPinned(model) || shown.has(model));
   return { listed, omitted: visible.length - listed.length };
+}
+
+/** Ultracode multiplies usage across every task, so only the user turns it on. */
+function isAgentSettableOption(option: { readonly id: string }): boolean {
+  return option.id !== "ultracode";
+}
+
+function inheritableOptions(
+  options: ReadonlyArray<ProviderOptionSelection> | undefined,
+): ReadonlyArray<ProviderOptionSelection> | undefined {
+  return migrateLegacyUltracodeOptions(options)?.filter(isAgentSettableOption);
 }
 
 /** Option ids and allowed values are all a delegating agent needs; labels are UI copy. */
@@ -1431,8 +1445,9 @@ const make = Effect.gen(function* () {
 
     const requestedOptions = input.target?.options;
     if (requestedOptions !== undefined) {
-      const descriptors = provider.models.find((candidate) => candidate.slug === model)
-        ?.capabilities?.optionDescriptors;
+      const descriptors = provider.models
+        .find((candidate) => candidate.slug === model)
+        ?.capabilities?.optionDescriptors?.filter(isAgentSettableOption);
       const invalid = invalidOptionSelections(requestedOptions, descriptors);
       if (invalid.length > 0) {
         return yield* failure(
@@ -1444,7 +1459,7 @@ const make = Effect.gen(function* () {
 
     const inheritsOptions =
       instanceId === inheritedSelection.instanceId && model === inheritedSelection.model;
-    let options = inheritsOptions ? inheritedSelection.options : undefined;
+    let options = inheritsOptions ? inheritableOptions(inheritedSelection.options) : undefined;
     if (requestedOptions !== undefined) {
       const selections = new Map(
         (requestedOptions.length === 0 ? [] : (options ?? [])).map((selection) => [
@@ -2038,7 +2053,7 @@ const make = Effect.gen(function* () {
         parentThreadId: parent?.thread.id ?? null,
         inheritedProviderInstanceId: inherited?.instanceId ?? null,
         inheritedModel: inherited?.model ?? null,
-        inheritedOptions: inherited?.options ?? [],
+        inheritedOptions: inheritableOptions(inherited?.options) ?? [],
         runtimeMode: limits.runtimeMode,
         interactionMode: limits.interactionMode,
         providers: providers.map((provider) => {
@@ -2063,7 +2078,9 @@ const make = Effect.gen(function* () {
             driverKind: provider.driver,
             displayName: provider.displayName ?? null,
             models: listed.map((model) => {
-              const options = model.capabilities?.optionDescriptors ?? [];
+              const options = (model.capabilities?.optionDescriptors ?? []).filter(
+                isAgentSettableOption,
+              );
               return {
                 id: model.slug,
                 ...(model.name.toLowerCase() === model.slug.toLowerCase()

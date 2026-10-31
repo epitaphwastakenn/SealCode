@@ -62,7 +62,7 @@ export function QuitHoldOverlay() {
       role="status"
       className="pointer-events-none fixed inset-x-0 top-[22%] z-100 flex justify-center"
     >
-      <div className="rounded-full bg-foreground/95 px-8 py-4 text-2xl font-bold text-background shadow-xl">
+      <div className="surface-glass rounded-lg px-4 py-2 text-sm font-medium text-foreground">
         {message}
       </div>
     </div>

@@ -287,13 +287,12 @@ function PullRequestBadge({
           className={cn("contents font-normal text-xs tabular-nums", presentation.toneClassName)}
         >
           <presentation.Icon aria-hidden className="size-3 shrink-0" />
-          <span className="redesign:text-secondary-label">{presentation.text}</span>
+          <span className="text-secondary-label">{presentation.text}</span>
         </span>
       </TooltipTrigger>
       <TooltipPopup
         side="top"
         sideOffset={0}
-        variant="glass"
         className="pointer-events-auto w-80 max-w-[calc(100vw-2rem)] text-left whitespace-normal"
       >
         <div className="-mx-1 max-h-[calc(var(--available-height)-0.5rem-2px)] overflow-y-auto overscroll-contain">
@@ -385,7 +384,7 @@ function ThreadPullRequestMiniListItem({
         className={cn("size-3 shrink-0", presentation?.toneClassName ?? "stroke-muted-foreground")}
       />
       <span className="shrink-0 font-mono tabular-nums">#{number}</span>
-      <span className="min-w-0 truncate text-foreground/75">{title}</span>
+      <span className="min-w-0 truncate text-foreground">{title}</span>
       {children}
     </>
   );
@@ -445,7 +444,7 @@ export function PrStatusTooltipContent({ status }: { status: PrStatusIndicator }
   return (
     <span className="flex max-w-[min(34rem,calc(100vw-2rem))] items-stretch overflow-hidden whitespace-nowrap">
       <span className="shrink-0 pr-2 font-medium">{status.tooltipLead}</span>
-      <span className="min-h-4 shrink-0 border-border/70 border-l" aria-hidden="true" />
+      <span className="min-h-4 shrink-0 border-border border-l" aria-hidden="true" />
       <span className="min-w-0 truncate pl-2">{status.tooltipTitle}</span>
     </span>
   );
@@ -705,7 +704,7 @@ export function terminalStatusFromRunningIds(
   }
   return {
     label: "Terminal process running",
-    colorClass: "text-teal-600 dark:text-teal-300/90",
+    colorClass: "text-success-foreground",
     pulse: true,
   };
 }
@@ -1002,10 +1001,7 @@ export function ThreadRowTrailingStatus({ thread }: { thread: SidebarThreadSumma
               />
             }
           >
-            <EnvironmentMachineIcon
-              kind={remoteMachine}
-              className="size-3 text-muted-foreground/60"
-            />
+            <EnvironmentMachineIcon kind={remoteMachine} className="size-3 text-muted-foreground" />
           </TooltipTrigger>
           <TooltipPopup side="top">{threadEnvironmentLabel}</TooltipPopup>
         </Tooltip>
@@ -1017,13 +1013,13 @@ export function ThreadRowTrailingStatus({ thread }: { thread: SidebarThreadSumma
 function settledPrHoverColorClass(state: ThreadPullRequestBadge["state"]): string {
   switch (state) {
     case "draft":
-      return "group-hover/sidebar-row:text-zinc-500 dark:group-hover/sidebar-row:text-zinc-400/80";
+      return "group-hover/sidebar-row:text-muted-foreground";
     case "open":
-      return "group-hover/sidebar-row:text-emerald-600 dark:group-hover/sidebar-row:text-emerald-300/90";
+      return "group-hover/sidebar-row:text-success-foreground";
     case "merged":
-      return "group-hover/sidebar-row:text-violet-600 dark:group-hover/sidebar-row:text-violet-300/90";
+      return "group-hover/sidebar-row:text-brand";
     case "closed":
-      return "group-hover/sidebar-row:text-red-600 dark:group-hover/sidebar-row:text-red-300/90";
+      return "group-hover/sidebar-row:text-error-foreground";
   }
 }
 

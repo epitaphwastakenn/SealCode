@@ -1,5 +1,5 @@
 import type { AgentPreset } from "@t3tools/contracts";
-import { SlidersHorizontalIcon } from "lucide-react";
+import { LayersIcon } from "lucide-react";
 import { memo } from "react";
 import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { ComposerControl, ComposerControlChevron, ComposerControlIcon } from "./ComposerControl";
@@ -25,7 +25,7 @@ export const AgentPresetPicker = memo(function AgentPresetPicker(props: {
           />
         }
       >
-        <ComposerControlIcon icon={SlidersHorizontalIcon} size={size} />
+        <ComposerControlIcon icon={LayersIcon} size={size} />
         <span data-composer-control-label className="truncate">
           Preset
         </span>

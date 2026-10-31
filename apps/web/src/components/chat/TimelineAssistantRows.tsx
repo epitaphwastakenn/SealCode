@@ -5,7 +5,7 @@ import { memo, use, useState } from "react";
 import { type ChatMessage, type TurnDiffSummary } from "../../types";
 import ChatMarkdown from "../ChatMarkdown";
 import { ChatMarkdownAssetImage } from "./ChatMarkdownMedia";
-import { ChevronDownIcon, GitForkIcon, TriangleAlertIcon } from "lucide-react";
+import { GitForkIcon, TriangleAlertIcon } from "lucide-react";
 import { Alert, AlertAction, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Spinner } from "../ui/spinner";
@@ -16,6 +16,7 @@ import {
   type TurnImageResource,
 } from "./turnImagesPreview";
 import { Button } from "../ui/button";
+import { DisclosureChevron } from "../ui/disclosure-chevron";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
 import { McpAppFrame } from "./McpAppFrame";
@@ -312,12 +313,7 @@ export function TurnImagesTimelineRow({
         data-scroll-anchor-ignore
         onClick={() => setCollapsed(ctx.routeThreadKey, row.runId, !collapsed)}
       >
-        <ChevronDownIcon
-          className={cn(
-            "size-3.5 transition-transform duration-150 ease-out motion-reduce:transition-none",
-            collapsed && "-rotate-90",
-          )}
-        />
+        <DisclosureChevron open={!collapsed} />
         Screenshots
         <span className="text-2xs tabular-nums">{row.images.length}</span>
       </Button>
@@ -365,7 +361,7 @@ function TurnImageTile({
       aria-label={label}
       onClick={onOpen}
       className={cn(
-        "relative shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-border bg-muted transition-colors hover:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70",
+        "relative shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-border bg-muted transition-colors hover:border-brand/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70",
         single ? "h-44 w-72" : "h-20 w-32",
       )}
     >

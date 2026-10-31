@@ -11,18 +11,17 @@ import type {
   ProviderInstanceId,
   ServerProvider,
 } from "@t3tools/contracts";
-import { ChevronRightIcon, WorkflowIcon } from "lucide-react";
+import { WorkflowIcon } from "lucide-react";
 import { useState } from "react";
 
 import { cn } from "../../lib/utils";
 import { providersIgnoringCheckedAtAtom } from "../../state/server";
 import ChatMarkdown from "../ChatMarkdown";
-import { ThreadHoverCardPopup } from "../ThreadHoverCard";
 import { Button } from "../ui/button";
-import { Tooltip, TooltipTrigger } from "../ui/tooltip";
 import { AgentElapsed } from "./AgentElapsed";
 import { findRevealRef } from "./markdownFindContext";
 import { shouldCollapseUserMessage } from "./MessagesTimeline.logic";
+import { SubagentRow } from "./SubagentRow";
 import { SubagentTooltipContent } from "./SubagentTooltipContent";
 import { EnvironmentSubagentAvatar } from "./V2LifecycleRow";
 
@@ -120,64 +119,25 @@ function WorkflowMemberRow(props: {
     ?.replace(/`/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  const className =
-    "group/subagent flex w-full min-w-0 items-center gap-2.5 rounded-md px-2 py-1.5 text-left";
   return (
     <li>
-      <Tooltip>
-        <TooltipTrigger
-          delay={200}
-          render={
-            threadId === null ? (
-              <div aria-description={member.status} className={className} />
-            ) : (
-              <button
-                type="button"
-                aria-label={`Open ${member.title}`}
-                aria-description={member.status}
-                onClick={() => props.onOpenThread(threadId)}
-                className={cn(
-                  className,
-                  "cursor-pointer transition-colors hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70",
-                )}
-              />
-            )
-          }
-        >
+      <SubagentRow
+        avatar={
           <EnvironmentSubagentAvatar
             environmentId={props.environmentId}
             providerInstanceId={props.providerInstanceId}
             driver={props.driver}
             status={member.status}
           />
-          <span className="min-w-0 flex-1">
-            <span className="block truncate text-xs font-medium text-foreground">
-              {member.title}
-            </span>
-            {detail ? (
-              <span
-                className={cn(
-                  "block truncate text-2xs leading-relaxed",
-                  failed ? "text-destructive" : "text-muted-foreground",
-                )}
-              >
-                {detail}
-              </span>
-            ) : null}
-          </span>
-          {member.startedAt ? (
-            <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-              <AgentElapsed agent={member} />
-            </span>
-          ) : null}
-          {threadId !== null ? (
-            <ChevronRightIcon
-              aria-hidden
-              className="size-3.5 shrink-0 text-muted-foreground transition-colors group-hover/subagent:text-foreground"
-            />
-          ) : null}
-        </TooltipTrigger>
-        <ThreadHoverCardPopup>
+        }
+        title={member.title}
+        detail={detail ? <span className="block truncate">{detail}</span> : null}
+        failed={failed}
+        statusText={null}
+        time={member.startedAt ? <AgentElapsed agent={member} /> : null}
+        description={member.status}
+        onOpen={threadId === null ? null : () => props.onOpenThread(threadId)}
+        tooltip={
           <SubagentTooltipContent
             title={member.title}
             model={member.model}
@@ -193,8 +153,8 @@ function WorkflowMemberRow(props: {
             result={member.result ?? member.error}
             progress={member.progress}
           />
-        </ThreadHoverCardPopup>
-      </Tooltip>
+        }
+      />
     </li>
   );
 }

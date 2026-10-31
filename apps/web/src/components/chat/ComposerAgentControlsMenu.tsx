@@ -15,6 +15,7 @@ import {
 import { agentControlGroups } from "./ComposerAgentControlsMenu.logic";
 import { ComposerControl, ComposerControlIcon } from "./ComposerControl";
 import { useComposerMenuProps } from "./composerEventScope";
+import { StatusDot } from "../ui/status-dot";
 import { useComposerMenuState } from "./useComposerMenuState";
 
 export interface AgentControlsBinding {
@@ -45,7 +46,7 @@ export function AgentControlsMenuContent(props: AgentControlsBinding) {
               <span className="flex min-w-0 flex-col">
                 <span className="truncate">{item.label}</span>
                 {item.detail ? (
-                  <span className="truncate text-2xs text-muted-foreground">{item.detail}</span>
+                  <span className="truncate text-xs text-muted-foreground">{item.detail}</span>
                 ) : null}
               </span>
             </MenuCheckboxItem>
@@ -86,9 +87,7 @@ export const ComposerAgentControlsMenu = memo(function ComposerAgentControlsMenu
         <span data-composer-control-label className="sr-only sm:not-sr-only">
           Agent
         </span>
-        {restricted ? (
-          <span className="size-1.5 shrink-0 rounded-full bg-(--brand-accent)" aria-hidden />
-        ) : null}
+        {restricted ? <StatusDot tone="brand" /> : null}
       </MenuTrigger>
       <MenuPopup align="start" {...composerFloatingLayerProps}>
         <AgentControlsMenuContent

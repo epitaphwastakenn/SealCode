@@ -8,6 +8,7 @@ import { useLayoutEffect, useRef } from "react";
 
 import type { ProviderInstanceEntry } from "../../providerInstances";
 import { Button } from "../ui/button";
+import { ComposerBanner } from "./ComposerBanner";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 
 export function ProviderSubagentBar(props: {
@@ -41,13 +42,10 @@ export function ProviderSubagentBar(props: {
     return () => clearInterval(id);
   }, [live, status]);
 
-  // Sized by the composer, not the viewport: a docked side panel narrows the
-  // chat column on a wide window, and one row there squeezes out the model
-  // and status, so the status drops to its own line instead.
   return (
-    <div className="flex min-h-12 items-center gap-3 rounded-2xl py-2 ps-5 pe-2 text-sm">
-      <div className="flex min-w-0 flex-1 items-center gap-3 @max-[560px]/composer-surface:flex-col @max-[560px]/composer-surface:items-start @max-[560px]/composer-surface:gap-0.5">
-        <span className="flex min-w-0 max-w-full items-center gap-2">
+    <div className="px-1 py-1 text-xs [--composer-banner-icon-column:--spacing(8)]">
+      <ComposerBanner.Row>
+        <ComposerBanner.Icon aria-hidden={false}>
           {props.provider ? (
             <ProviderInstanceIcon
               driverKind={props.provider.driverKind}
@@ -61,26 +59,32 @@ export function ProviderSubagentBar(props: {
               badgeClassName="right-[-0.125rem] bottom-[-0.125rem] h-3 min-w-3 px-0.5 text-5xs"
             />
           ) : null}
-          <span className="min-w-0 truncate font-medium text-foreground">{props.modelLabel}</span>
-          {props.effortLabel === null ? null : (
-            <span className="shrink-0 text-muted-foreground">{props.effortLabel}</span>
-          )}
+        </ComposerBanner.Icon>
+        <ComposerBanner.Content className="gap-2 text-sm @max-[560px]/composer-surface:flex-col @max-[560px]/composer-surface:items-start @max-[560px]/composer-surface:gap-0">
+          <span className="flex min-w-0 max-w-full items-center gap-2">
+            <span className="min-w-0 truncate font-medium text-foreground">{props.modelLabel}</span>
+            {props.effortLabel === null ? null : (
+              <span className="shrink-0 text-muted-foreground">{props.effortLabel}</span>
+            )}
+          </span>
+          <span
+            ref={statusRef}
+            aria-hidden
+            className="min-w-0 max-w-full truncate text-xs text-muted-foreground tabular-nums"
+          />
+        </ComposerBanner.Content>
+        <span role="status" className="sr-only">
+          {`${modelDescription} subagent: ${announcement}`}
         </span>
-        <span
-          ref={statusRef}
-          aria-hidden
-          className="min-w-0 max-w-full truncate text-muted-foreground tabular-nums @max-[560px]/composer-surface:text-xs"
-        />
-      </div>
-      <span role="status" className="sr-only">
-        {`${modelDescription} subagent: ${announcement}`}
-      </span>
-      {props.onOpenParent ? (
-        <Button size="sm" variant="ghost-muted" onClick={props.onOpenParent}>
-          <ArrowUpLeftIcon />
-          <span className="@max-[320px]/composer-surface:sr-only">Open parent</span>
-        </Button>
-      ) : null}
+        {props.onOpenParent ? (
+          <ComposerBanner.Actions>
+            <Button size="xs" variant="ghost-muted" onClick={props.onOpenParent}>
+              <ArrowUpLeftIcon />
+              <span className="@max-[320px]/composer-surface:sr-only">Open parent</span>
+            </Button>
+          </ComposerBanner.Actions>
+        ) : null}
+      </ComposerBanner.Row>
     </div>
   );
 }

@@ -74,7 +74,7 @@ export function ProviderDiagnosticsButton({
         </span>
       ) : null}
       <Dialog open={report !== null} onOpenChange={(open) => !open && setReport(null)}>
-        <DialogPopup className="max-w-3xl">
+        <DialogPopup size="xl">
           <DialogHeader>
             <DialogTitle>Diagnostics</DialogTitle>
             <DialogDescription>
@@ -87,7 +87,7 @@ export function ProviderDiagnosticsButton({
               {report}
             </pre>
           </DialogPanel>
-          <DialogFooter variant="bare">
+          <DialogFooter>
             <Button
               variant="outline"
               onClick={() => saveText(report ?? "", "sealcode-antigravity-diagnostics.txt")}

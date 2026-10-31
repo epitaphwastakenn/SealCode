@@ -99,6 +99,7 @@ const NO_ENVIRONMENTS: readonly EnvironmentId[] = [];
 
 const AGENT_ONBOARDING_THREAD_ID = ThreadId.make("onboarding-agent-setup");
 const ONBOARDING_STAGES = ["Connect", "Agents", "Projects"] as const;
+const ONBOARDING_STAGES_WITHOUT_CONNECT = ["Agents", "Projects"] as const;
 const SCAN_LIMIT_MESSAGE = "Scan limit reached. Some projects or conversations may be missing.";
 
 export function WelcomeWizard({
@@ -119,6 +120,7 @@ export function WelcomeWizard({
     resumeEnvironmentId ? [resumeEnvironmentId] : [],
   );
   const [isImporting, setIsImporting] = useState(false);
+  const [connectionRequested, setConnectionRequested] = useState(false);
   const finishingPromiseRef = useRef<Promise<boolean> | null>(null);
   const completionErrorToastIdRef = useRef<ReturnType<typeof toastManager.add> | null>(null);
   const primaryEnvironment = usePrimaryEnvironment();
@@ -143,6 +145,12 @@ export function WelcomeWizard({
   }, [autoSelectedComputers, environments]);
   const selectedIds =
     selection ?? new Set(primaryEnvironment ? [primaryEnvironment.environmentId] : []);
+  const setup = resolveOnboardingSetup(environments, selectedIds);
+  const soloComputer =
+    !resumeEnvironmentId && environments.length === 1 && setup.ready && !connectionRequested;
+  const activeStep: WizardStep = step === "connection" && soloComputer ? "agents" : step;
+  const activeSetupIds =
+    activeStep === "agents" && step === "connection" ? setup.environmentIds : setupIds;
   const scans = useProjectScans(step === "import" ? setupIds : NO_ENVIRONMENTS);
   const isLoadingProjects =
     step === "import" &&
@@ -153,7 +161,8 @@ export function WelcomeWizard({
     setSetupIds(ids);
     setStep("agents");
   };
-  const stageIndex = step === "agents" ? 1 : step === "import" ? 2 : 0;
+  const stageOffset = soloComputer ? 1 : 0;
+  const stageIndex = (activeStep === "agents" ? 1 : activeStep === "import" ? 2 : 0) - stageOffset;
   const finish = (
     projectRef?: ScopedProjectRef,
     importWarning?: string,
@@ -235,18 +244,18 @@ export function WelcomeWizard({
           }
         >
           <WizardSteps
-            steps={ONBOARDING_STAGES}
+            steps={soloComputer ? ONBOARDING_STAGES_WITHOUT_CONNECT : ONBOARDING_STAGES}
             currentStep={stageIndex}
             isStepDisabled={(index) => isImporting || index >= stageIndex}
             onStepChange={(index) => {
               if (isImporting || index > stageIndex) return;
-              setStep(index === 0 ? "connection" : "agents");
+              setStep(index + stageOffset === 0 ? "connection" : "agents");
             }}
           />
         </WizardHeader>
 
         <WizardPanel holdHeight={isLoadingProjects}>
-          {step === "connection" ? (
+          {activeStep === "connection" ? (
             <ConnectionStep
               expandPairingInitially={!localAvailable}
               selectedIds={selectedIds}
@@ -258,8 +267,22 @@ export function WelcomeWizard({
                 setSelection(new Set([...selectedIds, environmentId]));
               }}
             />
-          ) : step === "agents" ? (
-            <AgentsStep environmentIds={setupIds} onContinue={() => setStep("import")} />
+          ) : activeStep === "agents" ? (
+            <AgentsStep
+              environmentIds={activeSetupIds}
+              onAddComputer={
+                soloComputer
+                  ? () => {
+                      setConnectionRequested(true);
+                      setStep("connection");
+                    }
+                  : undefined
+              }
+              onContinue={() => {
+                setSetupIds(activeSetupIds);
+                setStep("import");
+              }}
+            />
           ) : (
             <ImportStep
               scans={scans}
@@ -338,7 +361,7 @@ function ConnectionStep({
           {environments.map((environment) => (
             <label
               key={environment.environmentId}
-              className="flex cursor-pointer items-center gap-3 rounded-lg border border-border bg-background px-3 py-3"
+              className="flex cursor-pointer items-center gap-3 rounded-lg border border-border/50 bg-foreground/[0.03] px-3 py-3"
             >
               <Checkbox
                 checked={selectedIds.has(environment.environmentId)}
@@ -377,7 +400,7 @@ function ConnectionStep({
         </fieldset>
       ) : null}
       <div className="mt-4 space-y-2">
-        <div className="rounded-lg border border-border bg-background">
+        <div className="rounded-lg border border-border/50 bg-foreground/[0.03]">
           <Collapsible open={pairingOpen} onOpenChange={setPairingOpen}>
             <CollapsibleTrigger
               disabled={isPairing}
@@ -390,7 +413,7 @@ function ConnectionStep({
               }
             >
               <LinkIcon className="size-4 text-muted-foreground" />
-              <span className="flex-1 text-left">Add a computer</span>
+              <span className="flex-1 text-left">Add another computer</span>
               <ChevronRightIcon
                 className={cn("size-4 text-muted-foreground", pairingOpen && "rotate-90")}
               />
@@ -557,9 +580,11 @@ interface AgentTerminalSession {
 
 function AgentsStep({
   environmentIds,
+  onAddComputer,
   onContinue,
 }: {
   readonly environmentIds: readonly EnvironmentId[];
+  readonly onAddComputer: (() => void) | undefined;
   readonly onContinue: () => void;
 }) {
   const { environments } = useEnvironments();
@@ -582,7 +607,15 @@ function AgentsStep({
           ))}
         </div>
       </ScrollArea>
-      <div className="mt-6 flex justify-end">
+      <div className="mt-6 flex items-center justify-between gap-3">
+        {onAddComputer ? (
+          <Button variant="ghost" onClick={onAddComputer}>
+            <LinkIcon />
+            Add another computer
+          </Button>
+        ) : (
+          <span />
+        )}
         <Button autoFocus onClick={onContinue}>
           Continue
           <ArrowRightIcon className="size-3.5" />
@@ -859,7 +892,7 @@ function AgentCard({
   const providerState = getOnboardingProviderState(provider);
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border bg-background px-4 py-4">
+    <div className="flex items-center gap-3 rounded-lg border border-border/50 bg-foreground/[0.03] px-4 py-4">
       <ProviderInstanceIcon
         driverKind={ProviderDriverKind.make(driver)}
         displayName={displayName}
@@ -1000,9 +1033,9 @@ function AgentInstallTerminal({
   return (
     <div
       data-thread-terminal-drawer
-      className="mt-4 overflow-hidden rounded-lg border border-border/70 bg-background text-foreground"
+      className="mt-4 overflow-hidden rounded-lg border border-border/50 bg-foreground/[0.03] text-foreground"
     >
-      <div className="flex items-center justify-between border-b border-border/60 bg-background/60 px-3 py-1.5">
+      <div className="flex items-center justify-between border-b border-border/50 px-3 py-1.5">
         <span className="text-2xs font-medium text-muted-foreground">
           {!canOperateTerminal ? (
             "This connection cannot control terminals."
@@ -1452,7 +1485,7 @@ function ImportCandidateList({
       ))}
       {other.length > 0 ? (
         <Collapsible>
-          <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-muted/40">
+          <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-row-hover">
             <Checkbox
               checked={otherSelected === other.length}
               indeterminate={otherSelected > 0 && otherSelected < other.length}
@@ -1515,7 +1548,7 @@ function ImportRepositoryGroup({
   }
   return (
     <Collapsible defaultOpen>
-      <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-muted/40">
+      <div className="flex items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-row-hover">
         <Checkbox
           checked={selectedCount === keys.length}
           indeterminate={selectedCount > 0 && selectedCount < keys.length}
@@ -1581,7 +1614,7 @@ function ImportCandidateRow({
   return (
     <label
       className={cn(
-        "flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-muted/40 has-disabled:cursor-default",
+        "flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 hover:bg-row-hover has-disabled:cursor-default",
         nested && "pl-8",
       )}
     >

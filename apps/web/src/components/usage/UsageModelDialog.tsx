@@ -71,7 +71,7 @@ export function UsageModelDialog({
         if (!open) onClose();
       }}
     >
-      <DialogPopup className="max-w-3xl">
+      <DialogPopup size="xl">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <ProviderInstanceIcon
@@ -136,7 +136,7 @@ export function UsageModelDialog({
           </div>
         </DialogPanel>
         {model.unpricedTokens > 0 ? (
-          <DialogFooter variant="bare" className="items-center sm:justify-between">
+          <DialogFooter className="items-center sm:justify-between">
             <span className="text-xs text-muted-foreground">
               {formatTokens(model.unpricedTokens)} tokens have no known price
             </span>

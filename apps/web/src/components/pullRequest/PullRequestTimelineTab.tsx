@@ -12,7 +12,6 @@ import type {
   ScopedThreadRef,
 } from "@t3tools/contracts";
 import {
-  ChevronDownIcon,
   CircleCheckIcon,
   ExternalLinkIcon,
   FileCode2Icon,
@@ -22,6 +21,7 @@ import {
 import { useState, type ReactNode } from "react";
 
 import { cn } from "~/lib/utils";
+import { DisclosureChevron } from "~/components/ui/disclosure-chevron";
 import { readLocalApi } from "~/localApi";
 import { pullRequestEnvironment } from "~/state/pullRequests";
 import { RelativeTime } from "~/components/RelativeTime";
@@ -95,7 +95,7 @@ function TimelineBody({
 }
 
 function ActorName({ actor }: { actor: PullRequestActor | null }) {
-  return <span className="font-semibold text-foreground">{actor?.login ?? "ghost"}</span>;
+  return <span className="font-medium text-foreground">{actor?.login ?? "ghost"}</span>;
 }
 
 function TimelineMarker({
@@ -147,7 +147,7 @@ function ActorTimelineMarker({
         actor={actor}
         className={cn(
           "size-7 bg-muted text-3xs transition-opacity",
-          muted && "opacity-45 grayscale",
+          muted && "opacity-50 grayscale",
         )}
       />
     </TimelineMarker>
@@ -161,7 +161,7 @@ function friendlyReviewState(value: string): string {
 
 function ReviewStateBadge({ state }: { state: string }) {
   return (
-    <span className="text-3xs font-medium text-muted-foreground">{friendlyReviewState(state)}</span>
+    <span className="text-2xs font-medium text-muted-foreground">{friendlyReviewState(state)}</span>
   );
 }
 
@@ -322,26 +322,20 @@ function ConversationGroup({
         <div>
           <CollapsibleTrigger
             className={cn(
-              "flex w-full min-w-0 items-center gap-3 py-2 text-left transition-opacity hover:opacity-100",
-              open ? "text-foreground opacity-100" : "text-muted-foreground opacity-55",
+              "flex w-full min-w-0 items-center gap-3 py-2 text-left transition-colors hover:text-foreground",
+              open ? "text-foreground" : "text-muted-foreground",
             )}
           >
             <span className="min-w-0 flex-1">
-              <span className="block text-xs font-semibold">
+              <span className="block text-xs font-medium">
                 {events.length.toLocaleString()} {events.length === 1 ? "comment" : "comments"}
               </span>
-              <span className="block truncate text-3xs text-muted-foreground">
+              <span className="block truncate text-2xs text-muted-foreground">
                 {actors.length.toLocaleString()} {actors.length === 1 ? "author" : "authors"} ·{" "}
                 <RelativeTime timestamp={first.at} />
               </span>
             </span>
-            <ChevronDownIcon
-              aria-hidden
-              className={cn(
-                "size-3.5 shrink-0 text-muted-foreground transition-transform",
-                open && "rotate-180",
-              )}
-            />
+            <DisclosureChevron open={open} />
           </CollapsibleTrigger>
           <CollapsiblePanel>
             {open ? (
@@ -422,10 +416,7 @@ function ReviewThreadEvent({
             ) : null}
           </span>
         )}
-        <ChevronDownIcon
-          aria-hidden
-          className={cn("ml-auto size-3.5 shrink-0 transition-transform", expanded && "rotate-180")}
-        />
+        <DisclosureChevron open={expanded} className="ml-auto" />
       </button>
       {expanded ? (
         <>
@@ -438,7 +429,7 @@ function ReviewThreadEvent({
             showPath={false}
           />
           {thread.replies.length > 0 ? (
-            <div className="ml-2 space-y-1 border-l border-border/60 pl-3">
+            <div className="ml-2 space-y-1 border-l border-border/50 pl-3">
               {thread.replies.map((reply) => (
                 <ConversationCard
                   key={reply.id}
@@ -483,10 +474,10 @@ function CommitEvent({
       />
       <div className="flex min-w-0 items-center gap-2.5 py-1.5">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-xs font-semibold text-foreground transition-colors group-hover:text-primary">
+          <div className="truncate text-xs font-medium text-foreground transition-colors group-hover:text-primary">
             {event.body ?? "Untitled commit"}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-3xs text-muted-foreground">
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-muted-foreground">
             <code className="font-mono">{event.id.slice(0, 7)}</code>
             <span>
               <RelativeTime timestamp={event.at} />
@@ -497,7 +488,7 @@ function CommitEvent({
           <PullRequestDiffStat
             additions={event.additions}
             deletions={event.deletions}
-            className="ml-auto shrink-0 font-mono text-3xs"
+            className="ml-auto shrink-0 font-mono text-2xs"
           />
         ) : null}
       </div>
@@ -529,7 +520,7 @@ function LifecycleEvent({ event, term }: { event: PullRequestTimelineEvent; term
       <div className="py-1.5 text-xs">
         <div className="flex flex-wrap items-center gap-1.5">
           {event.actor ? <ActorName actor={event.actor} /> : null}
-          <span className="font-semibold text-foreground">{presentation.label}</span>
+          <span className="font-medium text-foreground">{presentation.label}</span>
         </div>
         <div className="mt-0.5 text-2xs text-muted-foreground">
           <RelativeTime timestamp={event.at} />
@@ -572,7 +563,7 @@ function ReviewVerdictEvent({
                     className={cn(
                       "font-medium lowercase",
                       stale
-                        ? "text-muted-foreground opacity-70"
+                        ? "text-muted-foreground"
                         : pullRequestReviewOutcomeToneClassName(outcome),
                     )}
                   />
@@ -670,7 +661,7 @@ export function PullRequestTimelineTab({
     <div ref={scrollerRef} className="scrollbar-gutter-both h-full overflow-y-auto px-4 py-5">
       <div className="mx-auto max-w-3xl">
         <div className="relative">
-          <span aria-hidden className="absolute bottom-5 left-[15px] top-1 w-px bg-border/45" />
+          <span aria-hidden className="absolute bottom-5 left-[15px] top-1 w-px bg-border/50" />
           {rows.map((row) => {
             if (row.kind === "comments") {
               return (

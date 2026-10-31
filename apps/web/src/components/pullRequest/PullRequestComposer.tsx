@@ -6,6 +6,7 @@ import type { EnvironmentId, PullRequestDetailView, PullRequestRef } from "@t3to
 import { MessageSquareIcon, Trash2Icon, XIcon } from "lucide-react";
 import { useRef, useState } from "react";
 
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
 import { Popover, PopoverClose, PopoverPopup, PopoverTitle, PopoverTrigger } from "../ui/popover";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
@@ -88,12 +89,9 @@ export function PullRequestComposer({
       >
         <MessageSquareIcon className="size-4" />
         {pendingComments.length > 0 ? (
-          <span
-            aria-hidden
-            className="absolute -top-1 -right-1 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-info px-1 text-3xs font-semibold tabular-nums text-white"
-          >
+          <Badge aria-hidden size="sm" className="absolute -top-1 -right-1">
             {pendingComments.length}
-          </span>
+          </Badge>
         ) : null}
       </PopoverTrigger>
       <PopoverPopup

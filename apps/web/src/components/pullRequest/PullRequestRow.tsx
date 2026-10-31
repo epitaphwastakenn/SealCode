@@ -108,7 +108,7 @@ function PullRequestRowImpl({
       data-pull-request-key={statsKey}
       className={cn(
         "flex items-center rounded-md [content-visibility:auto] [contain-intrinsic-block-size:56.5px]",
-        selected ? "bg-accent" : "hover:bg-accent/60",
+        selected ? "bg-row-selected" : "hover:bg-row-hover",
       )}
     >
       <button
@@ -202,7 +202,7 @@ function PullRequestRowImpl({
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <span className="flex min-w-6 items-center gap-1 overflow-hidden rounded-full border border-border/60 px-1 text-3xs" />
+                      <span className="flex min-w-6 items-center gap-1 overflow-hidden rounded-full border border-border/50 px-1 text-3xs" />
                     }
                   >
                     <span className="sr-only">matched in the description</span>

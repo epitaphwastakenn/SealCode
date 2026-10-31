@@ -11,21 +11,14 @@ import type {
   PullRequestReviewThread,
   ScopedThreadRef,
 } from "@t3tools/contracts";
-import {
-  ArrowDownUpIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  HammerIcon,
-  ListFilterIcon,
-  TagIcon,
-  UsersIcon,
-} from "lucide-react";
+import { ArrowDownUpIcon, HammerIcon, ListFilterIcon, TagIcon, UsersIcon } from "lucide-react";
 import * as Schema from "effect/Schema";
 import { useRef, useState, type ReactNode } from "react";
 
 import { pullRequestEnvironment } from "~/state/pullRequests";
 import { useLocalStorage } from "~/hooks/useLocalStorage";
 import { cn } from "~/lib/utils";
+import { DisclosureChevron } from "~/components/ui/disclosure-chevron";
 import { useOpenLink } from "~/browser/useOpenLink";
 import { RelativeTime } from "~/components/RelativeTime";
 
@@ -232,7 +225,7 @@ function CollapsedComment({
   const statusTriggerRef = useRef<HTMLButtonElement>(null);
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
-      <article className="group rounded-lg border border-border/60 [contain-intrinsic-block-size:44px] [content-visibility:auto]">
+      <article className="group rounded-lg border border-border [contain-intrinsic-block-size:44px] [content-visibility:auto]">
         <div className="p-3">
           <div className="flex flex-wrap items-baseline gap-2">
             <CommentIdentity comment={comment} detail={detail} />
@@ -243,13 +236,10 @@ function CollapsedComment({
             ) : null}
             <CollapsibleTrigger
               ref={statusTriggerRef}
-              className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+              className="flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-row-hover hover:text-foreground"
             >
               {label}
-              <ChevronDownIcon
-                aria-hidden
-                className={cn("size-3.5 transition-transform", open && "rotate-180")}
-              />
+              <DisclosureChevron open={open} />
             </CollapsibleTrigger>
             {reactionBar}
           </div>
@@ -352,13 +342,7 @@ function Section({
       >
         <CollapsibleTrigger className="flex min-w-0 flex-1 items-center gap-1.5 px-4 py-3 text-left text-xs font-medium text-muted-foreground hover:text-foreground">
           <span>{title}</span>
-          <ChevronRightIcon
-            aria-hidden
-            className={cn(
-              "size-3.5 text-muted-foreground/60 transition-transform",
-              open && "rotate-90",
-            )}
-          />
+          <DisclosureChevron open={open} />
         </CollapsibleTrigger>
         {actions}
       </div>
@@ -569,9 +553,9 @@ export function PullRequestSummaryTab({
     return (
       <article
         key={`${detail.url}:${comment.id}`}
-        className="group rounded-lg border border-border/60 bg-background [contain-intrinsic-block-size:160px] [content-visibility:auto]"
+        className="group rounded-lg border border-border bg-background [contain-intrinsic-block-size:160px] [content-visibility:auto]"
       >
-        <div className="flex flex-wrap items-baseline gap-2 rounded-t-lg bg-muted/25 px-3 py-2.5">
+        <div className="flex flex-wrap items-baseline gap-2 rounded-t-lg bg-muted/40 px-3 py-2.5">
           <div className="flex min-w-0 flex-1 flex-wrap items-baseline gap-2 text-xs text-muted-foreground">
             <CommentIdentity comment={comment} detail={detail} />
             {outcome ? (
@@ -617,7 +601,7 @@ export function PullRequestSummaryTab({
     const thread = item.kind === "thread" ? item.thread : undefined;
     const replies =
       item.kind === "thread" && item.replies.length > 0 ? (
-        <div className="ml-4 space-y-2 border-l-2 border-border/60 pl-3">
+        <div className="ml-4 space-y-2 border-l-2 border-border/50 pl-3">
           {item.replies.map((reply) => renderCommentCard(reply, undefined, { reply: true }))}
         </div>
       ) : null;
@@ -805,7 +789,7 @@ export function PullRequestSummaryTab({
                 return (
                   <div
                     key={`${index}:${check.name}:${check.url ?? ""}`}
-                    className="group flex items-center gap-2 rounded-md pr-1 hover:bg-accent/60"
+                    className="group flex items-center gap-2 rounded-md pr-1 hover:bg-row-hover"
                   >
                     <button
                       type="button"

@@ -246,7 +246,7 @@ export function PullRequestStackMenu({
               {confirmationLayers.map((layer) => (
                 <li
                   key={layer.number}
-                  className="flex items-center gap-2 rounded-md bg-muted/50 px-3 py-2"
+                  className="flex items-center gap-2 rounded-md bg-muted/40 px-3 py-2"
                 >
                   <PullRequestStackLayerContent layer={layer} compact />
                 </li>

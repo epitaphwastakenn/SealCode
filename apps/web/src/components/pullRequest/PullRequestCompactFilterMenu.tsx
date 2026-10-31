@@ -57,7 +57,7 @@ export function PullRequestCompactFilterMenu<Value extends string>({
         ) : (
           <>
             <span className="truncate">{current.label}</span>
-            <ChevronDownIcon aria-hidden className="size-3 shrink-0 text-muted-foreground/70" />
+            <ChevronDownIcon aria-hidden className="size-3 shrink-0 text-muted-foreground" />
           </>
         )}
       </MenuTrigger>

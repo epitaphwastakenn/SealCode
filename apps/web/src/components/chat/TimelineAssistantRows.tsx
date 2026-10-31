@@ -1,14 +1,20 @@
 import { shouldPreserveAssistantLineBreaks } from "@t3tools/shared/markdownPipeline";
-import { type RunId } from "@t3tools/contracts";
+import { type EnvironmentId, type RunId } from "@t3tools/contracts";
 import { canForkProjectedAssistantItem } from "@t3tools/client-runtime/state/thread-workflows";
 import { memo, use, useState } from "react";
 import { type ChatMessage, type TurnDiffSummary } from "../../types";
 import ChatMarkdown from "../ChatMarkdown";
 import { ChatMarkdownAssetImage } from "./ChatMarkdownMedia";
-import { GitForkIcon, TriangleAlertIcon } from "lucide-react";
+import { ChevronDownIcon, GitForkIcon, TriangleAlertIcon } from "lucide-react";
 import { Alert, AlertAction, AlertDescription } from "../ui/alert";
 import { Badge } from "../ui/badge";
 import { Spinner } from "../ui/spinner";
+import { useAssetUrlState } from "../../assets/assetUrls";
+import {
+  buildTurnImagesPreview,
+  turnImageTileCounts,
+  type TurnImageResource,
+} from "./turnImagesPreview";
 import { Button } from "../ui/button";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
@@ -277,6 +283,113 @@ export function ToolImagesTimelineRow({
         />
       ))}
     </div>
+  );
+}
+
+export function TurnImagesTimelineRow({
+  row,
+}: {
+  row: Extract<TimelineRow, { kind: "turn-images" }>;
+}) {
+  const ctx = use(TimelineRowCtx);
+  const collapsed = useUiStateStore(
+    (store) =>
+      store.timelineCollapsedGalleryRunIdsByThread[ctx.routeThreadKey]?.includes(row.runId) ??
+      false,
+  );
+  const setCollapsed = useUiStateStore((store) => store.setTimelineGalleryCollapsed);
+  const { shown, hidden } = turnImageTileCounts(row.images.length);
+  const openViewer = (index: number) =>
+    ctx.onImageExpand(buildTurnImagesPreview(ctx.activeThreadEnvironmentId, row.images, index));
+
+  return (
+    <div className="min-w-0 px-1">
+      <Button
+        type="button"
+        size="xs"
+        variant="ghost-muted"
+        aria-expanded={!collapsed}
+        data-scroll-anchor-ignore
+        onClick={() => setCollapsed(ctx.routeThreadKey, row.runId, !collapsed)}
+      >
+        <ChevronDownIcon
+          className={cn(
+            "size-3.5 transition-transform duration-150 ease-out motion-reduce:transition-none",
+            collapsed && "-rotate-90",
+          )}
+        />
+        Screenshots
+        <span className="text-2xs tabular-nums">{row.images.length}</span>
+      </Button>
+      {collapsed ? null : (
+        <div className="mt-1.5 flex flex-wrap gap-2">
+          {row.images.slice(0, shown).map((resource, index) => (
+            <TurnImageTile
+              key={`${resource.itemId}:${String(resource.index)}`}
+              environmentId={ctx.activeThreadEnvironmentId}
+              resource={resource}
+              label={`Open screenshot ${index + 1} of ${row.images.length}`}
+              single={row.images.length === 1}
+              overflow={index === shown - 1 ? hidden : 0}
+              onOpen={() => openViewer(index)}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TurnImageTile({
+  environmentId,
+  resource,
+  label,
+  single,
+  overflow,
+  onOpen,
+}: {
+  environmentId: EnvironmentId;
+  resource: TurnImageResource;
+  label: string;
+  single: boolean;
+  overflow: number;
+  onOpen: () => void;
+}) {
+  const assetUrl = useAssetUrlState(environmentId, resource);
+  const [failed, setFailed] = useState(false);
+  const unavailable = assetUrl._tag === "Failure" || failed;
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      onClick={onOpen}
+      className={cn(
+        "relative shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-border bg-muted transition-colors hover:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70",
+        single ? "h-44 w-72" : "h-20 w-32",
+      )}
+    >
+      {unavailable ? (
+        <span className="flex size-full items-center justify-center p-2 text-center text-xs text-muted-foreground">
+          Image unavailable
+        </span>
+      ) : assetUrl._tag === "Success" ? (
+        <img
+          src={assetUrl.url}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          draggable={false}
+          className="size-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      ) : null}
+      {overflow > 0 ? (
+        <span className="absolute inset-0 flex items-center justify-center bg-background/70 text-sm font-medium tabular-nums text-foreground">
+          +{overflow}
+        </span>
+      ) : null}
+    </button>
   );
 }
 

@@ -1,13 +1,22 @@
-import { memo, useRef, useState, type ReactNode, type KeyboardEvent } from "react";
+import {
+  memo,
+  useRef,
+  useState,
+  type ReactNode,
+  type KeyboardEvent,
+  type PointerEvent,
+} from "react";
 import { flushSync } from "react-dom";
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "lucide-react";
 import { Image as ImageGlyph, Text as TextGlyph } from "lucide";
 import { Button } from "../ui/button";
+import { Spinner } from "../ui/spinner";
 import { MorphIcon } from "~/components/MorphIcon";
 import { Dialog, DialogPopup, DialogTitle } from "../ui/dialog";
 import type { ExpandedImageItem, ExpandedImagePreview } from "./ExpandedImagePreview";
 import { resolveExternalWebLinkHost } from "./externalLinkContextMenu";
-import { useAssetUrlRefresh, useAssetUrlState } from "../../assets/assetUrls";
+import { useAssetUrlRefresh, useAssetUrls, useAssetUrlState } from "../../assets/assetUrls";
+import { ExpandedImageFilmstrip, expandedImageFilmstripHeightPx } from "./ExpandedImageFilmstrip";
 import { OpenMediaLink } from "../media/OpenMediaLink";
 import { MediaActions, type MediaActionSource } from "../media/MediaActions";
 import { MediaVideoPlayer } from "../media/MediaVideoPlayer";
@@ -19,8 +28,10 @@ import {
 } from "./SnapShotAttachmentDetails";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { ZoomableImage, type ZoomableImageHandle } from "./ZoomableImage";
+import { cn } from "~/lib/utils";
 import { composerFloatingLayerProps } from "./composerEventScope";
 import { useAtomValue } from "@effect/atom-react";
+import type { AssetResource, EnvironmentId } from "@t3tools/contracts";
 import { Atom } from "effect/reactivity";
 import { appAtomRegistry } from "~/rpc/atomRegistry";
 import { expandedImageKey } from "./ExpandedImagePreview";
@@ -39,6 +50,23 @@ function ExpandedMediaFailure({ children }: { children: ReactNode }) {
     <div role="alert" className={EXPANDED_MEDIA_STATE_CLASS_NAME}>
       {children}
     </div>
+  );
+}
+
+const swipeDistancePx = 48;
+
+function NeighbourImagePrefetch({
+  environmentId,
+  resources,
+}: {
+  readonly environmentId: EnvironmentId;
+  readonly resources: ReadonlyArray<AssetResource>;
+}) {
+  const urls = useAssetUrls(environmentId, resources);
+  return urls.map((url) =>
+    url === null ? null : (
+      <img key={url} src={url} alt="" aria-hidden decoding="async" className="hidden" />
+    ),
   );
 }
 
@@ -75,6 +103,7 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
   const [failedImageSrc, setFailedImageSrc] = useState<string | null>(null);
   const [accessibilityDetailsSrc, setAccessibilityDetailsSrc] = useState<string | null>(null);
   const zoomableImageRef = useRef<ZoomableImageHandle>(null);
+  const swipeStartRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const [returnFocusTarget] = useState(() =>
     document.activeElement instanceof HTMLElement ? document.activeElement : null,
   );
@@ -106,8 +135,34 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
       }
     : source;
 
+  const assetSource =
+    item !== undefined && item.src === null && item.type !== "video"
+      ? item.actionsSource?.asset
+      : undefined;
+  const assetUrl = useAssetUrlState(
+    assetSource?.environmentId ?? null,
+    assetSource?.resource ?? null,
+  );
+  const imageSrc = item?.src ?? (assetUrl._tag === "Success" ? assetUrl.url : null);
+  const imageLoading = assetSource !== undefined && assetUrl._tag === "Loading";
+  const neighbourAssets = [...new Set([index - 1, index + 1])].flatMap((neighbour) => {
+    const neighbourItem = preview.images[(neighbour + imageCount) % imageCount];
+    const asset = neighbourItem?.actionsSource?.asset;
+    return neighbour === index ||
+      neighbourItem === undefined ||
+      neighbourItem.src !== null ||
+      neighbourItem.type === "video" ||
+      asset === undefined
+      ? []
+      : [asset];
+  });
+
   const navigateImage = (direction: -1 | 1) => {
     setImageOffset((current) => current + direction);
+  };
+
+  const goToImage = (target: number) => {
+    setImageOffset(target - preview.index);
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -125,13 +180,41 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
       navigateImage(-1);
       return;
     }
-    if (event.key !== "ArrowRight") return;
+    if (event.key === "ArrowRight") {
+      event.preventDefault();
+      event.stopPropagation();
+      navigateImage(1);
+      return;
+    }
+    if (event.key !== "Home" && event.key !== "End") return;
     event.preventDefault();
     event.stopPropagation();
-    navigateImage(1);
+    goToImage(event.key === "Home" ? 0 : imageCount - 1);
+  };
+
+  const onPointerDown = (event: PointerEvent<HTMLDivElement>) => {
+    const inFilmstrip =
+      event.target instanceof Element &&
+      event.target.closest("[data-expanded-image-filmstrip]") !== null;
+    swipeStartRef.current =
+      event.pointerType === "mouse" || imageCount <= 1 || inFilmstrip
+        ? null
+        : { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
+  };
+
+  const onPointerUp = (event: PointerEvent<HTMLDivElement>) => {
+    const start = swipeStartRef.current;
+    swipeStartRef.current = null;
+    if (start === null || start.pointerId !== event.pointerId) return;
+    if (zoomableImageRef.current?.isZoomed()) return;
+    const dx = event.clientX - start.x;
+    const dy = event.clientY - start.y;
+    if (Math.abs(dx) < swipeDistancePx || Math.abs(dx) < Math.abs(dy) * 2) return;
+    navigateImage(dx < 0 ? 1 : -1);
   };
 
   if (!item) return null;
+  const showFilmstrip = preview.filmstrip === true && imageCount > 1;
   const mediaLabel = item.type === "video" ? "video" : "image";
   const openOriginalLink =
     item.originalUrl && resolveExternalWebLinkHost(item.originalUrl) !== null ? (
@@ -164,8 +247,18 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
         variant="media"
         showCloseButton={false}
         bottomStickOnMobile={false}
-        className="row-start-1 h-full max-h-[92vh] w-[92vw] max-w-[92vw] items-center justify-center overflow-visible [--media-width:92vw] [--media-height:min(calc((100vh-var(--native-titlebar-height,0px))*0.86),calc(100vh-var(--native-titlebar-height,0px)-160px))] sm:[--media-width:calc(92vw-96px)]"
+        className={cn(
+          "row-start-1 h-full max-h-[92vh] w-[92vw] max-w-[92vw] touch-pan-y items-center justify-center overflow-visible [--media-width:92vw] sm:[--media-width:calc(92vw-96px)]",
+          showFilmstrip
+            ? "[--media-height:min(calc((100vh-var(--native-titlebar-height,0px))*0.86),calc(100vh-var(--native-titlebar-height,0px)-224px))]"
+            : "[--media-height:min(calc((100vh-var(--native-titlebar-height,0px))*0.86),calc(100vh-var(--native-titlebar-height,0px)-160px))]",
+        )}
         onKeyDown={onKeyDown}
+        onPointerDown={onPointerDown}
+        onPointerUp={onPointerUp}
+        onPointerCancel={() => {
+          swipeStartRef.current = null;
+        }}
         initialFocus={closeButtonRef}
         finalFocus={() => returnFocusTarget}
         onClick={(event) => {
@@ -207,7 +300,11 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
                   className="h-[min(var(--media-height),40rem)] w-[min(var(--media-width),42rem)] transition-opacity duration-140 ease-out starting:opacity-0 rounded-lg border border-border/70 bg-background p-4 text-xs leading-5 shadow-2xl motion-reduce:transition-none"
                 />
               ) : null
-            ) : item.src === null || failedImageSrc === item.src ? (
+            ) : imageLoading ? (
+              <div className={EXPANDED_MEDIA_STATE_CLASS_NAME}>
+                <Spinner size="lg" />
+              </div>
+            ) : imageSrc === null || failedImageSrc === imageSrc ? (
               <ExpandedMediaFailure>
                 <p>
                   {openOriginalLink
@@ -219,11 +316,12 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
             ) : (
               <ZoomableImage
                 ref={zoomableImageRef}
-                key={`${index}:${item.src}`}
-                src={item.src}
+                key={`${index}:${imageSrc}`}
+                src={imageSrc}
                 name={item.name}
                 mimeType={item.mimeType}
-                onError={() => setFailedImageSrc(item.src)}
+                reservedHeight={showFilmstrip ? expandedImageFilmstripHeightPx : 0}
+                onError={() => setFailedImageSrc(imageSrc)}
               />
             )}
             <div className="mt-2 flex max-w-[var(--media-width)] items-center justify-center gap-1.5 text-xs text-white/80 max-sm:px-10">
@@ -260,6 +358,17 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
             </div>
           </div>
         </MediaActions>
+        {showFilmstrip ? (
+          <div className="absolute inset-x-0 bottom-0 z-20 mx-auto flex w-fit max-w-[var(--media-width)] max-sm:max-w-[calc(var(--media-width)-6rem)]">
+            <ExpandedImageFilmstrip images={preview.images} index={index} onSelect={goToImage} />
+          </div>
+        ) : null}
+        {neighbourAssets[0] ? (
+          <NeighbourImagePrefetch
+            environmentId={neighbourAssets[0].environmentId}
+            resources={neighbourAssets.map((asset) => asset.resource)}
+          />
+        ) : null}
         {preview.images.length > 1 && (
           <Button
             type="button"

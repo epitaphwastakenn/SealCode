@@ -36,6 +36,7 @@ export interface ExpandedImageItem {
 export interface ExpandedImagePreview {
   images: ExpandedImageItem[];
   index: number;
+  filmstrip?: true;
 }
 
 export async function resolveMarkdownMediaPreview(input: {

@@ -4210,6 +4210,200 @@ describe("subagent continued by a later turn", () => {
   });
 });
 
+describe("turn screenshot gallery", () => {
+  const runId = RunId.make("gallery-run");
+  const threadId = ThreadId.make("gallery-thread");
+  const at = "2026-10-31T10:00:00.000Z";
+  const message = (
+    id: string,
+    role: "user" | "assistant",
+    messageRunId: RunId | null,
+  ): TimelineEntry => ({
+    kind: "message",
+    id,
+    createdAt: at,
+    message: {
+      id: MessageId.make(id),
+      role,
+      text: id,
+      runId: messageRunId,
+      streaming: false,
+      createdAt: at,
+      updatedAt: at,
+    },
+  });
+  const tool = (id: string, toolRunId: RunId = runId): TimelineEntry => ({
+    kind: "work",
+    id,
+    createdAt: at,
+    entry: {
+      id,
+      runId: toolRunId,
+      createdAt: at,
+      label: "Capture",
+      tone: "tool",
+      command: "capture",
+      toolLifecycleStatus: "completed",
+    },
+  });
+  const shots = (id: string, count: number, shotsRunId: RunId = runId): TimelineEntry => ({
+    kind: "tool-images",
+    id: `${id}:images`,
+    createdAt: at,
+    runId: shotsRunId,
+    images: Array.from({ length: count }, (_, index) => ({
+      _tag: "tool-output-image" as const,
+      threadId,
+      itemId: TurnItemId.make(id),
+      index,
+    })),
+  });
+  const derive = (
+    timelineEntries: ReadonlyArray<TimelineEntry>,
+    options: { running?: boolean; status?: "completed" | "interrupted" | "failed" } = {},
+  ) =>
+    deriveMessagesTimelineRows({
+      timelineEntries,
+      latestRun: {
+        runId,
+        status: options.running ? "running" : (options.status ?? "completed"),
+        startedAt: at,
+        completedAt: options.running ? null : at,
+      },
+      isWorking: options.running ?? false,
+      turnDiffSummaries: [],
+      supportsConversationRollback: false,
+    });
+  const imageKeys = (row: MessagesTimelineRow | undefined) =>
+    row?.kind === "turn-images" ? row.images.map((image) => `${image.itemId}:${image.index}`) : [];
+
+  it("replaces a settled run's inline screenshots with one gallery after its reply", () => {
+    const rows = derive([
+      message("prompt", "user", null),
+      tool("shot-1"),
+      shots("shot-1", 2),
+      tool("shot-2"),
+      shots("shot-2", 1),
+      message("reply", "assistant", runId),
+    ]);
+
+    expect(rows.some((row) => row.kind === "tool-images")).toBe(false);
+    expect(rows.map((row) => row.kind)).toEqual(["message", "turn-fold", "message", "turn-images"]);
+    expect(rows.at(-1)).toMatchObject({ id: `turn-images:${runId}`, runId });
+    expect(imageKeys(rows.at(-1))).toEqual(["shot-1:0", "shot-1:1", "shot-2:0"]);
+  });
+
+  it("keeps the gallery after the reply whether or not the turn's fold is open", () => {
+    const entries = [
+      message("prompt", "user", null),
+      tool("shot-1"),
+      shots("shot-1", 1),
+      message("reply", "assistant", runId),
+    ];
+    const open = deriveMessagesTimelineRows({
+      timelineEntries: entries,
+      latestRun: { runId, status: "completed", startedAt: at, completedAt: at },
+      expandedRunIds: new Set([runId]),
+      isWorking: false,
+      turnDiffSummaries: [],
+      supportsConversationRollback: false,
+    });
+
+    expect(open.some((row) => row.kind === "tool-images")).toBe(false);
+    expect(open.at(-2)).toMatchObject({ kind: "message", id: "reply" });
+    expect(open.at(-1)?.kind).toBe("turn-images");
+  });
+
+  it("keeps screenshots inline while the run is still working", () => {
+    const rows = derive(
+      [message("prompt", "user", null), tool("shot-1"), shots("shot-1", 1), tool("shot-2")],
+      { running: true },
+    );
+
+    expect(rows.filter((row) => row.kind === "tool-images")).toHaveLength(1);
+    expect(rows.some((row) => row.kind === "turn-images")).toBe(false);
+  });
+
+  it.each(["completed", "interrupted"] as const)(
+    "attaches the gallery to the run's last visible row when it ended %s without a reply",
+    (status) => {
+      const rows = derive(
+        [message("prompt", "user", null), tool("shot-1"), shots("shot-1", 2), tool("shot-2")],
+        { status },
+      );
+
+      expect(rows.some((row) => row.kind === "tool-images")).toBe(false);
+      expect(rows.filter((row) => row.kind === "turn-images")).toHaveLength(1);
+      expect(rows.at(-1)?.kind).toBe("turn-images");
+      expect(imageKeys(rows.at(-1))).toEqual(["shot-1:0", "shot-1:1"]);
+    },
+  );
+
+  it("follows the last visible work row of a failed run", () => {
+    const rows = derive(
+      [message("prompt", "user", null), tool("shot-1"), shots("shot-1", 1), tool("shot-2")],
+      { status: "failed" },
+    );
+
+    expect(rows.some((row) => row.kind === "turn-fold")).toBe(false);
+    expect(rows.map((row) => row.kind)).toEqual(["message", "work", "work", "turn-images"]);
+  });
+
+  it("builds one gallery per settled run", () => {
+    const otherRun = RunId.make("other-run");
+    const rows = deriveMessagesTimelineRows({
+      timelineEntries: [
+        message("prompt-1", "user", null),
+        tool("a", otherRun),
+        shots("a", 1, otherRun),
+        message("reply-1", "assistant", otherRun),
+        message("prompt-2", "user", null),
+        tool("b"),
+        shots("b", 2),
+        message("reply-2", "assistant", runId),
+      ],
+      latestRun: { runId, status: "completed", startedAt: at, completedAt: at },
+      isWorking: false,
+      turnDiffSummaries: [],
+      supportsConversationRollback: false,
+    });
+    const galleries = rows.filter((row) => row.kind === "turn-images");
+
+    expect(galleries.map((row) => row.id)).toEqual([
+      `turn-images:${otherRun}`,
+      `turn-images:${runId}`,
+    ]);
+    expect(galleries.map(imageKeys)).toEqual([["a:0"], ["b:0", "b:1"]]);
+    expect(rows.findIndex((row) => row.id === `turn-images:${otherRun}`)).toBe(
+      rows.findIndex((row) => row.id === "reply-1") + 1,
+    );
+    expect(rows.at(-2)?.id).toBe("reply-2");
+    expect(rows.at(-1)).toBe(galleries[1]);
+  });
+
+  it("keeps row identity across unchanged derivations and replaces it when a shot changes", () => {
+    const entries = [
+      message("prompt", "user", null),
+      tool("shot-1"),
+      shots("shot-1", 2),
+      message("reply", "assistant", runId),
+    ];
+    const first = computeStableMessagesTimelineRows(derive(entries), {
+      byId: new Map(),
+      result: [],
+    });
+    const same = computeStableMessagesTimelineRows(derive(entries), first);
+    expect(same.result.at(-1)).toBe(first.result.at(-1));
+
+    const more = computeStableMessagesTimelineRows(
+      derive([...entries.slice(0, 3), shots("shot-2", 1), entries[3]!]),
+      same,
+    );
+    expect(more.result.at(-1)).not.toBe(first.result.at(-1));
+    expect(imageKeys(more.result.at(-1))).toEqual(["shot-1:0", "shot-1:1", "shot-2:0"]);
+  });
+});
+
 describe("shouldCollapseUserMessage", () => {
   it("measures a quote chip by its label, not its encoded link", () => {
     const quote = "A long assistant paragraph that the user quoted. ".repeat(40);

@@ -43,7 +43,9 @@ such as `wally.toml` or `rokit.toml`, or an empty `.sealcode-roblox` file in its
   revision checks and automatic read-back.
 - Playtest: solo and multiplayer tests, code inside the running game, output logs.
 - See: move the camera, frame what they built, and take screenshots. **Screenshots appear in the
-  chat** under the action that took them.
+  chat** under the action that took them while the agent works. When the turn finishes they are
+  collected in one **Screenshots** row after the final reply. Click one to open the viewer, then flip
+  through them with the arrow keys, the thumbnail strip or a swipe.
 - Check UI: inspect and audit screens, click and type in them, and compare phones, tablets and PCs
   with the device simulator.
 - Use the Creator Store: search free assets, check their details and thumbnail, and insert them.

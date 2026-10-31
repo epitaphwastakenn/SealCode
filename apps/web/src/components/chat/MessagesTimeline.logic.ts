@@ -693,6 +693,13 @@ type MessagesTimelineRowContent =
       images: Extract<TimelineEntry, { kind: "tool-images" }>["images"];
     }
   | {
+      kind: "turn-images";
+      id: string;
+      createdAt: string;
+      runId: RunId;
+      images: Extract<TimelineEntry, { kind: "tool-images" }>["images"];
+    }
+  | {
       kind: "mcp-app";
       id: string;
       createdAt: string;
@@ -2216,9 +2223,14 @@ export function deriveMessagesTimelineRows(input: {
     }
   }
 
-  const result = attachTrailingToolGroupsToAssistant(
-    attachCreatedThreadSummaries(nextRows, timelineEntries, collapsedFoldMemberIds),
-  );
+  const result = collectSettledRunImages({
+    rows: attachTrailingToolGroupsToAssistant(
+      attachCreatedThreadSummaries(nextRows, timelineEntries, collapsedFoldMemberIds),
+    ),
+    timelineEntries,
+    terminalAssistantMessageIds,
+    runIsSettled: (runId) => !runIdIsActiveResponse(runId),
+  });
   return result.map((row, index) =>
     timelineRowIsWorkLog(row) && timelineRowIsWorkLog(result[index + 1])
       ? { ...row, continuesWorkLog: true }
@@ -2234,6 +2246,109 @@ function timelineRowIsWorkLog(row: MessagesTimelineRow | undefined): boolean {
       row.kind === "work-live" ||
       row.kind === "thinking")
   );
+}
+
+function timelineRowRunId(
+  row: MessagesTimelineRow,
+  runIdByEntryId: ReadonlyMap<string, RunId>,
+): RunId | null {
+  switch (row.kind) {
+    case "message":
+    case "assistant-meta":
+      return row.message.role === "assistant" ? (row.message.runId ?? null) : null;
+    case "work":
+      return row.groupedEntries[0]?.runId ?? null;
+    case "work-live":
+      return row.entry.runId ?? null;
+    case "work-toggle":
+    case "turn-fold":
+    case "attempt-fold":
+      return row.runId ?? null;
+    case "event":
+      return row.projectedItem.item.runId;
+    case "proposed-plan":
+      return row.proposedPlan.runId;
+    case "html-render":
+    case "mcp-app":
+      return runIdByEntryId.get(row.id) ?? null;
+    default:
+      return null;
+  }
+}
+
+function collectSettledRunImages(input: {
+  rows: MessagesTimelineRow[];
+  timelineEntries: ReadonlyArray<TimelineEntry>;
+  terminalAssistantMessageIds: ReadonlySet<string>;
+  runIsSettled: (runId: RunId) => boolean;
+}): MessagesTimelineRow[] {
+  const runIdByEntryId = new Map<string, RunId>();
+  for (const entry of input.timelineEntries) {
+    const runId = timelineEntryRunId(entry);
+    if (runId !== null) runIdByEntryId.set(entry.id, runId);
+  }
+  const galleries = new Map<
+    RunId,
+    {
+      createdAt: string;
+      images: Array<Extract<MessagesTimelineRow, { kind: "turn-images" }>["images"][number]>;
+      fallbackIndex: number;
+    }
+  >();
+  for (const [index, row] of input.rows.entries()) {
+    if (row.kind !== "tool-images") continue;
+    const runId = runIdByEntryId.get(row.id);
+    if (runId === undefined || !input.runIsSettled(runId)) continue;
+    const gallery = galleries.get(runId);
+    if (gallery === undefined) {
+      galleries.set(runId, {
+        createdAt: row.createdAt,
+        images: [...row.images],
+        fallbackIndex: index,
+      });
+    } else {
+      gallery.createdAt = row.createdAt;
+      gallery.images.push(...row.images);
+      gallery.fallbackIndex = index;
+    }
+  }
+  if (galleries.size === 0) return input.rows;
+
+  const replyAnchorByRunId = new Map<RunId, number>();
+  const lastRowByRunId = new Map<RunId, number>();
+  for (const [index, row] of input.rows.entries()) {
+    if (row.kind === "tool-images") continue;
+    const runId = timelineRowRunId(row, runIdByEntryId);
+    if (runId === null || !galleries.has(runId)) continue;
+    if (
+      (row.kind === "message" || row.kind === "assistant-meta") &&
+      input.terminalAssistantMessageIds.has(row.message.id)
+    ) {
+      replyAnchorByRunId.set(runId, index);
+    }
+    lastRowByRunId.set(runId, index);
+  }
+
+  const galleryRowsAfterIndex = new Map<number, MessagesTimelineRow[]>();
+  for (const [runId, gallery] of galleries) {
+    const anchorIndex =
+      replyAnchorByRunId.get(runId) ?? lastRowByRunId.get(runId) ?? gallery.fallbackIndex;
+    const galleryRows = galleryRowsAfterIndex.get(anchorIndex) ?? [];
+    galleryRows.push({
+      kind: "turn-images",
+      id: `turn-images:${runId}`,
+      createdAt: gallery.createdAt,
+      runId,
+      images: gallery.images,
+    });
+    galleryRowsAfterIndex.set(anchorIndex, galleryRows);
+  }
+
+  return input.rows.flatMap((row, index): MessagesTimelineRow[] => {
+    const galleryRows = galleryRowsAfterIndex.get(index) ?? [];
+    const runId = row.kind === "tool-images" ? runIdByEntryId.get(row.id) : undefined;
+    return runId !== undefined && galleries.has(runId) ? galleryRows : [row, ...galleryRows];
+  });
 }
 
 function attachCreatedThreadSummaries(
@@ -2519,6 +2634,19 @@ function isRowUnchanged(a: MessagesTimelineRow, b: MessagesTimelineRow): boolean
         a.createdAt === bi.createdAt &&
         a.images.length === bi.images.length &&
         a.images.every((image, index) => image.itemId === bi.images[index]?.itemId)
+      );
+    }
+
+    case "turn-images": {
+      const bi = b as typeof a;
+      return (
+        a.createdAt === bi.createdAt &&
+        a.runId === bi.runId &&
+        a.images.length === bi.images.length &&
+        a.images.every(
+          (image, index) =>
+            image.itemId === bi.images[index]?.itemId && image.index === bi.images[index]?.index,
+        )
       );
     }
 

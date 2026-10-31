@@ -45,6 +45,7 @@ export interface PersistedUiState {
   threadChangedFilesExpandedById?: Record<string, Record<string, boolean>>;
   pullRequestMergeMethod?: string;
   timelineExpandedTurnIdsByThread?: Record<string, string[]>;
+  timelineCollapsedGalleryRunIdsByThread?: Record<string, string[]>;
 }
 
 export interface UiProjectState {
@@ -59,6 +60,7 @@ export interface UiThreadState {
   threadLastVisitedAtById: Record<string, string>;
   threadChangedFilesExpandedById: Record<string, Record<string, boolean>>;
   timelineExpandedTurnIdsByThread: Record<string, string[]>;
+  timelineCollapsedGalleryRunIdsByThread: Record<string, string[]>;
 }
 
 export interface UiEndpointState {
@@ -90,6 +92,7 @@ const initialState: UiState = {
   threadLastVisitedAtById: {},
   threadChangedFilesExpandedById: {},
   timelineExpandedTurnIdsByThread: {},
+  timelineCollapsedGalleryRunIdsByThread: {},
   defaultAdvertisedEndpointKey: null,
   pullRequestMergeMethod: "merge",
   lastOpenThreadRoute: null,
@@ -195,6 +198,9 @@ export function parsePersistedState(parsed: PersistedUiState): UiState {
         : {},
     timelineExpandedTurnIdsByThread: sanitizeStringArrayRecord(
       parsed.timelineExpandedTurnIdsByThread,
+    ),
+    timelineCollapsedGalleryRunIdsByThread: sanitizeStringArrayRecord(
+      parsed.timelineCollapsedGalleryRunIdsByThread,
     ),
     defaultAdvertisedEndpointKey: sanitizeOptionalKey(parsed.defaultAdvertisedEndpointKey),
     sidebarProjectScopeKey: sanitizeOptionalKey(parsed.sidebarProjectScopeKey),
@@ -342,6 +348,7 @@ export function persistState(state: UiState): void {
         threadChangedFilesExpandedById: state.threadChangedFilesExpandedById,
         pullRequestMergeMethod: state.pullRequestMergeMethod,
         timelineExpandedTurnIdsByThread: state.timelineExpandedTurnIdsByThread,
+        timelineCollapsedGalleryRunIdsByThread: state.timelineCollapsedGalleryRunIdsByThread,
         lastOpenThreadRoute: state.lastOpenThreadRoute,
       } satisfies PersistedUiState),
     );
@@ -450,6 +457,27 @@ export function setTimelineTurnExpanded(
     ...state,
     timelineExpandedTurnIdsByThread,
   };
+}
+
+export function setTimelineGalleryCollapsed(
+  state: UiState,
+  threadId: string,
+  runId: string,
+  collapsed: boolean,
+): UiState {
+  const current = state.timelineCollapsedGalleryRunIdsByThread[threadId] ?? [];
+  if (current.includes(runId) === collapsed) {
+    return state;
+  }
+
+  const next = collapsed ? [...current, runId] : current.filter((id) => id !== runId);
+  const byThread = { ...state.timelineCollapsedGalleryRunIdsByThread };
+  if (next.length > 0) {
+    byThread[threadId] = next.slice(-100);
+  } else {
+    delete byThread[threadId];
+  }
+  return { ...state, timelineCollapsedGalleryRunIdsByThread: byThread };
 }
 
 function setDefaultAdvertisedEndpointKey(state: UiState, key: string | null): UiState {
@@ -610,6 +638,7 @@ interface UiStateStore extends UiState {
   markThreadUnread: (threadId: string, latestTurnCompletedAt: string | null | undefined) => void;
   setThreadChangedFilesExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
   setTimelineTurnExpanded: (threadId: string, turnId: string, expanded: boolean) => void;
+  setTimelineGalleryCollapsed: (threadId: string, runId: string, collapsed: boolean) => void;
   setDefaultAdvertisedEndpointKey: (key: string | null) => void;
   setSidebarProjectScopeKey: (projectKey: string | null) => void;
   setPullRequestMergeMethod: (method: PullRequestMergeMethod) => void;
@@ -639,6 +668,8 @@ export const useUiStateStore = create<UiStateStore>((set) => ({
     set((state) => setThreadChangedFilesExpanded(state, threadId, turnId, expanded)),
   setTimelineTurnExpanded: (threadId, turnId, expanded) =>
     set((state) => setTimelineTurnExpanded(state, threadId, turnId, expanded)),
+  setTimelineGalleryCollapsed: (threadId, runId, collapsed) =>
+    set((state) => setTimelineGalleryCollapsed(state, threadId, runId, collapsed)),
   setDefaultAdvertisedEndpointKey: (key) =>
     set((state) => setDefaultAdvertisedEndpointKey(state, key)),
   setSidebarProjectScopeKey: (projectKey) =>

@@ -231,8 +231,8 @@ export function StyledDiffCodeView<LAnnotation = undefined>({
         {...(viewerRef ? { ref: viewerRef } : {})}
         className={
           className
-            ? `diff-render-surface [--code-background:var(--background)] outline-none ${className}`
-            : "diff-render-surface [--code-background:var(--background)] outline-none"
+            ? `diff-render-surface [--code-background:var(--code-surface)] outline-none ${className}`
+            : "diff-render-surface [--code-background:var(--code-surface)] outline-none"
         }
         options={{
           ...options,

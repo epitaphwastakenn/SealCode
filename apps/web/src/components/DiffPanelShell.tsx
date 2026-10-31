@@ -1,48 +1,52 @@
+import { TriangleAlertIcon } from "lucide-react";
 import type { ReactNode } from "react";
 
-import { isElectron } from "~/env";
-import { cn } from "~/lib/utils";
-
+import { HarpMascot } from "./mascot/HarpMascot";
+import { PanelSubheader } from "./PanelSubheader";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "./ui/alert";
+import { Button } from "./ui/button";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "./ui/empty";
 import { Skeleton } from "./ui/skeleton";
 
-export type DiffPanelMode = "inline" | "sheet" | "sidebar" | "embedded";
-
-function getDiffPanelHeaderRowClassName(mode: DiffPanelMode) {
-  const shouldUseDragRegion = isElectron && mode !== "sheet" && mode !== "embedded";
-  return cn(
-    "flex items-center justify-between gap-2",
-    mode === "embedded" ? "px-2" : "px-4",
-    shouldUseDragRegion
-      ? "drag-region h-[var(--workspace-topbar-height)] border-b border-border wco:pr-(--workspace-native-controls-inset)"
-      : "flex h-10 min-h-10 shrink-0 items-center border-b border-border/60 bg-background in-data-[preview-panel-mode=inline]:mb-3 in-data-[preview-panel-mode=inline]:h-7 in-data-[preview-panel-mode=inline]:min-h-7 in-data-[preview-panel-mode=inline]:border-b-transparent",
+export function DiffPanelShell(props: { header: ReactNode; children: ReactNode }) {
+  return (
+    <div className="flex h-full w-full min-w-0 flex-col bg-background">
+      <PanelSubheader className="justify-between gap-2">{props.header}</PanelSubheader>
+      {props.children}
+    </div>
   );
 }
 
-export function DiffPanelShell(props: {
-  mode: DiffPanelMode;
-  header: ReactNode;
-  children: ReactNode;
-}) {
-  const shouldUseDragRegion = isElectron && props.mode !== "sheet" && props.mode !== "embedded";
-
+export function DiffPanelEmpty(props: { title: string; description?: string }) {
   return (
-    <div
-      className={cn(
-        "flex h-full min-w-0 flex-col bg-background",
-        props.mode === "inline"
-          ? "w-[42vw] min-w-[360px] max-w-[560px] shrink-0 border-l border-border"
-          : "w-full",
-      )}
-    >
-      {shouldUseDragRegion ? (
-        <div className={getDiffPanelHeaderRowClassName(props.mode)}>{props.header}</div>
-      ) : (
-        <div className={getDiffPanelHeaderRowClassName(props.mode)} data-surface-subheader>
-          {props.header}
-        </div>
-      )}
-      {props.children}
-    </div>
+    <Empty size="compact">
+      <EmptyHeader>
+        <HarpMascot scene="sleeping" className="mb-4 h-16 w-auto" />
+        <EmptyTitle>{props.title}</EmptyTitle>
+        {props.description ? <EmptyDescription>{props.description}</EmptyDescription> : null}
+      </EmptyHeader>
+    </Empty>
+  );
+}
+
+export function DiffPanelError(props: {
+  title: string;
+  message: string;
+  onRetry?: (() => void) | undefined;
+}) {
+  return (
+    <Alert variant="error" className="m-2 shrink-0">
+      <TriangleAlertIcon />
+      <AlertTitle>{props.title}</AlertTitle>
+      <AlertDescription>{props.message}</AlertDescription>
+      {props.onRetry ? (
+        <AlertAction>
+          <Button size="xs" variant="outline" onClick={props.onRetry}>
+            Retry
+          </Button>
+        </AlertAction>
+      ) : null}
+    </Alert>
   );
 }
 
@@ -99,9 +103,9 @@ export function DiffPanelLoadingState(props: { label: string }) {
     >
       <DiffFileHeaderSkeleton titleWidth="medium" />
       <div className="flex h-6 items-center gap-2 px-2 pr-3">
-        <div className="h-px flex-1 bg-border/40" />
+        <div className="h-px flex-1 bg-border/50" />
         <Skeleton shape="pill" className="h-2.5 w-24" />
-        <div className="h-px flex-1 bg-border/40" />
+        <div className="h-px flex-1 bg-border/50" />
       </div>
       <div className="space-y-2 px-3 py-2">
         <DiffCodeLineSkeleton width="medium" />

@@ -6,6 +6,7 @@ import {
 
 import type { ComposerImageAttachment } from "~/composerDraftStore";
 import { usePreviewAvailable } from "~/browser/previewRuntime";
+import { Empty, EmptyDescription, EmptyHeader } from "~/components/ui/empty";
 import { useEnvironmentScope } from "~/state/session";
 
 import { PreviewPanelShell, type PreviewPanelMode } from "./PreviewPanelShell";
@@ -36,13 +37,15 @@ export function PreviewPanel({
   if (!canOperatePreview || !available) {
     return (
       <PreviewPanelShell mode={mode}>
-        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 p-8 text-center">
-          <p className="max-w-sm text-sm text-muted-foreground">
-            {canOperatePreview
-              ? "Preview is only available in the Harp desktop app."
-              : "Pair this client again with preview access to control browser previews."}
-          </p>
-        </div>
+        <Empty size="compact">
+          <EmptyHeader>
+            <EmptyDescription>
+              {canOperatePreview
+                ? "Preview is only available in the Harp desktop app."
+                : "Pair this client again with preview access to control browser previews."}
+            </EmptyDescription>
+          </EmptyHeader>
+        </Empty>
       </PreviewPanelShell>
     );
   }

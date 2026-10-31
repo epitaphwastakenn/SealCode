@@ -59,21 +59,21 @@ export function DiffCommentAnnotation({
     return (
       <div
         data-diff-comment-annotation
-        className="group/comment flex min-w-0 items-start gap-2.5 border-s-2 border-primary/55 bg-primary/[0.045] px-3 py-2.5 font-sans text-foreground selection:bg-primary selection:text-primary-foreground"
+        className="group/comment flex min-w-0 items-start gap-2.5 border-s-2 border-brand/55 bg-brand/5 px-3 py-2.5 font-sans text-foreground selection:bg-primary selection:text-primary-foreground"
         contentEditable={false}
         onPointerDown={(event) => event.stopPropagation()}
       >
-        <MessageCircle className="size-3.5 h-5 shrink-0 text-primary/70" aria-hidden="true" />
+        <MessageCircle className="size-3.5 h-5 shrink-0 text-brand" aria-hidden="true" />
         <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-5">{displayedText}</p>
         {onDelete ? (
-          <span className="-my-1 -mr-1 flex shrink-0 opacity-0 transition-opacity group-hover/comment:opacity-100 focus-within:opacity-100 max-sm:opacity-100">
+          <span className="-my-1 -mr-1 flex shrink-0 opacity-0 transition-opacity group-hover/comment:opacity-100 focus-within:opacity-100 pointer-coarse:opacity-100">
             <Button
               variant="ghost-muted"
-              size="icon-xs"
+              size="icon-micro"
               aria-label="Delete comment"
               onClick={onDelete}
             >
-              <Trash2 className="size-3" />
+              <Trash2 className="size-3.5" />
             </Button>
           </span>
         ) : null}
@@ -113,7 +113,7 @@ export function DiffCommentAnnotation({
         }}
       />
       <div className="mt-1.5 flex items-center gap-1">
-        <span className="mr-auto text-3xs text-muted-foreground/70">⌘/Ctrl Enter to send</span>
+        <span className="mr-auto text-xs text-muted-foreground">⌘/Ctrl Enter to send</span>
         <Button variant="ghost-muted" size="xs" onClick={onCancel}>
           Cancel
         </Button>

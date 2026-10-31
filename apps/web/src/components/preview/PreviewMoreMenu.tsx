@@ -16,6 +16,7 @@ import {
   MenuSubTrigger,
   MenuTrigger,
 } from "~/components/ui/menu";
+import { StatusDot } from "~/components/ui/status-dot";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 
 const COLOR_SCHEME_OPTIONS: ReadonlyArray<{
@@ -49,9 +50,16 @@ interface Props {
   nativePictureInPicture: boolean;
   profileName: string | undefined;
   move?: { readonly label: string; readonly onMove: () => void };
+  onOpenInBrowser?: (() => void) | undefined;
+  onCapture?: ((record: boolean) => void) | undefined;
+  captureDisabled?: boolean | undefined;
+  recording?: boolean | undefined;
+  onPictureInPicture?: (() => void) | undefined;
+  pictureInPicture?: boolean | undefined;
+  pictureInPictureDisabled?: boolean | undefined;
 }
 
-const MenuTriggerButton = () => (
+const MenuTriggerButton = ({ recording }: { recording: boolean }) => (
   <Tooltip>
     <TooltipTrigger
       render={
@@ -61,8 +69,9 @@ const MenuTriggerButton = () => (
       }
     >
       <MoreVertical />
+      {recording ? <StatusDot tone="error" className="absolute top-0.5 right-0.5" /> : null}
     </TooltipTrigger>
-    <TooltipPopup>More</TooltipPopup>
+    <TooltipPopup>{recording ? "Recording" : "More"}</TooltipPopup>
   </Tooltip>
 );
 
@@ -76,13 +85,43 @@ export function PreviewMoreMenu({
   nativePictureInPicture,
   profileName,
   move,
+  onOpenInBrowser,
+  onCapture,
+  captureDisabled,
+  recording,
+  onPictureInPicture,
+  pictureInPicture,
+  pictureInPictureDisabled,
 }: Props) {
   const zoomLabel = `${Math.round(zoomFactor * 100)}%`;
   const disabled = !enabled;
+  const hasPageActions = Boolean(onCapture || onPictureInPicture || onOpenInBrowser);
   return (
     <Menu>
-      <MenuTriggerButton />
+      <MenuTriggerButton recording={recording ?? false} />
       <MenuPopup align="end" sideOffset={6}>
+        {onCapture && recording ? (
+          <MenuItem onClick={() => onCapture(false)}>Stop recording</MenuItem>
+        ) : null}
+        {onCapture && !recording ? (
+          <>
+            <MenuItem onClick={() => onCapture(false)} disabled={captureDisabled}>
+              Capture screenshot
+            </MenuItem>
+            <MenuItem onClick={() => onCapture(true)} disabled={captureDisabled}>
+              Record screen
+            </MenuItem>
+          </>
+        ) : null}
+        {onPictureInPicture ? (
+          <MenuItem onClick={onPictureInPicture} disabled={pictureInPictureDisabled}>
+            {pictureInPicture ? "Close floating preview" : "Float preview over chat"}
+          </MenuItem>
+        ) : null}
+        {onOpenInBrowser ? (
+          <MenuItem onClick={onOpenInBrowser}>Open in system browser</MenuItem>
+        ) : null}
+        {hasPageActions ? <MenuSeparator /> : null}
         <MenuItem onClick={actions.hardReload} disabled={disabled}>
           Hard reload
         </MenuItem>

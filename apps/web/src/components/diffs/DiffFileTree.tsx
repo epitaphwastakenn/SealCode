@@ -1,6 +1,6 @@
 import type { GitStatusEntry } from "@pierre/trees";
 import { FileTree, useFileTree, useFileTreeSelector } from "@pierre/trees/react";
-import { ChevronsDownUp, ChevronsUpDown } from "lucide";
+import { ChevronsDownUpIcon, ChevronsUpDownIcon } from "lucide-react";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { useStableCallback } from "~/hooks/useStableCallback";
@@ -9,8 +9,8 @@ import { cn } from "~/lib/utils";
 import { PIERRE_TREE_UNSAFE_CSS, pierreTreeStyle } from "~/pierre-tree-theme";
 
 import { areAllDirectoriesExpanded, setAllDirectoriesExpanded } from "../files/fileTreeExpansion";
+import { PanelSubheader } from "../PanelSubheader";
 import { Button } from "../ui/button";
-import { MorphIcon } from "~/components/MorphIcon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   buildDiffFileTreeUpdates,
@@ -29,7 +29,6 @@ interface DiffFileTreeProps {
   readonly selectedPath?: string | null;
   readonly revealRequestId?: number;
   readonly ariaLabel: string;
-  readonly headerAccessory?: ReactNode;
   readonly footer?: ReactNode;
   readonly className?: string;
 }
@@ -40,7 +39,6 @@ export function DiffFileTree({
   selectedPath = null,
   revealRequestId = 0,
   ariaLabel,
-  headerAccessory,
   footer,
   className,
 }: DiffFileTreeProps) {
@@ -179,13 +177,9 @@ export function DiffFileTree({
 
   return (
     <div className={cn("flex min-h-0 flex-1 flex-col bg-background", className)}>
-      <div
-        className="flex h-10 min-h-10 shrink-0 items-center gap-1 border-b border-border/60 bg-background px-2 text-xs text-muted-foreground in-data-[preview-panel-mode=inline]:mb-3 in-data-[preview-panel-mode=inline]:h-7 in-data-[preview-panel-mode=inline]:min-h-7 in-data-[preview-panel-mode=inline]:border-b-transparent"
-        data-surface-subheader
-      >
+      <PanelSubheader className="text-xs text-muted-foreground">
         <span className="px-1 font-medium text-foreground">Files</span>
         <span className="ml-auto tabular-nums">{entries.length}</span>
-        {headerAccessory}
         {directoryPaths.length > 0 ? (
           <Tooltip>
             <TooltipTrigger
@@ -193,7 +187,7 @@ export function DiffFileTree({
                 <Button
                   type="button"
                   size="icon-xs"
-                  variant="ghost"
+                  variant="ghost-muted"
                   aria-label={
                     allDirectoriesExpanded ? "Collapse all folders" : "Expand all folders"
                   }
@@ -203,17 +197,18 @@ export function DiffFileTree({
                 />
               }
             >
-              <MorphIcon
-                className="size-3.5"
-                icon={allDirectoriesExpanded ? ChevronsDownUp : ChevronsUpDown}
-              />
+              {allDirectoriesExpanded ? (
+                <ChevronsDownUpIcon className="size-3.5" />
+              ) : (
+                <ChevronsUpDownIcon className="size-3.5" />
+              )}
             </TooltipTrigger>
             <TooltipPopup>
               {allDirectoriesExpanded ? "Collapse all folders" : "Expand all folders"}
             </TooltipPopup>
           </Tooltip>
         ) : null}
-      </div>
+      </PanelSubheader>
       <FileTree
         model={model}
         aria-label={ariaLabel}

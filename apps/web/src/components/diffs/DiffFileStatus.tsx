@@ -27,7 +27,7 @@ export function DiffFileStatus({
           />
         }
       >
-        {error ? <RotateCwIcon className="size-3" /> : <InfoIcon className="size-3" />}
+        {error ? <RotateCwIcon className="size-3.5" /> : <InfoIcon className="size-3.5" />}
       </TooltipTrigger>
       <TooltipPopup>
         {error

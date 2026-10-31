@@ -134,10 +134,13 @@ function PreviewPanelShellFrame(
           ? maximized
             ? // Maximizing meets the sidebar border or window edge; omit the duplicate border.
               "flex-1"
-            : "shrink-0 border-l border-border"
+            : "shrink-0 border-l border-border [html[data-floating-panels=true]_&]:m-(--floating-panel-gap) [html[data-floating-panels=true]_&]:h-auto [html[data-floating-panels=true]_&]:rounded-(--floating-panel-radius) [html[data-floating-panels=true]_&]:border"
           : "w-full",
         collapsible &&
-          "[[data-panel-animations=true]_&]:transition-[width] [[data-panel-animations=true]_&]:duration-(--panel-animation-duration) [[data-panel-animations=true]_&]:ease-out",
+          "[[data-panel-animations=true]_&]:transition-[width,margin] [[data-panel-animations=true]_&]:duration-(--panel-animation-duration) [[data-panel-animations=true]_&]:ease-out",
+        collapsible &&
+          !open &&
+          "[html[data-floating-panels=true]_&]:m-0 [html[data-floating-panels=true]_&]:border-0",
         collapsible && open && "[[data-panel-animations=true]_&]:starting:w-0!",
         collapsible && !open && "pointer-events-none",
       )}
@@ -158,7 +161,12 @@ function PreviewPanelShellFrame(
       data-preview-panel-maximized={maximized ? "true" : "false"}
     >
       {isInline && !maximized ? <RightPanelResizeHandle handlers={handlers} /> : null}
-      <div className={cn("h-full min-h-0 w-full", collapsible && "overflow-clip")}>
+      <div
+        className={cn(
+          "h-full min-h-0 w-full [html[data-floating-panels=true]_&]:overflow-hidden [html[data-floating-panels=true]_&]:rounded-[inherit]",
+          collapsible && "overflow-clip",
+        )}
+      >
         <div
           className="flex h-full min-h-0 min-w-0 flex-col"
           style={

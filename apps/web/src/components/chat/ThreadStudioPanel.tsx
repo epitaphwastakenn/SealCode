@@ -1,6 +1,7 @@
 import { type EnvironmentId, type ThreadId } from "@t3tools/contracts";
 import { playtestsAllowed } from "@t3tools/shared/studioControls";
-import { BoxIcon, PlayIcon } from "lucide-react";
+import { PlayIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 import {
   useStudioControlsApply,
@@ -9,6 +10,7 @@ import {
 } from "../../hooks/useThreadStudioControls";
 import { cn } from "../../lib/utils";
 import { useThreadShell } from "../../state/entities";
+import { StatusDot } from "../ui/status-dot";
 import { Switch } from "../ui/switch";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import {
@@ -20,11 +22,12 @@ import {
 import {
   THREAD_DETAILS_PANEL_ICON_CLASS,
   THREAD_DETAILS_PANEL_ROW_CONTENT_CLASS,
+  threadDetailsMetaClassName,
+  threadDetailsRowLabelClassName,
 } from "./threadDetailsPanelStyles";
 
 function PanelRow(props: {
-  readonly icon: typeof BoxIcon;
-  readonly dot?: "connected" | "away" | undefined;
+  readonly leading: ReactNode;
   readonly title: string;
   readonly switchLabel: string;
   readonly detail?: string | null | undefined;
@@ -32,34 +35,26 @@ function PanelRow(props: {
   readonly checked: boolean;
   readonly onCheckedChange: (checked: boolean) => void;
 }) {
-  const Icon = props.icon;
   return (
     <li
       className={cn("flex items-center rounded-lg py-1.5", THREAD_DETAILS_PANEL_ROW_CONTENT_CLASS)}
     >
-      <span className="relative inline-flex size-4 shrink-0 items-center justify-center">
-        <Icon className={THREAD_DETAILS_PANEL_ICON_CLASS} aria-hidden />
-        {props.dot === undefined ? null : (
-          <span
-            className={cn(
-              "absolute -right-1 -top-1 size-1.5 rounded-full",
-              props.dot === "connected" ? "bg-success" : "bg-muted-foreground",
-            )}
-            aria-hidden
-          />
-        )}
+      <span className="inline-flex size-4 shrink-0 items-center justify-center">
+        {props.leading}
       </span>
       <div className="min-w-0 flex-1">
         <span
           className={cn(
-            "block truncate text-sm font-medium",
-            props.muted ? "text-muted-foreground" : "text-foreground",
+            "block truncate",
+            props.muted
+              ? "text-sm font-medium text-muted-foreground"
+              : threadDetailsRowLabelClassName,
           )}
         >
           {props.title}
         </span>
         {props.detail ? (
-          <p className="truncate text-2xs text-muted-foreground">{props.detail}</p>
+          <p className={cn("truncate", threadDetailsMetaClassName)}>{props.detail}</p>
         ) : null}
       </div>
       <Switch
@@ -79,8 +74,12 @@ function StudioPlaceRowItem(props: {
   const { row } = props;
   return (
     <PanelRow
-      icon={BoxIcon}
-      dot={row.connected ? "connected" : "away"}
+      leading={
+        <StatusDot
+          size="md"
+          tone={!row.connected ? "muted" : row.playtestRunning ? "info" : "success"}
+        />
+      }
       title={row.name}
       switchLabel={`Let the agent use ${row.name}`}
       detail={studioPlaceDetail(row)}
@@ -123,7 +122,7 @@ export function ThreadStudioPanel(props: {
           <StudioPlaceRowItem key={row.placeKey} row={row} onChange={change} />
         ))}
         <PanelRow
-          icon={PlayIcon}
+          leading={<PlayIcon className={THREAD_DETAILS_PANEL_ICON_CLASS} aria-hidden />}
           title="Playtests"
           switchLabel="Let the agent start playtests"
           detail={playtestsAllowed(controls) ? null : "The agent cannot start one"}
@@ -132,7 +131,7 @@ export function ThreadStudioPanel(props: {
         />
       </ul>
       {rows.length === 0 ? (
-        <p className="px-2.5 pt-1 text-2xs text-muted-foreground">
+        <p className="px-2.5 pt-1 text-xs text-muted-foreground">
           No Studio place is connected. Open one in Roblox Studio.
         </p>
       ) : null}

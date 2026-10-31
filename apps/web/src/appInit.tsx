@@ -68,9 +68,6 @@ function startClientAppearance(): void {
     if (previous?.chatWidth !== settings.chatWidth) {
       root.dataset.chatWidth = settings.chatWidth;
     }
-    if (previous?.redesignEnabled !== settings.redesignEnabled) {
-      root.toggleAttribute("data-redesign", settings.redesignEnabled);
-    }
     if (previous?.scrollbarSize !== settings.scrollbarSize) {
       root.style.setProperty("--app-scrollbar-size", `${settings.scrollbarSize}px`);
     }

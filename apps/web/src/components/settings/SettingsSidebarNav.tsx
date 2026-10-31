@@ -2,7 +2,6 @@ import { useEffect, useRef, useState, type ComponentType, type KeyboardEvent } f
 import {
   ActivityIcon,
   ArchiveIcon,
-  FlaskConicalIcon,
   BlocksIcon,
   BotIcon,
   CalendarClockIcon,
@@ -56,7 +55,6 @@ const SETTINGS_SECTION_ICONS: Readonly<
   "/settings/source-control": GitBranchIcon,
   "/settings/storage": HardDriveIcon,
   "/settings/connections": Link2Icon,
-  "/settings/beta": FlaskConicalIcon,
   "/settings/archived": ArchiveIcon,
 };
 
@@ -66,7 +64,7 @@ const SETTINGS_NAV_GROUPS: ReadonlyArray<{
 }> = [
   {
     label: "App",
-    items: ["/settings/general", "/settings/appearance", "/settings/keybindings", "/settings/beta"],
+    items: ["/settings/general", "/settings/appearance", "/settings/keybindings"],
   },
   {
     label: "Agents",

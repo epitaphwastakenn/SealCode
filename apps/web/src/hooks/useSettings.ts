@@ -150,11 +150,7 @@ async function hydrateClientSettings(): Promise<void> {
         return;
       }
       if (persistedSettings) {
-        replaceClientSettingsSnapshot({
-          ...DEFAULT_CLIENT_SETTINGS,
-          ...persistedSettings,
-          redesignEnabled: true,
-        });
+        replaceClientSettingsSnapshot({ ...DEFAULT_CLIENT_SETTINGS, ...persistedSettings });
       }
       setClientSettingsHydrationStatus("ready");
     } catch (error) {

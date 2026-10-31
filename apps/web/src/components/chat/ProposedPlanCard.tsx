@@ -17,7 +17,7 @@ import {
   normalizePlanMarkdownForExport,
 } from "../../proposedPlan";
 import ChatMarkdown from "../ChatMarkdown";
-import { EllipsisIcon } from "lucide-react";
+import { ClipboardListIcon, EllipsisIcon } from "lucide-react";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
@@ -73,7 +73,8 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
       );
     },
   });
-  const title = proposedPlanTitle(planMarkdown) ?? "Proposed plan";
+  const planTitle = proposedPlanTitle(planMarkdown);
+  const title = planTitle ?? "Proposed plan";
   const lineCount = planMarkdown.split("\n").length;
   const canCollapse = planMarkdown.length > 900 || lineCount > 20;
   const displayedPlanMarkdown = stripDisplayedPlanMarkdown(planMarkdown);
@@ -158,20 +159,23 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
   };
 
   return (
-    <div className="rounded-2xl border border-border/80 bg-card/70 p-4 sm:p-5">
+    <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <Badge variant="secondary">Plan</Badge>
-          {}
+          {planTitle ? (
+            <Badge variant="secondary">Plan</Badge>
+          ) : (
+            <ClipboardListIcon aria-hidden="true" className="size-4 shrink-0 text-icon-muted" />
+          )}
           <h3 data-thread-find-text="true" className="truncate text-sm font-medium text-foreground">
             {title}
           </h3>
         </div>
         <Menu>
           <MenuTrigger
-            render={<Button aria-label="Plan actions" size="icon-xs" variant="outline" />}
+            render={<Button aria-label="Plan actions" size="icon-xs" variant="ghost-muted" />}
           >
-            <EllipsisIcon aria-hidden="true" className="size-4" />
+            <EllipsisIcon aria-hidden="true" />
           </MenuTrigger>
           <MenuPopup align="end">
             <MenuItem onClick={handleCopyPlan}>
@@ -214,14 +218,14 @@ export const ProposedPlanCard = memo(function ProposedPlanCard({
             />
           )}
           {isCollapsed ? (
-            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-card/95 via-card/80 to-transparent" />
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 h-24 bg-linear-to-t from-card to-transparent" />
           ) : null}
         </div>
         {canCollapse ? (
-          <div className="mt-4 flex justify-center">
+          <div className="mt-2 flex">
             <Button
-              size="sm"
-              variant="outline"
+              size="xs"
+              variant="ghost-muted"
               data-scroll-anchor-ignore
               onClick={() => setExpanded((value) => !value)}
             >

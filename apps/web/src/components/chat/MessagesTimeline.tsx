@@ -2,7 +2,7 @@ import { AudioPreviewUnmountContext } from "../files/AudioPreview";
 import { ThreadFindTimelineContext } from "./ThreadFindProvider";
 import { MarkdownFindContext } from "./markdownFindContext";
 import { useChatCanvas } from "./ChatCanvasContext";
-import { WorkLogBlock } from "./WorkLog";
+import { WorkLogBlock, WorkLogButton } from "./WorkLog";
 import type { WorktreeSetupSnapshot } from "@t3tools/contracts";
 import { deriveTimelineMinimapItems } from "./timelineMinimapItems";
 import {
@@ -26,7 +26,6 @@ const NOOP_OPEN_ATTACHMENT = (_attachment: ChatFileAttachment) => {};
 const NOOP_REVIEW_TURN_DIFF = (_runId: RunId) => {};
 
 import { resolveChatListAnchoredEndSpace } from "@t3tools/shared/chatList";
-import { observeVisibleAnimation } from "../../lib/visibleAnimation";
 import {
   memo,
   use,
@@ -46,9 +45,15 @@ import {
 import { type TimelineEntry } from "../../session-logic";
 import type { CodexArtifactTemplate } from "@t3tools/shared/codexArtifactTemplates";
 import { type ChatFileAttachment, type TurnDiffSummary } from "../../types";
-import { ArrowRightIcon, BotIcon, CircleAlertIcon, Minimize2Icon } from "lucide-react";
-import { ChevronDown, ChevronRight } from "lucide";
-import { MorphIcon } from "~/components/MorphIcon";
+import {
+  ArrowRightIcon,
+  BotIcon,
+  CheckIcon,
+  CircleAlertIcon,
+  Minimize2Icon,
+  RotateCcwIcon,
+} from "lucide-react";
+import { DisclosureChevron } from "~/components/ui/disclosure-chevron";
 import { ExpandedImagePreview } from "./ExpandedImagePreview";
 import {
   CHAT_TIMELINE_ANCHOR_OFFSET,
@@ -85,6 +90,7 @@ import { useUiStateStore } from "~/uiStateStore";
 import { type DiffPresentation, type TimestampFormat } from "@t3tools/contracts/settings";
 import { type HandoffTimelineRun } from "./V2LifecycleRow";
 import { TimelineSystemDivider } from "./TimelineSystemDivider";
+import { HarpMascot } from "../mascot/HarpMascot";
 
 import { forwardWheelToTimeline } from "./timelineMinimapWheel";
 import { TimelineMinimap } from "./TimelineMinimap";
@@ -96,7 +102,7 @@ import {
   type WorkGroupViewState,
   type TimelineRow,
 } from "./timelineRowContext";
-import { TimelineRowTimestamp, ActivityShimmerOverlay } from "./TimelineRowParts";
+import { TimelineRowTimestamp } from "./TimelineRowParts";
 import {
   WorkGroupSection,
   WorkingTimelineRow,
@@ -1154,7 +1160,7 @@ const ConversationTimeline = memo(function ConversationTimeline({
           className="flex h-full items-center justify-center ps-(--chat-lane-inset-start) pe-(--chat-lane-inset-end)"
           style={{ paddingBottom: emptyPlaceholderInset }}
         >
-          <p className="text-sm text-muted-foreground">Send a message to start the conversation.</p>
+          <HarpMascot scene="resting" className="h-16 w-auto" />
         </div>
       </>
     );
@@ -1306,19 +1312,20 @@ const TimelineRowContent = memo(function TimelineRowContent({ row }: { row: Time
       className={cn(
         isWorkLogRow || isSubagentGroup
           ? undefined
-          : row.kind === "turn-fold" || row.kind === "working"
-            ? "pb-1.5"
-            : (row.kind === "message" &&
-                  row.message.role === "assistant" &&
-                  !row.showAssistantMeta) ||
-                row.kind === "worktree-setup" ||
-                row.kind === "event" ||
-                row.kind === "attempt-fold" ||
-                row.kind === "html-render" ||
-                row.kind === "mcp-app" ||
-                row.kind === "tool-images"
-              ? "pb-2"
-              : "pb-4",
+          : (row.kind === "message" &&
+                row.message.role === "assistant" &&
+                !row.showAssistantMeta) ||
+              row.kind === "turn-fold" ||
+              row.kind === "working" ||
+              row.kind === "context-compaction" ||
+              row.kind === "worktree-setup" ||
+              row.kind === "event" ||
+              row.kind === "attempt-fold" ||
+              row.kind === "html-render" ||
+              row.kind === "mcp-app" ||
+              row.kind === "tool-images"
+            ? "pb-2"
+            : "pb-4",
         (row.kind === "message" && row.message.role === "assistant") ||
           row.kind === "assistant-meta"
           ? "group/assistant"
@@ -1405,118 +1412,69 @@ function ContextCompactionTimelineRow({
     row.title && row.label.startsWith("Context compacted")
       ? row.title + row.label.slice("Context compacted".length)
       : row.label;
-  const content = (
-    <span className="flex min-w-0 items-center gap-1.5">
-      {row.failed ? (
-        <CircleAlertIcon aria-hidden="true" className="size-3 shrink-0" />
-      ) : (
-        <Minimize2Icon aria-hidden="true" className="size-3" />
-      )}
-      {row.tokenCounts ? (
-        <>
-          {row.title ?? "Context compacted"} {row.tokenCounts.before}
-          <ArrowRightIcon aria-hidden="true" className="size-3" />
-          {row.tokenCounts.after} tokens
-        </>
-      ) : (
-        label
-      )}
-      {row.failure ? (
-        <span className="min-w-0 truncate opacity-80">&middot; {row.failure}</span>
-      ) : null}
-    </span>
-  );
   return (
-    <div
-      role="separator"
-      aria-label={row.failure ? `${label}: ${row.failure}` : label}
-      className={cn(
-        "mx-auto flex w-full max-w-(--chat-content-max-width) items-center gap-3 py-1 text-xs",
-        row.failed ? "text-destructive" : "text-muted-foreground",
-      )}
-    >
-      <span className={cn("h-px flex-1", row.failed ? "bg-destructive/30" : "bg-border/70")} />
-      <span
-        ref={row.active ? observeVisibleAnimation : undefined}
-        className="relative min-w-0 overflow-hidden"
-      >
-        {content}
-        {row.active ? <ActivityShimmerOverlay>{content}</ActivityShimmerOverlay> : null}
-      </span>
-      <span className={cn("h-px flex-1", row.failed ? "bg-destructive/30" : "bg-border/70")} />
-    </div>
+    <TimelineSystemDivider
+      label={row.tokenCounts ? (row.title ?? "Context compacted") : label}
+      detail={
+        row.tokenCounts ? (
+          <>
+            {row.tokenCounts.before}
+            <ArrowRightIcon aria-hidden="true" className="mx-1 size-3" />
+            {row.tokenCounts.after} tokens
+          </>
+        ) : null
+      }
+      showDetailSeparator={!row.tokenCounts}
+      tone={row.failed ? "danger" : "neutral"}
+      icon={row.failed ? CircleAlertIcon : Minimize2Icon}
+      active={row.active}
+      ariaLabel={row.failure ? `${label}: ${row.failure}` : label}
+    />
   );
 }
 
 function TurnFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "turn-fold" }> }) {
   const ctx = use(TimelineRowCtx);
   const { summary } = row;
-  // An interrupted turn's label already says it was stopped.
-  const stateLabel =
-    summary.state === "failed" ? "Failed" : summary.state === "interrupted" ? null : "Completed";
-  const summaryItems = [
-    summary.toolCallCount > 0
-      ? `${summary.toolCallCount} tool call${summary.toolCallCount === 1 ? "" : "s"}`
-      : null,
-    summary.assistantResponseCount > 0
-      ? `${summary.assistantResponseCount} response${summary.assistantResponseCount === 1 ? "" : "s"}`
-      : null,
-    summary.agentCount > 0
-      ? `${summary.agentCount} agent${summary.agentCount === 1 ? "" : "s"}`
-      : null,
-    summary.changedFileCount !== null
-      ? `${summary.changedFileCount} file${summary.changedFileCount === 1 ? "" : "s"}`
-      : null,
-  ].filter((item): item is string => item !== null);
-  const accessibleLabel = [stateLabel, row.label, ...summaryItems]
+  const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? "" : "s"}`;
+  const toolCalls = summary.toolCallCount > 0 ? plural(summary.toolCallCount, "tool call") : null;
+  const accessibleLabel = [
+    summary.state === "failed" ? "Failed" : summary.state === "interrupted" ? null : "Completed",
+    row.label,
+    toolCalls,
+    summary.assistantResponseCount > 0 ? plural(summary.assistantResponseCount, "response") : null,
+    summary.agentCount > 0 ? plural(summary.agentCount, "agent") : null,
+    summary.changedFileCount !== null ? plural(summary.changedFileCount, "file") : null,
+  ]
     .filter((part): part is string => part !== null)
     .join(", ");
 
   return (
-    <div className="group/timeline-row relative flex items-start gap-1 border-b border-border/60 pb-2 pe-0.5 pt-1">
-      <button
-        type="button"
-        aria-expanded={row.expanded}
-        aria-label={accessibleLabel}
-        data-scroll-anchor-ignore
-        onClick={() => ctx.onToggleTurnFold(row.runId)}
-        className="flex min-w-0 flex-1 cursor-pointer select-none items-start gap-2 rounded-md px-1 py-1 text-left text-sm leading-relaxed text-muted-foreground tabular-nums transition-colors hover:bg-accent/20 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
-      >
-        <span
-          aria-hidden
-          className={cn(
-            "mt-2 size-1.5 shrink-0 rounded-full",
-            summary.state === "failed"
-              ? "bg-destructive"
-              : summary.state === "interrupted"
-                ? "bg-muted-foreground/60"
-                : "bg-success",
-          )}
-        />
-        <span className="min-w-0 flex-1">
-          <span className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5">
-            {stateLabel ? (
-              <span className="font-medium text-foreground/85">{stateLabel}</span>
-            ) : null}
-            <span>{row.label}</span>
-          </span>
-          {summaryItems.length > 0 ? (
-            <span className="mt-0.5 block text-xs text-muted-foreground/75">
-              {summaryItems.join(" · ")}
-            </span>
+    <WorkLogButton
+      aria-expanded={row.expanded}
+      aria-label={accessibleLabel}
+      data-scroll-anchor-ignore
+      onClick={() => ctx.onToggleTurnFold(row.runId)}
+      icon={
+        summary.state === "failed" ? (
+          <CircleAlertIcon aria-hidden className="size-4 shrink-0 text-error-foreground" />
+        ) : summary.state === "interrupted" ? (
+          <span aria-hidden className="size-4" />
+        ) : (
+          <CheckIcon aria-hidden className="size-4 shrink-0 text-icon-muted" />
+        )
+      }
+      label={<span className="tabular-nums">{row.label}</span>}
+      trailing={
+        <>
+          {toolCalls ? (
+            <span className="shrink-0 text-xs text-muted-foreground">{toolCalls}</span>
           ) : null}
-        </span>
-        <MorphIcon
-          className="mt-1 size-3.5 shrink-0"
-          icon={row.expanded ? ChevronDown : ChevronRight}
-        />
-      </button>
-      <TimelineRowTimestamp
-        createdAt={row.createdAt}
-        timestampFormat={ctx.timestampFormat}
-        className="ms-auto mt-1.5"
-      />
-    </div>
+          <DisclosureChevron open={row.expanded} />
+          <TimelineRowTimestamp createdAt={row.createdAt} timestampFormat={ctx.timestampFormat} />
+        </>
+      }
+    />
   );
 }
 
@@ -1524,20 +1482,15 @@ function AttemptFoldTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "at
   const ctx = use(TimelineRowCtx);
 
   return (
-    <button
-      type="button"
+    <WorkLogButton
       aria-expanded={row.expanded}
+      aria-label={`${row.label}, cut off by a steer`}
       data-scroll-anchor-ignore
       data-superseded-attempt-id={row.attemptId}
       onClick={() => ctx.onToggleAttemptFold(row.attemptId)}
-      className="flex w-full cursor-pointer select-none items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2.5 py-2 text-left transition-colors hover:bg-muted/35 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
-    >
-      <MorphIcon
-        className="size-3.5 shrink-0 text-muted-foreground"
-        icon={row.expanded ? ChevronDown : ChevronRight}
-      />
-      <span className="text-xs font-medium text-foreground/80">{row.label}</span>
-      <span className="text-2xs text-muted-foreground">Cut off by a steer</span>
-    </button>
+      icon={<RotateCcwIcon aria-hidden className="size-4 shrink-0 text-icon-muted" />}
+      label="Cut off by a steer"
+      trailing={<DisclosureChevron open={row.expanded} />}
+    />
   );
 }

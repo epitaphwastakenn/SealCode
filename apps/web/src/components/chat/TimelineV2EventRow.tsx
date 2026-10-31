@@ -1,4 +1,4 @@
-import { WorkLogBlock } from "./WorkLog";
+import { WorkLogBlock, WorkLogDetails, WorkLogRow } from "./WorkLog";
 import { scopeThreadRef } from "@t3tools/client-runtime/environment";
 import { useAtomValue } from "@effect/atom-react";
 import { environmentThreadDetails } from "../../state/threads";
@@ -8,7 +8,10 @@ import {
 } from "@t3tools/client-runtime/state/subagent-display";
 import { memo, use, useState } from "react";
 import ChatMarkdown from "../ChatMarkdown";
-import { ChevronDownIcon } from "lucide-react";
+import { Alert, AlertAction, AlertDescription, AlertTitle } from "../ui/alert";
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { DisclosureChevron } from "../ui/disclosure-chevron";
 import { cn } from "~/lib/utils";
 import { V2ItemInspector } from "./V2ItemInspector";
 import { Collapsible, CollapsibleTrigger, CollapsiblePanel } from "../ui/collapsible";
@@ -24,7 +27,7 @@ import { v2EventPresentation, subagentGroupTiming } from "./TimelineV2EventRow.l
 
 export function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "event" }> }) {
   const ctx = use(TimelineRowCtx);
-  const { item, visibility, sourceThreadId } = row.projectedItem;
+  const { item, visibility } = row.projectedItem;
   if (item.type === "subagent" && (row.subagents?.length ?? 1) > 1) {
     return <V2SubagentGroup key={row.id} row={row} />;
   }
@@ -50,164 +53,125 @@ export function V2EventTimelineRow({ row }: { row: Extract<TimelineRow, { kind: 
       />
     );
   }
+  return <V2GenericEventRow row={row} />;
+}
+
+function V2GenericEventRow({ row }: { row: Extract<TimelineRow, { kind: "event" }> }) {
+  const ctx = use(TimelineRowCtx);
+  const [expanded, setExpanded] = useState(false);
+  const { item, visibility } = row.projectedItem;
   const presentation = v2EventPresentation(item);
   const Icon = presentation.icon;
-  if (item.type === "error") {
+  const alertVariant =
+    presentation.tone === "danger"
+      ? "error"
+      : presentation.tone === "warning"
+        ? "warning"
+        : presentation.tone === "success"
+          ? "success"
+          : null;
+  const statusBadge =
+    item.status === "failed" ? (
+      <Badge variant="error" size="sm">
+        Failed
+      </Badge>
+    ) : item.status === "interrupted" ? (
+      <Badge variant="warning" size="sm">
+        Interrupted
+      </Badge>
+    ) : null;
+  const detail = presentation.detail ? (
+    <div className="text-xs leading-relaxed text-muted-foreground">
+      <ChatMarkdown
+        text={presentation.detail}
+        cwd={ctx.markdownCwd}
+        threadRef={ctx.threadRef ?? undefined}
+        skills={ctx.skills}
+        lineBreaks
+      />
+    </div>
+  ) : null;
+  const inspector = (
+    <V2ItemInspector
+      projectedItem={row.projectedItem}
+      environmentId={ctx.activeThreadEnvironmentId}
+      cwd={ctx.markdownCwd}
+      workspaceRoot={ctx.workspaceRoot}
+      onOpenThread={ctx.onOpenThread}
+      onOpenTurnDiff={ctx.onOpenTurnDiff}
+      onRollbackCheckpoint={ctx.onRollbackCheckpoint}
+      onImageExpand={ctx.onImageExpand}
+      source={ctx.turnItemSource}
+    />
+  );
+
+  if (alertVariant) {
     return (
-      <details
-        className={cn(
-          "group rounded-md border",
-          presentation.tone === "warning" && "border-warning/25 bg-warning/5",
-          presentation.tone === "danger" && "border-destructive/25 bg-destructive/5",
-          presentation.tone === "success" && "border-success/20 bg-success/5",
-        )}
-        data-v2-item-type={item.type}
-        data-v2-item-visibility={visibility}
-        data-v2-event-disclosure="true"
-      >
-        <summary className="flex min-w-0 cursor-pointer list-none items-center gap-2 px-2.5 py-1.5 text-xs [&::-webkit-details-marker]:hidden">
-          <Icon
-            className={cn(
-              "size-3.5 shrink-0",
-              presentation.tone === "warning" && "text-warning",
-              presentation.tone === "danger" && "text-destructive",
-              presentation.tone === "success" && "text-success",
-            )}
-          />
-          <span className="shrink-0 font-medium text-foreground/90">{presentation.label}</span>
-          {item.status !== "completed" ? (
-            <span
-              className={cn(
-                "shrink-0 rounded-full border px-1.5 py-0.5 font-mono text-3xs",
-                item.status === "failed"
-                  ? "border-destructive/40 text-destructive"
-                  : "border-border/70 text-muted-foreground",
-              )}
+      <div data-v2-item-type={item.type} data-v2-item-visibility={visibility}>
+        <Alert variant={alertVariant}>
+          <Icon />
+          <AlertTitle className="flex items-center gap-2">
+            {presentation.label}
+            {statusBadge}
+          </AlertTitle>
+          {detail ? <AlertDescription>{detail}</AlertDescription> : null}
+          <AlertAction>
+            <Button
+              size="xs"
+              variant="ghost-muted"
+              aria-expanded={expanded}
+              onClick={() => setExpanded((open) => !open)}
             >
-              {item.status}
-            </span>
-          ) : null}
-          {presentation.detail ? (
-            <span className="min-w-0 flex-1 truncate text-muted-foreground/65">
-              {presentation.detail}
-            </span>
-          ) : null}
-          {visibility !== "local" ? (
-            <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-3xs text-muted-foreground">
-              {visibility === "inherited" ? "Inherited" : "Synthetic"}
-            </span>
-          ) : null}
-          <ChevronDownIcon className="size-3 shrink-0 text-muted-foreground/60 transition-transform group-open:rotate-180" />
-        </summary>
-        <div className="border-t border-border/45 px-3 py-2 ps-8">
-          {presentation.detail ? (
-            <div className="text-xs leading-relaxed text-muted-foreground">
-              <ChatMarkdown
-                text={presentation.detail}
-                cwd={ctx.markdownCwd}
-                threadRef={ctx.threadRef ?? undefined}
-                skills={ctx.skills}
-                lineBreaks
-              />
-            </div>
-          ) : null}
-          {visibility === "inherited" ? (
-            <p className="mt-1 font-mono text-3xs text-muted-foreground/65">
-              From {sourceThreadId}
-            </p>
-          ) : null}
-          <div className={presentation.detail ? "mt-2" : undefined}>
-            <V2ItemInspector
-              projectedItem={row.projectedItem}
-              environmentId={ctx.activeThreadEnvironmentId}
-              cwd={ctx.markdownCwd}
-              workspaceRoot={ctx.workspaceRoot}
-              onOpenThread={ctx.onOpenThread}
-              onOpenTurnDiff={ctx.onOpenTurnDiff}
-              onRollbackCheckpoint={ctx.onRollbackCheckpoint}
-              onImageExpand={ctx.onImageExpand}
-              source={ctx.turnItemSource}
-            />
-          </div>
-        </div>
-      </details>
+              Details
+              <DisclosureChevron open={expanded} />
+            </Button>
+          </AlertAction>
+        </Alert>
+        {expanded ? <div className="mt-2 ps-1">{inspector}</div> : null}
+      </div>
     );
   }
+
+  const toggle = () => setExpanded((open) => !open);
   return (
-    <section
-      className={cn(
-        "rounded-lg border px-3 py-2",
-        presentation.tone === "warning" && "border-warning/25 bg-warning/5",
-        presentation.tone === "danger" && "border-destructive/25 bg-destructive/5",
-        presentation.tone === "success" && "border-success/20 bg-success/5",
-        presentation.tone === "muted" && "border-border/60 bg-card/30",
-      )}
+    <WorkLogRow
       data-v2-item-type={item.type}
       data-v2-item-visibility={visibility}
-    >
-      <div className="flex items-start gap-2.5">
-        <Icon
-          className={cn(
-            "mt-0.5 size-3.5 shrink-0",
-            presentation.tone === "warning" && "text-warning",
-            presentation.tone === "danger" && "text-destructive",
-            presentation.tone === "success" && "text-success",
-            presentation.tone === "muted" && "text-muted-foreground",
-          )}
-        />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span className="text-xs font-medium text-foreground/90">{presentation.label}</span>
-            {item.status !== "completed" ? (
-              <span
-                className={cn(
-                  "rounded-full border px-1.5 py-0.5 font-mono text-3xs",
-                  item.status === "failed"
-                    ? "border-destructive/40 text-destructive"
-                    : "border-border/70 text-muted-foreground",
-                )}
-              >
-                {item.status}
-              </span>
-            ) : null}
-            {visibility !== "local" ? (
-              <span className="rounded-full bg-muted px-1.5 py-0.5 text-3xs text-muted-foreground">
-                {visibility === "inherited" ? "Inherited" : "Synthetic"}
-              </span>
-            ) : null}
-          </div>
+      role="button"
+      tabIndex={0}
+      aria-expanded={expanded}
+      onClick={toggle}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          toggle();
+        }
+      }}
+      icon={<Icon className="size-4 shrink-0 text-icon-muted" />}
+      label={
+        <>
+          {presentation.label}
           {presentation.detail ? (
-            <div className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              <ChatMarkdown
-                text={presentation.detail}
-                cwd={ctx.markdownCwd}
-                threadRef={ctx.threadRef ?? undefined}
-                skills={ctx.skills}
-                lineBreaks
-              />
-            </div>
+            <span className="ms-1.5 text-muted-foreground">{presentation.detail}</span>
           ) : null}
-          {visibility === "inherited" ? (
-            <p className="mt-1 font-mono text-3xs text-muted-foreground/65">
-              From {sourceThreadId}
-            </p>
-          ) : null}
-          <div className="mt-2">
-            <V2ItemInspector
-              projectedItem={row.projectedItem}
-              environmentId={ctx.activeThreadEnvironmentId}
-              cwd={ctx.markdownCwd}
-              workspaceRoot={ctx.workspaceRoot}
-              onOpenThread={ctx.onOpenThread}
-              onOpenTurnDiff={ctx.onOpenTurnDiff}
-              onRollbackCheckpoint={ctx.onRollbackCheckpoint}
-              onImageExpand={ctx.onImageExpand}
-              source={ctx.turnItemSource}
-            />
+        </>
+      }
+      trailing={
+        <>
+          {statusBadge}
+          <DisclosureChevron open={expanded} />
+        </>
+      }
+    >
+      {expanded ? (
+        <WorkLogDetails kind="panel">
+          <div className="flex flex-col gap-2">
+            {detail}
+            {inspector}
           </div>
-        </div>
-      </div>
-    </section>
+        </WorkLogDetails>
+      ) : null}
+    </WorkLogRow>
   );
 }
 
@@ -251,15 +215,12 @@ const V2SubagentGroup = memo(function V2SubagentGroup({
   return (
     <WorkLogBlock continues={row.continuesWorkLog}>
       <Collapsible open={expanded} onOpenChange={toggleExpanded} data-subagent-group>
-        {/* pr-3.25 matches the panel border, padding, and row inset so the times line up. */}
         <CollapsibleTrigger
           aria-label={label}
           aria-description={statusSummary}
           className={cn(
-            "flex w-full min-w-0 items-center gap-2.5 py-2 pr-3.25 text-left transition-opacity hover:opacity-100",
-            expanded || summary.active
-              ? "text-foreground opacity-100"
-              : "text-muted-foreground opacity-55",
+            "flex w-full min-w-0 items-center gap-2.5 py-2 text-left transition-colors hover:text-foreground",
+            expanded || summary.active ? "text-foreground" : "text-secondary-label",
           )}
         >
           <span className="flex shrink-0 items-center -space-x-1.5" aria-hidden>
@@ -279,11 +240,11 @@ const V2SubagentGroup = memo(function V2SubagentGroup({
             ) : null}
           </span>
           <span className="min-w-0 flex-1">
-            <span className="block text-xs font-semibold">{label}</span>
+            <span className="block text-sm font-medium">{label}</span>
             <span
               className={cn(
-                "block truncate text-3xs text-muted-foreground",
-                summary.active ? "text-info" : summary.failed && "text-destructive",
+                "block truncate text-xs text-muted-foreground",
+                summary.active ? "text-info-foreground" : summary.failed && "text-error-foreground",
               )}
             >
               {statusSummary}
@@ -292,18 +253,12 @@ const V2SubagentGroup = memo(function V2SubagentGroup({
           <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
             <SubagentElapsed agent={subagentGroupTiming(agents)} />
           </span>
-          <ChevronDownIcon
-            aria-hidden
-            className={cn(
-              "size-3.5 shrink-0 text-muted-foreground transition-transform",
-              expanded && "rotate-180",
-            )}
-          />
+          <DisclosureChevron open={expanded} />
         </CollapsibleTrigger>
         {/* Virtualized rows must settle before disclosure scroll anchoring resumes. */}
         <CollapsiblePanel animate={false}>
           {expanded ? (
-            <div className="mt-1 mb-1 rounded-lg border border-border/60 bg-card/30 p-1">
+            <div className="mt-1 mb-1 rounded-xl bg-foreground/[0.03] p-1">
               {members.map((item) => (
                 <V2LifecycleRow
                   environmentId={ctx.activeThreadEnvironmentId}

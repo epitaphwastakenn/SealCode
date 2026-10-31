@@ -5,7 +5,10 @@ import { memo, use, useState } from "react";
 import { type ChatMessage, type TurnDiffSummary } from "../../types";
 import ChatMarkdown from "../ChatMarkdown";
 import { ChatMarkdownAssetImage } from "./ChatMarkdownMedia";
-import { GitForkIcon } from "lucide-react";
+import { GitForkIcon, TriangleAlertIcon } from "lucide-react";
+import { Alert, AlertAction, AlertDescription } from "../ui/alert";
+import { Badge } from "../ui/badge";
+import { Spinner } from "../ui/spinner";
 import { Button } from "../ui/button";
 import { ProposedPlanCard } from "./ProposedPlanCard";
 import { HtmlRenderFrame } from "./HtmlRenderFrame";
@@ -27,10 +30,13 @@ import { resolveAssistantMessageCopyState } from "./MessagesTimeline.logic";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
 import { useUiStateStore } from "~/uiStateStore";
-import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../timestampFormat";
 import { useV2ItemSupport } from "../../state/v2ItemSupport";
 import { TimelineRowCtx, TimelineRowActivityCtx, type TimelineRow } from "./timelineRowContext";
-import { MESSAGE_HEADING_LEVEL, MessageAuthorHeading } from "./TimelineRowParts";
+import {
+  MESSAGE_HEADING_LEVEL,
+  MessageAuthorHeading,
+  TimelineRowTimestamp,
+} from "./TimelineRowParts";
 
 export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const ctx = use(TimelineRowCtx);
@@ -40,14 +46,6 @@ export function AssistantTimelineRow({ row }: { row: Extract<TimelineRow, { kind
     <>
       <div className="relative min-w-0 px-1 py-0.5">
         <MessageAuthorHeading>Harp</MessageAuthorHeading>
-        {!row.showAssistantMeta && messageText.trim().length > 0 ? (
-          <div
-            aria-hidden
-            className="mb-0.5 text-2xs font-medium uppercase tracking-wider text-muted-foreground/70"
-          >
-            Agent response
-          </div>
-        ) : null}
         <div data-thread-find-text="true">
           <AssistantCitationSource
             messageId={row.message.id}
@@ -119,8 +117,8 @@ function AssistantForkButton({
         render={
           <Button
             type="button"
-            size="xs"
-            variant="ghost"
+            size="icon-xs"
+            variant="ghost-muted"
             disabled={busy}
             onClick={() => {
               setBusy(true);
@@ -132,7 +130,7 @@ function AssistantForkButton({
           />
         }
       >
-        <GitForkIcon className={cn("size-3", busy && "animate-pulse")} />
+        {busy ? <Spinner /> : <GitForkIcon />}
       </TooltipTrigger>
       <TooltipPopup side="top">Fork from this response</TooltipPopup>
     </Tooltip>
@@ -185,10 +183,14 @@ function AssistantMessageMeta({
         className,
       )}
     >
-      {projectedItem && projectedItem.item.status !== "completed" ? (
-        <span className="rounded-full border border-border/70 px-1.5 py-0.5 font-mono text-3xs text-muted-foreground">
-          {projectedItem.item.status}
-        </span>
+      {projectedItem?.item.status === "failed" ? (
+        <Badge variant="error" size="sm">
+          Failed
+        </Badge>
+      ) : projectedItem?.item.status === "interrupted" ? (
+        <Badge variant="warning" size="sm">
+          Interrupted
+        </Badge>
       ) : null}
       <AssistantCopyButton
         message={message}
@@ -199,14 +201,11 @@ function AssistantMessageMeta({
         <AssistantForkButton projectedItem={projectedItem} />
       ) : null}
       {!message.streaming && (
-        <Tooltip>
-          <TooltipTrigger render={<p className="text-muted-foreground text-xs tabular-nums" />}>
-            {formatDayAwareTimestamp(message.updatedAt, ctx.timestampFormat)}
-          </TooltipTrigger>
-          <TooltipPopup>
-            {formatChatTimestampTooltip(message.updatedAt, ctx.timestampFormat)}
-          </TooltipPopup>
-        </Tooltip>
+        <TimelineRowTimestamp
+          createdAt={message.updatedAt}
+          timestampFormat={ctx.timestampFormat}
+          alwaysVisible
+        />
       )}
     </div>
   );
@@ -346,17 +345,17 @@ const AssistantChangedFilesSection = memo(function AssistantChangedFilesSection(
   const checkpointFiles = turnSummary.files;
   if (shouldRenderUnattributedDiffFallback(turnSummary)) {
     return (
-      <div className="mt-2 flex items-center gap-2 rounded-md border border-border/60 bg-muted/20 px-2 py-1.5 text-xs text-muted-foreground">
-        <span>Changed files could not be attributed safely to this turn.</span>
-        <Button
-          type="button"
-          size="xs"
-          variant="ghost"
-          onClick={() => onOpenTurnDiff(turnSummary.runId)}
-        >
-          Open raw diff
-        </Button>
-      </div>
+      <Alert variant="warning" className="mt-2">
+        <TriangleAlertIcon />
+        <AlertDescription>
+          Changed files could not be attributed safely to this turn.
+        </AlertDescription>
+        <AlertAction>
+          <Button size="xs" variant="ghost-muted" onClick={() => onOpenTurnDiff(turnSummary.runId)}>
+            Open raw diff
+          </Button>
+        </AlertAction>
+      </Alert>
     );
   }
   if (checkpointFiles.length === 0) return null;
@@ -426,7 +425,7 @@ function AssistantChangedFilesSectionInner({
           <p className="px-3 py-2 text-xs text-muted-foreground">Loading inline diff…</p>
         ) : null}
         {inlinePatch?.kind === "files" ? (
-          <div className="mt-2 max-h-[32rem] space-y-2 overflow-auto rounded-xl border border-border/60 bg-code p-1">
+          <div className="mt-2 max-h-[32rem] space-y-2 overflow-auto rounded-xl border border-border bg-code p-1">
             {inlinePatch.files.map((fileDiff) => (
               <FileDiff
                 key={resolveFileDiffPath(fileDiff)}

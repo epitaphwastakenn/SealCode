@@ -85,13 +85,9 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
   const chatGptLimit = workspaceLimit || errorCode === CHATGPT_USAGE_LIMIT_CODE;
   const variant = errorClass === "usage_limit" || chatGptLimit ? "warning" : "error";
   return (
-    <div className="pointer-events-auto mx-auto w-fit max-w-[min(48rem,calc(100%-2rem))] pt-3">
+    <div className="pointer-events-auto mx-auto w-fit max-w-[min(48rem,calc(100%-2rem))]">
       <Alert variant={variant} surface="glass" controlAlignment="first-line" data-variant={variant}>
-        {chatGptLimit ? (
-          <OpenAI className="size-4 text-foreground!" aria-hidden="true" />
-        ) : (
-          <CircleAlertIcon />
-        )}
+        {chatGptLimit ? <OpenAI className="size-4" aria-hidden="true" /> : <CircleAlertIcon />}
         <AlertDescription>
           {chatGptLimit ? (
             <div className="space-y-1">
@@ -116,7 +112,12 @@ export const ThreadErrorBanner = memo(function ThreadErrorBanner({
               <ChatGptUsageButton variant="default" size="sm" />
             ) : null}
             {onDismiss ? (
-              <Button variant="ghost" size="icon-xs" aria-label="Dismiss error" onClick={onDismiss}>
+              <Button
+                variant="ghost-muted"
+                size="icon-xs"
+                aria-label="Dismiss error"
+                onClick={onDismiss}
+              >
                 <XIcon />
               </Button>
             ) : null}

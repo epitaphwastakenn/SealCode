@@ -1,6 +1,6 @@
 import { type ProviderInstanceId, type ServerProvider } from "@t3tools/contracts";
 import { memo } from "react";
-import { InfoIcon, XIcon } from "lucide-react";
+import { CircleAlertIcon, XIcon } from "lucide-react";
 import { Alert, AlertAction, AlertDescription, AlertTitle } from "../ui/alert";
 import { Button, InlineButton } from "../ui/button";
 import { formatProviderDriverKindLabel } from "../../providerModels";
@@ -111,14 +111,14 @@ export const ProviderStatusBanner = memo(function ProviderStatusBanner({
     incompatible?.status !== "broken" && (status.status === "warning" || incompatible !== null);
 
   return (
-    <div className="pointer-events-auto mx-auto w-fit max-w-[calc(100%-2rem)] pt-3">
+    <div className="pointer-events-auto mx-auto w-fit max-w-[min(48rem,calc(100%-2rem))]">
       <Alert
         variant={isWarning ? "warning" : "error"}
         role={incompatible && incompatible.status !== "broken" ? "status" : "alert"}
         surface="glass"
         controlAlignment="first-line"
       >
-        <InfoIcon />
+        <CircleAlertIcon />
         <AlertTitle>{title}</AlertTitle>
         <AlertDescription>
           <Tooltip>

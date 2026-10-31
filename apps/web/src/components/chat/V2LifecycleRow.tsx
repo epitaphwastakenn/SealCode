@@ -38,6 +38,7 @@ import {
   GitForkIcon,
   MessageSquareIcon,
   MinusIcon,
+  SquareIcon,
   XIcon,
 } from "lucide-react";
 
@@ -55,6 +56,8 @@ import { cn } from "~/lib/utils";
 import { TimelineSystemDivider } from "./TimelineSystemDivider";
 import { subagentResumedSince } from "./V2LifecycleRow.logic";
 import { Button, InlineButton } from "../ui/button";
+import { StatusDot, type StatusDotTone } from "../ui/status-dot";
+import { TimelineRowTimestamp } from "./TimelineRowParts";
 import { HarpGlyph } from "../HarpMark";
 
 const LIFECYCLE_TYPES = new Set<OrchestrationV2TurnItem["type"]>([
@@ -85,20 +88,18 @@ export function V2LifecycleRow(props: {
   const { item } = props;
   if (item.type === "run_interrupt_request") {
     return (
-      <div className="flex justify-end px-1 py-1" data-v2-item-type={item.type}>
-        <div className="flex max-w-[80%] items-center gap-2 text-xs text-destructive">
-          <span aria-hidden="true" className="font-mono">
-            ■
-          </span>
-          <span className="font-medium">Interrupt requested</span>
-          <span aria-hidden="true" className="opacity-50">
-            ·
-          </span>
-          <span className="font-medium">{item.message}</span>
-          <span className="text-3xs text-muted-foreground">
-            {formatShortTimestamp(props.createdAt, props.timestampFormat)}
-          </span>
-        </div>
+      <div
+        className="flex justify-end gap-1.5 px-1 py-1 text-xs text-muted-foreground"
+        data-v2-item-type={item.type}
+      >
+        <SquareIcon aria-hidden="true" className="size-3 shrink-0 self-center" />
+        <span className="font-medium">Interrupt requested</span>
+        {item.message ? <span className="max-w-[60%] truncate">{item.message}</span> : null}
+        <TimelineRowTimestamp
+          createdAt={props.createdAt}
+          timestampFormat={props.timestampFormat}
+          alwaysVisible
+        />
       </div>
     );
   }
@@ -154,11 +155,9 @@ export function V2LifecycleRow(props: {
       return (
         <div
           data-v2-item-type={item.type}
-          className="flex min-w-0 items-center gap-3 rounded-lg border border-border/60 p-3"
+          className="flex min-w-0 items-center gap-3 rounded-xl border border-border bg-card p-3"
         >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/60">
-            <MessageSquareIcon className="size-4 text-secondary-label" aria-hidden />
-          </span>
+          <MessageSquareIcon className="size-4 shrink-0 text-icon-muted" aria-hidden />
           <span className="min-w-0 flex-1 truncate text-sm font-medium">
             {item.title ?? "Created thread"}
           </span>
@@ -213,16 +212,16 @@ export function V2LifecycleRow(props: {
 
 const STATUS_VISUALS: Record<
   OrchestrationV2TurnItem["status"],
-  { dotClass: string; label: string }
+  { tone: StatusDotTone; label: string }
 > = {
-  pending: { dotClass: "bg-info", label: "Queued" },
-  running: { dotClass: "bg-info", label: "Running" },
-  waiting: { dotClass: "bg-info", label: "Waiting" },
-  idle: { dotClass: "bg-muted-foreground/50", label: "Idle · resumable" },
-  completed: { dotClass: "bg-success", label: "Completed" },
-  failed: { dotClass: "bg-destructive", label: "Failed" },
-  cancelled: { dotClass: "bg-muted-foreground/60", label: "Stopped" },
-  interrupted: { dotClass: "bg-muted-foreground/60", label: "Stopped" },
+  pending: { tone: "info", label: "Queued" },
+  running: { tone: "info", label: "Running" },
+  waiting: { tone: "info", label: "Waiting" },
+  idle: { tone: "muted", label: "Idle · resumable" },
+  completed: { tone: "success", label: "Completed" },
+  failed: { tone: "error", label: "Failed" },
+  cancelled: { tone: "muted", label: "Stopped" },
+  interrupted: { tone: "muted", label: "Stopped" },
 };
 
 function subagentStatusVisual(status: OrchestrationV2TurnItem["status"]) {
@@ -272,7 +271,7 @@ function SubagentAvatar({
     <span
       aria-hidden
       className={cn(
-        "relative inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-border/70 bg-muted ring-2 ring-background",
+        "relative inline-flex size-6 shrink-0 items-center justify-center rounded-full border border-border bg-muted ring-2 ring-background",
         className,
       )}
     >
@@ -288,11 +287,10 @@ function SubagentAvatar({
         <BotIcon className="size-3.5 text-muted-foreground" />
       )}
       {status ? (
-        <span
-          className={cn(
-            "absolute -right-px -bottom-px size-2 rounded-full ring-2 ring-background",
-            subagentStatusVisual(status).dotClass,
-          )}
+        <StatusDot
+          size="md"
+          tone={subagentStatusVisual(status).tone}
+          className="absolute -right-px -bottom-px ring-2 ring-background"
         />
       ) : null}
     </span>
@@ -443,7 +441,7 @@ function SubagentTimelineLink(props: {
         <span
           className={cn(
             "block text-2xs leading-relaxed",
-            failed ? "text-destructive" : "text-muted-foreground",
+            failed ? "text-error-foreground" : "text-muted-foreground",
           )}
         >
           {detail === null ? (
@@ -457,7 +455,10 @@ function SubagentTimelineLink(props: {
       </span>
       {detail !== null && (props.event !== undefined || status !== "completed") ? (
         <span
-          className={cn("shrink-0 text-xs", failed ? "text-destructive" : "text-muted-foreground")}
+          className={cn(
+            "shrink-0 text-xs",
+            failed ? "text-error-foreground" : "text-muted-foreground",
+          )}
         >
           {statusLabel}
         </span>
@@ -468,7 +469,7 @@ function SubagentTimelineLink(props: {
       {threadId !== null ? (
         <ChevronRightIcon
           aria-hidden
-          className="size-3.5 shrink-0 text-muted-foreground/60 transition-colors group-hover/subagent:text-foreground"
+          className="size-3.5 shrink-0 text-muted-foreground transition-colors group-hover/subagent:text-foreground"
         />
       ) : null}
     </>
@@ -493,7 +494,7 @@ function SubagentTimelineLink(props: {
               onClick={() => props.onOpenThread(threadId)}
               className={cn(
                 className,
-                "cursor-pointer transition-colors hover:bg-accent/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70",
+                "cursor-pointer transition-colors hover:bg-row-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70",
               )}
             >
               {content}

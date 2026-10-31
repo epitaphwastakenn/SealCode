@@ -342,20 +342,23 @@ export function WorktreeSetupCard({
       ) : null}
 
       <div className="mt-0.5 ms-6 flex flex-wrap items-center gap-0.5">
-        <Button
-          type="button"
-          size="xs"
-          variant="ghost-muted"
-          aria-expanded={detailsOpen}
+        <span
           className={cn(
             !detailsOpen &&
               "opacity-0 group-focus-within/worktree-setup:opacity-100 group-hover/worktree-setup:opacity-100 pointer-coarse:opacity-100",
           )}
-          onClick={() => setDetailsOpen((open) => !open)}
         >
-          <DisclosureChevron open={detailsOpen} />
-          Details
-        </Button>
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost-muted"
+            aria-expanded={detailsOpen}
+            onClick={() => setDetailsOpen((open) => !open)}
+          >
+            <DisclosureChevron open={detailsOpen} />
+            Details
+          </Button>
+        </span>
         {showTerminal ? (
           <Button type="button" size="xs" variant="ghost-muted" onClick={onOpenTerminal}>
             <TerminalIcon aria-hidden />

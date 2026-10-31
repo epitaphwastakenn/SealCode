@@ -143,7 +143,7 @@ export function SubagentTooltipContent(props: {
             <span className="inline-flex shrink-0 items-center gap-1">
               {effort ? " · " : null}
               {speed?.speedIcon && provider ? (
-                <TraitsSpeedIcon provider={provider.driver} speedIcon={speed.speedIcon} size="xs" />
+                <TraitsSpeedIcon speedIcon={speed.speedIcon} size="xs" />
               ) : null}
               {effort}
             </span>

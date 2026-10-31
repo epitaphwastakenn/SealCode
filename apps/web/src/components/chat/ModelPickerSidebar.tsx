@@ -70,6 +70,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
       return;
     }
     setSelection({ top: selectedItem.offsetTop, height: selectedItem.offsetHeight });
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- the favorites row shifts the rail
   }, [props.instanceEntries, props.selectedInstanceId, showFavorites]);
   useEffect(() => {
     if (selection === null || selectionCanAnimate) return;

@@ -35,7 +35,7 @@ const NOOP_REVIEW_TURN_DIFF = (_runId: RunId) => {};
 const VIRTUALIZE_AFTER_ROWS = 250;
 const ROW_OVERSCAN = 8;
 const rowClassName =
-  "group flex h-7 w-full cursor-pointer items-center gap-2 rounded-lg pe-2 ps-[calc(--spacing(2)+var(--depth)*--spacing(3.5))] text-left transition-colors hover:bg-row-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70";
+  "group flex h-7 w-full cursor-pointer items-center gap-2 rounded-lg pe-2 ps-(--row-indent) text-left transition-colors hover:bg-row-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70";
 
 interface ChangedFileRow {
   node: TurnDiffTreeNode;
@@ -159,7 +159,6 @@ const ChangedFilesTree = memo(function ChangedFilesTree(props: {
   }>({ key: null, overrides: {} });
   const treeNodes = buildTurnDiffTree(files);
   const directoryPathsKey = collectDirectoryPaths(treeNodes).join("\u0000");
-  const hasDirectoryNodes = directoryPathsKey.length > 0;
   const expansionStateKey = `${allDirectoriesExpanded ? "expanded" : "collapsed"}\u0000${directoryPathsKey}`;
   const expandedDirectories =
     directoryExpansionState.key === expansionStateKey
@@ -183,7 +182,7 @@ const ChangedFilesTree = memo(function ChangedFilesTree(props: {
   const virtualized = rows.length > VIRTUALIZE_AFTER_ROWS;
 
   const renderRow = ({ node, depth }: ChangedFileRow) => {
-    const indent = { "--depth": depth } as CSSProperties;
+    const indent = { "--row-indent": `${0.5 + depth * 0.875}rem` } as CSSProperties;
     if (node.kind === "directory") {
       const isExpanded = expandedDirectories[node.path] ?? allDirectoriesExpanded;
       return (

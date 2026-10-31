@@ -287,11 +287,9 @@ function SubagentAvatar({
         <BotIcon className="size-3.5 text-muted-foreground" />
       )}
       {status ? (
-        <StatusDot
-          size="md"
-          tone={subagentStatusVisual(status).tone}
-          className="absolute -right-px -bottom-px ring-2 ring-background"
-        />
+        <span className="absolute -right-px -bottom-px flex rounded-full ring-2 ring-background">
+          <StatusDot size="md" tone={subagentStatusVisual(status).tone} />
+        </span>
       ) : null}
     </span>
   );

@@ -40,11 +40,9 @@ export function getTraitsSpeedDisplay(
 }
 
 export function TraitsSpeedIcon({
-  provider,
   speedIcon,
   size = "sm",
 }: {
-  provider: ProviderDriverKind;
   speedIcon: "fast" | "ultrafast";
   size?: ComposerControlSize;
 }) {

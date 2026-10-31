@@ -4,7 +4,6 @@ import {
   type ProviderDriverKind,
   type ProviderInstanceId,
   type ProviderOptionSelection,
-  type ScopedThreadRef,
   type ServerProviderModel,
 } from "@t3tools/contracts";
 import {
@@ -13,11 +12,8 @@ import {
   getProviderOptionDescriptors,
   normalizeModelSlug,
 } from "@t3tools/shared/model";
-import type { ReactNode } from "react";
 
-import type { DraftId } from "../../composerDraftStore";
 import { getProviderModelCapabilities } from "../../providerModels";
-import type { ComposerControlSize } from "./ComposerControl";
 import { getReasoningTraitStep } from "./TraitsPicker";
 
 export type ComposerProviderStateInput = {

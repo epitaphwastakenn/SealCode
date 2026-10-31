@@ -3831,20 +3831,25 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
             {showCollapsedMobilePromptRow ? (
               <div className="flex items-center justify-between gap-2 px-3 py-2">
                 <Button
-                  variant="ghost"
+                  variant="ghost-muted"
+                  size="sm"
                   data-chat-composer-transition-prompt="true"
-                  className={cn(
-                    "h-auto min-w-0 flex-1 justify-start truncate p-0 text-left text-sm font-normal hover:bg-transparent",
-                    !prompt.trim() && "text-placeholder",
-                  )}
+                  className="min-w-0 flex-1 justify-start"
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={expandMobileComposerStable}
                   aria-label="Expand composer"
                 >
-                  {prompt.trim() ||
-                    (showProviderUnavailable
-                      ? "Enable a provider in Settings"
-                      : DEFAULT_COMPOSER_PLACEHOLDER)}
+                  <span
+                    className={cn(
+                      "truncate",
+                      prompt.trim() ? "text-foreground" : "text-placeholder",
+                    )}
+                  >
+                    {prompt.trim() ||
+                      (showProviderUnavailable
+                        ? "Enable a provider in Settings"
+                        : DEFAULT_COMPOSER_PLACEHOLDER)}
+                  </span>
                 </Button>
                 {collapsedComposerImagePreviews}
                 <ComposerSendButton

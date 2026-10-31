@@ -205,19 +205,6 @@ export function getTraitsSectionVisibility(input: {
   };
 }
 
-/**
- * Whether the primary reasoning control sits on its highest level. The composer
- * frames itself and the model picker highlights the effort label when it does.
- */
-export function isMaximumReasoningEffort(input: {
-  primarySelectDescriptor: Extract<ProviderOptionDescriptor, { type: "select" }> | null;
-}): boolean {
-  const descriptor = input.primarySelectDescriptor;
-  if (!descriptor || descriptor.options.length < 2) return false;
-  const lastOption = descriptor.options.at(-1);
-  return lastOption !== undefined && getDescriptorStringValue(descriptor) === lastOption.id;
-}
-
 function getTraitSelectChange(
   selected: ReturnType<typeof getSelectedTraits>,
   descriptor: Extract<ProviderOptionDescriptor, { type: "select" }>,
@@ -270,17 +257,7 @@ export function getReasoningTraitStep(input: {
   return modelOptions ? { modelOptions } : null;
 }
 
-export function shouldRenderTraitsControls(input: {
-  provider: ProviderDriverKind;
-  models: ReadonlyArray<ServerProviderModel>;
-  model: string | null | undefined;
-  modelOptions: ProviderOptions | null | undefined;
-  planModeEnabled: boolean;
-}): boolean {
-  return getTraitsSectionVisibility(input).hasAnyControls;
-}
-
-export interface TraitsMenuContentProps {
+interface TraitsMenuContentProps {
   provider: ProviderDriverKind;
   instanceId?: ProviderInstanceId;
   models: ReadonlyArray<ServerProviderModel>;
@@ -292,7 +269,7 @@ export interface TraitsMenuContentProps {
   isComposerOwned?: boolean;
 }
 
-export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
+const TraitsMenuContent = memo(function TraitsMenuContentImpl({
   provider,
   instanceId,
   models,

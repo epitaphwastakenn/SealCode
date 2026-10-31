@@ -110,9 +110,11 @@ function V2GenericEventRow({ row }: { row: Extract<TimelineRow, { kind: "event" 
       <div data-v2-item-type={item.type} data-v2-item-visibility={visibility}>
         <Alert variant={alertVariant}>
           <Icon />
-          <AlertTitle className="flex items-center gap-2">
-            {presentation.label}
-            {statusBadge}
+          <AlertTitle>
+            <span className="flex items-center gap-2">
+              {presentation.label}
+              {statusBadge}
+            </span>
           </AlertTitle>
           {detail ? <AlertDescription>{detail}</AlertDescription> : null}
           <AlertAction>

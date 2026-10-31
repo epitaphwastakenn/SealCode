@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { XIcon } from "lucide-react";
 
+import { observeResize } from "~/lib/observeResize";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 
@@ -36,9 +37,7 @@ export function ComposerVoiceRecorderBar(props: ComposerVoiceRecorderBarProps) {
       setVisibleBarCount(Math.max(8, Math.floor(width / (BAR_WIDTH_PX + BAR_GAP_PX))));
     };
     computeVisibleBars();
-    const observer = new ResizeObserver(computeVisibleBars);
-    observer.observe(node);
-    return () => observer.disconnect();
+    return observeResize(node, computeVisibleBars);
   }, []);
 
   const visibleLevels = props.waveformLevels.slice(-visibleBarCount);
@@ -70,6 +69,7 @@ export function ComposerVoiceRecorderBar(props: ComposerVoiceRecorderBarProps) {
           );
           return (
             <span
+              // oxlint-disable-next-line react/no-array-index-key -- levels scroll by position
               key={`${visibleLevels.length - index}-${index}`}
               className="inline-block shrink-0 rounded-full bg-foreground/35"
               style={{ width: BAR_WIDTH_PX, height }}

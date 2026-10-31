@@ -15,8 +15,6 @@ import { cn } from "~/lib/utils";
 import { modelPickerModelKey } from "./modelPickerKeys";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 
-// Small at-a-glance hints in each row. They come from the model name because
-// providers do not report these traits consistently.
 // Rows take the model's fields rather than the picker's item object, and one shared toggle
 // handler, because the picker rebuilds its items on every search keystroke; that keeps memo
 // effective for rows whose content did not change.

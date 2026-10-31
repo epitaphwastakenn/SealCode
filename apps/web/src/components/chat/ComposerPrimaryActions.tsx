@@ -219,11 +219,13 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     }
 
     return (
-      <div data-chat-composer-implement-actions="true" className="flex items-center justify-end">
+      <div
+        data-chat-composer-implement-actions="true"
+        className="flex items-center justify-end gap-px"
+      >
         <Button
           type="submit"
           size="sm"
-          className="rounded-e-none"
           {...pointerFocusProps}
           disabled={isSendBusy || isSendDisabled || isConnecting || isEnvironmentUnavailable}
         >
@@ -233,8 +235,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           <MenuTrigger
             render={
               <Button
-                size="sm"
-                className="rounded-s-none border-s-primary-foreground/20"
+                size="icon-sm"
                 aria-label="Implementation actions"
                 onMouseDown={
                   preserveComposerFocusOnPointerDown ? (event) => event.preventDefault() : undefined
@@ -306,7 +307,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   const sendButton = (
     <ComposerSendButton
       type={showResume ? "button" : "submit"}
-      className={stageBackdropVariant ? "isolate overflow-hidden text-white" : undefined}
+      className={stageBackdropVariant ? "isolate overflow-hidden" : undefined}
       {...pointerFocusProps}
       onClick={showResume ? onResume : onSubmitMessage}
       disabled={
@@ -351,9 +352,8 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
         <TooltipTrigger
           render={
             <Button
-              variant="ghost-muted"
+              variant={keepFullHistory ? "ghost-muted" : "outline"}
               size="sm"
-              className="tabular-nums aria-pressed:bg-row-selected aria-pressed:text-foreground"
               {...pointerFocusProps}
               aria-pressed={!keepFullHistory}
               aria-label={`Compact ${compactTokens} tokens of history before sending`}

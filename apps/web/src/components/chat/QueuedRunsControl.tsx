@@ -316,29 +316,31 @@ export function QueuedRunsControl({
                   ) : null}
                   <ComposerBanner.Icon aria-hidden={false}>
                     {canReorder && rowRunId !== null && rowServerIndex !== null ? (
-                      <Button
-                        size="icon-xs"
-                        variant="ghost-muted"
-                        aria-label="Reorder queued message (drag, or press the arrow keys)"
-                        className="cursor-grab opacity-0 group-focus-within/queued:opacity-100 group-hover/queued:opacity-100 pointer-coarse:opacity-100 active:cursor-grabbing disabled:cursor-default"
-                        disabled={busyRunId !== null}
-                        onPointerDown={() => {
-                          dragArmedRunIdRef.current = rowRunId;
-                        }}
-                        onKeyDown={(event) => {
-                          if (busyRunId !== null) return;
-                          if (event.key === "ArrowUp" && rowServerIndex > 0) {
-                            event.preventDefault();
-                            void move(rowRunId, queued[rowServerIndex - 1]?.run.id ?? null);
-                          }
-                          if (event.key === "ArrowDown" && rowServerIndex < queued.length - 1) {
-                            event.preventDefault();
-                            void move(rowRunId, queued[rowServerIndex + 2]?.run.id ?? null);
-                          }
-                        }}
-                      >
-                        <GripVerticalIcon />
-                      </Button>
+                      <span className="opacity-0 group-focus-within/queued:opacity-100 group-hover/queued:opacity-100 pointer-coarse:opacity-100">
+                        <Button
+                          size="icon-xs"
+                          variant="ghost-muted"
+                          aria-label="Reorder queued message (drag, or press the arrow keys)"
+                          className="cursor-grab active:cursor-grabbing disabled:cursor-default"
+                          disabled={busyRunId !== null}
+                          onPointerDown={() => {
+                            dragArmedRunIdRef.current = rowRunId;
+                          }}
+                          onKeyDown={(event) => {
+                            if (busyRunId !== null) return;
+                            if (event.key === "ArrowUp" && rowServerIndex > 0) {
+                              event.preventDefault();
+                              void move(rowRunId, queued[rowServerIndex - 1]?.run.id ?? null);
+                            }
+                            if (event.key === "ArrowDown" && rowServerIndex < queued.length - 1) {
+                              event.preventDefault();
+                              void move(rowRunId, queued[rowServerIndex + 2]?.run.id ?? null);
+                            }
+                          }}
+                        >
+                          <GripVerticalIcon />
+                        </Button>
+                      </span>
                     ) : null}
                   </ComposerBanner.Icon>
                   <ComposerBanner.Content>
@@ -387,34 +389,35 @@ export function QueuedRunsControl({
                       </Button>
                     ) : (
                       <>
-                        <Tooltip>
-                          <TooltipTrigger
-                            render={
-                              <Button
-                                size="icon-xs"
-                                variant="ghost-muted"
-                                className="opacity-0 group-focus-within/queued:opacity-100 group-hover/queued:opacity-100 pointer-coarse:opacity-100"
-                                aria-label="Edit queued message"
-                                disabled={item.runId === null || busyRunId !== null}
-                                onClick={() => {
-                                  if (item.runId !== null && item.messageId !== null) {
-                                    props.onEditQueuedRun({
-                                      runId: item.runId,
-                                      messageId: item.messageId,
-                                      text: item.text,
-                                      attachments: item.attachments,
-                                    });
-                                  }
-                                }}
-                              />
-                            }
-                          >
-                            <PencilIcon />
-                          </TooltipTrigger>
-                          <TooltipPopup>
-                            {`Edit in the composer${item.serverIndex === queued.length - 1 && props.editShortcutLabel ? ` (${props.editShortcutLabel})` : ""}`}
-                          </TooltipPopup>
-                        </Tooltip>
+                        <span className="opacity-0 group-focus-within/queued:opacity-100 group-hover/queued:opacity-100 pointer-coarse:opacity-100">
+                          <Tooltip>
+                            <TooltipTrigger
+                              render={
+                                <Button
+                                  size="icon-xs"
+                                  variant="ghost-muted"
+                                  aria-label="Edit queued message"
+                                  disabled={item.runId === null || busyRunId !== null}
+                                  onClick={() => {
+                                    if (item.runId !== null && item.messageId !== null) {
+                                      props.onEditQueuedRun({
+                                        runId: item.runId,
+                                        messageId: item.messageId,
+                                        text: item.text,
+                                        attachments: item.attachments,
+                                      });
+                                    }
+                                  }}
+                                />
+                              }
+                            >
+                              <PencilIcon />
+                            </TooltipTrigger>
+                            <TooltipPopup>
+                              {`Edit in the composer${item.serverIndex === queued.length - 1 && props.editShortcutLabel ? ` (${props.editShortcutLabel})` : ""}`}
+                            </TooltipPopup>
+                          </Tooltip>
+                        </span>
                         {item.serverIndex === 0 ? (
                           <Tooltip>
                             <TooltipTrigger render={<span className="flex shrink-0" />}>

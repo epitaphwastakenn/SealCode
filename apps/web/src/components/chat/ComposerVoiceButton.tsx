@@ -1,6 +1,5 @@
 import { MicIcon } from "lucide-react";
 
-import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import { Spinner } from "../ui/spinner";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -25,8 +24,7 @@ export function ComposerVoiceButton(props: {
           <Button
             type="button"
             size="icon-sm"
-            variant="ghost-muted"
-            className={cn(props.isRecording && "text-error-foreground hover:text-error-foreground")}
+            variant={props.isRecording ? "destructive-outline" : "ghost-muted"}
             disabled={props.disabled || props.isTranscribing}
             aria-label={label}
             aria-pressed={props.isRecording}

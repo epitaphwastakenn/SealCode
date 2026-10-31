@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { useTheme } from "~/hooks/useTheme";
 
-import { FileSurfaceLoading } from "./fileSurfaceChrome";
+import { FileSurfaceLoading, FileSurfaceUnavailable } from "./fileSurfaceChrome";
 
 const MAX_FONT_BYTES = 10 * 1024 * 1024;
 
@@ -65,15 +65,7 @@ export default function FontViewer(props: { readonly src: string; readonly name:
   }, [props.src]);
   if (error)
     return (
-      <div
-        role="alert"
-        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-6 text-center"
-      >
-        <p className="text-sm font-medium">No preview for this file</p>
-        <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-          {error} Save it to open in another app.
-        </p>
-      </div>
+      <FileSurfaceUnavailable alert>{error} Save it to open in another app.</FileSurfaceUnavailable>
     );
   if (!data) return <FileSurfaceLoading />;
   const tokens = getComputedStyle(document.documentElement);

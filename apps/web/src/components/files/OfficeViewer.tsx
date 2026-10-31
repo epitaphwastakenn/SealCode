@@ -6,6 +6,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 
 import VirtualTablePreview from "./VirtualTablePreview";
 
+import { PanelSubheader } from "~/components/PanelSubheader";
 import {
   Select,
   SelectItem,
@@ -14,7 +15,12 @@ import {
   SelectValue,
 } from "~/components/ui/select";
 
-import { FileSurfaceAction, FileSurfaceLoading, FileSurfaceNotice } from "./fileSurfaceChrome";
+import {
+  FileSurfaceAction,
+  FileSurfaceLoading,
+  FileSurfaceNotice,
+  FileSurfaceUnavailable,
+} from "./fileSurfaceChrome";
 import { OFFICE_PREVIEW_MAX_BYTES, type OfficeWorkerResult } from "./officePreviewProtocol";
 
 const DocumentPages = lazy(() => import("./DocumentPages"));
@@ -156,15 +162,9 @@ function ExtendedOfficeViewer(props: {
   const selectPage = setPage;
   if (error)
     return (
-      <div
-        role="alert"
-        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-6 text-center"
-      >
-        <p className="text-sm font-medium">No preview for this file</p>
-        <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-          {error} Save it or open it in another app.
-        </p>
-      </div>
+      <FileSurfaceUnavailable alert>
+        {error} Save it or open it in another app.
+      </FileSurfaceUnavailable>
     );
   if (notebook)
     return (
@@ -183,7 +183,7 @@ function ExtendedOfficeViewer(props: {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {count > 0 ? (
-        <div className="flex h-10 shrink-0 items-center gap-2 border-b border-border/60 px-3 text-xs">
+        <PanelSubheader className="text-xs">
           <FileSurfaceAction
             label={`Previous ${navigation}`}
             disabled={page === 0}
@@ -243,11 +243,11 @@ function ExtendedOfficeViewer(props: {
           >
             <ChevronRightIcon className="size-3.5" />
           </FileSurfaceAction>
-        </div>
+        </PanelSubheader>
       ) : null}
       {props.kind === "ods" && sheet ? (
         <div
-          className="flex min-h-10 shrink-0 flex-wrap items-center gap-x-1 border-b border-border/60 px-3 py-2 text-xs text-muted-foreground tabular-nums"
+          className="flex min-h-10 shrink-0 flex-wrap items-center gap-x-1 border-b border-border px-3 py-2 text-xs text-muted-foreground tabular-nums"
           role="status"
         >
           Sheet {page + 1} of {count} · {sheet.rowCount.toLocaleString()} rows ·{" "}

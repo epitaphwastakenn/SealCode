@@ -1,11 +1,8 @@
 /* oxlint-disable react/no-unstable-nested-components -- These callbacks return overlays, and are invoked as render functions. */
 import { useEffect, useRef, useState } from "react";
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react";
-import {
-  FileSurfaceAction,
-  FileSurfaceLoading,
-  FILE_SURFACE_SUBHEADER_CLASS,
-} from "../fileSurfaceChrome";
+import { PanelSubheader } from "~/components/PanelSubheader";
+import { FileSurfaceAction, FileSurfaceLoading } from "../fileSurfaceChrome";
 import { OfficePages, type PaintPage } from "./OfficePages";
 import { createWorkerClient } from "./worker-rpc";
 import {
@@ -98,7 +95,7 @@ export default function Presentation(props: {
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className={FILE_SURFACE_SUBHEADER_CLASS}>
+      <PanelSubheader>
         <FileSurfaceAction
           label="Previous slide"
           disabled={page === 0}
@@ -116,7 +113,7 @@ export default function Presentation(props: {
         >
           <ChevronRightIcon className="size-3.5" />
         </FileSurfaceAction>
-      </div>
+      </PanelSubheader>
       <OfficePages
         pages={opened.slides}
         paint={opened.paint}
@@ -127,7 +124,7 @@ export default function Presentation(props: {
         overlay={(index) => (
           <>
             {opened.slides[index]?.hidden ? (
-              <div className="pointer-events-none absolute inset-0 bg-white/50" />
+              <div className="pointer-events-none absolute inset-0 bg-background/50" />
             ) : null}
             {failed[index] ? (
               <p

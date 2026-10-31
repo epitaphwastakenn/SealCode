@@ -285,7 +285,7 @@ const RunContextSelector = memo(function RunContextSelector({
     return (
       <span
         className={cn(
-          "inline-flex h-7 min-w-0 max-w-[48%] flex-initial items-center justify-start gap-1 rounded-md border border-transparent px-1.75 font-normal text-foreground/70 text-xs sm:h-6 dark:text-muted-foreground",
+          "inline-flex h-7 min-w-0 max-w-[48%] flex-initial items-center justify-start gap-1 rounded-md border border-transparent px-1.75 font-normal text-muted-foreground text-xs sm:h-6",
           isPanel && "max-w-full",
           isPanel && THREAD_DETAILS_PANEL_LOCKED_ROW_CLASS,
         )}
@@ -767,7 +767,7 @@ export const BranchToolbar = memo(function BranchToolbar({
       ref={attachStrip}
       data-compact={labelsOverflow ? "" : undefined}
       className={cn(
-        "gap-1 text-xs font-normal text-foreground/70 dark:text-muted-foreground",
+        "gap-1 text-xs font-normal text-muted-foreground",
         // Hide empty non-Git strips while retaining host width so controls can reappear as the chat grows.
         !contextStripVisible && "pointer-events-none invisible absolute inset-x-0 top-full",
       )}

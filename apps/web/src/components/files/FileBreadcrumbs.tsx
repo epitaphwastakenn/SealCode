@@ -240,7 +240,7 @@ function FolderContentsMenu(props: FileBreadcrumbsProps & { readonly crumb: File
           <button
             type="button"
             aria-label={`Browse ${props.crumb.label}`}
-            className="relative mx-0.5 flex h-5 w-4 shrink-0 cursor-pointer items-center justify-center rounded-sm text-muted-foreground/60 outline-none pointer-coarse:after:absolute pointer-coarse:after:-inset-3 hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-popup-open:bg-accent data-popup-open:text-foreground"
+            className="relative mx-0.5 flex h-5 w-4 shrink-0 cursor-pointer items-center justify-center rounded-sm text-muted-foreground outline-none pointer-coarse:after:absolute pointer-coarse:after:-inset-3 hover:bg-row-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring data-popup-open:bg-row-hover data-popup-open:text-foreground"
           />
         }
       >
@@ -266,8 +266,6 @@ function FolderContentsMenu(props: FileBreadcrumbsProps & { readonly crumb: File
 
 function FolderBreadcrumb(props: {
   readonly crumb: FileBreadcrumb;
-  /** Whether this crumb is below the current folder. */
-  readonly descendant: boolean;
   readonly onNavigate: (path: string) => void;
   readonly projectName: string;
 }) {
@@ -278,10 +276,7 @@ function FolderBreadcrumb(props: {
           <button
             type="button"
             onClick={() => props.onNavigate(props.crumb.path)}
-            className={cn(
-              "relative block max-w-40 cursor-pointer rounded-sm px-0.5 text-left outline-none pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-3 hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
-              props.descendant ? "text-muted-foreground/70" : "text-muted-foreground",
-            )}
+            className="relative block max-w-40 cursor-pointer rounded-sm px-0.5 text-left text-muted-foreground outline-none pointer-coarse:after:absolute pointer-coarse:after:inset-x-0 pointer-coarse:after:-inset-y-3 hover:bg-row-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
           />
         }
       >
@@ -324,7 +319,6 @@ export function FileBreadcrumbs(props: FileBreadcrumbsProps) {
               ) : (
                 <FolderBreadcrumb
                   crumb={crumb}
-                  descendant={index > currentIndex}
                   onNavigate={props.onNavigateFolder}
                   projectName={props.projectName}
                 />
@@ -332,7 +326,7 @@ export function FileBreadcrumbs(props: FileBreadcrumbsProps) {
               {index === breadcrumbs.length - 1 ? null : hostPath ? (
                 <ChevronRightIcon
                   aria-hidden
-                  className="mx-1 size-3.5 shrink-0 text-muted-foreground/60"
+                  className="mx-1 size-3.5 shrink-0 text-muted-foreground"
                 />
               ) : (
                 <FolderContentsMenu {...props} crumb={crumb} />

@@ -17,7 +17,6 @@ import type {
 } from "@t3tools/contracts";
 import {
   ChevronDownIcon,
-  ChevronRightIcon,
   Columns2Icon,
   FolderTreeIcon,
   InfoIcon,
@@ -28,7 +27,7 @@ import {
   TextWrapIcon,
   TriangleAlertIcon,
 } from "lucide-react";
-import { ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide";
+import { ChevronsDownUp, ChevronsUpDown } from "lucide";
 import { useAtomRefresh } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
@@ -63,7 +62,6 @@ import {
 } from "~/lib/diffRendering";
 import { APP_BASE_NAME } from "~/branding";
 import { PREFERRED_HIGHLIGHTER } from "~/lib/syntaxHighlighting";
-import { cn } from "~/lib/utils";
 import { createPullRequestDiffFileContentsLoader } from "~/lib/diffFileContents";
 import {
   buildDiffReviewComment,
@@ -83,6 +81,7 @@ import { diffFileTreeEntries } from "../diffs/diffFileTree.logic";
 import { StyledDiffCodeView } from "../diffs/StyledDiffCodeView";
 import { Button } from "../ui/button";
 import { MorphIcon } from "~/components/MorphIcon";
+import { DisclosureChevron } from "~/components/ui/disclosure-chevron";
 import { Checkbox } from "../ui/checkbox";
 import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import {
@@ -625,7 +624,7 @@ function PullRequestCodeTab({
     ) : null;
   const unstructured =
     rawSlices.length === 0 ? null : (
-      <div className="space-y-4 border-t border-border/60 px-4 py-5">
+      <div className="space-y-4 border-t border-border px-4 py-5">
         {rawSlices.map((slice) => (
           <div key={`${slice.reason}:${slice.text.slice(0, 64)}`} className="space-y-2">
             <p className="text-xs text-muted-foreground">{slice.reason}</p>
@@ -792,7 +791,7 @@ function PullRequestCodeTab({
           toggleFile(item.id);
         }}
       >
-        <MorphIcon className="size-4" icon={collapsed ? ChevronRight : ChevronDown} />
+        <DisclosureChevron open={!collapsed} />
       </Button>
     );
   };
@@ -980,7 +979,7 @@ function PullRequestCodeTab({
     setSelectedLines(null);
   };
   const toolbar = (
-    <div className="@container flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-border/60 bg-background px-4 text-xs text-muted-foreground">
+    <div className="@container flex h-10 min-h-10 shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-4 text-xs text-muted-foreground">
       <div className="flex min-w-0 flex-1 items-center gap-3">
         {orderedCommits.length > 0 ? (
           <DropdownMenu>
@@ -990,7 +989,7 @@ function PullRequestCodeTab({
               aria-label={`Diff scope: ${scopeLabel}`}
             >
               <span className="truncate">{scopeLabel}</span>
-              <ChevronDownIcon className="size-3.5 shrink-0 opacity-70" />
+              <ChevronDownIcon className="size-3.5 shrink-0" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="max-w-[min(28rem,calc(100vw-2rem))]">
               <DropdownMenuRadioGroup
@@ -1349,7 +1348,7 @@ function PullRequestCodeTab({
     <div className="flex h-full min-h-0 flex-col">
       {toolbar}
       {orphanFiles.size > 0 ? (
-        <div className="shrink-0 border-b border-border/60">
+        <div className="shrink-0 border-b border-border">
           <Collapsible open={orphansOpen} onOpenChange={setOrphansOpen}>
             <h2>
               <CollapsibleTrigger className="flex w-full items-center gap-1.5 px-4 py-2 text-left text-xs text-muted-foreground">
@@ -1358,10 +1357,7 @@ function PullRequestCodeTab({
                     ? "Conversations not on the current diff"
                     : "Conversations not on the diff loaded so far"}
                 </span>
-                <ChevronRightIcon
-                  aria-hidden
-                  className={cn("size-3.5 transition-transform", orphansOpen && "rotate-90")}
-                />
+                <DisclosureChevron open={orphansOpen} />
                 <span aria-hidden className="tabular-nums">
                   {orphanThreads.length}
                 </span>
@@ -1450,14 +1446,14 @@ function PullRequestCodeTab({
           </FileViewedToggleContext>
         </div>
         {fileTreeOpen ? (
-          <aside className="flex w-[min(20rem,40%)] min-w-48 shrink-0 border-l border-border/60">
+          <aside className="flex w-[min(20rem,40%)] min-w-48 shrink-0 border-l border-border">
             <DiffFileTree
               ariaLabel={`${capitalizeTerm(term)} #${detail.number} files`}
               entries={fileTreeEntries}
               onSelectFile={revealFile}
               footer={
                 nextCursor === null ? null : (
-                  <div className="shrink-0 border-t border-border/60 p-2">
+                  <div className="shrink-0 border-t border-border p-2">
                     <Button
                       type="button"
                       size="xs"

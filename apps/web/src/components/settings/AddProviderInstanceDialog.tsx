@@ -442,9 +442,9 @@ export function AddProviderInstanceDialog({
               {wizardStep === 0 ? (
                 <div className="space-y-4 pt-4">
                   <div className="flex items-center gap-3 text-xs text-muted-foreground">
-                    <div aria-hidden className="flex-1 border-t border-border/70" />
+                    <div aria-hidden className="flex-1 border-t border-border" />
                     <span>Or choose from ACP Registry</span>
-                    <div aria-hidden className="flex-1 border-t border-border/70" />
+                    <div aria-hidden className="flex-1 border-t border-border" />
                   </div>
                   {isAcpRegistry && isManualAcpConfiguration ? (
                     <div className="grid gap-4">
@@ -509,7 +509,7 @@ export function AddProviderInstanceDialog({
               ) : null}
 
               {isAcpRegistry && wizardStep === 1 && selectedAcp ? (
-                <div className="mb-4 flex items-start justify-between gap-3 border-b border-border/70 pb-3">
+                <div className="mb-4 flex items-start justify-between gap-3 border-b border-border pb-3">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium text-foreground">
                       {selectedAcp.name}

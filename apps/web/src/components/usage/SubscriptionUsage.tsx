@@ -78,7 +78,7 @@ function SubscriptionProviderCard({
   const name = providerEntryName(provider);
 
   return (
-    <article className="flex min-w-0 flex-col gap-5 rounded-xl border border-border bg-card/35 p-5">
+    <article className="flex min-w-0 flex-col gap-5 rounded-xl border border-border bg-foreground/[0.03] p-5">
       <header className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
           <ProviderInstanceIcon
@@ -105,7 +105,7 @@ function SubscriptionProviderCard({
       ) : null}
       {entry.metrics.length > 0 ? <SubscriptionUsageMetrics metrics={entry.metrics} /> : null}
       {entry.unavailableReason ? (
-        <p className="rounded-md bg-muted/50 px-3 py-3 text-xs text-muted-foreground">
+        <p className="rounded-md bg-foreground/[0.03] px-3 py-3 text-xs text-muted-foreground">
           {entry.unavailableReason}
         </p>
       ) : null}
@@ -125,7 +125,7 @@ function SubscriptionUsageMetrics({
   return (
     <div className="grid grid-cols-2 gap-2">
       {metrics.map((metric) => (
-        <div key={metric.id} className="rounded-md bg-muted/50 px-3 py-2">
+        <div key={metric.id} className="rounded-md bg-foreground/[0.03] px-3 py-2">
           <div className="text-3xs text-muted-foreground">{metric.label}</div>
           <div className="mt-0.5 truncate text-sm font-medium tabular-nums text-foreground">
             {metric.value}

@@ -33,7 +33,7 @@ export function PanelAnimationsPreview({ durationMs }: { durationMs: number }) {
           className={cn(
             "flex shrink-0 items-center overflow-hidden bg-foreground/5 px-2",
             transitionClass,
-            panelsOpen ? "h-2 border-t border-border/70" : "h-0 border-t-0",
+            panelsOpen ? "h-2 border-t border-border" : "h-0 border-t-0",
           )}
         >
           <span className="h-px w-2/3 rounded-full bg-muted-foreground/25" />

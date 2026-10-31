@@ -275,19 +275,8 @@ export function buildFileDiffContentVersion(fileDiff: FileDiffMetadata): number 
   return hash;
 }
 
-export function getDiffCollapseIconClassName(fileDiff: FileDiffMetadata): string {
-  switch (fileDiff.type) {
-    case "new":
-      return "text-[var(--diffs-addition-base)] redesign:text-muted-foreground/80";
-    case "deleted":
-      return "text-[var(--diffs-deletion-base)] redesign:text-muted-foreground/80";
-    case "change":
-    case "rename-pure":
-    case "rename-changed":
-      return "text-[var(--diffs-modified-base)] redesign:text-muted-foreground/80";
-    default:
-      return "text-muted-foreground/80";
-  }
+export function getDiffCollapseIconClassName(_fileDiff: FileDiffMetadata): string {
+  return "text-muted-foreground";
 }
 
 export const DIFF_SURFACE_THEME_UNSAFE_CSS = `

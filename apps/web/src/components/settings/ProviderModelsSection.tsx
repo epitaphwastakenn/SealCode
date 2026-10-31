@@ -459,7 +459,7 @@ function ProviderModelRow({
   readonly onRemove: (slug: string) => void;
 }) {
   const capLabels = describeModelCapabilities(model);
-  const nameClassName = cn("text-xs", isHidden ? "text-muted-foreground" : "text-foreground/90");
+  const nameClassName = cn("text-xs", isHidden ? "text-muted-foreground" : "text-foreground");
   const pickerTooltip = model.isCustom
     ? "Custom models are always shown in the picker"
     : isHidden
@@ -470,7 +470,7 @@ function ProviderModelRow({
     <div
       data-model-slug={model.slug}
       className={cn(
-        "grid h-7 grid-cols-[1.5rem_minmax(0,1fr)_auto_minmax(5.5rem,auto)_auto] items-center gap-2 rounded-md px-2 transition-colors hover:bg-muted/30",
+        "grid h-7 grid-cols-[1.5rem_minmax(0,1fr)_auto_minmax(5.5rem,auto)_auto] items-center gap-2 rounded-md px-2 transition-colors hover:bg-row-hover",
         isHidden && "opacity-50",
       )}
     >
@@ -503,7 +503,7 @@ function ProviderModelRow({
           >
             <span className={cn(nameClassName, "max-w-full shrink-0 truncate")}>{model.name}</span>
             {model.name !== model.slug ? (
-              <code className="truncate font-mono text-2xs text-muted-foreground/70">
+              <code className="truncate font-mono text-2xs text-muted-foreground">
                 {model.slug}
               </code>
             ) : null}
@@ -516,10 +516,10 @@ function ProviderModelRow({
           </TooltipPopup>
         </Tooltip>
         {model.isCustom ? (
-          <span className="shrink-0 text-2xs text-muted-foreground/70">custom</span>
+          <span className="shrink-0 text-2xs text-muted-foreground">custom</span>
         ) : null}
       </span>
-      <span className="text-2xs text-muted-foreground/70">
+      <span className="text-2xs text-muted-foreground">
         {capLabels.length > 0 ? (
           <span className="hidden sm:inline">{capLabels.join(" · ")}</span>
         ) : null}

@@ -100,7 +100,7 @@ function AccessScopeSummary({
         <p className="mb-1 font-medium">Granted scopes</p>
         <div className="flex flex-col gap-0.5">
           {scopes.map((scope) => (
-            <code key={scope} className="font-mono text-foreground/85">
+            <code key={scope} className="font-mono text-foreground">
               {scope}
             </code>
           ))}
@@ -122,11 +122,11 @@ function endpointRowClassName(presentation: AccessSectionPresentation, isAvailab
   if (presentation === "endpoint-rail") {
     return cn(
       "relative first:rounded-t-xl last:rounded-b-xl px-3 py-3 sm:px-4",
-      !isAvailable && "bg-muted/15",
+      !isAvailable && "bg-foreground/[0.03]",
     );
   }
 
-  return cn(ENDPOINT_ROW_CLASSNAME, !isAvailable && "bg-muted/24");
+  return cn(ENDPOINT_ROW_CLASSNAME, !isAvailable && "bg-foreground/[0.03]");
 }
 
 type PairingLinkListRowProps = {
@@ -303,11 +303,11 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
             <AccessScopeSummary scopes={pairingLink.scopes} label="Pairing link scopes" />
           </p>
           {!credential ? (
-            <p className="text-2xs text-muted-foreground/70">
+            <p className="text-2xs text-muted-foreground">
               Create a new link to share from this client.
             </p>
           ) : shareablePairingUrl === null ? (
-            <p className="text-2xs text-muted-foreground/70">
+            <p className="text-2xs text-muted-foreground">
               Copy the token and pair from another client using this backend&apos;s reachable host.
             </p>
           ) : null}
@@ -369,7 +369,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
                   onClick={(event) => event.currentTarget.select()}
                 />
                 {isRevealValueUrl && isRevealValueQrShareable ? (
-                  <div className="flex justify-center rounded-xl border border-border/60 bg-muted/30 p-4">
+                  <div className="flex justify-center rounded-xl border border-border bg-foreground/[0.03] p-4">
                     <QRCodeSvg
                       value={revealValue}
                       size={132}
@@ -414,7 +414,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
                 role="radiogroup"
                 aria-label="Endpoint the pairing QR code and URL use"
               >
-                <p className="text-2xs text-muted-foreground/70">Reach this machine via</p>
+                <p className="text-2xs text-muted-foreground">Reach this machine via</p>
                 {endpointCopyOptions.map((option) => {
                   const isSelected = option.id === selectedQrOption?.id;
                   return (
@@ -426,8 +426,8 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
                       className={cn(
                         "flex w-full items-baseline gap-2 rounded-lg border px-2.5 py-1.5 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
                         isSelected
-                          ? "border-foreground/60 bg-muted/30"
-                          : "border-border/50 hover:bg-muted/20",
+                          ? "border-foreground/60 bg-foreground/[0.03]"
+                          : "border-border/50 hover:bg-row-hover",
                       )}
                       onClick={() => setQrEndpointId(option.id)}
                     >
@@ -439,7 +439,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
                       >
                         {option.label}
                       </span>
-                      <span className="min-w-0 truncate text-2xs text-muted-foreground/70">
+                      <span className="min-w-0 truncate text-2xs text-muted-foreground">
                         {option.detail}
                       </span>
                     </button>
@@ -447,7 +447,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
                 })}
               </div>
             ) : null}
-            <div className="flex items-center gap-2 rounded-lg border border-border/60 bg-muted/30 px-2.5 py-1.5">
+            <div className="flex items-center gap-2 rounded-lg border border-border bg-foreground/[0.03] px-2.5 py-1.5">
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -483,7 +483,7 @@ const PairingLinkListRow = memo(function PairingLinkListRow({
             </div>
           ) : (
             <div className="flex size-[192px] shrink-0 items-center justify-center self-center rounded-xl border border-border/50 p-4 sm:self-start">
-              <p className="text-center text-2xs text-muted-foreground/70">
+              <p className="text-center text-2xs text-muted-foreground">
                 No QR for this endpoint. Another device scanning a loopback link would dial itself;
                 copy the URL for use on this machine instead.
               </p>
@@ -545,7 +545,7 @@ const ConnectedClientListRow = memo(function ConnectedClientListRow({
             />
             <h3 className="text-sm font-medium text-foreground">{primaryLabel}</h3>
             {clientSession.current ? (
-              <span className="text-3xs text-muted-foreground/80 rounded-md border border-border/50 bg-muted/50 px-1 py-0.5">
+              <span className="text-3xs text-muted-foreground rounded-md border border-border/50 bg-foreground/[0.03] px-1 py-0.5">
                 This device
               </span>
             ) : null}
@@ -733,12 +733,12 @@ export const AuthorizedClientsHeaderAction = memo(function AuthorizedClientsHead
                   </Button>
                 </div>
               </div>
-              <div className="divide-y divide-border/60 rounded-lg border border-input bg-muted/25">
+              <div className="divide-y divide-border/60 rounded-lg border border-input bg-foreground/[0.03]">
                 {PAIRING_SCOPE_OPTIONS.filter(({ scope }) => delegatableScopes.includes(scope)).map(
                   ({ scope, title, description }) => (
                     <label
                       key={scope}
-                      className="flex cursor-pointer items-start gap-3 px-3 py-2.5 transition-colors hover:bg-muted/40"
+                      className="flex cursor-pointer items-start gap-3 px-3 py-2.5 transition-colors hover:bg-row-hover"
                     >
                       <Checkbox
                         className="mt-0.5"
@@ -847,7 +847,7 @@ export const PairingClientsList = memo(function PairingClientsList({
 
       {pairingLinks.length === 0 && clientSessions.length === 0 && !isLoading ? (
         <div className={accessRowClassName(presentation)}>
-          <p className="text-xs text-muted-foreground/60">No pairing links or client sessions.</p>
+          <p className="text-xs text-muted-foreground">No pairing links or client sessions.</p>
         </div>
       ) : null}
     </>
@@ -902,7 +902,7 @@ export const AdvertisedEndpointListRow = memo(function AdvertisedEndpointListRow
             </Tooltip>
           ) : null}
           {!isAvailable ? (
-            <span className="shrink-0 rounded-md border border-border/70 px-1 py-0.5 text-3xs text-muted-foreground">
+            <span className="shrink-0 rounded-md border border-border px-1 py-0.5 text-3xs text-muted-foreground">
               Setup required
             </span>
           ) : null}

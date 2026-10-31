@@ -962,7 +962,7 @@ function UsageOverview({
                   return (
                     <tr
                       key={key}
-                      className="relative border-b border-border/50 text-right whitespace-nowrap text-muted-foreground tabular-nums transition-colors hover:bg-muted/50 has-focus-visible:bg-muted/50"
+                      className="relative border-b border-border/50 text-right whitespace-nowrap text-muted-foreground tabular-nums transition-colors hover:bg-row-hover has-focus-visible:bg-muted/50"
                     >
                       <td className="py-2.5 pr-3 text-left text-xs">{index + 1}</td>
                       <td className="py-2.5 text-left whitespace-normal">
@@ -1045,7 +1045,7 @@ function UsageOverview({
                   breakdownPeriods.map((period) => (
                     <tr
                       key={"hourStart" in period ? period.hourStart : period.day}
-                      className="border-b border-border/50 transition-colors hover:bg-muted/50"
+                      className="border-b border-border/50 transition-colors hover:bg-row-hover"
                     >
                       <td className="py-2 text-foreground">
                         {"hourStart" in period
@@ -1196,11 +1196,11 @@ function CursorEnableLimits({
           displayName="Cursor"
           indicatorBackground="var(--background)"
           className="size-5"
-          iconClassName="size-4 text-foreground/80"
+          iconClassName="size-4 text-foreground"
         />
         Cursor
       </h2>
-      <div className="flex flex-col items-start gap-3 rounded-lg border border-border/60 p-4">
+      <div className="flex flex-col items-start gap-3 rounded-lg border border-border p-4">
         <p className="text-xs text-muted-foreground">{CURSOR_KEYCHAIN_COPY}</p>
         <div className="flex flex-wrap gap-2">
           {environments.map((environment) => (

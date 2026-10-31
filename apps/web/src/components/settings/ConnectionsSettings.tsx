@@ -870,7 +870,7 @@ export function ConnectionsSettings() {
           <SettingsRow
             title="WSL only"
             description="Run only the WSL backend. Harp restarts when this changes."
-            className="bg-muted/20 pl-7 sm:pl-8"
+            className="bg-foreground/[0.03] pl-7 sm:pl-8"
             control={
               <Switch
                 checked={desktopWslState.wslOnly}
@@ -1394,7 +1394,7 @@ export function ConnectionsSettings() {
                 {!isTailscaleServePortValid ? (
                   <p className="mt-2 text-xs text-destructive">Enter a port from 1 to 65535.</p>
                 ) : null}
-                <div className="rounded-md border border-border/70 bg-muted/20 px-3 py-2">
+                <div className="rounded-md border border-border bg-foreground/[0.03] px-3 py-2">
                   <p className="text-xs font-medium text-muted-foreground">HTTPS endpoint</p>
                   <Tooltip>
                     <TooltipTrigger

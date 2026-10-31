@@ -36,7 +36,7 @@ function StyleCard({
     >
       <span aria-hidden className="block h-12 overflow-hidden rounded-lg">
         {art === "off" ? (
-          <span className="flex size-full items-center justify-center bg-muted/60 text-muted-foreground">
+          <span className="flex size-full items-center justify-center bg-foreground/[0.03] text-muted-foreground">
             <BanIcon className="size-4" />
           </span>
         ) : (

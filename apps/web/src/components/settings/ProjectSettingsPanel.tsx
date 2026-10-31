@@ -450,9 +450,7 @@ function ProjectDetail({
                   >
                     <Tooltip>
                       <TooltipTrigger
-                        render={
-                          <span className="min-w-0 truncate text-xs text-muted-foreground/80" />
-                        }
+                        render={<span className="min-w-0 truncate text-xs text-muted-foreground" />}
                       >
                         {member.workspaceRoot}
                       </TooltipTrigger>

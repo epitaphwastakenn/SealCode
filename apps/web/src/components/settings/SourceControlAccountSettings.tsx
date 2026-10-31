@@ -212,7 +212,7 @@ export function SourceControlAccountSettings({
             {group.broken.map((entry) => (
               <p
                 key={entry.account}
-                className="flex min-w-0 flex-wrap items-center gap-1 text-xs text-muted-foreground/70"
+                className="flex min-w-0 flex-wrap items-center gap-1 text-xs text-muted-foreground"
               >
                 <RedactedLogin revealed={revealed} account={entry.account} />
                 <span>

@@ -213,19 +213,19 @@ function CleanupResults({
                 <span className={`block ${entry.outcome === "failed" ? "text-destructive" : ""}`}>
                   {entry.reason}
                 </span>
-                <span className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 border-l border-border/60 pl-3">
+                <span className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 border-l border-border pl-3">
                   <span>Machine</span>
-                  <span className="text-foreground/80">{environmentLabel}</span>
+                  <span className="text-foreground">{environmentLabel}</span>
                   {entry.projectPath && (
                     <>
                       <span>Project</span>
-                      <code className="text-foreground/80">{entry.projectPath}</code>
+                      <code className="text-foreground">{entry.projectPath}</code>
                     </>
                   )}
                   {entry.path && (
                     <>
                       <span>Folder</span>
-                      <code className="text-foreground/80">{entry.path}</code>
+                      <code className="text-foreground">{entry.path}</code>
                     </>
                   )}
                   {entry.threadTitle && (

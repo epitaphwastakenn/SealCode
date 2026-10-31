@@ -286,7 +286,7 @@ export function SettingInheritance({
                           ? "text-foreground"
                           : layer.set
                             ? "text-muted-foreground"
-                            : "text-muted-foreground/60",
+                            : "text-muted-foreground",
                       )}
                     >
                       <span className="max-w-32 truncate">{layer.value}</span>
@@ -434,7 +434,7 @@ export function SettingInheritance({
                     </ul>
                   );
                   return (
-                    <div className="mt-2 border-t border-border/60 pt-2">
+                    <div className="mt-2 border-t border-border pt-2">
                       {foldOverrides ? (
                         <Collapsible>
                           {header}

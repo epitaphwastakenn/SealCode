@@ -233,7 +233,7 @@ function AgentPresetsSettings(props: {
           </Button>
         </div>
         {props.settings.agentPresets.length > 0 ? (
-          <div className="divide-y divide-border/60 rounded-md border border-border/60">
+          <div className="divide-y divide-border/60 rounded-md border border-border">
             {props.settings.agentPresets.map((preset) => (
               <div key={preset.id} className="flex items-center gap-2 px-2.5 py-2">
                 <div className="min-w-0 flex-1">

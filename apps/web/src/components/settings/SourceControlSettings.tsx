@@ -168,7 +168,7 @@ function sourceControlItemIcon(
   const Icon = isProviderDiscoveryItem(item)
     ? host && sourceControlIcon(host)
     : VCS_ICONS[item.kind];
-  return Icon ? <Icon className="size-4.5 text-foreground/80" aria-hidden /> : null;
+  return Icon ? <Icon className="size-4.5 text-foreground" aria-hidden /> : null;
 }
 
 function SourceControlItemMark({
@@ -288,7 +288,7 @@ function DiscoveryItemRow({
   return (
     <div
       className={cn(
-        "first:rounded-t-xl last:rounded-b-xl transition-colors hover:bg-muted/20",
+        "first:rounded-t-xl last:rounded-b-xl transition-colors hover:bg-row-hover",
         isVcsNotReady(item) && "opacity-80",
       )}
     >
@@ -310,7 +310,7 @@ function DiscoveryItemRow({
                 </Badge>
               ) : null}
             </div>
-            <p className="flex min-w-0 flex-wrap items-center gap-x-1 text-xs leading-normal text-muted-foreground/80">
+            <p className="flex min-w-0 flex-wrap items-center gap-x-1 text-xs leading-normal text-muted-foreground">
               {itemSummary({ item, auth, authAccount })}
             </p>
           </div>

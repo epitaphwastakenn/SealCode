@@ -71,7 +71,6 @@ import { Switch } from "../ui/switch";
 import { TooltipProvider } from "../ui/tooltip";
 import { Button, InlineButton } from "../ui/button";
 import { DisclosureChevron } from "../ui/disclosure-chevron";
-import { Switch } from "../ui/switch";
 import {
   isProviderInstancePickerReady,
   isProviderInstancePickerVisible,

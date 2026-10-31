@@ -3,7 +3,6 @@ import type { PendingBackgroundWorkItem } from "@t3tools/client-runtime/state/th
 import { useNavigate } from "@tanstack/react-router";
 import {
   BotIcon,
-  CpuIcon,
   EyeIcon,
   GaugeIcon,
   type LucideIcon,
@@ -16,13 +15,17 @@ import { type ContextWindowSnapshot, formatContextWindowTokens } from "~/lib/con
 import { cn } from "../../lib/utils";
 import { useEnvironmentQuery } from "../../state/query";
 import { serverEnvironment } from "../../state/server";
+import { StatusDot, type StatusDotTone } from "../ui/status-dot";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { UsageBar, usageTone } from "../ui/usage-ring";
 import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { mcpStatusLabel, threadMcpServers } from "./ThreadSessionPanel.logic";
 import {
   THREAD_DETAILS_PANEL_ICON_CLASS,
   THREAD_DETAILS_PANEL_ROW_CONTENT_CLASS,
+  threadDetailsMetaClassName,
+  threadDetailsRowLabelClassName,
 } from "./threadDetailsPanelStyles";
 
 export interface ThreadSessionInfo {
@@ -42,25 +45,25 @@ const BACKGROUND_WORK_ICON: Partial<Record<PendingBackgroundWorkItem["kind"], Lu
   background_task: SquareTerminalIcon,
 };
 
-const MCP_STATE_DOT_CLASS: Record<GlobalMcpStatus["state"], string> = {
-  ready: "bg-emerald-500",
-  connecting: "bg-sky-500",
-  error: "bg-destructive",
-  stopped: "bg-muted-foreground/40",
-  disabled: "bg-muted-foreground/40",
+const mcpStateDotTone: Record<GlobalMcpStatus["state"], StatusDotTone> = {
+  ready: "success",
+  connecting: "info",
+  error: "error",
+  stopped: "muted",
+  disabled: "muted",
 };
 
-function contextUsageColor(percent: number): string {
-  if (percent >= 90) return "var(--color-error)";
-  if (percent >= 75) return "var(--color-warning)";
-  return "color-mix(in oklab, var(--color-muted-foreground) 72%, transparent)";
-}
+const usageTextClassName = {
+  muted: "text-muted-foreground",
+  warning: "text-warning-foreground",
+  error: "text-error-foreground",
+} as const;
 
 function SessionRow(props: {
   readonly icon: LucideIcon;
   readonly title: string;
-  readonly detail?: string | null;
   readonly trailing?: string | null;
+  readonly trailingClassName?: string;
   readonly children?: React.ReactNode;
 }) {
   const Icon = props.icon;
@@ -71,16 +74,13 @@ function SessionRow(props: {
       <Icon className={cn(THREAD_DETAILS_PANEL_ICON_CLASS, "mt-px")} aria-hidden />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <div className="flex min-w-0 items-baseline justify-between gap-2">
-          <span className="truncate text-sm font-medium text-foreground/80">{props.title}</span>
+          <span className={cn("truncate", threadDetailsRowLabelClassName)}>{props.title}</span>
           {props.trailing ? (
-            <span className="shrink-0 text-2xs tabular-nums text-muted-foreground">
+            <span className={cn("shrink-0", threadDetailsMetaClassName, props.trailingClassName)}>
               {props.trailing}
             </span>
           ) : null}
         </div>
-        {props.detail ? (
-          <p className="truncate text-2xs text-muted-foreground">{props.detail}</p>
-        ) : null}
         {props.children}
       </div>
     </li>
@@ -95,6 +95,7 @@ function ContextWindowRow({ usage }: { readonly usage: ContextWindowSnapshot }) 
     <SessionRow
       icon={GaugeIcon}
       title="Context"
+      trailingClassName={usageTextClassName[usageTone(percent ?? 0)]}
       trailing={
         usage.maxTokens == null
           ? `${used} tokens`
@@ -103,21 +104,7 @@ function ContextWindowRow({ usage }: { readonly usage: ContextWindowSnapshot }) 
             }`
       }
     >
-      {percent === null ? null : (
-        <div
-          className="h-1 w-full overflow-hidden rounded-full bg-muted/60"
-          role="progressbar"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={Math.round(percent)}
-          aria-label="Context window usage"
-        >
-          <div
-            className="h-full rounded-full"
-            style={{ width: `${percent}%`, backgroundColor: contextUsageColor(percent) }}
-          />
-        </div>
-      )}
+      {percent === null ? null : <UsageBar percent={percent} label="Context window usage" />}
     </SessionRow>
   );
 }
@@ -174,21 +161,19 @@ function ThreadMcpServers(props: {
             >
               <span className="relative inline-flex size-4 shrink-0 items-center justify-center">
                 <PlugIcon className={THREAD_DETAILS_PANEL_ICON_CLASS} aria-hidden />
-                <span
-                  className={cn(
-                    "absolute -right-1 -top-1 size-1.5 rounded-full",
-                    MCP_STATE_DOT_CLASS[server.state],
-                  )}
-                  aria-hidden
+                <StatusDot
+                  tone={mcpStateDotTone[server.state]}
+                  className="absolute -top-1 -right-1"
                 />
               </span>
-              <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground/80">
+              <span className={cn("min-w-0 flex-1 truncate", threadDetailsRowLabelClassName)}>
                 {server.displayName ?? server.id}
               </span>
               <span
                 className={cn(
-                  "shrink-0 text-2xs tabular-nums",
-                  server.state === "error" ? "text-destructive" : "text-muted-foreground",
+                  "shrink-0",
+                  threadDetailsMetaClassName,
+                  server.state === "error" && "text-error-foreground",
                 )}
               >
                 {mcpStatusLabel(server)}
@@ -212,7 +197,7 @@ function ThreadMcpServers(props: {
 }
 
 /**
- * What the thread's session knows beyond its workspace: the model, the context
+ * What the thread's session knows beyond its workspace: the context
  * window the provider last reported, background work still running, and the
  * MCP servers Harp hands its agent. A provider that reports none of it
  * leaves its row out.
@@ -226,17 +211,13 @@ export function ThreadSessionPanel(props: {
 }) {
   const { session } = props;
   const backgroundWork = props.compact ? [] : session.backgroundWork;
-  const hasSessionRows =
-    session.modelLabel !== null || session.contextWindow !== null || backgroundWork.length > 0;
+  const hasSessionRows = session.contextWindow !== null || backgroundWork.length > 0;
 
   return (
     <>
       {hasSessionRows ? (
         <ThreadDetailsSection headingId="thread-details-session-heading" title="Session">
           <ul className="m-0 list-none p-0">
-            {session.modelLabel !== null ? (
-              <SessionRow icon={CpuIcon} title={session.modelLabel} detail={session.modelDetail} />
-            ) : null}
             {session.contextWindow !== null ? (
               <ContextWindowRow usage={session.contextWindow} />
             ) : null}

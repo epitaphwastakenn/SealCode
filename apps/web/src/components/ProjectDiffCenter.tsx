@@ -1,5 +1,5 @@
-import { useMemo, useState } from "react";
-import { FileDiff, RefreshCw, TriangleAlert } from "lucide-react";
+import { useState } from "react";
+import { TriangleAlertIcon } from "lucide-react";
 import { FileDiff as PierreFileDiff } from "@pierre/diffs/react";
 import type { ThreadCheckpointSummary } from "@t3tools/client-runtime/state/thread-checkpoints";
 import type { EnvironmentId, ProjectId, ThreadId } from "@t3tools/contracts";
@@ -19,8 +19,18 @@ import {
 } from "../lib/checkpointAttribution";
 import { formatShortTimestamp } from "../timestampFormat";
 import { cn } from "../lib/utils";
+import { Alert, AlertDescription } from "./ui/alert";
+import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { DiffPanelLoadingState, DiffPanelShell } from "./DiffPanelShell";
+import { RefreshIcon } from "./ui/refresh-icon";
+import { StatusDot } from "./ui/status-dot";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
+import {
+  DiffPanelEmpty,
+  DiffPanelError,
+  DiffPanelLoadingState,
+  DiffPanelShell,
+} from "./DiffPanelShell";
 
 interface ProjectDiffCenterProps {
   readonly environmentId: EnvironmentId;
@@ -62,22 +72,19 @@ function useProjectDiffIndex(
       input: { projectId, limit: INDEX_LIMIT },
     }),
   );
-  const entries = useMemo(
-    () =>
-      query.data === null
-        ? NO_ENTRIES
-        : query.data.entries.map((entry): ProjectDiffEntry => ({
-            threadId: entry.threadId,
-            threadTitle: entry.threadTitle,
-            archivedAt: entry.archivedAt,
-            runId: entry.runId,
-            checkpointTurnCount: entry.appRunOrdinal,
-            status: entry.status,
-            files: entry.files,
-            completedAt: entry.capturedAt,
-          })),
-    [query.data],
-  );
+  const entries =
+    query.data === null
+      ? NO_ENTRIES
+      : query.data.entries.map((entry): ProjectDiffEntry => ({
+          threadId: entry.threadId,
+          threadTitle: entry.threadTitle,
+          archivedAt: entry.archivedAt,
+          runId: entry.runId,
+          checkpointTurnCount: entry.appRunOrdinal,
+          status: entry.status,
+          files: entry.files,
+          completedAt: entry.capturedAt,
+        }));
   return {
     entries,
     isPending: query.isPending,
@@ -97,10 +104,8 @@ export function ProjectDiffCenter({ environmentId, projectId }: ProjectDiffCente
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const index = useProjectDiffIndex(environmentId, projectId);
   const entries = index.entries;
-  const selectedEntry = useMemo(
-    () => entries.find((entry) => entryKey(entry) === selectedKey) ?? entries[0] ?? null,
-    [entries, selectedKey],
-  );
+  const selectedEntry =
+    entries.find((entry) => entryKey(entry) === selectedKey) ?? entries[0] ?? null;
 
   const checkpointDiff = useCheckpointDiff(
     {
@@ -115,140 +120,152 @@ export function ProjectDiffCenter({ environmentId, projectId }: ProjectDiffCente
     },
     { enabled: selectedEntry !== null },
   );
-  const renderablePatch = useMemo(
-    () =>
-      getRenderablePatch(
-        checkpointDiff.data?.diff,
-        selectedEntry === null ? "project-diff-center" : `project-diff:${entryKey(selectedEntry)}`,
-      ),
-    [checkpointDiff.data?.diff, selectedEntry],
+  const renderablePatch = getRenderablePatch(
+    checkpointDiff.data?.diff,
+    selectedEntry === null ? "project-diff-center" : `project-diff:${entryKey(selectedEntry)}`,
   );
+
+  const countLabel =
+    index.isPending && entries.length === 0
+      ? null
+      : `${entries.length} checkpoint${entries.length === 1 ? "" : "s"}`;
 
   const header = (
     <>
-      <div className="flex min-w-0 items-center gap-2">
-        <FileDiff className="size-4 shrink-0 text-primary" />
-        <div className="min-w-0">
-          <h2 className="truncate text-sm font-semibold">Project Diff Center</h2>
-          <p className="truncate text-2xs text-muted-foreground">
-            {entries.length} checkpoint{entries.length === 1 ? "" : "s"} across this project
-          </p>
-        </div>
-      </div>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-sm"
-        aria-label="Refresh project diffs"
-        onClick={index.refresh}
-        disabled={index.isPending || !index.available}
-      >
-        <RefreshCw className={cn("size-3.5", index.isPending && "animate-spin")} />
-      </Button>
+      <span className="min-w-0 flex-1 truncate px-1 text-xs tabular-nums text-muted-foreground">
+        {countLabel}
+      </span>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              type="button"
+              variant="ghost-muted"
+              size="icon-xs"
+              aria-label="Refresh project diffs"
+              onClick={index.refresh}
+              disabled={index.isPending || !index.available}
+            />
+          }
+        >
+          <RefreshIcon size="sm" refreshing={index.isPending} />
+        </TooltipTrigger>
+        <TooltipPopup side="top">
+          {index.isPending ? "Refreshing project diffs…" : "Refresh project diffs"}
+        </TooltipPopup>
+      </Tooltip>
     </>
   );
 
   return (
-    <DiffPanelShell mode="embedded" header={header}>
+    <DiffPanelShell header={header}>
       {!index.available ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-5 text-center text-xs text-muted-foreground">
-          <FileDiff className="size-6 opacity-50" />
-          <p>Project-wide checkpoint diffs are not available from this server yet.</p>
-          <p>Open a thread&apos;s Diff panel to review its checkpoints.</p>
-        </div>
+        <DiffPanelEmpty
+          title="Project diffs are not available yet"
+          description="This server cannot list checkpoints across a project. Open a thread's Diff panel to review its checkpoints."
+        />
       ) : index.error ? (
-        <div className="flex flex-1 items-center justify-center px-5 text-center text-xs text-destructive">
-          {index.error}
-        </div>
+        <DiffPanelError
+          title="Couldn't load project diffs"
+          message={index.error}
+          onRetry={index.refresh}
+        />
       ) : index.isPending && entries.length === 0 ? (
         <DiffPanelLoadingState label="Loading project diffs" />
       ) : entries.length === 0 ? (
-        <div className="flex flex-1 flex-col items-center justify-center gap-2 px-5 text-center text-xs text-muted-foreground">
-          <FileDiff className="size-6 opacity-50" />
-          <p>No completed checkpoint diffs in this project yet.</p>
-        </div>
+        <DiffPanelEmpty title="No completed checkpoint diffs in this project yet." />
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col md:flex-row">
-          <div className="max-h-56 min-h-0 w-full shrink-0 overflow-auto border-b border-border/70 md:max-h-none md:w-64 md:border-r md:border-b-0">
-            {entries.map((entry) => {
-              const key = entryKey(entry);
-              const selected = key === (selectedEntry === null ? null : entryKey(selectedEntry));
-              const fileCount = resolveCheckpointChangedFileCount(entry);
-              return (
-                <button
-                  key={key}
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => setSelectedKey(key)}
-                  className={cn(
-                    "flex w-full items-start gap-2 border-b border-border/50 px-3 py-2.5 text-left transition-colors hover:bg-accent/40",
-                    selected && "bg-accent/70",
-                  )}
-                >
-                  <span
-                    aria-hidden
+        <div className="@container/project-diffs flex min-h-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col @min-[40rem]/project-diffs:flex-row">
+            <div className="flex max-h-56 min-h-0 w-full shrink-0 flex-col gap-0.5 overflow-auto border-b border-border p-2 @min-[40rem]/project-diffs:max-h-none @min-[40rem]/project-diffs:w-64 @min-[40rem]/project-diffs:border-r @min-[40rem]/project-diffs:border-b-0">
+              {entries.map((entry) => {
+                const key = entryKey(entry);
+                const selected = key === (selectedEntry === null ? null : entryKey(selectedEntry));
+                const fileCount = resolveCheckpointChangedFileCount(entry);
+                return (
+                  <button
+                    key={key}
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => setSelectedKey(key)}
                     className={cn(
-                      "mt-1.5 size-1.5 shrink-0 rounded-full",
-                      entry.status === "error"
-                        ? "bg-destructive"
-                        : entry.status === "missing"
-                          ? "bg-warning"
-                          : "bg-success",
+                      "flex w-full shrink-0 items-start gap-2 rounded-lg px-2.5 py-1.5 text-left outline-none transition-colors duration-150 ease-out focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70",
+                      selected ? "bg-row-selected" : "hover:bg-row-hover",
                     )}
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="flex items-center gap-1.5">
-                      <span className="truncate text-xs font-medium">{entry.threadTitle}</span>
-                      {entry.archivedAt !== null ? (
-                        <span className="shrink-0 text-3xs text-muted-foreground">Archived</span>
-                      ) : null}
-                    </span>
-                    <span className="mt-0.5 flex flex-wrap gap-x-1.5 text-3xs text-muted-foreground">
-                      <span>Turn {entry.checkpointTurnCount}</span>
-                      <span>
-                        {formatShortTimestamp(entry.completedAt, settings.timestampFormat)}
+                  >
+                    <StatusDot
+                      tone={
+                        entry.status === "error"
+                          ? "error"
+                          : entry.status === "missing"
+                            ? "warning"
+                            : "success"
+                      }
+                      className="mt-1.25"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5">
+                        <span className="truncate text-xs font-medium">{entry.threadTitle}</span>
+                        {entry.archivedAt !== null ? (
+                          <Badge size="sm" variant="secondary">
+                            Archived
+                          </Badge>
+                        ) : null}
                       </span>
-                      {fileCount !== null ? <span>{fileCount} files</span> : null}
+                      <span className="flex flex-wrap gap-x-1.5 text-2xs tabular-nums text-secondary-label">
+                        <span>Turn {entry.checkpointTurnCount}</span>
+                        <span>
+                          {formatShortTimestamp(entry.completedAt, settings.timestampFormat)}
+                        </span>
+                        {fileCount !== null ? (
+                          <span>
+                            {fileCount} file{fileCount === 1 ? "" : "s"}
+                          </span>
+                        ) : null}
+                      </span>
                     </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="min-h-0 min-w-0 flex-1 overflow-auto bg-background">
-            {selectedEntry && shouldRenderUnattributedDiffFallback(selectedEntry) ? (
-              <div className="flex items-center gap-2 border-b border-border/70 bg-muted/30 px-3 py-2 text-2xs text-muted-foreground">
-                <TriangleAlert className="size-3.5 shrink-0 text-warning" />
-                This checkpoint has unverified file attribution; review it as a raw turn diff.
-              </div>
-            ) : null}
-            {checkpointDiff.error ? (
-              <p className="p-3 text-xs text-destructive">{checkpointDiff.error}</p>
-            ) : checkpointDiff.isPending ? (
-              <DiffPanelLoadingState label="Loading selected checkpoint diff" />
-            ) : renderablePatch?.kind === "files" ? (
-              <div className="space-y-2 bg-code p-1">
-                {renderablePatch.files.map((fileDiff) => (
-                  <PierreFileDiff
-                    key={resolveFileDiffPath(fileDiff)}
-                    fileDiff={fileDiff}
-                    options={{
-                      collapsed: false,
-                      diffStyle: "unified",
-                      theme: resolveDiffThemeName(resolvedTheme),
-                    }}
-                  />
-                ))}
-              </div>
-            ) : renderablePatch?.kind === "raw" ? (
-              <pre className="m-2 overflow-auto rounded-lg border border-border/60 bg-code p-3 text-xs text-code-foreground">
-                {renderablePatch.text}
-              </pre>
-            ) : (
-              <p className="p-3 text-xs text-muted-foreground">
-                No patch is available for this checkpoint.
-              </p>
-            )}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="min-h-0 min-w-0 flex-1 overflow-auto bg-background">
+              {selectedEntry && shouldRenderUnattributedDiffFallback(selectedEntry) ? (
+                <Alert variant="warning" className="m-2">
+                  <TriangleAlertIcon />
+                  <AlertDescription>
+                    This checkpoint has unverified file attribution; review it as a raw turn diff.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+              {checkpointDiff.error ? (
+                <DiffPanelError
+                  title="Couldn't load this checkpoint diff"
+                  message={checkpointDiff.error}
+                />
+              ) : checkpointDiff.isPending ? (
+                <DiffPanelLoadingState label="Loading selected checkpoint diff" />
+              ) : renderablePatch?.kind === "files" ? (
+                <div className="space-y-2 bg-code p-1">
+                  {renderablePatch.files.map((fileDiff) => (
+                    <PierreFileDiff
+                      key={resolveFileDiffPath(fileDiff)}
+                      fileDiff={fileDiff}
+                      options={{
+                        collapsed: false,
+                        diffStyle: "unified",
+                        theme: resolveDiffThemeName(resolvedTheme),
+                      }}
+                    />
+                  ))}
+                </div>
+              ) : renderablePatch?.kind === "raw" ? (
+                <pre className="m-2 overflow-auto rounded-lg bg-code p-2.5 text-xs text-code-foreground">
+                  {renderablePatch.text}
+                </pre>
+              ) : (
+                <DiffPanelEmpty title="No patch available for this checkpoint" />
+              )}
+            </div>
           </div>
         </div>
       )}

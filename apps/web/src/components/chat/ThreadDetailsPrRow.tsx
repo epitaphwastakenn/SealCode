@@ -252,7 +252,6 @@ export function ThreadDetailsPrRow({
         side="top"
         align="start"
         sideOffset={4}
-        variant="glass"
         className="max-w-80 text-left whitespace-normal"
       >
         <div className="flex min-w-0 max-w-80 flex-col gap-2 px-1 py-2">
@@ -266,11 +265,11 @@ export function ThreadDetailsPrRow({
                 aria-hidden
                 className={cn("size-3 shrink-0", statePresentation.toneClassName)}
               />
-              <div className="min-w-0 truncate text-foreground/75">{statePresentation.label}</div>
+              <div className="min-w-0 truncate text-secondary-label">{statePresentation.label}</div>
             </div>
             <div className="flex min-w-0 items-center gap-2">
               <GitBranchIcon className="size-3 shrink-0 stroke-muted-foreground" />
-              <div className="min-w-0 truncate text-foreground/75">
+              <div className="min-w-0 truncate text-secondary-label">
                 {detail.baseBranch} ← {detail.headBranch}
               </div>
             </div>
@@ -285,13 +284,13 @@ export function ThreadDetailsPrRow({
                         : "success"
                   }
                 />
-                <div className="min-w-0 truncate text-foreground/75">
+                <div className="min-w-0 truncate text-secondary-label">
                   {describePullRequestChecks(detail.checks)}
                 </div>
               </div>
             ) : null}
             {detail.isDraft && conflicting ? (
-              <div className="flex min-w-0 items-start gap-2 text-destructive">
+              <div className="flex min-w-0 items-start gap-2 text-error-foreground">
                 <TriangleAlertIcon aria-hidden className="mt-0.5 size-3 shrink-0 stroke-current" />
                 <div className="min-w-0 flex-1 wrap-break-word">
                   Merge conflicts with {detail.baseBranch}
@@ -300,7 +299,7 @@ export function ThreadDetailsPrRow({
             ) : null}
             <div className="flex min-w-0 items-center gap-2">
               <FileDiffIcon className="size-3 shrink-0 stroke-muted-foreground" />
-              <div className="min-w-0 flex items-baseline gap-1 truncate text-foreground/75">
+              <div className="min-w-0 flex items-baseline gap-1 truncate text-secondary-label">
                 {detail.changedFiles.toLocaleString()}{" "}
                 {detail.changedFiles === 1 ? "file" : "files"}
                 <PullRequestDiffStat additions={detail.additions} deletions={detail.deletions} />
@@ -310,7 +309,7 @@ export function ThreadDetailsPrRow({
               <PullRequestChangeBreakdownRows
                 environmentId={environmentId}
                 reference={reference}
-                className="pl-5 text-foreground/75"
+                className="pl-5 text-secondary-label"
               />
             ) : null}
           </div>
@@ -322,7 +321,7 @@ export function ThreadDetailsPrRow({
     rowAction === "resolve"
       ? {
           label: "Resolve",
-          pendingLabel: "Preparing...",
+          pendingLabel: "Preparing…",
           pending: handoff === "conflicts",
           destructive: true,
           suffix: <ArrowUpRightIcon aria-hidden className="size-3 shrink-0" />,
@@ -332,7 +331,7 @@ export function ThreadDetailsPrRow({
       : rowAction === "ready"
         ? {
             label: "Ready",
-            pendingLabel: "Marking...",
+            pendingLabel: "Marking…",
             pending: actionPending,
             destructive: false,
             suffix: null,
@@ -342,7 +341,7 @@ export function ThreadDetailsPrRow({
         : rowAction === "fix"
           ? {
               label: "Fix",
-              pendingLabel: "Preparing...",
+              pendingLabel: "Preparing…",
               pending: handoff === "findings",
               destructive: true,
               suffix: <ArrowUpRightIcon aria-hidden className="size-3 shrink-0" />,
@@ -352,7 +351,7 @@ export function ThreadDetailsPrRow({
           : rowAction === "merge"
             ? {
                 label: "Merge",
-                pendingLabel: "Merging...",
+                pendingLabel: "Merging…",
                 pending: actionPending,
                 destructive: false,
                 suffix: null,
@@ -439,7 +438,7 @@ export function ThreadDetailsPrRow({
       {detail !== null && (showChecks || trailingAction !== null || watching) ? (
         <div className="pb-1.5">
           {openRow(detail.title, "row", true)}
-          <div className="flex h-5 min-w-0 items-center gap-0.5 ps-9 pe-1 text-xs text-muted-foreground redesign:pe-2.5">
+          <div className="flex h-5 min-w-0 items-center gap-0.5 ps-9 pe-2.5 text-xs text-muted-foreground">
             <span className="me-1 shrink-0 tabular-nums">#{number}</span>
             {showChecks && checksRollup !== null ? (
               <PullRequestChecksPopover

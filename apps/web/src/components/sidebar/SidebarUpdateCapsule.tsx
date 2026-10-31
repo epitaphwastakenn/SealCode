@@ -88,9 +88,9 @@ export function SidebarUpdateCapsule({
     <Popover>
       <div
         className={cn(
-          "relative flex h-8 min-w-0 flex-1 items-center rounded-full bg-sidebar-control-surface text-sidebar-foreground",
-          view.tone === "slow" && "ring-1 ring-warning/40 ring-inset",
-          view.tone === "failed" && "ring-1 ring-destructive/40 ring-inset",
+          "relative flex h-8 min-w-0 flex-1 items-center rounded-lg border border-transparent bg-sidebar-control-surface text-sidebar-foreground",
+          view.tone === "slow" && "border-warning/32 bg-warning-surface text-warning-foreground",
+          view.tone === "failed" && "border-error/32 bg-error-surface text-error-foreground",
         )}
       >
         <PopoverTrigger
@@ -100,24 +100,18 @@ export function SidebarUpdateCapsule({
               aria-label={
                 view.slow ? `${view.label} ${view.slow.status} ${view.slow.elapsed}` : view.label
               }
-              className="absolute inset-0 cursor-pointer rounded-full outline-hidden ring-ring hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset"
+              className="absolute inset-0 cursor-pointer rounded-lg outline-hidden ring-ring hover:bg-sidebar-row-hover focus-visible:ring-2 focus-visible:ring-inset"
             />
           }
         />
         <span className="pointer-events-none relative min-w-0 flex-1 truncate pl-3 text-xs">
-          <span className={cn(view.tone === "failed" && "text-destructive")}>{view.label}</span>
-          {view.slow ? (
-            <span className="text-warning tabular-nums"> {view.slow.elapsed}</span>
-          ) : null}
+          <span>{view.label}</span>
+          {view.slow ? <span className="tabular-nums"> {view.slow.elapsed}</span> : null}
         </span>
         {view.action !== null ? (
-          <button
-            type="button"
-            className="relative shrink-0 cursor-pointer pr-3 pl-1.5 text-xs underline decoration-muted-foreground/60 underline-offset-3 hover:decoration-current"
-            onClick={runAction}
-          >
+          <Button size="xs" variant="ghost" className="relative mr-1 shrink-0" onClick={runAction}>
             {actionLabel}
-          </button>
+          </Button>
         ) : (
           <span className="pointer-events-none relative grid size-8 shrink-0 place-items-center">
             {icon}
@@ -148,7 +142,7 @@ export function SidebarUpdateCapsule({
                 <span
                   className={cn(
                     "shrink-0 tabular-nums",
-                    status === "failed" ? "text-destructive" : "text-muted-foreground",
+                    status === "failed" ? "text-error-foreground" : "text-muted-foreground",
                   )}
                 >
                   {RUN_STATUS_LABELS[status]}

@@ -1186,7 +1186,7 @@ export function PullRequestDetailPanel({
         `Delete branch ${detail.headBranch}?`,
         `This deletes ${detail.headBranch} from ${detail.headRepositoryNameWithOwner ?? detail.repository}. Local branches and worktrees are not changed.`,
       ].join("\n"),
-      { variant: "destructive" },
+      { variant: "destructive", confirmLabel: "Delete branch" },
     );
     if (confirmed) void perform("delete-branch");
   };
@@ -1271,7 +1271,7 @@ export function PullRequestDetailPanel({
       <div
         className={cn(
           "@container/pr-header grid min-w-0 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2",
-          detail && "border-b border-border/60",
+          detail && "border-b border-border",
           !detail && !onClose && "hidden",
         )}
       >
@@ -1432,8 +1432,8 @@ export function PullRequestDetailPanel({
                       <RelativeTime timestamp={detail.updatedAt} />
                     </span>
                   </span>
-                  <span aria-hidden className="h-3 w-px shrink-0 bg-border/70" />
-                  <span className="flex min-w-0 flex-1 items-center gap-1.5 font-mono text-2xs text-muted-foreground/65">
+                  <span aria-hidden className="h-3 w-px shrink-0 bg-border" />
+                  <span className="flex min-w-0 flex-1 items-center gap-1.5 font-mono text-2xs text-muted-foreground">
                     <PullRequestBaseBranch
                       baseBranch={detail.baseBranch}
                       freshness={freshness}
@@ -1442,10 +1442,7 @@ export function PullRequestDetailPanel({
                       onUpdate={(method) => void perform("update-branch", undefined, method)}
                       iconClassName="size-3"
                     />
-                    <ArrowLeftIcon
-                      aria-label="receives changes from"
-                      className="size-3 shrink-0 opacity-60"
-                    />
+                    <ArrowLeftIcon aria-label="receives changes from" className="size-3 shrink-0" />
                     <Tooltip>
                       <TooltipTrigger
                         render={
@@ -1608,7 +1605,7 @@ export function PullRequestDetailPanel({
                 <PullRequestMetaLine
                   className={cn(
                     "whitespace-nowrap text-2xs transition-opacity",
-                    (activityPending || activityError) && "opacity-35",
+                    (activityPending || activityError) && "opacity-50",
                   )}
                 >
                   <span

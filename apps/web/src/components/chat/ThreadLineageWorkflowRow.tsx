@@ -3,7 +3,7 @@ import type {
   RuntimeSubagent,
 } from "@t3tools/client-runtime/state/subagentRuntime";
 import type { ProviderDriverKind, ProviderInstanceId, ServerProvider } from "@t3tools/contracts";
-import { ChevronDownIcon, LoaderCircleIcon, SquareIcon } from "lucide-react";
+import { LoaderCircleIcon, SquareIcon } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { AgentElapsed } from "./AgentElapsed";
@@ -13,10 +13,12 @@ import { ThreadRelationshipIcon } from "./ThreadRelationshipIcon";
 import { cn } from "../../lib/utils";
 import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import { CollapsibleSectionHeader, SectionHeaderStatus } from "../ui/collapsible-section-header";
+import { DisclosureChevron } from "../ui/disclosure-chevron";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
   THREAD_DETAILS_PANEL_SPLIT_GROUP_CLASS,
   THREAD_DETAILS_PANEL_SPLIT_SEPARATOR_CLASS,
+  threadDetailsMetaClassName,
 } from "./threadDetailsPanelStyles";
 
 function phaseElapsed(phase: SubagentWorkflowGroup["phases"][number]) {
@@ -83,7 +85,7 @@ function WorkflowMemberRow({
           <span className="min-w-0 flex-1 truncate">{member.title}</span>
           <span className="sr-only">{member.status}</span>
           {member.startedAt ? (
-            <span className="shrink-0 text-2xs font-normal tabular-nums text-muted-foreground">
+            <span className={cn("shrink-0", threadDetailsMetaClassName)}>
               <AgentElapsed agent={member} />
             </span>
           ) : null}
@@ -176,13 +178,7 @@ export function ThreadLineageWorkflowRow({
           aria-label={`${expanded ? "Collapse" : "Expand"} ${label}`}
           onClick={() => setExpanded((value) => !value)}
         >
-          <ChevronDownIcon
-            aria-hidden
-            className={cn(
-              "size-3.5 text-muted-foreground transition-transform",
-              expanded && "rotate-180",
-            )}
-          />
+          <DisclosureChevron open={expanded} />
         </ThreadDetailsControl>
       </div>
       {expanded ? (
@@ -203,11 +199,11 @@ export function ThreadLineageWorkflowRow({
                       {status === "failed" ? (
                         <SectionHeaderStatus>Failed</SectionHeaderStatus>
                       ) : null}
-                      <span className="shrink-0 text-2xs font-normal tabular-nums">
+                      <span className="shrink-0 text-2xs tabular-nums">
                         {phase.settledCount}/{phase.members.length}{" "}
                         {phase.members.length === 1 ? "agent" : "agents"}
                       </span>
-                      <span className="shrink-0 text-2xs font-normal tabular-nums empty:hidden">
+                      <span className="shrink-0 text-2xs tabular-nums empty:hidden">
                         <AgentElapsed agent={phaseElapsed(phase)} />
                       </span>
                     </>
@@ -247,7 +243,7 @@ export function ThreadLineageWorkflowRow({
             />
           ))}
           {phases.length === 0 && group.unphasedMembers.length === 0 ? (
-            <li className="px-2.5 py-1.5 text-2xs text-muted-foreground/70">No agents yet</li>
+            <li className={cn("px-2.5 py-1.5", threadDetailsMetaClassName)}>No agents yet</li>
           ) : null}
         </ul>
       ) : null}

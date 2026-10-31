@@ -53,7 +53,9 @@ import { useAssetUrlRefresh, useAssetUrlState } from "~/assets/assetUrls";
 import { OpenInPicker } from "~/components/chat/OpenInPicker";
 import { MediaVideoPlayer } from "~/components/media/MediaVideoPlayer";
 import { MediaActions, type MediaActionSource } from "~/components/media/MediaActions";
+import { HarpMascot } from "~/components/mascot/HarpMascot";
 import { MorphIcon } from "~/components/MorphIcon";
+import { PanelSubheader } from "~/components/PanelSubheader";
 import { useRemoteOpenState } from "~/remoteOpen";
 import { useClientSettings, updateClientSettings } from "~/hooks/useSettings";
 import { useResolvedAppearance } from "~/hooks/useTheme";
@@ -65,6 +67,14 @@ import { cn } from "~/lib/utils";
 import type { ChatFileAttachment } from "~/types";
 import { isHostPath } from "@t3tools/shared/path";
 import { resolvePathLinkTarget } from "@t3tools/shared/fileLinks";
+import { Alert, AlertDescription } from "~/components/ui/alert";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "~/components/ui/empty";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { stackedThreadToast, toastManager } from "~/components/ui/toast";
 import { type DraftId, useComposerDraftStore } from "~/composerDraftStore";
@@ -100,10 +110,10 @@ import { installFileEditorDismissal } from "./fileEditorDismissal";
 import {
   FILE_LINK_REVEAL_ATTRIBUTE,
   FILE_LINK_REVEAL_UNSAFE_CSS,
-  FILE_SURFACE_SUBHEADER_CLASS,
   FileSurfaceAction,
   FileSurfaceFailure,
   FileSurfaceLoading,
+  FileSurfaceNotice,
 } from "./fileSurfaceChrome";
 import SourceFilePreview from "./ReadOnlySourcePreview";
 import { resolveCenteredFileLineScrollTop } from "./fileLineReveal";
@@ -197,9 +207,7 @@ function WorkspaceImagePreview(props: {
   if (assetUrl._tag === "Failure") {
     return (
       <MediaActions source={actionsSource}>
-        <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-xs leading-relaxed text-destructive">
-          Unable to load workspace image.
-        </div>
+        <FileSurfaceFailure message="Unable to load workspace image." />
       </MediaActions>
     );
   }
@@ -211,9 +219,7 @@ function WorkspaceImagePreview(props: {
       </div>
     </MediaActions>
   ) : (
-    <div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground">
-      <Spinner size="lg" />
-    </div>
+    <FileSurfaceLoading />
   );
 }
 
@@ -240,18 +246,10 @@ function WorkspaceBrowserPreview(props: {
       : `${assetUrl._tag === "Success" && assetUrl.url.includes("?") ? "&" : "?"}workspace-revision=${encodeURIComponent(props.workspaceMutationId)}`;
 
   if (assetUrl._tag === "Failure") {
-    return (
-      <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center text-xs leading-relaxed text-destructive">
-        Unable to load file preview.
-      </div>
-    );
+    return <FileSurfaceFailure message="Unable to load file preview." />;
   }
   if (assetUrl._tag !== "Success") {
-    return (
-      <div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground">
-        <Spinner size="lg" />
-      </div>
-    );
+    return <FileSurfaceLoading />;
   }
   return (
     <BrowserDocumentFrame
@@ -1221,21 +1219,29 @@ export default function FilePreviewPanel({
       return (
         <div className="flex min-h-0 flex-1 items-center justify-center gap-2 text-sm text-muted-foreground">
           <Spinner className="size-4" />
-          Checking file access...
+          Checking file access…
         </div>
       );
     }
     return (
-      <div className="p-4 text-sm text-muted-foreground">
-        {fileAccess.error ?? "This connection cannot read host files."}
-      </div>
+      <Empty size="compact">
+        <EmptyHeader>
+          <EmptyMedia>
+            <HarpMascot scene="sleeping" className="h-12 w-auto" />
+          </EmptyMedia>
+          <EmptyTitle>Files unavailable</EmptyTitle>
+          <EmptyDescription>
+            {fileAccess.error ?? "This connection cannot read host files."}
+          </EmptyDescription>
+        </EmptyHeader>
+      </Empty>
     );
   }
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
       {breadcrumbPath !== null && breadcrumbTrail !== null ? (
-        <div className={FILE_SURFACE_SUBHEADER_CLASS} data-surface-subheader>
+        <PanelSubheader>
           <ScrollArea
             radius="none"
             ref={breadcrumbRef}
@@ -1313,10 +1319,10 @@ export default function FilePreviewPanel({
               <FolderTree className="size-3.5" />
             </FileSurfaceAction>
           ) : null}
-        </div>
+        </PanelSubheader>
       ) : null}
       {relativePath && !attachment && !isHostFile && !canWriteFiles && !fileAccess.isPending ? (
-        <div className="shrink-0 border-b px-3 py-1.5 text-2xs text-muted-foreground">
+        <div className="shrink-0 bg-muted/40 px-3 py-1.5 text-2xs text-muted-foreground">
           Read-only connection. Unsaved edits are kept until write access returns.
         </div>
       ) : null}
@@ -1326,9 +1332,9 @@ export default function FilePreviewPanel({
       !renderBrowserFile &&
       file.data?.truncated &&
       (draft || isMarkdown || isMermaid || isHtml) ? (
-        <div className="shrink-0 border-b border-warning/20 bg-warning-surface px-3 py-1.5 text-2xs text-warning-foreground">
+        <FileSurfaceNotice>
           Preview limited to the first 1 MB of a {file.data.byteLength.toLocaleString()} byte file.
-        </div>
+        </FileSurfaceNotice>
       ) : null}
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <div
@@ -1430,37 +1436,32 @@ export default function FilePreviewPanel({
               origin="File"
             />
           ) : relativePath && file.error && file.data === null ? (
-            <div
-              role="alert"
-              className="scrollbar-gutter-both flex min-h-0 flex-1 flex-col overflow-auto"
-            >
-              <div className="my-auto flex shrink-0 flex-col gap-3 px-6 py-6 text-center text-xs leading-relaxed">
-                <p className="text-destructive">
-                  {file.readError ? filePreviewReadErrorMessage(file.readError) : file.error}
-                </p>
-                {attemptedPath ? (
-                  <p className="text-muted-foreground">
-                    Attempted path
-                    <code className="block break-all font-mono text-foreground select-all">
-                      {attemptedPath}
-                    </code>
-                  </p>
-                ) : null}
-                {!isHostFile ? (
-                  <p className="text-muted-foreground">
-                    Workspace folder:{" "}
-                    <code className="break-all font-mono select-all">
-                      {file.readError?.cwd ?? cwd}
-                    </code>
-                    . Check the link's path or locate the file in Files.
-                  </p>
-                ) : null}
-              </div>
+            <div className="scrollbar-gutter-both flex min-h-0 flex-1 flex-col overflow-auto p-4">
+              <Alert variant="error" className="my-auto">
+                <AlertDescription>
+                  <p>{file.readError ? filePreviewReadErrorMessage(file.readError) : file.error}</p>
+                  {attemptedPath ? (
+                    <p className="text-muted-foreground">
+                      Attempted path
+                      <code className="block break-all font-mono text-foreground select-all">
+                        {attemptedPath}
+                      </code>
+                    </p>
+                  ) : null}
+                  {!isHostFile ? (
+                    <p className="text-muted-foreground">
+                      Workspace folder:{" "}
+                      <code className="break-all font-mono select-all">
+                        {file.readError?.cwd ?? cwd}
+                      </code>
+                      . Check the link's path or locate the file in Files.
+                    </p>
+                  ) : null}
+                </AlertDescription>
+              </Alert>
             </div>
           ) : relativePath && file.data === null ? (
-            <div className="flex min-h-0 flex-1 items-center justify-center text-muted-foreground">
-              <Spinner size="lg" />
-            </div>
+            <FileSurfaceLoading />
           ) : relativePath && file.data ? (
             renderMermaid ? (
               <Suspense fallback={<FileSurfaceLoading />}>
@@ -1515,9 +1516,7 @@ export default function FilePreviewPanel({
           <aside
             className={cn(
               "flex min-h-0 shrink-0 bg-background",
-              previewPath
-                ? "w-[min(22rem,46%)] min-w-64 border-l border-border/60"
-                : "min-w-0 flex-1",
+              previewPath ? "w-[min(22rem,46%)] min-w-64 border-l border-border" : "min-w-0 flex-1",
             )}
           >
             <FileBrowserPanel
@@ -1607,12 +1606,11 @@ export function WorkspaceLargeTextPreview(props: {
         }}
       />
     );
-  if (assetUrl._tag !== "Success" || loaded === null)
-    return <div className="p-6 text-xs text-muted-foreground">Loading…</div>;
+  if (assetUrl._tag !== "Success" || loaded === null) return <FileSurfaceLoading />;
   const src = `${loaded.url}${loaded.url.includes("?") ? "&" : "?"}revision=${encodeURIComponent(loaded.revision)}`;
   return (
     <>
-      <div className={FILE_SURFACE_SUBHEADER_CLASS}>
+      <PanelSubheader>
         <span className="min-w-0 flex-1 text-xs text-muted-foreground">Full file</span>
         <FileSurfaceAction
           label={isCopied ? "Copied" : "Copy contents"}
@@ -1649,8 +1647,8 @@ export function WorkspaceLargeTextPreview(props: {
         >
           <DownloadIcon className="size-3.5" />
         </FileSurfaceAction>
-      </div>
-      <Suspense fallback={<div className="p-6 text-xs text-muted-foreground">Loading…</div>}>
+      </PanelSubheader>
+      <Suspense fallback={<FileSurfaceLoading />}>
         <LargeTextViewer
           key={`${src}:${revision}`}
           name={props.name}

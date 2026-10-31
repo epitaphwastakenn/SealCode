@@ -17,11 +17,11 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { useAssetUrlRefresh } from "~/assets/assetUrls";
 import ChatMarkdown from "~/components/ChatMarkdown";
 import { MorphIcon } from "~/components/MorphIcon";
+import { PanelSubheader } from "~/components/PanelSubheader";
 import { ScrollArea } from "~/components/ui/scroll-area";
 import { toastManager } from "~/components/ui/toast";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import { useClientSettings, updateClientSettings } from "~/hooks/useSettings";
-import { cn } from "~/lib/utils";
 
 import { BinaryFilePreview } from "./BinaryFilePreview";
 import { PreviewImage } from "./PreviewImage";
@@ -29,11 +29,11 @@ import { AudioPreview } from "./AudioPreview";
 import { BrowserDocumentFrame } from "./BrowserDocumentFrame";
 import { DelimitedTablePreview } from "./DelimitedTablePreview";
 import {
-  FILE_SURFACE_SUBHEADER_CLASS,
   FileSurfaceAction,
   FileSurfaceFailure,
   FileSurfaceLoading,
   FileSurfaceNotice,
+  FileSurfaceUnavailable,
 } from "./fileSurfaceChrome";
 
 const LargeTextViewer = lazy(() => import("./LargeTextViewer"));
@@ -337,23 +337,19 @@ export function AttachmentFilePreview(props: {
       onError={() => setError("Unable to load image.")}
     />
   ) : (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-6 text-center">
-      <p className="text-sm font-medium">No preview for this file</p>
-      <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-        Save it to open in an app that supports {props.name.split(".").at(-1) || "this format"}{" "}
-        files.
-      </p>
-    </div>
+    <FileSurfaceUnavailable>
+      Save it to open in an app that supports {props.name.split(".").at(-1) || "this format"} files.
+    </FileSurfaceUnavailable>
   );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-background">
-      <div className={cn(FILE_SURFACE_SUBHEADER_CLASS)} data-surface-subheader>
+      <PanelSubheader>
         <div className="flex min-w-0 flex-1 items-center text-xs">
           <span className="shrink-0 px-0.5 text-muted-foreground">
             {props.origin ?? "Attachment"}
           </span>
-          <ChevronRightIcon className="mx-1 size-3.5 shrink-0 text-muted-foreground/60" />
+          <ChevronRightIcon className="mx-1 size-3.5 shrink-0 text-muted-foreground" />
           <span aria-current="page" className="min-w-0 truncate px-0.5 font-medium text-foreground">
             {props.name}
           </span>
@@ -434,7 +430,7 @@ export function AttachmentFilePreview(props: {
             <XIcon className="size-3.5" />
           </FileSurfaceAction>
         ) : null}
-      </div>
+      </PanelSubheader>
       {content?.truncated ? (
         <FileSurfaceNotice>
           Preview limited to the first 1 MB

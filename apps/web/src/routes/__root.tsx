@@ -38,6 +38,8 @@ import { ThemeEditorHost } from "../components/settings/ThemeEditorHost";
 import { useCopyToClipboard } from "../hooks/useCopyToClipboard";
 import { useEnvironmentThemeSync } from "../hooks/useEnvironmentTheme";
 import { Button } from "../components/ui/button";
+import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "../components/ui/empty";
+import { HarpMascot } from "../components/mascot/HarpMascot";
 import { MorphIcon } from "~/components/MorphIcon";
 import { StandalonePage, StandalonePageHeader } from "../components/ui/standalone-page";
 import {
@@ -120,15 +122,20 @@ export const Route = createRootRoute({
 
 function RootRouteNotFoundView() {
   return (
-    <main className="flex min-h-0 min-w-0 flex-1 items-center justify-center p-6">
-      <div className="flex max-w-sm flex-col items-center gap-4 text-center">
-        <h1 className="text-lg font-medium text-foreground">Page not found</h1>
-        <p className="text-sm text-muted-foreground">
-          This link doesn't point to a page in {APP_DISPLAY_NAME}. Go home to choose a project or
-          start a thread.
-        </p>
-        <Button render={<Link to="/" replace />}>Go home</Button>
-      </div>
+    <main className="flex min-h-0 min-w-0 flex-1">
+      <Empty>
+        <EmptyHeader>
+          <HarpMascot scene="ball" className="mb-6 h-20 w-auto" />
+          <EmptyTitle>Page not found</EmptyTitle>
+          <EmptyDescription>
+            This link doesn't point to a page in {APP_DISPLAY_NAME}. Go home to choose a project or
+            start a thread.
+          </EmptyDescription>
+          <Button className="mt-6" size="sm" render={<Link to="/" replace />}>
+            Go home
+          </Button>
+        </EmptyHeader>
+      </Empty>
     </main>
   );
 }
@@ -328,9 +335,9 @@ function RootRouteErrorView({ error }: ErrorComponentProps) {
         <CopyErrorButton report={report} />
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-lg border border-border/70 bg-background/55">
-        <p className="px-3 py-1.5 text-xs font-medium text-muted-foreground">Error report</p>
-        <pre className="max-h-64 overflow-auto border-t border-border/70 bg-background/80 px-3 py-2 text-xs whitespace-pre-wrap text-foreground/85">
+      <div className="mt-5 flex flex-col gap-1.5">
+        <p className="text-xs font-medium text-muted-foreground">Error report</p>
+        <pre className="max-h-64 overflow-auto rounded-lg bg-code p-2.5 text-xs whitespace-pre-wrap text-code-foreground">
           {report}
         </pre>
       </div>

@@ -72,7 +72,7 @@ export function PullRequestTitleEditor({
         <Tooltip>
           <TooltipTrigger
             render={
-              <h1 className="min-w-0 flex-1 truncate text-base font-semibold leading-snug">
+              <h1 className="min-w-0 flex-1 truncate text-base font-medium leading-snug">
                 {detail.title}
               </h1>
             }

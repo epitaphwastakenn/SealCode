@@ -275,10 +275,6 @@ export function buildFileDiffContentVersion(fileDiff: FileDiffMetadata): number 
   return hash;
 }
 
-export function getDiffCollapseIconClassName(_fileDiff: FileDiffMetadata): string {
-  return "text-muted-foreground";
-}
-
 export const DIFF_SURFACE_THEME_UNSAFE_CSS = `
 [data-diffs-header],
 [data-diff],

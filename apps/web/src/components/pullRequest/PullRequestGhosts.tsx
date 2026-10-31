@@ -1,7 +1,6 @@
 import type { PullRequestListEntry, PullRequestSummary } from "@t3tools/contracts";
 import {
   ArrowLeftIcon,
-  ChevronRightIcon,
   EllipsisIcon,
   ExternalLinkIcon,
   PanelRightIcon,
@@ -18,6 +17,7 @@ import {
 
 import { readLocalApi } from "~/localApi";
 import { cn } from "~/lib/utils";
+import { DisclosureChevron } from "~/components/ui/disclosure-chevron";
 import { RelativeTime } from "~/components/RelativeTime";
 
 import { Button, InlineButton } from "../ui/button";
@@ -54,9 +54,7 @@ export function PullRequestListGhost({ rows = 7, caption }: { rows?: number; cap
     <div role="status" aria-label={caption ?? "Loading pull requests"} className="space-y-0.5">
       {/* Outside the pulse so the explanation stays readable. */}
       {caption ? (
-        <p className="px-3 pb-1 text-xs font-medium text-muted-foreground/70 redesign:text-muted-foreground">
-          {caption}
-        </p>
+        <p className="px-3 pb-1 text-xs font-medium text-muted-foreground">{caption}</p>
       ) : null}
       <div className="motion-safe:animate-skeleton space-y-0.5">
         {Array.from({ length: rows }, (_, index) => (
@@ -136,7 +134,7 @@ export function PullRequestDetailGhost({
         !seed && "motion-safe:animate-skeleton",
       )}
     >
-      <div className="@container/pr-header grid min-w-0 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 border-b border-border/60">
+      <div className="@container/pr-header grid min-w-0 shrink-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-x-2 border-b border-border">
         <div className="pl-4 grid h-7 min-w-0 items-center overflow-hidden">
           <div className="flex min-w-0 items-center gap-1 text-sm text-muted-foreground sm:text-xs">
             {onBack ? (
@@ -197,7 +195,7 @@ export function PullRequestDetailGhost({
               title={
                 <PullRequestDetailTitleRow>
                   {seed ? (
-                    <h1 className="truncate text-base font-semibold leading-snug">{seed.title}</h1>
+                    <h1 className="truncate text-base font-medium leading-snug">{seed.title}</h1>
                   ) : (
                     <GhostBar className="h-5 w-4/5 max-w-md" />
                   )}
@@ -351,10 +349,7 @@ export function PullRequestDetailGhost({
           <div className="sticky top-0 z-10 flex w-full items-center bg-background pr-4">
             <div className="flex min-w-0 flex-1 items-center gap-1.5 px-4 py-3 text-left text-xs font-medium text-muted-foreground">
               <span>Description</span>
-              <ChevronRightIcon
-                aria-hidden
-                className="size-3.5 rotate-90 text-muted-foreground/60"
-              />
+              <DisclosureChevron open />
             </div>
           </div>
           <div className="space-y-3 px-4 pb-4">
@@ -396,7 +391,7 @@ export function PullRequestTimelineGhost({ rows = 6 }: { rows?: number }) {
       aria-label="Loading timeline"
       className="motion-safe:animate-skeleton px-4 py-5"
     >
-      <div className="relative ml-2 border-l border-border/70 pl-5">
+      <div className="relative ml-2 border-l border-border/50 pl-5">
         {Array.from({ length: rows }, (_, index) => (
           <div key={index} className="relative pb-5">
             <GhostBar className="absolute -left-[1.55rem] top-1 size-2 rounded-full" />

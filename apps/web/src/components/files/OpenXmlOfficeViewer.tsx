@@ -1,11 +1,8 @@
 import { useStableCallback } from "~/hooks/useStableCallback";
 import type { OfficePreviewKind } from "@t3tools/shared/filePreview";
 import { lazy, Suspense, useEffect, useState } from "react";
-import {
-  FileSurfaceLoading,
-  FileSurfaceNotice,
-  FILE_SURFACE_SUBHEADER_CLASS,
-} from "./fileSurfaceChrome";
+import { PanelSubheader } from "~/components/PanelSubheader";
+import { FileSurfaceLoading, FileSurfaceNotice, FileSurfaceUnavailable } from "./fileSurfaceChrome";
 import { OFFICE_PREVIEW_MAX_BYTES, type OfficeWorkerResult } from "./officePreviewProtocol";
 const WordDocument = lazy(() => import("./office/WordDocument"));
 const Spreadsheet = lazy(() => import("./office/Spreadsheet"));
@@ -93,15 +90,9 @@ export default function OfficeViewer(props: {
   }, [props.src, props.kind, props.sizeBytes, fail]);
   if (error)
     return (
-      <div
-        role="alert"
-        className="flex min-h-0 flex-1 flex-col items-center justify-center gap-1 px-6 text-center"
-      >
-        <p className="text-sm font-medium">No preview for this file</p>
-        <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-          {error} Save it or open it in another app.
-        </p>
-      </div>
+      <FileSurfaceUnavailable alert>
+        {error} Save it or open it in another app.
+      </FileSurfaceUnavailable>
     );
   if (!prepared) return <FileSurfaceLoading />;
   const Viewer =
@@ -109,12 +100,12 @@ export default function OfficeViewer(props: {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {details ? (
-        <div className={FILE_SURFACE_SUBHEADER_CLASS}>
+        <PanelSubheader>
           <span className="text-xs text-muted-foreground" aria-live="polite">
             {details}
             {props.kind !== "xlsx" ? " · Fit to width" : ""}
           </span>
-        </div>
+        </PanelSubheader>
       ) : null}
       {prepared.truncated ? (
         <FileSurfaceNotice>

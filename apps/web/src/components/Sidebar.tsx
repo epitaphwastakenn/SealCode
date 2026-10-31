@@ -79,7 +79,6 @@ import {
   useReducer,
   useRef,
   useState,
-  type DragEvent as ReactDragEvent,
   useSyncExternalStore,
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -192,7 +191,6 @@ import {
   sidebarThreadKeyAtY,
   sortInboxThreadsByReturn,
   sortPinnedThreadsForSidebar,
-  sortThreadsForSidebar,
   sortWorkingThreadsBySend,
   buildSidebarFolderLayout,
   groupSidebarThreadsByFolder,
@@ -214,8 +212,10 @@ import {
 import { SidebarPointerSensor } from "./Sidebar.pointer";
 import { createSidebarListMotion } from "./Sidebar.motion";
 import { resolveSnoozePresets, snoozeWakeLabel, type SnoozePreset } from "./Sidebar.snooze";
-import { ProjectFavicon } from "./ProjectFavicon";
+import { ProjectFavicon, type ProjectFaviconProject } from "./ProjectFavicon";
 import { HarpMascot } from "./mascot/HarpMascot";
+import { DisclosureChevron } from "./ui/disclosure-chevron";
+import { SidebarRowAction } from "./sidebar/SidebarRowAction";
 import { deriveProviderEntriesByEnvironment } from "../providerInstances";
 import { useStableCallback } from "../hooks/useStableCallback";
 import {
@@ -331,7 +331,6 @@ interface SidebarThreadPartitionInput {
   readonly scopedProjectKeys: ReadonlySet<string> | null;
   readonly serverConfigs: ReadonlyMap<EnvironmentId, EnvironmentServerConfig>;
   readonly optimisticDrop: SidebarOptimisticDrop | null;
-  readonly workingShelfEnabled: boolean;
   // Snooze wakes, the queued-turn grace and the Working shelf's exit grace depend
   // on the clock, so the minute tick, the precise snooze-wake tick and the inbox
   // tracker's expiry version are inputs: a new key repartitions.
@@ -353,9 +352,8 @@ function resolveDraggedOrders(input: {
   readonly threadByKey: ReadonlyMap<string, EnvironmentThreadShell>;
   readonly settledThreads: readonly EnvironmentThreadShell[];
   readonly activeThreads: readonly EnvironmentThreadShell[];
-  readonly workingShelfEnabled: boolean;
 }): typeof NO_DRAGGED_ORDERS {
-  const { drag, threadByKey, settledThreads, activeThreads, workingShelfEnabled } = input;
+  const { drag, threadByKey, settledThreads, activeThreads } = input;
   const thread = threadByKey.get(drag.activeKey);
   if (thread === undefined) return NO_DRAGGED_ORDERS;
   const others = (list: readonly EnvironmentThreadShell[]) =>
@@ -365,12 +363,10 @@ function resolveDraggedOrders(input: {
       ...others(settledThreads),
       applySidebarThreadDrop(thread, "settled", drag.occurredAt),
     ]).map(threadShellKey),
-    activeOrder: workingShelfEnabled
-      ? sortInboxThreadsByReturn(
-          [...others(activeThreads), applySidebarThreadDrop(thread, "active", drag.occurredAt)],
-          inboxReturns.returnedAt,
-        ).map(threadShellKey)
-      : undefined,
+    activeOrder: sortInboxThreadsByReturn(
+      [...others(activeThreads), applySidebarThreadDrop(thread, "active", drag.occurredAt)],
+      inboxReturns.returnedAt,
+    ).map(threadShellKey),
   };
 }
 
@@ -402,7 +398,6 @@ function useSidebarThreads(input: {
     routeRowThreadKey,
     folderLayout,
   } = input;
-  const workingShelfEnabled = useClientSettings((s) => s.sidebarWorkingShelfEnabled);
   const inboxReturnsVersion = useSyncExternalStore(
     inboxReturns.subscribe,
     inboxReturns.getSnapshot,
@@ -440,7 +435,6 @@ function useSidebarThreads(input: {
     scopedProjectKeys,
     serverConfigs,
     optimisticDrop,
-    workingShelfEnabled,
     clockKey: `${nowMinute}:${snoozeWakeClock}:${inboxReturnsVersion}`,
   });
 
@@ -526,7 +520,6 @@ function useSidebarThreads(input: {
     visibleActiveThreads,
     folderHeaderPlan,
     threads,
-    workingShelfEnabled,
     searchableThreads: [
       ...pinnedThreads,
       ...activeThreads,
@@ -569,15 +562,14 @@ function useSidebarThreads(input: {
 }
 
 function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
-  const { threads, scopedProjectKeys, serverConfigs, optimisticDrop, workingShelfEnabled } = input;
+  const { threads, scopedProjectKeys, serverConfigs, optimisticDrop } = input;
   const preciseNow = new Date().toISOString();
   const visible = filterSidebarV2VisibleThreads(threads, scopedProjectKeys);
-  const inboxObservation = inboxReturns.observe(workingShelfEnabled ? threads : null);
+  const inboxObservation = inboxReturns.observe(threads);
   const pinned: EnvironmentThreadShell[] = [];
   const active: EnvironmentThreadShell[] = [];
   const working: EnvironmentThreadShell[] = [];
   const inbox = (thread: EnvironmentThreadShell, manuallyMoved = false) =>
-    workingShelfEnabled &&
     (manuallyMoved ? isThreadWorking(thread) : inboxObservation.isWorking(thread))
       ? working
       : active;
@@ -629,9 +621,7 @@ function partitionSidebarThreads(input: SidebarThreadPartitionInput) {
   }
   // Capability gates dragging only; mixed server versions must preserve the same pinned order across clients.
   const sortedPinned = sortPinnedThreadsForSidebar(pinned);
-  const sortedActive = workingShelfEnabled
-    ? sortInboxThreadsByReturn(active, inboxObservation.returnedAt)
-    : sortThreadsForSidebar(active);
+  const sortedActive = sortInboxThreadsByReturn(active, inboxObservation.returnedAt);
   return {
     pinnedThreads:
       optimisticDrop?.section !== "pinned" || optimisticDrop.order === null
@@ -811,58 +801,14 @@ function useSidebarFolderLayout(input: {
 
 const FOLDER_DRAG_TYPE = "application/x-sealcode-folder";
 
-function SidebarFolderAction(props: {
-  readonly label: string;
-  readonly className: string;
-  readonly pressed?: boolean;
-  readonly onClick?: () => void;
-  readonly onDragStart?: (event: ReactDragEvent<HTMLButtonElement>) => void;
-  readonly children: ReactNode;
-}) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <button
-            type="button"
-            aria-label={props.label}
-            aria-pressed={props.pressed}
-            draggable={props.onDragStart !== undefined}
-            onDragStart={props.onDragStart}
-            onClick={(event) => {
-              event.stopPropagation();
-              props.onClick?.();
-            }}
-            className={cn(
-              "inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-md transition-opacity hover:bg-sidebar-row-hover hover:text-sidebar-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring",
-              props.className,
-            )}
-          />
-        }
-      >
-        {props.children}
-      </TooltipTrigger>
-      <TooltipPopup side="top">{props.label}</TooltipPopup>
-    </Tooltip>
-  );
-}
-
-function SidebarFolderSectionLabel(props: { readonly label: string; readonly divided: boolean }) {
-  return (
-    <li
-      className={cn(
-        "list-none px-2 text-3xs font-semibold uppercase tracking-wide text-sidebar-muted-foreground/60",
-        props.divided ? "mb-0.5 mt-2 border-t border-sidebar-border/50 pt-2" : "mb-0.5 mt-1",
-      )}
-    >
-      {props.label}
-    </li>
-  );
+function SidebarFolderDivider() {
+  return <li aria-hidden className="mx-2 my-1 h-px list-none bg-sidebar-border/50" />;
 }
 
 function SidebarProjectFolderHeader(props: {
   readonly folderKey: string;
   readonly label: string;
+  readonly project: ProjectFaviconProject;
   readonly threadCount: number;
   readonly expanded: boolean;
   readonly pinned: boolean;
@@ -874,7 +820,10 @@ function SidebarProjectFolderHeader(props: {
   const [dropTarget, setDropTarget] = useState(false);
   return (
     <li
-      className={cn("list-none", dropTarget && "rounded-lg ring-1 ring-primary/50")}
+      className={cn(
+        "list-none rounded-lg",
+        dropTarget && "bg-brand/10 ring-1 ring-inset ring-brand/60",
+      )}
       data-sidebar-folder
       onDragOver={(event) => {
         if (!event.dataTransfer.types.includes(FOLDER_DRAG_TYPE)) return;
@@ -891,60 +840,56 @@ function SidebarProjectFolderHeader(props: {
         props.onReorder(draggedFolderKey, props.folderKey);
       }}
     >
-      <div className="group/sidebar-folder flex min-h-10 min-w-0 items-center gap-1 rounded-lg border border-transparent hover:border-sidebar-border/70 hover:bg-sidebar-row-hover">
+      <div className="group/sidebar-folder relative flex h-8 min-w-0 items-center gap-2 rounded-lg px-2 text-sm font-medium text-sidebar-foreground hover:bg-sidebar-row-hover">
         <button
           type="button"
           aria-expanded={props.expanded}
+          aria-label={props.label}
           onClick={props.onToggle}
-          // oxlint-disable-next-line shadcn/no-arbitrary-values -- Harp's folder title sits between the text-sm and text-base steps.
-          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[0.9375rem] font-bold text-sidebar-foreground outline-none hover:text-sidebar-foreground focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-ring"
-        >
-          <ChevronDownIcon
+          className="absolute inset-0 cursor-pointer rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
+        />
+        <ProjectFavicon project={props.project} className="pointer-events-none size-4 shrink-0" />
+        <span className="pointer-events-none min-w-0 flex-1 truncate">{props.label}</span>
+        {props.pinned ? (
+          <PinIcon
             aria-hidden
-            className={cn(
-              "size-4 shrink-0 transition-transform duration-150 motion-reduce:transition-none",
-              !props.expanded && "-rotate-90",
-            )}
+            className="pointer-events-none size-3 shrink-0 text-sidebar-muted-foreground"
           />
-          <FolderIcon aria-hidden className="size-5 shrink-0 text-sidebar-foreground/90" />
-          <span className="min-w-0 flex-1 truncate">{props.label}</span>
-          <span className="shrink-0 rounded-full px-1.5 py-0.5 text-3xs font-semibold tabular-nums text-sidebar-muted-foreground">
-            {props.threadCount}
-          </span>
-        </button>
-        <SidebarFolderAction
-          label={`Create thread in ${props.label}`}
-          className="text-sidebar-muted-foreground/45 opacity-0 group-hover/sidebar-folder:opacity-100"
-          onClick={props.onCreateThread}
-        >
-          <PlusIcon aria-hidden className="size-3.5" />
-        </SidebarFolderAction>
-        <SidebarFolderAction
-          label={`${props.pinned ? "Unpin" : "Pin"} project ${props.label}`}
-          pressed={props.pinned}
-          className={
-            props.pinned
-              ? "text-primary"
-              : "text-sidebar-muted-foreground/45 opacity-0 group-hover/sidebar-folder:opacity-100"
-          }
-          onClick={props.onTogglePinned}
-        >
-          {props.pinned ? (
-            <PinOffIcon aria-hidden className="size-3.5" />
-          ) : (
-            <PinIcon aria-hidden className="size-3.5" />
-          )}
-        </SidebarFolderAction>
-        <SidebarFolderAction
-          label={`Reorder folder ${props.label}`}
-          className="mr-1 cursor-grab text-sidebar-muted-foreground/45 opacity-0 active:cursor-grabbing group-hover/sidebar-folder:opacity-100"
-          onDragStart={(event) => {
-            event.dataTransfer.setData(FOLDER_DRAG_TYPE, props.folderKey);
-            event.dataTransfer.effectAllowed = "move";
-          }}
-        >
-          <GripVerticalIcon aria-hidden className="size-3.5" />
-        </SidebarFolderAction>
+        ) : null}
+        <span className="pointer-events-none shrink-0 text-xs font-normal tabular-nums text-secondary-label group-any-hover/sidebar-folder:hidden">
+          {props.threadCount}
+        </span>
+        <span className="relative hidden shrink-0 items-center gap-0.5 group-any-hover/sidebar-folder:flex">
+          <SidebarRowAction
+            label={`Create thread in ${props.label}`}
+            onClick={props.onCreateThread}
+          >
+            <PlusIcon aria-hidden className="size-3.5" />
+          </SidebarRowAction>
+          <SidebarRowAction
+            label={`${props.pinned ? "Unpin" : "Pin"} project ${props.label}`}
+            aria-pressed={props.pinned}
+            onClick={props.onTogglePinned}
+          >
+            {props.pinned ? (
+              <PinOffIcon aria-hidden className="size-3.5" />
+            ) : (
+              <PinIcon aria-hidden className="size-3.5" />
+            )}
+          </SidebarRowAction>
+          <SidebarRowAction
+            label={`Reorder folder ${props.label}`}
+            className="cursor-grab active:cursor-grabbing"
+            draggable
+            onDragStart={(event) => {
+              event.dataTransfer.setData(FOLDER_DRAG_TYPE, props.folderKey);
+              event.dataTransfer.effectAllowed = "move";
+            }}
+          >
+            <GripVerticalIcon aria-hidden className="size-3.5" />
+          </SidebarRowAction>
+        </span>
+        <DisclosureChevron open={props.expanded} className="pointer-events-none" />
       </div>
     </li>
   );
@@ -1354,7 +1299,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
   const reorderProjects = useUiStateStore((store) => store.reorderProjects);
   const markThreadVisited = useUiStateStore((store) => store.markThreadVisited);
   const {
-    workingShelfEnabled,
     pinnedThreads,
     draggableThreadKeys,
     activeReorderableThreadKeys,
@@ -2047,7 +1991,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
           threadByKey,
           settledThreads,
           activeThreads,
-          workingShelfEnabled,
         });
   const sidebarSortingStrategy = createSidebarSortingStrategy({
     items: sidebarListItems,
@@ -2088,7 +2031,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             activeOrder: activeKeys,
             activeKeysById,
             activeReorderableKeys: activeReorderableThreadKeys,
-            activeTimeOrdered: workingShelfEnabled,
+            activeTimeOrdered: true,
           }).kind !== "none"
         );
       },
@@ -2123,7 +2066,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
       activeOrder: activeKeys,
       activeKeysById,
       activeReorderableKeys: activeReorderableThreadKeys,
-      activeTimeOrdered: workingShelfEnabled,
+      activeTimeOrdered: true,
     });
     if (plan.kind === "none") return;
     if (plan.kind === "settle" && settlingThreadKeysRef.current.has(activeKey)) return;
@@ -3080,20 +3023,28 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                               />
                             ) : null}
                             {project ? (
-                              <Button
-                                size="icon-xs"
-                                variant="ghost-muted"
-                                tabIndex={-1}
-                                aria-hidden="true"
-                                title={`Project settings for ${project.displayName}`}
-                                className="ml-auto"
-                                onPointerDown={(event) => event.stopPropagation()}
-                                onClick={(event) => {
-                                  void handleProjectSettings(event, project);
-                                }}
-                              >
-                                <SettingsIcon className="size-3.5" />
-                              </Button>
+                              <Tooltip>
+                                <TooltipTrigger
+                                  render={
+                                    <Button
+                                      size="icon-xs"
+                                      variant="ghost-muted"
+                                      tabIndex={-1}
+                                      aria-hidden="true"
+                                      className="ml-auto"
+                                      onPointerDown={(event) => event.stopPropagation()}
+                                      onClick={(event) => {
+                                        void handleProjectSettings(event, project);
+                                      }}
+                                    />
+                                  }
+                                >
+                                  <SettingsIcon className="size-3.5" />
+                                </TooltipTrigger>
+                                <TooltipPopup side="right">
+                                  {`Project settings for ${project.displayName}`}
+                                </TooltipPopup>
+                              </Tooltip>
                             ) : null}
                           </ComboboxItem>
                         );
@@ -3185,12 +3136,18 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                 </ul>
               </TooltipProvider>
             ) : (
-              <p
+              <div
                 role="status"
-                className="px-2 py-6 text-center text-xs text-sidebar-muted-foreground"
+                className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-sidebar-muted-foreground"
               >
+                {threadSearch.isPending ? null : (
+                  <HarpMascot
+                    scene="ball"
+                    className="h-10 w-auto [--harp-mascot-eye:var(--sidebar)]"
+                  />
+                )}
                 {threadSearch.isPending ? "Searching thread messages…" : "No threads found"}
-              </p>
+              </div>
             )
           ) : null}
           {!isSearchingThreads ? (
@@ -3229,9 +3186,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                         const threadKey = scopedThreadKey(
                           scopeThreadRef(thread.environmentId, thread.id),
                         );
-                        const isCard =
-                          section === "active" || section === "pinned" || section === "working";
-                        const rowVariant = isCard ? "card" : "slim";
+                        const rowVariant =
+                          section === "pinned" || (section === "active" && folderLayout === null)
+                            ? "card"
+                            : "slim";
                         return (
                           <SortableThreadRow
                             key={threadKey}
@@ -3350,8 +3308,6 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                           onDraftContextMenu={handleDraftContextMenu}
                         />,
                       ];
-                      // Pinned projects lead in their own section; the rest sit under
-                      // a "Threads" label, but only when both kinds exist.
                       const folderKeysWithThreads = [
                         ...(folderHeaderPlan?.threadCount.keys() ?? []),
                       ];
@@ -3361,8 +3317,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                       const hasRegularFolders = folderKeysWithThreads.some(
                         (key) => !pinnedProjectKeys.includes(key),
                       );
-                      let pinnedFolderLabelPushed = false;
-                      let regularFolderLabelPushed = false;
+                      let folderDividerPushed = false;
                       const pushFolderHeaders = (folderKeys: readonly string[]) => {
                         if (folderLayout === null || folderHeaderPlan === null) return;
                         for (const folderKey of folderKeys) {
@@ -3371,35 +3326,21 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                           const preferenceKeys = projectExpansionPreferenceKeys(group);
                           const expanded = !folderLayout.collapsed.has(folderKey);
                           const pinned = pinnedProjectKeys.includes(folderKey);
-                          if (pinned && !pinnedFolderLabelPushed) {
-                            pinnedFolderLabelPushed = true;
-                            items.push(
-                              <SidebarFolderSectionLabel
-                                key="folder-section:pinned"
-                                label="Pinned"
-                                divided={false}
-                              />,
-                            );
-                          } else if (
+                          if (
                             !pinned &&
-                            !regularFolderLabelPushed &&
+                            !folderDividerPushed &&
                             hasPinnedFolders &&
                             hasRegularFolders
                           ) {
-                            regularFolderLabelPushed = true;
-                            items.push(
-                              <SidebarFolderSectionLabel
-                                key="folder-section:regular"
-                                label="Threads"
-                                divided
-                              />,
-                            );
+                            folderDividerPushed = true;
+                            items.push(<SidebarFolderDivider key="folder-divider" />);
                           }
                           items.push(
                             <SidebarProjectFolderHeader
                               key={`folder:${folderKey}`}
                               folderKey={folderKey}
                               label={group.displayName}
+                              project={group}
                               threadCount={folderHeaderPlan.threadCount.get(folderKey) ?? 0}
                               expanded={expanded}
                               pinned={pinned}
@@ -3548,27 +3489,23 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
                     })()}
                     {settledShelfExpanded && hiddenSettledCount > 0 ? (
                       <li className="list-none">
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost-muted"
+                          size="sm"
                           disabled={olderSettledShelf.loading}
                           onClick={() => {
                             olderSettledShelf.retry();
                             showMoreSettled();
                           }}
-                          className="flex h-9 w-full cursor-pointer items-center gap-2.5 rounded-md px-2.5 text-left text-sm text-sidebar-muted-foreground/55 hover:bg-sidebar-row-hover hover:text-sidebar-foreground disabled:cursor-default redesign:text-sidebar-muted-foreground"
+                          className="w-full justify-start"
                         >
-                          {/* The New design keeps plus for "add" and uses a chevron to reveal more. */}
-                          <PlusIcon aria-hidden className="size-4 shrink-0 redesign:hidden" />
-                          <ChevronDownIcon
-                            aria-hidden
-                            className="hidden size-4 shrink-0 redesign:block"
-                          />
+                          <ChevronDownIcon aria-hidden className="size-4 shrink-0" />
                           {olderSettledShelf.loading
                             ? "Loading"
                             : olderSettledShelf.failed
                               ? "Could not load older threads. Retry"
                               : `Show ${Math.min(hiddenSettledCount, SETTLED_TAIL_PAGE_COUNT)} more`}
-                        </button>
+                        </Button>
                       </li>
                     ) : null}
                   </ul>
@@ -3584,7 +3521,7 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
             snoozedThreads.length +
             settledCount ===
             0 ? (
-            <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-muted-foreground/60">
+            <div className="flex flex-col items-center gap-2 px-2 py-6 text-center text-xs text-sidebar-muted-foreground">
               {projects.length > 0 ? (
                 <HarpMascot
                   scene="sleeping"
@@ -3594,14 +3531,10 @@ export default function Sidebar({ routeReveal }: { routeReveal: SidebarRouteReve
               {projects.length === 0 ? (
                 <>
                   <span>No projects yet</span>
-                  <button
-                    type="button"
-                    onClick={openAddProjectCommandPalette}
-                    className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-sidebar-border px-2.5 py-1 text-2xs font-medium text-sidebar-muted-foreground transition-colors hover:bg-sidebar-row-hover hover:text-sidebar-foreground"
-                  >
-                    <PlusIcon className="-mx-0.5 size-3" />
+                  <Button size="xs" variant="outline" onClick={openAddProjectCommandPalette}>
+                    <PlusIcon aria-hidden />
                     Add project
-                  </button>
+                  </Button>
                 </>
               ) : scopedProjectGroup ? (
                 `No threads in ${scopedProjectGroup.displayName} yet`

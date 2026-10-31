@@ -164,11 +164,11 @@ export function GuideExcerpt({
           onOpenFile={onOpenFile}
         />
       ) : loading ? (
-        <p className="rounded-lg border border-border/60 px-3 py-2 text-xs text-muted-foreground">
+        <p className="rounded-lg border border-border/50 px-3 py-2 text-xs text-muted-foreground">
           Loading {excerpt.path}...
         </p>
       ) : (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2 text-xs text-muted-foreground">
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-border/50 px-3 py-2 text-xs text-muted-foreground">
           <span className="min-w-0 truncate">
             <span className="font-mono text-foreground">{excerpt.path}</span> lines {excerpt.start}-
             {excerpt.end} are not in the loaded diff.
@@ -293,7 +293,7 @@ function ExcerptDiff({
   };
 
   return (
-    <div className="min-w-0 overflow-hidden rounded-lg border border-border/60">
+    <div className="min-w-0 overflow-hidden rounded-lg border border-border">
       <FileDiff<ExcerptAnnotation>
         fileDiff={slice.fileDiff}
         options={options}

@@ -10,6 +10,7 @@ import {
   getProviderUpdateSidebarPillView,
   type ProviderUpdateSidebarPillView,
 } from "../ProviderUpdateLaunchNotification.logic";
+import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 // Matches the pill's `duration-180` class.
@@ -17,19 +18,19 @@ const PROVIDER_UPDATE_PILL_EXIT_MS = 180;
 
 const PROVIDER_UPDATE_PILL_STYLES = {
   loading:
-    "bg-sidebar-control-surface text-sidebar-foreground group-has-[button[data-provider-update-main]:hover]/provider-update:bg-sidebar-row-hover",
+    "border border-transparent bg-sidebar-control-surface text-sidebar-foreground group-has-[button[data-provider-update-main]:hover]/provider-update:bg-sidebar-row-hover",
   success:
-    "bg-sidebar-control-surface text-sidebar-foreground group-has-[button[data-provider-update-main]:hover]/provider-update:bg-sidebar-row-hover",
+    "border border-transparent bg-sidebar-control-surface text-sidebar-foreground group-has-[button[data-provider-update-main]:hover]/provider-update:bg-sidebar-row-hover",
   warning:
-    "bg-warning/12 text-warning group-has-[button[data-provider-update-main]:hover]/provider-update:bg-warning/18",
+    "border border-warning/32 bg-warning-surface text-warning-foreground group-has-[button[data-provider-update-main]:hover]/provider-update:bg-warning/16",
   error:
-    "bg-destructive/12 text-destructive group-has-[button[data-provider-update-main]:hover]/provider-update:bg-destructive/18",
+    "border border-error/32 bg-error-surface text-error-foreground group-has-[button[data-provider-update-main]:hover]/provider-update:bg-error/16",
 } as const;
 
 const PROVIDER_UPDATE_PILL_PROGRESS_STYLES = {
   success: "bg-foreground/8",
   warning: "bg-warning/14",
-  error: "bg-destructive/14",
+  error: "bg-error/14",
 } as const;
 
 function latestProviderCheckedAt(
@@ -138,7 +139,7 @@ export function SidebarProviderUpdatePill() {
 
   return (
     <div
-      className={`group/provider-update relative flex min-h-7 w-full shrink-0 items-center overflow-hidden rounded-lg text-2xs leading-4 font-medium transform-gpu transition-all duration-180 ease-drawer will-change-transform ${
+      className={`group/provider-update relative flex min-h-8 w-full shrink-0 items-center overflow-hidden rounded-lg text-xs leading-4 font-medium transform-gpu transition-[opacity,translate] duration-180 ease-drawer will-change-transform ${
         PROVIDER_UPDATE_PILL_STYLES[displayedView.tone]
       } ${
         exitingKey === displayedView.key
@@ -150,7 +151,7 @@ export function SidebarProviderUpdatePill() {
         <div
           key={displayedView.key}
           aria-hidden="true"
-          className={`pointer-events-none absolute inset-y-0 left-0 w-full origin-left scale-x-0 transition-transform duration-(--provider-update-pill-dismiss-ms) ease-linear starting:scale-x-100 border-r border-current/15 inset-shadow-2xs inset-shadow-white/8 ${
+          className={`pointer-events-none absolute inset-y-0 left-0 w-full origin-left scale-x-0 transition-transform duration-(--provider-update-pill-dismiss-ms) ease-linear starting:scale-x-100 ${
             PROVIDER_UPDATE_PILL_PROGRESS_STYLES[displayedView.tone]
           }`}
           style={
@@ -190,14 +191,15 @@ export function SidebarProviderUpdatePill() {
         <Tooltip>
           <TooltipTrigger
             render={
-              <button
-                type="button"
+              <Button
+                size="icon-micro"
+                variant="ghost-muted"
                 aria-label="Dismiss provider update notice"
-                className="relative z-[1] mr-1 flex size-5 shrink-0 cursor-pointer items-center justify-center rounded-md opacity-70 outline-none hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+                className="relative z-[1] mr-1"
                 onClick={() => startExit(displayedView.key, null, displayedView.key)}
               >
-                <XIcon className="size-3.5 shrink-0" />
-              </button>
+                <XIcon className="size-3.5" />
+              </Button>
             }
           />
           <TooltipPopup side="top">Dismiss until provider status changes</TooltipPopup>

@@ -105,7 +105,6 @@ export function RightPanelSurfaceContent(props: {
         <Suspense fallback={null}>
           <DiffPanel
             key={scopedThreadKey(threadRef)}
-            mode="embedded"
             composerDraftTarget={props.composerDraftTarget}
             workspaceMutationId={props.workspaceMutationId}
             visible={visible}

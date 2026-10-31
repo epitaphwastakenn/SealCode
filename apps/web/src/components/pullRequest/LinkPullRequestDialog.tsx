@@ -155,7 +155,7 @@ function LinkPullRequestDialog({
             </p>
           ) : null}
           {(validation ?? submitError) ? (
-            <p className="text-destructive text-xs">{validation ?? submitError}</p>
+            <p className="text-error-foreground text-xs">{validation ?? submitError}</p>
           ) : null}
         </DialogPanel>
         <DialogFooter>

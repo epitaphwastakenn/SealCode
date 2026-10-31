@@ -139,7 +139,7 @@ export default function Spreadsheet(props: {
             aria-selected={tab.index === opened.layout.info.activeSheet}
             tabIndex={tab.index === opened.layout.info.activeSheet ? 0 : -1}
             onClick={() => show(tab.index)}
-            className="h-7 shrink-0 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-accent aria-selected:bg-accent aria-selected:text-foreground"
+            className="h-7 shrink-0 rounded-md px-2.5 text-xs text-muted-foreground hover:bg-row-hover aria-selected:bg-row-selected aria-selected:text-foreground"
           >
             {tab.name}
           </button>
@@ -578,7 +578,7 @@ function SpreadsheetGrid(props: {
       {notice ? (
         <div
           role="status"
-          className="absolute inset-x-3 bottom-3 rounded-md bg-background p-2 text-xs text-foreground shadow-md"
+          className="dropdown-glass absolute inset-x-3 bottom-3 rounded-lg p-2 text-xs text-foreground"
         >
           {notice}
         </div>

@@ -4,11 +4,7 @@ import { cn } from "~/lib/utils";
 
 export function ThreadHoverCardPopup({ className, ...props }: ComponentProps<typeof TooltipPopup>) {
   return (
-    <TooltipPopup
-      {...props}
-      variant="glass"
-      className={cn("max-w-80 text-left whitespace-normal", className)}
-    />
+    <TooltipPopup {...props} className={cn("max-w-80 text-left whitespace-normal", className)} />
   );
 }
 

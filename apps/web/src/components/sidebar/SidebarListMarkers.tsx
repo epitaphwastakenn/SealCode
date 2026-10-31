@@ -3,7 +3,6 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { type ReactNode } from "react";
 import { cn } from "~/lib/utils";
-import { useClientSettings } from "../../hooks/useSettings";
 import {
   animateSidebarLayoutChanges,
   sidebarMarkerId,
@@ -55,8 +54,8 @@ export function SidebarSectionPlaceholder(props: {
       {props.showHint ? (
         <div
           className={cn(
-            "absolute inset-x-0 top-0 flex h-9 items-center justify-center rounded-md border border-dashed border-sidebar-foreground/25 text-xs text-sidebar-foreground/80",
-            props.isDropTarget && "border-primary/40 bg-primary/5 text-primary",
+            "absolute inset-x-0 top-0 flex h-9 items-center justify-center rounded-lg border border-dashed border-sidebar-border text-xs text-sidebar-muted-foreground",
+            props.isDropTarget && "border-brand/40 bg-brand/10 text-brand",
           )}
         >
           {props.label}
@@ -83,17 +82,14 @@ export function SidebarDragBoundary(props: {
           <span
             className={cn(
               "shrink-0 text-xs font-medium",
-              props.isDropTarget ? "text-primary" : "text-sidebar-foreground/80",
+              props.isDropTarget ? "text-brand" : "text-sidebar-muted-foreground",
             )}
           >
             {props.label}
           </span>
           <span
             aria-hidden
-            className={cn(
-              "h-px flex-1",
-              props.isDropTarget ? "bg-primary/50" : "bg-sidebar-foreground/25",
-            )}
+            className={cn("h-px flex-1", props.isDropTarget ? "bg-brand/50" : "bg-sidebar-border")}
           />
         </div>
       ) : null}
@@ -104,7 +100,7 @@ export function SidebarDragBoundary(props: {
 export function SidebarSectionHeader(props: {
   marker: "working-header" | "snoozed-header" | "settled-header";
   label: string;
-  /** A muted trailing count; classic shows it only while the shelf is collapsed. */
+  /** A muted trailing count. */
   count: number;
   className?: string;
   dragging?: boolean;
@@ -119,9 +115,6 @@ export function SidebarSectionHeader(props: {
       : props.marker === "snoozed-header"
         ? "snoozed"
         : "settled";
-  const redesign = useClientSettings((s) => s.redesignEnabled);
-  const collapsedCount = props.toggle.expanded ? null : props.count;
-  const count = redesign ? props.count : collapsedCount;
   return (
     <SortableSidebarMarker
       marker={props.marker}
@@ -129,21 +122,16 @@ export function SidebarSectionHeader(props: {
       className={cn("relative mx-0.5 h-8", props.className)}
     >
       {props.hostsUndoNotice ? (
-        <SidebarThreadUndoNotice className="absolute inset-x-0 bottom-full bg-sidebar surface-grain" />
+        <SidebarThreadUndoNotice className="absolute inset-x-0 bottom-full" />
       ) : null}
       <CollapsibleSectionHeader
         onClick={props.toggle.onToggle}
         expanded={props.toggle.expanded}
         tone={props.isDropTarget ? "accent" : props.dragging ? "emphasized" : "muted"}
         data-testid={`sidebar-${shelf}-shelf-toggle`}
-        accessory={
-          redesign && count !== null ? (
-            <span className="font-normal tabular-nums">{count}</span>
-          ) : null
-        }
+        accessory={<span className="font-normal tabular-nums">{props.count}</span>}
       >
         {props.label}
-        {!redesign && collapsedCount !== null ? ` (${collapsedCount})` : null}
       </CollapsibleSectionHeader>
     </SortableSidebarMarker>
   );

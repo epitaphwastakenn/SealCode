@@ -12,9 +12,20 @@ import * as Cause from "effect/Cause";
 import { ChevronsDownUp, ChevronsUpDown } from "lucide";
 import { useEffect, useRef, useState } from "react";
 
+import { HarpMascot } from "~/components/mascot/HarpMascot";
+import { Alert, AlertAction, AlertDescription } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
+import {
+  Empty,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "~/components/ui/empty";
 import { InputGroup, InputGroupInput } from "~/components/ui/input-group";
 import { MorphIcon } from "~/components/MorphIcon";
+import { PanelSubheader } from "~/components/PanelSubheader";
+import { Spinner } from "~/components/ui/spinner";
 import { toastManager } from "~/components/ui/toast";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
 import { useComposerHandleContext } from "~/composerHandleContext";
@@ -494,10 +505,7 @@ export default function FileBrowserPanel({
       className="flex min-h-0 flex-1 flex-col bg-background"
       data-file-browser-panel={`${environmentId}:${cwd}`}
     >
-      <div
-        className="flex h-10 min-h-10 shrink-0 items-center gap-1 border-b border-border/60 bg-background px-2 in-data-[preview-panel-mode=inline]:mb-1 in-data-[preview-panel-mode=inline]:h-9 in-data-[preview-panel-mode=inline]:min-h-9 in-data-[preview-panel-mode=inline]:border-b-transparent"
-        data-surface-subheader
-      >
+      <PanelSubheader>
         <RefreshFilesButton isPending={isPending} onRefresh={handleRefresh} />
         <FileSearchField
           name="project-files-search"
@@ -533,15 +541,16 @@ export default function FileBrowserPanel({
             </TooltipPopup>
           </Tooltip>
         ) : null}
-      </div>
+      </PanelSubheader>
       {error || pathSearch.error ? (
-        <button
-          type="button"
-          onClick={handleRefresh}
-          className="p-4 text-left text-xs leading-relaxed text-destructive"
-        >
-          {error ?? pathSearch.error} Click to retry.
-        </button>
+        <Alert variant="error" className="m-2">
+          <AlertDescription>{error ?? pathSearch.error}</AlertDescription>
+          <AlertAction>
+            <Button variant="outline" size="xs" onClick={handleRefresh}>
+              Retry
+            </Button>
+          </AlertAction>
+        </Alert>
       ) : null}
       {query.trim() && pathSearch.truncated && !pathSearch.isPending ? (
         <div className="px-3 py-1 text-xs text-muted-foreground">
@@ -554,17 +563,24 @@ export default function FileBrowserPanel({
           className={
             entries.length > 0 && !hasNoSearchMatches
               ? "sr-only"
-              : "px-3 py-1 text-xs text-muted-foreground"
+              : "flex items-center gap-2 px-3 py-2 text-xs text-muted-foreground"
           }
         >
+          {entries.length > 0 && !hasNoSearchMatches ? null : <Spinner size="xs" aria-hidden />}
           Loading files…
         </div>
       )}
       {hasNoSearchMatches ? (
         ready && !isPending && !pathSearch.isPending && !error && !pathSearch.error ? (
-          <div role="status" className="px-3 py-4 text-xs text-muted-foreground">
-            No matching files.
-          </div>
+          <Empty size="compact" role="status">
+            <EmptyHeader>
+              <EmptyMedia>
+                <HarpMascot scene="ball" className="h-14 w-auto" />
+              </EmptyMedia>
+              <EmptyTitle>No matching files</EmptyTitle>
+              <EmptyDescription>Try a different search.</EmptyDescription>
+            </EmptyHeader>
+          </Empty>
         ) : null
       ) : (
         <FileTree

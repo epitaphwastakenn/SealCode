@@ -1,10 +1,9 @@
 import type { ScopedThreadRef } from "@t3tools/contracts";
+import { GlobeIcon } from "lucide-react";
 import { type ReactNode, useState } from "react";
 
 import { useFaviconForThreadUrl } from "~/browserFaviconStore";
 import { cn } from "~/lib/utils";
-
-import { BrowserMockup } from "./BrowserMockup";
 
 export function FaviconImage(props: {
   sources: ReadonlyArray<string | null | undefined>;
@@ -48,12 +47,22 @@ export function PreviewFaviconIcon(props: {
   className?: string | undefined;
 }) {
   const source = useFaviconForThreadUrl(props.threadRef, props.url);
-  const fallback = <BrowserMockup className={cn("size-7 shrink-0", props.className)} />;
+  const fallback = (
+    <span
+      aria-hidden
+      className={cn(
+        "flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground",
+        props.className,
+      )}
+    >
+      <GlobeIcon className="size-4" />
+    </span>
+  );
   return (
     <FaviconImage
       sources={[source]}
       fallback={fallback}
-      className={cn("size-7 shrink-0 rounded object-contain", props.className)}
+      className={cn("size-7 shrink-0 rounded-md object-contain", props.className)}
     />
   );
 }

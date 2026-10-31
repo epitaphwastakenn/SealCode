@@ -31,7 +31,7 @@ export function SidebarThreadUndoNotice({ className }: { className?: string }) {
         if (!summary && event.target === event.currentTarget) setShownSummary(null);
       }}
       className={cn(
-        "flex gap-1 px-2 text-2xs leading-6 text-sidebar-muted-foreground transition-opacity duration-200 ease-out starting:opacity-0",
+        "mb-1 flex w-fit max-w-full gap-1 rounded-lg bg-sidebar-control-surface px-2 text-xs leading-6 text-sidebar-muted-foreground backdrop-blur-sm transition-opacity duration-200 ease-out starting:opacity-0",
         !summary && "opacity-0",
         className,
       )}

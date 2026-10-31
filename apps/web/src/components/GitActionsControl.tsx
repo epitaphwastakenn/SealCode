@@ -62,8 +62,10 @@ import {
 } from "./GitActionsControl.logic";
 import { WizardPopup, WizardHeader, WizardSteps, WizardPanel, WizardFooter } from "./ui/wizard";
 import { StartTruncatedPath } from "./StartTruncatedPath";
+import { Alert, AlertDescription, AlertTitle } from "~/components/ui/alert";
 import { Button } from "~/components/ui/button";
 import { Checkbox } from "~/components/ui/checkbox";
+import { DisclosureChevron } from "~/components/ui/disclosure-chevron";
 import {
   Dialog,
   DialogDescription,
@@ -120,7 +122,6 @@ import { getSourceControlPresentation, sourceControlIcon } from "~/sourceControl
 import { sourceControlClients } from "@t3tools/client-runtime/source-control-clients";
 import { formatDiffCount } from "@t3tools/client-runtime/diff-count";
 import { useOpenLink } from "~/browser/useOpenLink";
-import { useClientSettings } from "~/hooks/useSettings";
 
 interface GitActionsControlProps {
   presentation?: "toolbar" | "menu";
@@ -649,7 +650,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                   return (
                     <div
                       key={option.value}
-                      className="relative flex cursor-not-allowed items-center gap-3 rounded-lg border border-border bg-background px-3 py-3 text-left opacity-64 dark:border-transparent dark:bg-white/[0.035]"
+                      className="relative flex cursor-not-allowed items-center gap-3 rounded-lg border border-border bg-muted/40 px-3 py-3 text-left opacity-50"
                     >
                       <option.Icon className="size-5 shrink-0 text-muted-foreground" aria-hidden />
                       <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
@@ -685,11 +686,11 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                     key={option.value}
                     value={option.value}
                     className={cn(
-                      "relative flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 text-left outline-none transition-[background-color,border-color,box-shadow]",
-                      "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                      "relative flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 text-left outline-none transition-colors",
+                      "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70",
                       isSelected
-                        ? "border-primary bg-background shadow-sm ring-2 ring-inset ring-primary/35 dark:border-transparent dark:bg-primary/10 dark:shadow-none dark:ring-1 dark:ring-primary/30"
-                        : "border-border bg-background hover:border-foreground/20 hover:bg-muted/50 dark:border-transparent dark:bg-white/[0.035] dark:hover:bg-accent",
+                        ? "border-primary/60 bg-row-selected"
+                        : "border-border bg-muted/40 hover:bg-row-hover",
                     )}
                   >
                     <option.Icon className="size-5 shrink-0" aria-hidden />
@@ -730,7 +731,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                   }}
                   placeholder={publishPathPlaceholder}
                   disabled={publishRepositoryAction.isPending}
-                  className="w-full bg-transparent px-3 py-2 font-mono text-sm placeholder:text-muted-foreground/60 focus:outline-none"
+                  className="w-full bg-transparent px-3 py-2 font-mono text-sm placeholder:text-placeholder focus:outline-none"
                 />
               </div>
             </div>
@@ -771,11 +772,11 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                       key={option.value}
                       value={option.value}
                       className={cn(
-                        "relative flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-left outline-none transition-[background-color,border-color,box-shadow]",
-                        "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
+                        "relative flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2.5 text-left outline-none transition-colors",
+                        "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70",
                         isSelected
-                          ? "border-primary bg-background shadow-sm ring-2 ring-inset ring-primary/35 dark:border-transparent dark:bg-primary/10 dark:shadow-none dark:ring-1 dark:ring-primary/30"
-                          : "border-border bg-background hover:border-foreground/20 hover:bg-muted/50 dark:border-transparent dark:bg-white/[0.035] dark:hover:bg-accent",
+                          ? "border-primary/60 bg-row-selected"
+                          : "border-border bg-muted/40 hover:bg-row-hover",
                       )}
                     >
                       <option.Icon className="size-4 shrink-0 text-muted-foreground" aria-hidden />
@@ -800,12 +801,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                 aria-expanded={publishAdvancedOpen}
                 className="flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
               >
-                <ChevronDownIcon
-                  className={cn(
-                    "size-3.5 transition-transform",
-                    publishAdvancedOpen ? "" : "-rotate-90",
-                  )}
-                />
+                <DisclosureChevron open={publishAdvancedOpen} />
                 Advanced
               </button>
               {publishAdvancedOpen ? (
@@ -850,20 +846,17 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
               <div
                 role="status"
                 aria-live="polite"
-                className="flex items-center gap-2 rounded-md border border-input bg-muted/40 px-3 py-2 text-xs text-muted-foreground dark:border-transparent dark:bg-white/[0.035]"
+                className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
               >
                 <Spinner size="sm" aria-hidden />
-                Publishing repository to {publishProviderLabel}...
+                Publishing repository to {publishProviderLabel}…
               </div>
             ) : null}
             {publishError && !publishRepositoryAction.isPending ? (
-              <div
-                role="alert"
-                className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive"
-              >
-                <p className="font-medium">Publish failed</p>
-                <p className="mt-0.5 text-destructive/90">{publishError}</p>
-              </div>
+              <Alert variant="error">
+                <AlertTitle>Publish failed</AlertTitle>
+                <AlertDescription>{publishError}</AlertDescription>
+              </Alert>
             ) : null}
           </div>
 
@@ -874,7 +867,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                   <span className="grid size-8 place-items-center rounded-full bg-success/15 text-success">
                     <CheckIcon className="size-4" aria-hidden />
                   </span>
-                  <h3 className="text-sm font-semibold text-foreground">
+                  <h3 className="text-sm font-medium text-foreground">
                     {publishResult.status === "pushed"
                       ? "Repository published"
                       : "Repository created"}
@@ -885,7 +878,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                       : `Remote "${publishResult.remoteName}" is set up. Make a commit and push it to share your code.`}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 rounded-lg border border-input bg-muted/40 px-3 py-2 dark:border-transparent dark:bg-white/[0.035]">
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2">
                   <currentPublishProvider.Icon className="size-3.5 shrink-0 text-muted-foreground" />
                   <span className="min-w-0 flex-1 truncate font-mono text-xs text-foreground">
                     {publishResult.repository.nameWithOwner}
@@ -903,7 +896,7 @@ function PublishRepositoryDialog(props: PublishRepositoryDialogProps) {
                 </Button>
               </>
             ) : (
-              <div className="rounded-md border border-input bg-background px-3 py-2 text-xs text-muted-foreground dark:border-transparent dark:bg-white/[0.035]">
+              <div className="rounded-lg border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
                 Publish result unavailable.
               </div>
             )}
@@ -1152,10 +1145,8 @@ export default function GitActionsControl({
       ? (quickAction.hint ?? "This action is currently unavailable.")
       : null;
   const gitActionProgress = resolveGitActionProgressPresentation(vcsActionState);
-  const redesign = useClientSettings((s) => s.redesignEnabled);
   // A fresh draft or a thread with no turns hides commit, push, and diff rows until there is work.
   const quietEmptyDraft =
-    redesign &&
     isPanel &&
     (draftId !== undefined || activeServerThreadShell?.latestRun === null) &&
     gitActionProgress === null &&
@@ -1628,7 +1619,9 @@ export default function GitActionsControl({
         gitStatusForActions.aheadCount === 0 && (
           <p className="px-2 py-1.5 text-xs text-warning">Behind upstream. Pull/rebase first.</p>
         )}
-      {gitStatusError && <p className="px-2 py-1.5 text-xs text-destructive">{gitStatusError}</p>}
+      {gitStatusError && (
+        <p className="px-2 py-1.5 text-xs text-error-foreground">{gitStatusError}</p>
+      )}
     </>
   );
 
@@ -1704,7 +1697,7 @@ export default function GitActionsControl({
           className={cn(
             "shrink-0",
             isPanel && THREAD_DETAILS_PANEL_SPLIT_GROUP_CLASS,
-            isPanel && gitActionProgress && "bg-black/[0.035] dark:bg-white/[0.055]",
+            isPanel && gitActionProgress && "bg-row-hover",
           )}
         >
           {gitActionProgress ? (
@@ -1882,7 +1875,7 @@ export default function GitActionsControl({
             <DialogDescription>{COMMIT_DIALOG_DESCRIPTION}</DialogDescription>
           </DialogHeader>
           <DialogPanel>
-            <div className="space-y-3 rounded-xl bg-zinc-25 p-3 text-sm ring-1 ring-black/5 dark:bg-white/[0.035] dark:ring-white/5">
+            <div className="space-y-3 rounded-xl border border-border bg-muted/40 p-3 text-sm">
               <div className="grid grid-cols-[auto_1fr] items-center gap-x-2 gap-y-1">
                 <span className="text-muted-foreground">Branch</span>
                 <span className="flex items-center justify-between gap-2">
@@ -1927,7 +1920,7 @@ export default function GitActionsControl({
                   <p className="font-medium">none</p>
                 ) : (
                   <div className="space-y-2">
-                    <div className="h-44 rounded-lg bg-card ring-1 ring-black/5 dark:bg-white/[0.025] dark:ring-white/5">
+                    <div className="h-44 rounded-lg border border-border/50 bg-card">
                       <ScrollArea>
                         <div className="space-y-1 p-1">
                           {allFiles.map((file) => {
@@ -1935,7 +1928,7 @@ export default function GitActionsControl({
                             return (
                               <div
                                 key={file.path}
-                                className="flex w-full items-center gap-2 rounded-md px-2 py-1 font-mono hover:bg-accent/50"
+                                className="flex w-full items-center gap-2 rounded-md px-2 py-1 font-mono hover:bg-row-hover"
                               >
                                 {isEditingFiles && (
                                   <Checkbox

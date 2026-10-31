@@ -25,6 +25,7 @@ import {
 import { showDesktopUpdateDownloadedToast } from "../desktopUpdate.toast";
 import { Alert, AlertDescription, AlertTitle } from "../ui/alert";
 import { Popover, PopoverCreateHandle, PopoverPopup, PopoverTrigger } from "../ui/popover";
+import { Button } from "../ui/button";
 import { SidebarMenuItem } from "../ui/sidebar";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import {
@@ -122,7 +123,7 @@ function SidebarUpdateArchitectureWarningContent() {
   if (!visible || !description) return null;
 
   return (
-    <Alert variant="warning">
+    <Alert variant="sidebar">
       <TriangleAlertIcon />
       <AlertTitle>Intel build on Apple Silicon</AlertTitle>
       <AlertDescription>{description}</AlertDescription>
@@ -440,24 +441,12 @@ function SidebarUpdateControl() {
   }
 
   const updateButton = (
-    <button
-      type="button"
+    <Button
+      size="icon"
+      variant={showUpdateIconState ? "outline" : "ghost-muted"}
       aria-label={idleTooltip?.detail ? `${tooltip}: ${idleTooltip.detail}` : tooltip}
       aria-disabled={isInteractionDisabled || undefined}
-      className={cn(
-        "inline-flex size-8 items-center justify-center rounded-full outline-hidden ring-ring transition-colors focus-visible:ring-2 focus-visible:ring-inset",
-        isInteractionDisabled ? "cursor-not-allowed" : "cursor-pointer",
-        showUpdateIconState
-          ? cn(
-              "bg-sidebar-control-surface text-sidebar-foreground",
-              !isInteractionDisabled && "hover:bg-sidebar-row-hover",
-            )
-          : cn(
-              "text-(--sidebar-icon-color)",
-              !isInteractionDisabled && "hover:bg-sidebar-row-hover hover:text-sidebar-foreground",
-            ),
-        disabled && !showUpdateIconState && "opacity-60",
-      )}
+      className={cn(isInteractionDisabled && "cursor-not-allowed")}
       onClick={handleAction}
       onBlur={() => {
         suppressReleaseNotesFocusOpen.current = false;
@@ -483,7 +472,7 @@ function SidebarUpdateControl() {
       }}
     >
       {statusIcon}
-    </button>
+    </Button>
   );
 
   return (
@@ -522,11 +511,7 @@ function SidebarUpdateControl() {
             }
           />
           {!showReleaseNotesPopover ? (
-            <TooltipPopup
-              align="center"
-              side="top"
-              variant={showUpdateDetails ? "glass" : "default"}
-            >
+            <TooltipPopup align="center" side="top">
               {idleTooltip?.detail ? (
                 <div className="text-left">
                   <div className="font-medium">{idleTooltip.title}</div>

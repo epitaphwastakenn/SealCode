@@ -80,6 +80,7 @@ import { PreviewFileNotShown, PreviewUnreachable } from "./PreviewUnreachable";
 import { revealInFileExplorerLabel } from "./fileExplorerLabel";
 import { shouldShowPreviewEmptyState } from "./previewEmptyStateLogic";
 import { Badge } from "~/components/ui/badge";
+import { Empty, EmptyDescription, EmptyHeader } from "~/components/ui/empty";
 import { BrowserSurfaceSlot } from "~/browser/BrowserSurfaceSlot";
 import { alternatePreviewRuntime, useRendersServerTabNatively } from "~/browser/previewRuntime";
 import { ServerBrowserSurface, type ServerBrowserHandle } from "~/browser/ServerBrowserSurface";
@@ -913,17 +914,6 @@ export function PreviewView({
         onForward={handleForward}
         onRefresh={handleRefresh}
         onSubmit={(next) => void handleSubmitUrl(next)}
-        onOpenInBrowser={tabId ? handleOpenInBrowser : undefined}
-        onCapture={previewBridge && tabId && !isServerTab ? handleCapture : undefined}
-        captureDisabled={!desktopOverlay || isUnreachable}
-        recording={recordingRuntimeTabId !== null}
-        onPictureInPicture={
-          tabId && (isServerTab || previewBridge) ? handlePictureInPicture : undefined
-        }
-        pictureInPicture={miniPlayerTabId === tabId}
-        pictureInPictureDisabled={
-          isUnreachable || (!isServerTab && !desktopOverlay?.hasWebContents)
-        }
         onPickElement={previewBridge && tabId && !isServerTab ? handlePickElement : undefined}
         pickActive={pickActive}
         pickDisabled={!tabId || isUnreachable}
@@ -963,6 +953,17 @@ export function PreviewView({
               deviceToolbarVisible={viewport._tag !== "fill"}
               onToggleDeviceToolbar={handleToggleDeviceToolbar}
               nativePictureInPicture={desktopOverlay?.pictureInPicture ?? false}
+              onOpenInBrowser={tabId ? handleOpenInBrowser : undefined}
+              onCapture={previewBridge && tabId && !isServerTab ? handleCapture : undefined}
+              captureDisabled={!desktopOverlay || isUnreachable}
+              recording={recordingRuntimeTabId !== null}
+              onPictureInPicture={
+                tabId && (isServerTab || previewBridge) ? handlePictureInPicture : undefined
+              }
+              pictureInPicture={miniPlayerTabId === tabId}
+              pictureInPictureDisabled={
+                isUnreachable || (!isServerTab && !desktopOverlay?.hasWebContents)
+              }
             />
           ) : null
         }
@@ -1020,11 +1021,11 @@ export function PreviewView({
               className="absolute inset-0 h-full w-full"
             />
           ) : (
-            <div className="flex h-full items-center justify-center p-8 text-center">
-              <p className="max-w-sm text-sm text-muted-foreground">
-                This tab is open in the Harp desktop app.
-              </p>
-            </div>
+            <Empty size="compact" className="h-full">
+              <EmptyHeader>
+                <EmptyDescription>This tab is open in the Harp desktop app.</EmptyDescription>
+              </EmptyHeader>
+            </Empty>
           )
         ) : null}
         {showEmptyState ? (

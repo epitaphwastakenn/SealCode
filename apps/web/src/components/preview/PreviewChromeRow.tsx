@@ -1,12 +1,5 @@
 import { RefreshIcon } from "~/components/ui/refresh-icon";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Camera,
-  ExternalLink,
-  MousePointerClick,
-  PictureInPicture2,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, MousePointerClick } from "lucide-react";
 import {
   type FormEvent,
   type KeyboardEvent,
@@ -16,10 +9,10 @@ import {
   useState,
 } from "react";
 
+import { PanelSubheader } from "~/components/PanelSubheader";
 import { Button } from "~/components/ui/button";
-import { InputGroup, InputGroupAddon, InputGroupInput } from "~/components/ui/input-group";
+import { InputGroup, InputGroupInput } from "~/components/ui/input-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "~/components/ui/tooltip";
-import { cn } from "~/lib/utils";
 
 interface Props {
   url: string;
@@ -33,13 +26,6 @@ interface Props {
   onForward: () => void;
   onRefresh: () => void;
   onSubmit: (url: string) => void;
-  onOpenInBrowser?: (() => void) | undefined;
-  onCapture?: ((record: boolean) => void) | undefined;
-  captureDisabled?: boolean | undefined;
-  recording?: boolean | undefined;
-  onPictureInPicture?: (() => void) | undefined;
-  pictureInPicture?: boolean | undefined;
-  pictureInPictureDisabled?: boolean | undefined;
   onPickElement?: (() => void) | undefined;
   pickActive?: boolean | undefined;
   pickDisabled?: boolean | undefined;
@@ -62,13 +48,6 @@ export function PreviewChromeRow({
   onForward,
   onRefresh,
   onSubmit,
-  onOpenInBrowser,
-  onCapture,
-  captureDisabled,
-  recording,
-  onPictureInPicture,
-  pictureInPicture,
-  pictureInPictureDisabled,
   onPickElement,
   pickActive,
   pickDisabled,
@@ -97,11 +76,7 @@ export function PreviewChromeRow({
 
   return (
     <div className="relative">
-      <form
-        onSubmit={submit}
-        className="flex h-10 min-h-10 shrink-0 items-center gap-1 border-b border-border/60 bg-background px-2 in-data-[preview-panel-mode=inline]:mb-3 in-data-[preview-panel-mode=inline]:h-7 in-data-[preview-panel-mode=inline]:min-h-7 in-data-[preview-panel-mode=inline]:border-b-transparent"
-        data-surface-subheader
-      >
+      <PanelSubheader render={<form onSubmit={submit} />}>
         <div className="flex items-center gap-0.5" role="group" aria-label="Navigation">
           <Tooltip>
             <TooltipTrigger
@@ -158,7 +133,7 @@ export function PreviewChromeRow({
 
         {leadingActions}
 
-        <InputGroup variant="ghost" className="group/address h-7 flex-1">
+        <InputGroup variant="ghost" className="h-7 flex-1">
           <Tooltip>
             <TooltipTrigger
               render={
@@ -191,29 +166,6 @@ export function PreviewChromeRow({
               }
             />
           </Tooltip>
-          {onOpenInBrowser && !inputFocused ? (
-            <InputGroupAddon align="inline-end">
-              {}
-              <span className="pointer-events-none flex opacity-0 transition-opacity focus-within:pointer-events-auto focus-within:opacity-100 group-hover/address:pointer-events-auto group-hover/address:opacity-100">
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        onClick={onOpenInBrowser}
-                        aria-label="Open in system browser"
-                        type="button"
-                      />
-                    }
-                  >
-                    <ExternalLink />
-                  </TooltipTrigger>
-                  <TooltipPopup>Open in system browser</TooltipPopup>
-                </Tooltip>
-              </span>
-            </InputGroupAddon>
-          ) : null}
         </InputGroup>
 
         {onPickElement ? (
@@ -231,7 +183,7 @@ export function PreviewChromeRow({
                 />
               }
             >
-              <MousePointerClick className={cn(pickActive && "text-primary")} />
+              <MousePointerClick />
             </TooltipTrigger>
             <TooltipPopup>
               {pickDisabled && pickDisabledReason
@@ -242,62 +194,12 @@ export function PreviewChromeRow({
             </TooltipPopup>
           </Tooltip>
         ) : null}
-        {onCapture ? (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant={recording ? "secondary" : "ghost"}
-                  size="icon-xs"
-                  onClick={(event) => onCapture(event.shiftKey)}
-                  aria-label={recording ? "Stop recording" : "Capture screenshot"}
-                  type="button"
-                  className="relative"
-                  disabled={captureDisabled}
-                />
-              }
-            >
-              <Camera className={cn(recording && "text-destructive")} />
-              {recording ? (
-                <span className="absolute right-0.5 top-0.5 size-1.5 motion-safe:animate-status-pulse rounded-full bg-destructive" />
-              ) : null}
-            </TooltipTrigger>
-            <TooltipPopup>
-              {recording ? "Stop recording" : "Screenshot · Shift-click to record"}
-            </TooltipPopup>
-          </Tooltip>
-        ) : null}
-        {onPictureInPicture ? (
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  variant={pictureInPicture ? "secondary" : "ghost"}
-                  size="icon-xs"
-                  onClick={onPictureInPicture}
-                  aria-label={
-                    pictureInPicture ? "Close floating preview" : "Float preview over chat"
-                  }
-                  aria-pressed={pictureInPicture ? "true" : "false"}
-                  type="button"
-                  disabled={pictureInPictureDisabled}
-                />
-              }
-            >
-              <PictureInPicture2 className={cn(pictureInPicture && "text-primary")} />
-            </TooltipTrigger>
-            <TooltipPopup>
-              {pictureInPicture ? "Close floating preview" : "Float preview over chat"}
-            </TooltipPopup>
-          </Tooltip>
-        ) : null}
         {trailingActions}
-      </form>
+      </PanelSubheader>
       <div
         aria-hidden
         data-loading={loading}
-        className="preview-loading-progress pointer-events-none absolute bottom-0 left-0 z-10 h-0.5 w-full origin-left rounded-r-full bg-primary"
-        style={{ boxShadow: "0 0 6px 1px var(--color-ring)" }}
+        className="preview-loading-progress pointer-events-none absolute bottom-0 left-0 z-10 h-0.5 w-full origin-left rounded-r-full bg-brand shadow-sm shadow-brand/50"
       />
     </div>
   );

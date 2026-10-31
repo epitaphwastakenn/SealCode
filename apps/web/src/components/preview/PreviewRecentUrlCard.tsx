@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 
 import { isValidHistoryTimestamp, type BrowserHistoryEntry } from "~/browserHistoryStore";
 import { RelativeTime } from "~/components/RelativeTime";
+import { Button } from "~/components/ui/button";
 
 import { PreviewFaviconIcon } from "./PreviewFaviconIcon";
 
@@ -25,7 +26,7 @@ export function PreviewRecentUrlCard({ threadRef, entry, onOpen, onRemove }: Pro
       <button
         type="button"
         onClick={onOpen}
-        className="flex w-full items-center gap-3 px-3 py-3 pr-10 text-left hover:bg-accent/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        className="flex w-full items-center gap-3 px-3 py-3 pr-10 text-left hover:bg-row-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70"
       >
         <PreviewFaviconIcon threadRef={threadRef} url={entry.url} />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -38,14 +39,16 @@ export function PreviewRecentUrlCard({ threadRef, entry, onOpen, onRemove }: Pro
           </span>
         </div>
       </button>
-      <button
-        type="button"
-        aria-label={`Remove ${label} from history`}
-        onClick={onRemove}
-        className="absolute right-3 rounded p-1 text-muted-foreground opacity-0 hover:bg-accent hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring group-hover:opacity-100"
-      >
-        <X className="size-3.5" />
-      </button>
+      <span className="absolute right-3 flex opacity-0 focus-within:opacity-100 group-hover:opacity-100 pointer-coarse:opacity-100">
+        <Button
+          variant="ghost-muted"
+          size="icon-micro"
+          aria-label={`Remove ${label} from history`}
+          onClick={onRemove}
+        >
+          <X />
+        </Button>
+      </span>
     </div>
   );
 }

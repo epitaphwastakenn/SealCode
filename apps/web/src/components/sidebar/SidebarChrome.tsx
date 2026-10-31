@@ -116,10 +116,10 @@ function SidebarBrandMark({ onBackdrop }: { onBackdrop: boolean }) {
   return (
     <HarpMark
       className="text-sm"
-      glyphClassName={onBackdrop ? "sidebar-stage-brand-glyph" : undefined}
+      glyphClassName={onBackdrop ? "sidebar-stage-brand-glyph" : "text-brand"}
       wordmarkClassName={cn(
         "[text-box:trim-both_cap_alphabetic] supports-[text-box:trim-both_cap_alphabetic]:py-1",
-        onBackdrop ? "text-white/85 sidebar-stage-brand-text" : "text-muted-foreground",
+        onBackdrop ? "text-white/85 sidebar-stage-brand-text" : "text-sidebar-foreground",
       )}
     />
   );

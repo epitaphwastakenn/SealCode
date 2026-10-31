@@ -35,7 +35,9 @@ import { PullRequestsUnavailableState } from "./PullRequestsUnavailableState";
 import { threadEnvironment } from "~/state/threads";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { RelativeTime } from "~/components/RelativeTime";
+import { HarpMascot } from "../mascot/HarpMascot";
 import { Button } from "../ui/button";
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from "../ui/empty";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { MiddleTruncate } from "../ui/middle-truncate";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -130,7 +132,7 @@ function LinkRowImpl({
     actionEntry !== null && pullRequestQuickActions(actionEntry, linkHostActions).length > 0;
   return (
     <div
-      className={cn(PULL_REQUEST_ROW_CLASS, "relative hover:bg-accent/60")}
+      className={cn(PULL_REQUEST_ROW_CLASS, "relative hover:bg-row-hover")}
       onContextMenu={(event) => {
         event.preventDefault();
         event.stopPropagation();
@@ -139,7 +141,7 @@ function LinkRowImpl({
       }}
       style={{ paddingLeft: `${0.5 + Math.min(depth, 3) * 1.25}rem` }}
     >
-      {depth > 0 ? <span aria-hidden className="-ml-2 h-6 w-px shrink-0 bg-border/70" /> : null}
+      {depth > 0 ? <span aria-hidden className="-ml-2 h-6 w-px shrink-0 bg-border/50" /> : null}
       {snapshot === null ? (
         <PullRequestGlyph.pullRequest
           aria-label="Waiting for host state"
@@ -237,7 +239,7 @@ function LinkRowImpl({
                 <Tooltip>
                   <TooltipTrigger
                     render={
-                      <span className="inline-flex shrink-0 items-center gap-0.5 text-foreground/70" />
+                      <span className="inline-flex shrink-0 items-center gap-0.5 text-muted-foreground" />
                     }
                   >
                     <PullRequestGlyph.stack aria-hidden className="size-3" />
@@ -296,7 +298,7 @@ function LinkRowImpl({
           speedMode && hasQuickActions && "hidden",
         )}
       >
-        <span aria-hidden className="absolute inset-0 bg-accent/60" />
+        <span aria-hidden className="absolute inset-0 bg-row-hover" />
         <Menu
           open={menuOpen}
           onOpenChange={(open) => {
@@ -427,18 +429,22 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
 
   if (linkCount === 0) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 p-6 text-center">
-        <PullRequestGlyph.link aria-hidden className="size-6 text-muted-foreground/60" />
-        <p className="text-sm font-medium">No linked pull requests</p>
-        <p className="max-w-60 text-xs text-muted-foreground">
-          Pull requests the agent opens from this thread land here. Link one yourself from a URL or
-          a number.
-        </p>
+      <Empty size="compact" className="h-full">
+        <EmptyHeader>
+          <EmptyMedia>
+            <HarpMascot scene="sleeping" className="h-12 w-auto" />
+          </EmptyMedia>
+          <EmptyTitle>No linked pull requests</EmptyTitle>
+          <EmptyDescription>
+            Pull requests the agent opens from this thread land here. Link one yourself from a URL
+            or a number.
+          </EmptyDescription>
+        </EmptyHeader>
         <Button size="sm" variant="outline" onClick={openLinkDialog}>
           <PlusIcon className="size-3.5" />
           Link pull request
         </Button>
-      </div>
+      </Empty>
     );
   }
 
@@ -471,7 +477,7 @@ function EnabledThreadPullRequestsPanel({ threadRef }: { threadRef: ScopedThread
           drawDistance={440}
           className="min-h-0 flex-1 overscroll-contain p-1.5"
         />
-        <footer className="flex items-center justify-between border-t border-border/60 px-2 py-1.5 text-2xs text-muted-foreground">
+        <footer className="flex items-center justify-between border-t border-border px-2 py-1.5 text-2xs text-muted-foreground">
           <span>
             {openCount} open · {linkCount} linked
             {lastSynced ? (

@@ -590,7 +590,7 @@ export function ConnectionsSettings() {
   const handleRemoveSavedBackend = async (environment: EnvironmentPresentation) => {
     const confirmed = await requestConfirmDialog(
       `Remove ${environment.label} from this device?\nThis forgets its pairing, credentials, and cached threads here. Switch it off instead to keep it saved.`,
-      { variant: "destructive" },
+      { variant: "destructive", confirmLabel: "Remove" },
     );
     if (confirmed === true) await removeSavedBackend(environment);
   };

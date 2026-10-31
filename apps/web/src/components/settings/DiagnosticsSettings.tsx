@@ -840,7 +840,7 @@ function DiagnosticsSettingsBody() {
       try {
         confirmed = await ensureLocalApi().dialogs.confirm(
           `Send SIGKILL to process ${pid}? This cannot be handled by the process.`,
-          { variant: "destructive" },
+          { variant: "destructive", confirmLabel: "Send SIGKILL" },
         );
       } catch (error) {
         clearSignaling();

@@ -191,7 +191,7 @@ export function AcpSessionManagementSection(props: {
       return;
     const confirmed = await ensureLocalApi().dialogs.confirm(
       `Permanently delete native ACP session "${session.title ?? session.sessionId}"?`,
-      { variant: "destructive" },
+      { variant: "destructive", confirmLabel: "Delete" },
     );
     if (!confirmed || !readEnvironmentScope(props.environmentId, AuthOrchestrationOperateScope))
       return;
@@ -282,7 +282,7 @@ export function AcpSessionManagementSection(props: {
     if (projectId === null || savingProviderId !== null || provider.required) return;
     const confirmed = await ensureLocalApi().dialogs.confirm(
       `Disable ACP provider "${provider.providerId}"?`,
-      { variant: "destructive" },
+      { variant: "destructive", confirmLabel: "Disable" },
     );
     if (!confirmed || !readEnvironmentScope(props.environmentId, AuthProvidersManageScope)) return;
     setSavingProviderId(provider.providerId);

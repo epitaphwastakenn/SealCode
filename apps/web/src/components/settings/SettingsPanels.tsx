@@ -822,7 +822,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       ["Restore default settings?", `This will reset: ${changedSettingLabels.join(", ")}.`].join(
         "\n",
       ),
-      { variant: "destructive" },
+      { variant: "destructive", confirmLabel: "Restore" },
     );
     if (!confirmed) return;
 

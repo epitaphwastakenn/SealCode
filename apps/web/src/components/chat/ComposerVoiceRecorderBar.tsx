@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Loader2Icon, XIcon } from "lucide-react";
+import { XIcon } from "lucide-react";
 
-import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
+import { Spinner } from "../ui/spinner";
 
 interface ComposerVoiceRecorderBarProps {
   disabled?: boolean;
@@ -51,13 +51,12 @@ export function ComposerVoiceRecorderBar(props: ComposerVoiceRecorderBarProps) {
       <Button
         type="button"
         size="icon-sm"
-        variant="ghost"
-        className="rounded-full text-secondary-label hover:text-foreground"
+        variant="ghost-muted"
         disabled={props.disabled || props.isTranscribing}
         aria-label="Discard voice note"
         onClick={props.onDiscard}
       >
-        <XIcon className="size-4" aria-hidden="true" />
+        <XIcon aria-hidden="true" />
       </Button>
       <div
         ref={trackRef}
@@ -72,31 +71,27 @@ export function ComposerVoiceRecorderBar(props: ComposerVoiceRecorderBarProps) {
           return (
             <span
               key={`${visibleLevels.length - index}-${index}`}
-              className="inline-block shrink-0 rounded-full bg-destructive/80"
+              className="inline-block shrink-0 rounded-full bg-foreground/35"
               style={{ width: BAR_WIDTH_PX, height }}
             />
           );
         })}
       </div>
-      <span className="shrink-0 font-mono text-xs text-secondary-label tabular-nums">
+      <span className="shrink-0 text-xs text-secondary-label tabular-nums">
         {props.isTranscribing ? "Transcribing…" : props.durationLabel}
       </span>
       <Button
         type="button"
         size="icon-sm"
-        variant="ghost"
-        className={cn(
-          "rounded-full",
-          props.isTranscribing ? "text-secondary-label" : "text-destructive hover:text-destructive",
-        )}
+        variant="ghost-muted"
         disabled={props.disabled}
         aria-label={props.isTranscribing ? "Transcribing voice note" : "Stop and transcribe"}
         onClick={props.onStop}
       >
         {props.isTranscribing ? (
-          <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
+          <Spinner aria-hidden="true" />
         ) : (
-          <span className="size-2.5 rounded-[2px] bg-current" aria-hidden="true" />
+          <span className="size-2.5 rounded-xs bg-destructive" aria-hidden="true" />
         )}
       </Button>
     </div>

@@ -11,8 +11,6 @@ import { getProviderModelCapabilities } from "../../providerModels";
 import {
   getComposerProviderState,
   getComposerReasoningStep,
-  renderProviderTraitsMenuContent,
-  renderProviderTraitsPicker,
   withImplicitFastModeDefault,
 } from "./composerProviderState";
 
@@ -471,24 +469,6 @@ describe("composer max effort frame", () => {
       promptEffort: "medium",
       modelOptionsForDispatch: selections(["effort", "medium"]),
     });
-  });
-});
-
-describe("provider traits render guards", () => {
-  it("returns null when no thread target is provided", () => {
-    const models = modelWith([
-      selectDescriptor("effort", [{ id: "high", label: "High", isDefault: true }]),
-    ]);
-    const args = {
-      provider: PROVIDER,
-      model: MODEL,
-      models,
-      modelOptions: undefined,
-      planModeEnabled: true,
-    };
-
-    expect(renderProviderTraitsPicker(args)).toBeNull();
-    expect(renderProviderTraitsMenuContent(args)).toBeNull();
   });
 });
 

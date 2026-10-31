@@ -326,7 +326,7 @@ function TimelineMinimapNavigationButton({
           type="button"
           variant="ghost-muted"
         >
-          <Icon className="size-4 text-foreground/90" />
+          <Icon className="size-4 text-foreground" />
         </Button>
       </TooltipTrigger>
       <TooltipPopup side={previous ? "top" : "bottom"}>{label}</TooltipPopup>

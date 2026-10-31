@@ -21,7 +21,7 @@ import {
   normalizeModelSlug,
 } from "@t3tools/shared/model";
 import { memo } from "react";
-import { BrainIcon, GaugeIcon } from "lucide-react";
+import { GaugeIcon } from "lucide-react";
 import {
   Menu,
   MenuGroup,
@@ -362,7 +362,7 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
                 <div className="px-2 pt-1.5 pb-1 font-medium text-muted-foreground text-xs">
                   {descriptor.label}
                 </div>
-                <div className="px-2 pb-1.5 text-muted-foreground/80 text-xs">{value}</div>
+                <div className="px-2 pb-1.5 text-muted-foreground text-xs">{value}</div>
               </MenuGroup>
             </div>
           );
@@ -396,7 +396,7 @@ export const TraitsMenuContent = memo(function TraitsMenuContentImpl({
                         {option.isDefault ? <DefaultBadge /> : null}
                       </span>
                       {option.description ? (
-                        <span className="max-w-56 text-pretty text-muted-foreground/80 text-xs">
+                        <span className="max-w-56 text-pretty text-muted-foreground text-xs">
                           {option.description}
                         </span>
                       ) : null}
@@ -520,8 +520,7 @@ export const TraitsPicker = memo(function TraitsPicker({
                 size === "xs" ? "gap-1" : "gap-1.5",
               )}
             >
-              <ComposerControlIcon icon={BrainIcon} size={size} className="redesign:hidden" />
-              <ComposerControlIcon icon={GaugeIcon} size={size} className="hidden redesign:block" />
+              <ComposerControlIcon icon={GaugeIcon} size={size} />
               <span data-composer-control-label className="min-w-0 truncate">
                 {triggerLabel}
               </span>
@@ -529,8 +528,7 @@ export const TraitsPicker = memo(function TraitsPicker({
             </span>
           ) : (
             <>
-              <ComposerControlIcon icon={BrainIcon} size={size} className="redesign:hidden" />
-              <ComposerControlIcon icon={GaugeIcon} size={size} className="hidden redesign:block" />
+              <ComposerControlIcon icon={GaugeIcon} size={size} />
               <span data-composer-control-label>{triggerLabel}</span>
               <ComposerControlChevron size={size} />
             </>

@@ -75,11 +75,8 @@ export function ProviderSubagentBar(props: {
       <span role="status" className="sr-only">
         {`${modelDescription} subagent: ${announcement}`}
       </span>
-      <span className="shrink-0 text-muted-foreground @max-[640px]/composer-surface:sr-only">
-        Runs on its own
-      </span>
       {props.onOpenParent ? (
-        <Button size="sm" variant="ghost" onClick={props.onOpenParent}>
+        <Button size="sm" variant="ghost-muted" onClick={props.onOpenParent}>
           <ArrowUpLeftIcon />
           <span className="@max-[320px]/composer-surface:sr-only">Open parent</span>
         </Button>

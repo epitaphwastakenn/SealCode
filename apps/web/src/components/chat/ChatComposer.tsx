@@ -2958,7 +2958,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       attachButton={
         showComposerAttachAction ? (
           <ComposerAttachButton
-            variant="control"
             size={composerControlsCollapsed ? "xs" : "sm"}
             disabled={isConnecting || isComposerApprovalState || projectSelectionRequired}
             addComposerAttachments={addComposerAttachments}

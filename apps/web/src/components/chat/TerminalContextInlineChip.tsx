@@ -24,8 +24,8 @@ export function TerminalContextInlineChip(props: TerminalContextInlineChipProps)
         label={label}
         accessibleLabel={`Terminal excerpt, ${label}`}
       >
-        <div className="overflow-hidden rounded-md border border-border/70 bg-background/80">
-          <div className="flex items-center gap-2 border-b border-border/70 px-3 py-2">
+        <div className="overflow-hidden rounded-md border border-border bg-background/80">
+          <div className="flex items-center gap-2 border-b border-border px-3 py-2">
             <TerminalIcon className="size-4 shrink-0 text-success" aria-hidden />
             <span className="min-w-0 truncate text-sm font-medium text-foreground">
               {terminalLabel}

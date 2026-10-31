@@ -6,28 +6,28 @@ import type * as React from "react";
 import { cn } from "~/lib/utils";
 
 const contextChipVariants = cva(
-  "inline-flex h-[1.41em] max-w-full items-center gap-[0.33em] rounded-[0.5em] border px-[0.5em] align-middle font-medium text-[0.86em] leading-none [&_svg]:block [&_svg]:size-[1.17em] [&_svg]:shrink-0 [&_svg]:self-center [button&,a&,[data-popup-open]&]:cursor-pointer [button&,a&]:transition-colors [button&,a&]:motion-reduce:transition-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-foreground disabled:cursor-default",
+  "inline-flex h-[1.41em] max-w-full items-center gap-[0.33em] rounded-[min(var(--control-radius),0.5em)] border px-[0.5em] align-middle font-medium text-[0.86em] leading-none [&_svg]:block [&_svg]:size-[1.17em] [&_svg]:shrink-0 [&_svg]:self-center [button&,a&,[data-popup-open]&]:cursor-pointer [button&,a&]:transition-colors [button&,a&]:motion-reduce:transition-none focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-foreground disabled:cursor-default",
   {
     defaultVariants: { kind: "neutral" },
     variants: {
       kind: {
-        neutral: "border-border/70 bg-accent/40 text-foreground",
-        image: "[--context-chip-accent:oklch(0.62_0.16_16)]",
-        video: "[--context-chip-accent:oklch(0.62_0.16_48)]",
-        file: "[--context-chip-accent:oklch(0.62_0.136_237)]",
-        mention: "[--context-chip-accent:oklch(0.62_0.11_215)]",
-        terminal: "[--context-chip-accent:oklch(0.62_0.134_163)]",
-        element: "[--context-chip-accent:oklch(0.62_0.134_70)]",
-        "preview-annotation": "[--context-chip-accent:oklch(0.62_0.134_70)]",
-        "review-comment": "[--context-chip-accent:oklch(0.62_0.16_292)]",
-        "pull-request": "[--context-chip-accent:oklch(0.62_0.16_277)]",
-        "pr-open": "[--context-chip-accent:oklch(0.62_0.134_163)]",
-        "pr-draft": "[--context-chip-accent:oklch(0.62_0.02_259)]",
-        "pr-merged": "[--context-chip-accent:oklch(0.62_0.16_292)]",
-        "pr-closed": "[--context-chip-accent:oklch(0.62_0.16_16)]",
-        skill: "[--context-chip-accent:oklch(0.62_0.16_322)]",
-        thread: "[--context-chip-accent:oklch(0.62_0.12_190)]",
-        citation: "[--context-chip-accent:oklch(0.62_0.16_259)]",
+        neutral: "border-border bg-row-hover text-foreground",
+        image: "[--context-chip-accent:var(--muted-foreground)]",
+        video: "[--context-chip-accent:var(--muted-foreground)]",
+        file: "[--context-chip-accent:var(--muted-foreground)]",
+        mention: "[--context-chip-accent:var(--muted-foreground)]",
+        terminal: "[--context-chip-accent:var(--success)]",
+        element: "[--context-chip-accent:var(--brand-accent)]",
+        "preview-annotation": "[--context-chip-accent:var(--warning)]",
+        "review-comment": "[--context-chip-accent:var(--brand-accent)]",
+        "pull-request": "[--context-chip-accent:var(--info)]",
+        "pr-open": "[--context-chip-accent:var(--success)]",
+        "pr-draft": "[--context-chip-accent:var(--muted-foreground)]",
+        "pr-merged": "[--context-chip-accent:var(--brand-accent)]",
+        "pr-closed": "[--context-chip-accent:var(--destructive)]",
+        skill: "[--context-chip-accent:var(--brand-accent)]",
+        thread: "[--context-chip-accent:var(--muted-foreground)]",
+        citation: "[--context-chip-accent:var(--muted-foreground)]",
       },
       state: {
         unresolved: "border-dashed",
@@ -58,7 +58,10 @@ const contextChipVariants = cva(
           "[--context-chip-border:color-mix(in_oklab,var(--context-chip-accent)_34%,var(--contrast-border))] [--context-chip-border-hover:color-mix(in_oklab,var(--context-chip-accent)_48%,var(--contrast-border))] [--context-chip-foreground:color-mix(in_oklab,var(--context-chip-accent)_22%,var(--contrast-foreground))] border-(--context-chip-border) bg-(--context-chip-accent)/11 text-(--context-chip-foreground) [button:enabled&,a&]:hover:border-(--context-chip-border-hover) [button:enabled&,a&]:hover:bg-(--context-chip-accent)/17",
       },
       { state: "unresolved", className: "text-foreground" },
-      { state: "invalid", className: "border-destructive/35 bg-destructive/8 text-destructive" },
+      {
+        state: "invalid",
+        className: "border-destructive/32 bg-destructive/8 text-error-foreground",
+      },
     ],
   },
 );

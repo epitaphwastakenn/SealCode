@@ -80,7 +80,7 @@ function TaskSummary({
       <ComposerBanner.Content>
         <span className="shrink-0 text-muted-foreground">Tasks</span>
         <span
-          className="min-w-0 flex-1 truncate text-left font-medium text-foreground/80"
+          className="min-w-0 flex-1 truncate text-left font-medium text-foreground"
           data-composer-task-current="true"
         >
           {progress.step}
@@ -175,7 +175,7 @@ export const ComposerTasksContent = memo(function ComposerTasksContent({
                       ? "text-success"
                       : step.status === "inProgress"
                         ? "text-primary"
-                        : "text-muted-foreground/40",
+                        : "text-muted-foreground",
                   )}
                 >
                   {step.status === "completed" ? (
@@ -190,10 +190,10 @@ export const ComposerTasksContent = memo(function ComposerTasksContent({
                   className={cn(
                     "block wrap-anywhere",
                     step.status === "completed"
-                      ? "text-muted-foreground/55"
+                      ? "text-muted-foreground"
                       : step.status === "inProgress"
-                        ? "text-foreground/90"
-                        : "text-muted-foreground/70",
+                        ? "text-foreground"
+                        : "text-muted-foreground",
                   )}
                 >
                   <span className="sr-only">{taskStatusLabels[step.status]}: </span>
@@ -201,7 +201,7 @@ export const ComposerTasksContent = memo(function ComposerTasksContent({
                 </ComposerBanner.Content>
                 <ComposerBanner.Actions>
                   <span
-                    className="min-w-12 text-right text-3xs/4 whitespace-nowrap text-muted-foreground/45 tabular-nums"
+                    className="min-w-12 text-right text-3xs/4 whitespace-nowrap text-muted-foreground tabular-nums"
                     data-composer-task-duration="true"
                   >
                     {step.durationMs !== undefined

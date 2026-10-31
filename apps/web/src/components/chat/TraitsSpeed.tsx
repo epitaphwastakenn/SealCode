@@ -55,11 +55,7 @@ export function TraitsSpeedIcon({
         size={size}
         className={cn(
           "fill-current opacity-80",
-          size === "xs"
-            ? "text-current"
-            : provider === "claudeAgent"
-              ? "text-[#d97757]"
-              : "text-foreground",
+          size === "xs" ? "text-current" : "text-foreground",
         )}
       />
       <span className="sr-only">

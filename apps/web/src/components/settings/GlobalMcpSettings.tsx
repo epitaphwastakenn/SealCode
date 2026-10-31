@@ -1,5 +1,5 @@
-import { PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
-import { useMemo, useState } from "react";
+import { EllipsisIcon, PlusIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
+import { useState } from "react";
 import type {
   GlobalMcpServer,
   GlobalMcpStatus,
@@ -12,18 +12,39 @@ import { serverEnvironment } from "~/state/server";
 import { useEnvironmentQuery } from "~/state/query";
 import { useAtomCommand } from "~/state/use-atom-command";
 import { usePrimarySettings, useUpdatePrimarySettings } from "~/hooks/useSettings";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
+import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
+import { DisclosureChevron } from "../ui/disclosure-chevron";
 import { Input } from "../ui/input";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
+import { StatusDot, type StatusDotTone } from "../ui/status-dot";
 import { Switch } from "../ui/switch";
-import { SettingsSection, SettingsRow } from "./settingsLayout";
+import { SettingsCallout, SettingsSection, SettingsRow } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 
-const TRANSPORTS: ReadonlyArray<{ value: GlobalMcpTransport; label: string }> = [
-  { value: "stdio", label: "Local process (stdio)" },
-  { value: "streamable-http", label: "Streamable HTTP" },
-  { value: "sse", label: "SSE" },
+const transports: ReadonlyArray<{ value: GlobalMcpTransport; label: string; short: string }> = [
+  { value: "stdio", label: "Local process (stdio)", short: "Local" },
+  { value: "streamable-http", label: "Streamable HTTP", short: "HTTP" },
+  { value: "sse", label: "SSE", short: "SSE" },
 ];
+
+const stateTones: Record<GlobalMcpStatus["state"], StatusDotTone> = {
+  ready: "success",
+  connecting: "info",
+  error: "error",
+  stopped: "muted",
+  disabled: "muted",
+};
+
+const stateLabels: Record<GlobalMcpStatus["state"], string> = {
+  ready: "Connected",
+  connecting: "Connecting",
+  error: "Error",
+  stopped: "Stopped",
+  disabled: "Off",
+};
 
 const newServer = (id: string): GlobalMcpServer => ({
   id,
@@ -45,11 +66,17 @@ function FieldList({
   readonly kind: "environment variable" | "header";
   readonly onChange: (fields: ReadonlyArray<McpSecretField>) => void;
 }) {
+  const seen = new Map<string, number>();
+  const fieldKeys = fields.map((field) => {
+    const occurrence = seen.get(field.name) ?? 0;
+    seen.set(field.name, occurrence + 1);
+    return `${field.name}:${occurrence}`;
+  });
   return (
     <div className="space-y-2">
       {fields.map((field, index) => (
         <McpFieldRow
-          key={`${field.name}-${index}`}
+          key={fieldKeys[index]}
           field={field}
           kind={kind}
           onChange={(next) => {
@@ -154,7 +181,7 @@ function McpFieldRow({
   );
 }
 
-function McpServerCard({
+function McpServerRow({
   server,
   status,
   onChange,
@@ -170,181 +197,194 @@ function McpServerCard({
   readonly reconnecting: boolean;
 }) {
   const isRemote = server.transport !== "stdio";
+  const [open, setOpen] = useState(false);
+  const state = status?.state ?? (server.enabled ? "connecting" : "disabled");
   return (
-    <div className="rounded-xl border border-border/70 bg-muted/10 p-3 sm:p-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-[minmax(9rem,0.6fr)_minmax(0,1fr)]">
-          <Input
-            value={server.id}
-            aria-label="MCP server id"
-            onChange={(event) => onChange({ ...server, id: event.target.value })}
-          />
-          <Input
-            value={server.displayName}
-            aria-label="MCP server display name"
-            onChange={(event) => onChange({ ...server, displayName: event.target.value })}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Switch
-            checked={server.enabled}
-            onCheckedChange={(enabled) => onChange({ ...server, enabled })}
-            aria-label={`Enable ${server.displayName}`}
-          />
-          <Button
-            type="button"
-            size="icon-xs"
-            variant="ghost"
-            aria-label="Remove MCP server"
-            onClick={onRemove}
-          >
-            <Trash2Icon className="size-3.5" />
-          </Button>
-        </div>
-      </div>
-
-      <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <label className="space-y-1 text-xs text-muted-foreground">
-          <span>Transport</span>
-          <Select
-            value={server.transport}
-            onValueChange={(value) => {
-              if (typeof value !== "string") return;
-              const transport = value as GlobalMcpTransport;
-              const {
-                command: _command,
-                url: _url,
-                args: _args,
-                cwd: _cwd,
-                env: _env,
-                headers: _headers,
-                ...base
-              } = server;
-              onChange(
-                transport === "stdio"
-                  ? {
-                      ...base,
-                      transport,
-                      command: server.command ?? "mcp-server",
-                      args: server.args,
-                      env: server.env,
-                      headers: [],
-                    }
-                  : {
-                      ...base,
-                      transport,
-                      url: server.url ?? "",
-                      args: [],
-                      env: [],
-                      headers: server.headers,
-                    },
-              );
-            }}
-          >
-            <SelectTrigger aria-label="MCP transport">
-              <SelectValue>
-                {TRANSPORTS.find((item) => item.value === server.transport)?.label}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectPopup>
-              {TRANSPORTS.map((item) => (
-                <SelectItem key={item.value} value={item.value} hideIndicator>
-                  {item.label}
-                </SelectItem>
-              ))}
-            </SelectPopup>
-          </Select>
-        </label>
-        {isRemote ? (
-          <Input
-            value={server.url ?? ""}
-            placeholder="https://example.test/mcp"
-            aria-label="MCP server URL"
-            onChange={(event) => onChange({ ...server, url: event.target.value })}
-          />
-        ) : (
-          <Input
-            value={server.command ?? ""}
-            placeholder="Command"
-            aria-label="MCP server command"
-            onChange={(event) => onChange({ ...server, command: event.target.value })}
-          />
-        )}
-      </div>
-
-      {server.transport === "stdio" ? (
-        <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <Input
-            value={(server.args ?? []).join(" ")}
-            placeholder="Arguments separated by spaces"
-            aria-label="MCP server arguments"
-            onChange={(event) =>
-              onChange({
-                ...server,
-                args: event.target.value.trim() ? event.target.value.trim().split(/\s+/u) : [],
-              })
+    <Collapsible open={open} onOpenChange={setOpen}>
+      <div className="flex items-center gap-2 px-3 py-2 sm:px-4">
+        <CollapsibleTrigger className="flex min-h-9 min-w-0 flex-1 items-center gap-2 rounded-md text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring">
+          <DisclosureChevron open={open} />
+          <StatusDot aria-label={stateLabels[state]} tone={stateTones[state]} />
+          <span className="min-w-0 truncate text-sm font-medium text-foreground">
+            {server.displayName}
+          </span>
+          <Badge variant="outline" size="sm">
+            {transports.find((item) => item.value === server.transport)?.short}
+          </Badge>
+          <span className="shrink-0 text-xs tabular-nums text-muted-foreground">
+            {status?.toolCount ?? 0} tools
+          </span>
+        </CollapsibleTrigger>
+        <Switch
+          checked={server.enabled}
+          onCheckedChange={(enabled) => onChange({ ...server, enabled })}
+          aria-label={`Enable ${server.displayName}`}
+        />
+        <Menu>
+          <MenuTrigger
+            render={
+              <Button
+                aria-label={`${server.displayName} actions`}
+                size="icon-xs"
+                type="button"
+                variant="ghost-muted"
+              />
             }
-          />
-          <Input
-            value={server.cwd ?? ""}
-            placeholder="Working directory (optional)"
-            aria-label="MCP server working directory"
-            onChange={(event) => {
-              const cwd = event.target.value;
-              if (cwd) {
-                onChange({ ...server, cwd });
-              } else {
-                const { cwd: _cwd, ...withoutCwd } = server;
-                onChange(withoutCwd);
-              }
-            }}
-          />
+          >
+            <EllipsisIcon />
+          </MenuTrigger>
+          <MenuPopup align="end">
+            <MenuItem disabled={reconnecting} onClick={onReconnect}>
+              <RefreshCwIcon />
+              Reconnect
+            </MenuItem>
+            <MenuItem variant="destructive" onClick={onRemove}>
+              <Trash2Icon />
+              Remove
+            </MenuItem>
+          </MenuPopup>
+        </Menu>
+      </div>
+      <CollapsiblePanel>
+        <div className="space-y-3 border-t border-border/50 px-3 py-3 sm:px-4">
+          {status?.errorMessage ? (
+            <SettingsCallout tone="error">{status.errorMessage}</SettingsCallout>
+          ) : null}
+          <div className="grid gap-2 sm:grid-cols-[minmax(9rem,0.6fr)_minmax(0,1fr)]">
+            <Input
+              value={server.id}
+              aria-label="MCP server id"
+              onChange={(event) => onChange({ ...server, id: event.target.value })}
+            />
+            <Input
+              value={server.displayName}
+              aria-label="MCP server display name"
+              onChange={(event) => onChange({ ...server, displayName: event.target.value })}
+            />
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="space-y-1 text-xs text-muted-foreground">
+              <span>Transport</span>
+              <Select
+                value={server.transport}
+                onValueChange={(value) => {
+                  if (typeof value !== "string") return;
+                  const transport = value as GlobalMcpTransport;
+                  const {
+                    command: _command,
+                    url: _url,
+                    args: _args,
+                    cwd: _cwd,
+                    env: _env,
+                    headers: _headers,
+                    ...base
+                  } = server;
+                  onChange(
+                    transport === "stdio"
+                      ? {
+                          ...base,
+                          transport,
+                          command: server.command ?? "mcp-server",
+                          args: server.args,
+                          env: server.env,
+                          headers: [],
+                        }
+                      : {
+                          ...base,
+                          transport,
+                          url: server.url ?? "",
+                          args: [],
+                          env: [],
+                          headers: server.headers,
+                        },
+                  );
+                }}
+              >
+                <SelectTrigger aria-label="MCP transport">
+                  <SelectValue>
+                    {transports.find((item) => item.value === server.transport)?.label}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectPopup>
+                  {transports.map((item) => (
+                    <SelectItem key={item.value} value={item.value} hideIndicator>
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectPopup>
+              </Select>
+            </label>
+            {isRemote ? (
+              <Input
+                value={server.url ?? ""}
+                placeholder="https://example.test/mcp"
+                aria-label="MCP server URL"
+                onChange={(event) => onChange({ ...server, url: event.target.value })}
+              />
+            ) : (
+              <Input
+                value={server.command ?? ""}
+                placeholder="Command"
+                aria-label="MCP server command"
+                onChange={(event) => onChange({ ...server, command: event.target.value })}
+              />
+            )}
+          </div>
+
+          {server.transport === "stdio" ? (
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input
+                value={(server.args ?? []).join(" ")}
+                placeholder="Arguments separated by spaces"
+                aria-label="MCP server arguments"
+                onChange={(event) =>
+                  onChange({
+                    ...server,
+                    args: event.target.value.trim() ? event.target.value.trim().split(/\s+/u) : [],
+                  })
+                }
+              />
+              <Input
+                value={server.cwd ?? ""}
+                placeholder="Working directory (optional)"
+                aria-label="MCP server working directory"
+                onChange={(event) => {
+                  const cwd = event.target.value;
+                  if (cwd) {
+                    onChange({ ...server, cwd });
+                  } else {
+                    const { cwd: _cwd, ...withoutCwd } = server;
+                    onChange(withoutCwd);
+                  }
+                }}
+              />
+            </div>
+          ) : null}
+
+          <div>
+            {server.transport === "stdio" ? (
+              <>
+                <p className="mb-2 text-xs font-medium text-muted-foreground">Environment</p>
+                <FieldList
+                  fields={server.env}
+                  kind="environment variable"
+                  onChange={(env) => onChange({ ...server, env })}
+                />
+              </>
+            ) : (
+              <>
+                <p className="mb-2 text-xs font-medium text-muted-foreground">Headers</p>
+                <FieldList
+                  fields={server.headers}
+                  kind="header"
+                  onChange={(headers) => onChange({ ...server, headers })}
+                />
+              </>
+            )}
+          </div>
         </div>
-      ) : null}
-
-      <div className="mt-4">
-        {server.transport === "stdio" ? (
-          <>
-            <p className="mb-2 text-xs font-medium text-muted-foreground">Environment</p>
-            <FieldList
-              fields={server.env}
-              kind="environment variable"
-              onChange={(env) => onChange({ ...server, env })}
-            />
-          </>
-        ) : (
-          <>
-            <p className="mb-2 text-xs font-medium text-muted-foreground">Headers</p>
-            <FieldList
-              fields={server.headers}
-              kind="header"
-              onChange={(headers) => onChange({ ...server, headers })}
-            />
-          </>
-        )}
-      </div>
-
-      <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span className={status?.state === "ready" ? "text-success" : undefined}>
-          {status?.state ?? (server.enabled ? "connecting" : "disabled")}
-        </span>
-        <span>{status?.toolCount ?? 0} tools</span>
-        {status?.errorMessage ? (
-          <span className="text-destructive">{status.errorMessage}</span>
-        ) : null}
-        <Button
-          type="button"
-          size="xs"
-          variant="outline"
-          className="ml-auto"
-          disabled={reconnecting}
-          onClick={onReconnect}
-        >
-          <RefreshCwIcon className={reconnecting ? "size-3 animate-spin" : "size-3"} />
-          Reconnect
-        </Button>
-      </div>
-    </div>
+      </CollapsiblePanel>
+    </Collapsible>
   );
 }
 
@@ -366,10 +406,7 @@ export function GlobalMcpSettings() {
   });
   const [reconnectingId, setReconnectingId] = useState<string | null>(null);
   const statuses = statusUpdates.data?.statuses ?? statusesQuery.data ?? [];
-  const statusById = useMemo(
-    () => new Map(statuses.map((status) => [status.id, status] as const)),
-    [statuses],
-  );
+  const statusById = new Map(statuses.map((status) => [status.id, status] as const));
   const servers = settings.mcpServers ?? {};
 
   const commit = (next: Record<string, GlobalMcpServer>) => updateSettings({ mcpServers: next });
@@ -383,10 +420,10 @@ export function GlobalMcpSettings() {
   return (
     <SettingsSection
       {...searchableSetting("global-mcp-servers")}
-      description="Connect external MCP servers once for this Harp environment. Every provider receives the authenticated gateway, while local process configuration stays on the server."
+      description="Connect external MCP servers once. Every provider gets them through Harp's authenticated gateway."
     >
       {Object.values(servers).map((server) => (
-        <McpServerCard
+        <McpServerRow
           key={server.id}
           server={server}
           status={statusById.get(server.id)}

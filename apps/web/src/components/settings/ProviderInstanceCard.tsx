@@ -37,7 +37,6 @@ import {
 } from "@t3tools/shared/model";
 import { cn } from "../../lib/utils";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
-import { useClientSettings } from "../../hooks/useSettings";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { normalizeProviderAccentColor } from "../../providerInstances";
 import { Badge } from "../ui/badge";
@@ -687,7 +686,6 @@ export function ProviderInstanceCard({
   const displayName =
     instance.displayName?.trim() || driverOption?.label || String(instance.driver);
   const accentColor = normalizeProviderAccentColor(instance.accentColor);
-  const redesign = useClientSettings((settings) => settings.redesignEnabled);
   const { copyToClipboard } = useCopyToClipboard<{ providerName: string }>({
     onCopy: ({ providerName }) => {
       toastManager.add({
@@ -992,7 +990,7 @@ export function ProviderInstanceCard({
         data-slot="settings-row"
         className={cn(
           "group flex min-h-18 items-center gap-3 px-3 py-3 transition-colors sm:px-4",
-          selected ? "bg-muted/45 redesign:bg-foreground/[0.06]" : "hover:bg-muted/25",
+          selected ? "bg-row-selected" : "hover:bg-row-hover",
         )}
       >
         <div
@@ -1159,11 +1157,15 @@ export function ProviderInstanceCard({
 
   return (
     <>
-      <SettingsSection title={displayName} icon={titleIconNode} headerAction={editorHeaderAction}>
-        {redesign ? <SettingsRow title="Status" status={statusContent} /> : null}
+      <SettingsSection
+        title={displayName}
+        icon={titleIconNode}
+        headerAction={editorHeaderAction}
+        variant="flat"
+      >
+        <SettingsRow title="Status" status={statusContent} />
         <SettingsRow
           title="Display name"
-          {...(redesign ? {} : { status: statusContent })}
           control={
             <div
               inert={readOnly}
@@ -1242,7 +1244,7 @@ export function ProviderInstanceCard({
       </SettingsSection>
 
       {setup || environmentFields.length > 0 ? (
-        <SettingsSection title="Setup">
+        <SettingsSection title="Setup" variant="flat">
           {setup}
           {environmentFields.length > 0 ? (
             <div
@@ -1276,6 +1278,7 @@ export function ProviderInstanceCard({
             id={`provider-instance-${instanceId}-runtime`}
             title="Runtime"
             headerPlacement="outside"
+            variant="flat"
           >
             {runtime ?? runtimeFields}
           </FoldedSettingsSection>
@@ -1283,6 +1286,7 @@ export function ProviderInstanceCard({
       ) : !driverOption || deriveProviderSettingsFields(driverOption).length > 0 ? (
         <SettingsSection
           title="Runtime"
+          variant="flat"
           inert={readOnly}
           aria-disabled={readOnly || undefined}
           className={readOnly ? "opacity-50 select-none" : undefined}
@@ -1293,6 +1297,7 @@ export function ProviderInstanceCard({
 
       <SettingsSection
         title="Environment"
+        variant="flat"
         inert={readOnly}
         aria-disabled={readOnly || undefined}
         className={readOnly ? "opacity-50 select-none" : undefined}
@@ -1315,6 +1320,7 @@ export function ProviderInstanceCard({
       {driverOption !== undefined ? (
         <SettingsSection
           title="Models"
+          variant="flat"
           description="Model preferences and custom models are saved on the selected environment and shared across connected devices."
         >
           <div className="px-3 py-3 sm:px-4">

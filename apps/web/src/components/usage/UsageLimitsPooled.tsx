@@ -406,7 +406,7 @@ function SegmentTriggers({
             className={cn(
               "shrink-0 font-semibold text-foreground tabular-nums",
               // A single-account bar repeats the headline percentage.
-              !showAccountName && "redesign:hidden",
+              !showAccountName && "hidden",
             )}
           >
             {remaining}%

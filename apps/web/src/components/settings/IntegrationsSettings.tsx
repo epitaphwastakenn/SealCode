@@ -46,6 +46,10 @@ import { previewEnvironment } from "~/state/preview";
 import { useServerConfigs } from "~/state/entities";
 import { squashAtomCommandFailure } from "@t3tools/client-runtime/state/runtime";
 import { isElectron } from "../../env";
+import { isWindowsPlatform } from "../../lib/utils";
+import { ComputerUseSettings } from "./ComputerUseSettings";
+import { GlobalMcpSettings } from "./GlobalMcpSettings";
+import { useCanManageLocalBackend } from "./useCanManageLocalBackend";
 
 import { Badge } from "../ui/badge";
 import {
@@ -1308,6 +1312,7 @@ function BrowserProfilesSetting({ disabled }: { readonly disabled: boolean }) {
 }
 
 export function IntegrationsSettingsPanel() {
+  const canManageLocalBackend = useCanManageLocalBackend();
   const previewDefaultsDisabled = !isElectron;
   const previewDefaults = (
     <>
@@ -1337,6 +1342,10 @@ export function IntegrationsSettingsPanel() {
         <BrowserSearchEngineSetting />
         <PullRequestLinksOpenInAppSetting />
       </SettingsSection>
+      {canManageLocalBackend && isElectron && isWindowsPlatform(navigator.platform) ? (
+        <ComputerUseSettings />
+      ) : null}
+      {canManageLocalBackend ? <GlobalMcpSettings /> : null}
     </SettingsPageContainer>
   );
 }

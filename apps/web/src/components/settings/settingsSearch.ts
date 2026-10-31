@@ -22,7 +22,7 @@ export type SettingsPath =
   | "/settings/diagnostics"
   | "/settings/appearance"
   | "/settings/keybindings"
-  | "/settings/snap-shot"
+  | "/settings/roblox-studio"
   | "/settings/providers"
   | "/settings/integrations"
   | "/settings/scheduled-tasks"
@@ -77,7 +77,7 @@ export const SETTINGS_SECTION_LABELS: Readonly<Record<SettingsPath, string>> = {
   "/settings/general": "General",
   "/settings/appearance": "Appearance",
   "/settings/keybindings": "Keybindings",
-  "/settings/snap-shot": "SnapShots",
+  "/settings/roblox-studio": "Roblox Studio",
   "/settings/providers": "Providers",
   "/settings/integrations": "Integrations",
   "/settings/scheduled-tasks": "Scheduled tasks",
@@ -255,13 +255,13 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "glass-app",
-    title: "Glass app",
+    title: "Glass",
     to: "/settings/appearance",
     searchTerms: ["translucent transparent acrylic whole window panels see through"],
   },
   {
     id: "panel-glass-opacity",
-    title: "Panel glass",
+    title: "Panel opacity",
     to: "/settings/appearance",
     searchTerms: ["transparency tint panels solid see through glass amount"],
   },
@@ -307,9 +307,9 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     // Prefixed because the slider control already owns the `glass-opacity` id.
     id: "setting-glass-opacity",
-    title: "Glass opacity",
+    title: "Menu and dialog opacity",
     to: "/settings/appearance",
-    searchTerms: ["transparent transparency solid menus dialogs composer"],
+    searchTerms: ["glass transparent transparency solid menus dialogs composer"],
   },
   {
     id: "diff-color-scheme",
@@ -348,8 +348,8 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "harness-sound-volume",
-    title: "Sound volume",
-    to: "/settings/appearance",
+    title: "Notification sound volume",
+    to: "/settings/general",
     searchTerms: ["harness notification sound volume audio"],
   },
   {
@@ -724,15 +724,15 @@ export const SETTINGS_SEARCH_ITEMS = [
   },
   {
     id: "legacy-plan-mode",
-    title: "Plan mode (legacy)",
+    title: "Plan mode",
     to: "/settings/general",
-    searchTerms: ["build plan composer old"],
+    searchTerms: ["build plan composer"],
   },
   {
     id: "legacy-context-window-indicator",
-    title: "Context window indicator (legacy)",
+    title: "Context window indicator",
     to: "/settings/general",
-    searchTerms: ["composer meter usage tokens circle old"],
+    searchTerms: ["composer meter usage tokens circle"],
   },
   {
     id: "keybindings",
@@ -745,12 +745,12 @@ export const SETTINGS_SEARCH_ITEMS = [
     id: "snap-shot-enabled",
     title: "SnapShots",
     searchTerms: ["window capture screenshot"],
-    to: "/settings/snap-shot",
+    to: "/settings/general",
   },
   {
     id: "snap-shot-accessibility",
     title: "Include app text",
-    to: "/settings/snap-shot",
+    to: "/settings/general",
     targetId: "snap-shot-enabled",
     searchTerms: [
       "capture accessibility data text UI structure elements privacy omit agent context",
@@ -759,25 +759,25 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "snap-shot-shortcut",
     title: "Capture shortcut",
-    to: "/settings/snap-shot",
+    to: "/settings/general",
     targetId: "snap-shot-enabled",
   },
   {
     id: "snap-shot-sound",
     title: "Capture sound",
-    to: "/settings/snap-shot",
+    to: "/settings/general",
     targetId: "snap-shot-enabled",
   },
   {
     id: "snap-shot-flash",
     title: "Capture flash",
-    to: "/settings/snap-shot",
+    to: "/settings/general",
     targetId: "snap-shot-enabled",
   },
   {
     id: "snap-shot-animations",
     title: "Capture animations",
-    to: "/settings/snap-shot",
+    to: "/settings/general",
     targetId: "snap-shot-enabled",
   },
   {
@@ -1078,7 +1078,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "roblox-studio",
     title: "Roblox Studio",
-    to: "/settings/connections",
+    to: "/settings/roblox-studio",
     searchTerms: [
       "roblox studio sealcode plugin mcp bridge blender skills rojo open cloud playtest luau screenshot camera creator store panel switch tool safety pause agent read-only",
     ],
@@ -1086,7 +1086,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "computer-use",
     title: "Computer use",
-    to: "/settings/connections",
+    to: "/settings/integrations",
     searchTerms: [
       "computer use mouse keyboard screen screenshot overlay desktop apps paint permission browsers view only terminals ides clicks esc stops new agent sessions",
     ],
@@ -1097,7 +1097,7 @@ export const SETTINGS_SEARCH_ITEMS = [
   {
     id: "global-mcp-servers",
     title: "Global MCP servers",
-    to: "/settings/connections",
+    to: "/settings/integrations",
     searchTerms: [
       "model context protocol tools stdio http sse providers external servers authenticated gateway local process configuration",
     ],
@@ -1119,7 +1119,7 @@ const SETTINGS_CATEGORY_SCOPES: Readonly<Record<SettingsPath, SettingsSearchScop
   "/settings/projects": "project",
   "/settings/general": null,
   "/settings/appearance": null,
-  "/settings/snap-shot": null,
+  "/settings/roblox-studio": null,
   "/settings/keybindings": null,
   "/settings/providers": null,
   "/settings/integrations": null,

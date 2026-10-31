@@ -13,13 +13,15 @@ import {
   clearBackdropEffects,
   DEFAULT_UNIFIED_SETTINGS,
   MAX_BACKDROP_STYLES,
+  MAX_GLASS_OPACITY,
   MAX_PANEL_GLASS_OPACITY,
+  MIN_GLASS_OPACITY,
   MIN_PANEL_GLASS_OPACITY,
   newAppBackdrop,
   sameBackdropLook,
 } from "@t3tools/contracts";
 import { ImageIcon, PlusIcon, Trash2Icon, UploadIcon, XIcon } from "lucide-react";
-import { type CSSProperties, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import {
   deleteBackdropImage,
@@ -35,7 +37,14 @@ import { Input } from "../ui/input";
 import { Switch } from "../ui/switch";
 import { toastManager } from "../ui/toast";
 import { Toggle } from "../ui/toggle";
-import { SettingResetButton, SettingsRow, SettingsSection } from "./settingsLayout";
+import { useThrottledRange } from "~/hooks/useThrottledRange";
+import {
+  SettingResetButton,
+  SettingsRow,
+  SettingsSection,
+  SettingsSlider,
+  settingsSliderStyle,
+} from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 
@@ -95,11 +104,6 @@ function BackdropSlider(props: {
   readonly onChange: (value: number) => void;
 }) {
   const { spec } = props;
-  const ratio = (props.value - spec.min) / (spec.max - spec.min);
-  const style = {
-    "--settings-slider-progress": `${ratio * 100}%`,
-    "--settings-slider-fill-offset": `${0.5 - ratio}rem`,
-  } as CSSProperties;
   return (
     <label
       htmlFor={props.id}
@@ -121,7 +125,7 @@ function BackdropSlider(props: {
         step={spec.step}
         value={props.value}
         disabled={props.disabled}
-        style={style}
+        style={settingsSliderStyle(props.value, spec.min, spec.max)}
         onChange={(event) => {
           const value = Number(event.currentTarget.value);
           if (Number.isFinite(value)) props.onChange(value);
@@ -132,31 +136,31 @@ function BackdropSlider(props: {
 }
 
 function useBackdropPreview(imageId: string | null): string | null {
-  const [url, setUrl] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState<{ imageId: string; url: string } | null>(null);
   useEffect(() => {
-    if (imageId === null) {
-      setUrl(null);
-      return;
-    }
+    if (imageId === null) return;
     let cancelled = false;
     let created: string | null = null;
     void loadBackdropImage(imageId).then((blob) => {
       if (cancelled || !blob) return;
       created = URL.createObjectURL(blob);
-      setUrl(created);
+      setLoaded({ imageId, url: created });
     });
     return () => {
       cancelled = true;
       if (created !== null) URL.revokeObjectURL(created);
     };
   }, [imageId]);
-  return url;
+  return imageId !== null && loaded?.imageId === imageId ? loaded.url : null;
 }
 
 export function BackgroundSettingsSection() {
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
   const backdrop = settings.backdrop;
+  const glassOpacityRange = useThrottledRange(settings.glassOpacity, (glassOpacity) =>
+    updateSettings({ glassOpacity }),
+  );
   const fileInputRef = useRef<HTMLInputElement>(null);
   const preview = useBackdropPreview(backdrop?.imageId ?? null);
   const [namingStyle, setNamingStyle] = useState(false);
@@ -252,12 +256,9 @@ export function BackgroundSettingsSection() {
   };
 
   const fading = look !== null && look.fade !== "none";
-  const glassRatio =
-    (settings.panelGlassOpacity - MIN_PANEL_GLASS_OPACITY) /
-    (MAX_PANEL_GLASS_OPACITY - MIN_PANEL_GLASS_OPACITY);
 
   return (
-    <SettingsSection id="appearance-background" title="Background & glass">
+    <SettingsSection id="appearance-background" title="Glass and background">
       <SettingsRow
         {...searchableSetting("glass-app")}
         description="Make every panel translucent so the window behind the app shows through: the image below, or the desktop's acrylic on Windows."
@@ -294,43 +295,65 @@ export function BackgroundSettingsSection() {
           ) : null
         }
         control={
-          <div className="flex w-full items-center gap-3 sm:w-52">
-            <output
-              className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
-              htmlFor="panel-glass-opacity-slider"
-            >
-              {settings.panelGlassOpacity >= MAX_PANEL_GLASS_OPACITY
-                ? "Solid"
-                : `${settings.panelGlassOpacity}%`}
-            </output>
-            <input
-              aria-label="Panel glass"
-              className="settings-slider min-w-0 flex-1"
-              id="panel-glass-opacity-slider"
-              type="range"
-              min={MIN_PANEL_GLASS_OPACITY}
-              max={MAX_PANEL_GLASS_OPACITY}
-              step={1}
-              disabled={!settings.glassAppEnabled}
-              style={
-                {
-                  "--settings-slider-progress": `${glassRatio * 100}%`,
-                  "--settings-slider-fill-offset": `${0.5 - glassRatio}rem`,
-                } as CSSProperties
+          <SettingsSlider
+            label="Panel opacity"
+            min={MIN_PANEL_GLASS_OPACITY}
+            max={MAX_PANEL_GLASS_OPACITY}
+            disabled={!settings.glassAppEnabled}
+            format={(value) => (value >= MAX_PANEL_GLASS_OPACITY ? "Solid" : `${value}%`)}
+            value={settings.panelGlassOpacity}
+            onChange={(panelGlassOpacity) => updateSettings({ panelGlassOpacity })}
+          />
+        }
+      />
+
+      <SettingsRow
+        {...searchableSetting("setting-glass-opacity")}
+        description="Higher values make menus, dialogs and the composer more solid."
+        resetAction={
+          settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? (
+            <SettingResetButton
+              label="menu and dialog opacity"
+              onClick={() =>
+                updateSettings({ glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity })
               }
-              value={settings.panelGlassOpacity}
-              onChange={(event) => {
-                const panelGlassOpacity = Number(event.currentTarget.value);
-                if (
-                  Number.isInteger(panelGlassOpacity) &&
-                  panelGlassOpacity >= MIN_PANEL_GLASS_OPACITY &&
-                  panelGlassOpacity <= MAX_PANEL_GLASS_OPACITY
-                ) {
-                  updateSettings({ panelGlassOpacity });
-                }
-              }}
             />
-          </div>
+          ) : null
+        }
+        control={
+          <SettingsSlider
+            label="Menu and dialog opacity"
+            min={MIN_GLASS_OPACITY}
+            max={MAX_GLASS_OPACITY}
+            step={5}
+            value={glassOpacityRange.value}
+            onChange={glassOpacityRange.onChange}
+            onFinish={glassOpacityRange.onFinish}
+          />
+        }
+      />
+
+      <SettingsRow
+        {...searchableSetting("glass-sidebar")}
+        description="Render the sidebar as a translucent glass panel over the window background. On Windows this reveals the desktop acrylic material behind the app."
+        resetAction={
+          settings.glassSidebarEnabled !== DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled ? (
+            <SettingResetButton
+              label="glass sidebar"
+              onClick={() =>
+                updateSettings({
+                  glassSidebarEnabled: DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled,
+                })
+              }
+            />
+          ) : null
+        }
+        control={
+          <Switch
+            checked={settings.glassSidebarEnabled}
+            onCheckedChange={(checked) => updateSettings({ glassSidebarEnabled: Boolean(checked) })}
+            aria-label="Glass sidebar"
+          />
         }
       />
 
@@ -402,9 +425,7 @@ export function BackgroundSettingsSection() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Style
-              </span>
+              <span className="text-xs font-medium text-muted-foreground">Style</span>
               <div className="flex flex-wrap items-center gap-2">
                 <Toggle
                   variant="outline"
@@ -486,9 +507,7 @@ export function BackgroundSettingsSection() {
             </div>
 
             <div className="flex flex-col gap-2">
-              <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                Effects
-              </span>
+              <span className="text-xs font-medium text-muted-foreground">Effects</span>
               <div className="grid grid-cols-1 gap-x-4 gap-y-3 sm:grid-cols-2">
                 {EFFECT_SLIDERS.map(([key, spec]) => (
                   <BackdropSlider

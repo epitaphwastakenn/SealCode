@@ -1,12 +1,6 @@
 import { MousePointer2Icon, PaintbrushIcon, PlusIcon, XIcon } from "lucide-react";
 import { ChevronDown, ChevronUp } from "lucide";
-import {
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type PointerEvent as ReactPointerEvent,
-} from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import {
   adjustThemeColorsBrightness,
   applyThemeColorPreview,
@@ -38,6 +32,7 @@ import { Switch } from "../ui/switch";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { getThemeRoleLabel, ThemeColorField } from "./ThemeColorPicker";
+import { settingsSliderStyle } from "./settingsLayout";
 import {
   clearThemeInspectorHover,
   clearThemeInspectorHighlights,
@@ -960,7 +955,6 @@ export function ThemeEditorPanel({
 
   const renderBrightnessSlider = () => {
     const percent = Math.round(brightness * 100);
-    const ratio = (brightness + 1) / 2;
     return (
       <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,2fr)] items-center gap-3">
         <span className="text-sm font-medium">Brightness</span>
@@ -974,12 +968,7 @@ export function ThemeEditorPanel({
             onChange={(event) => setBrightness(Number(event.currentTarget.value) / 100)}
             onDoubleClick={() => setBrightness(0)}
             step={1}
-            style={
-              {
-                "--settings-slider-progress": `${ratio * 100}%`,
-                "--settings-slider-fill-offset": `${0.5 - ratio}rem`,
-              } as CSSProperties
-            }
+            style={settingsSliderStyle(percent, -100, 100)}
             type="range"
             value={percent}
           />

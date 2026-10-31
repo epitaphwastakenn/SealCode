@@ -1,4 +1,3 @@
-import type { CSSProperties } from "react";
 import { useState } from "react";
 import {
   DEFAULT_ENVIRONMENT_IDENTIFICATION_MODE,
@@ -6,13 +5,9 @@ import {
   type ChatWidth,
   type EnvironmentIdentificationMode,
   MAX_APPEARANCE_CONTRAST,
-  MAX_GLASS_OPACITY,
-  MAX_HARNESS_SOUND_VOLUME,
   MAX_PANEL_ANIMATION_DURATION_MS,
   MAX_SCROLLBAR_SIZE,
   MIN_APPEARANCE_CONTRAST,
-  MIN_GLASS_OPACITY,
-  MIN_HARNESS_SOUND_VOLUME,
   MIN_PANEL_ANIMATION_DURATION_MS,
   MIN_SCROLLBAR_SIZE,
 } from "@t3tools/contracts/settings";
@@ -30,6 +25,7 @@ import {
   SettingsPageContainer,
   SettingsRow,
   SettingsSection,
+  SettingsSlider,
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 import { PanelAnimationsPreview } from "./PanelAnimationsPreview";
@@ -66,9 +62,6 @@ export function AppearanceSettingsPanel() {
   const [isImportThemeOpen, setIsImportThemeOpen] = useState(false);
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
-  const glassOpacityRange = useThrottledRange(settings.glassOpacity, (glassOpacity) =>
-    updateSettings({ glassOpacity }),
-  );
   const appearanceContrastRange = useThrottledRange(
     settings.appearanceContrast,
     (appearanceContrast) => updateSettings({ appearanceContrast }),
@@ -77,49 +70,12 @@ export function AppearanceSettingsPanel() {
     settings.panelAnimationDurationMs,
     (panelAnimationDurationMs) => updateSettings({ panelAnimationDurationMs }),
   );
-  const harnessSoundVolumeRange = useThrottledRange(
-    settings.harnessSoundVolume,
-    (harnessSoundVolume) => updateSettings({ harnessSoundVolume }),
-  );
   const scrollbarSizeRange = useThrottledRange(settings.scrollbarSize, (scrollbarSize) =>
     updateSettings({ scrollbarSize }),
   );
   const environmentStageLabel = useEnvironmentStageLabel();
   const showEnvironmentIdentification =
     resolveEnvironmentIdentificationPillLabel(environmentStageLabel) !== null;
-  const glassOpacityRatio =
-    (glassOpacityRange.value - MIN_GLASS_OPACITY) / (MAX_GLASS_OPACITY - MIN_GLASS_OPACITY);
-  const glassOpacitySliderStyle = {
-    "--settings-slider-progress": `${glassOpacityRatio * 100}%`,
-    "--settings-slider-fill-offset": `${0.5 - glassOpacityRatio}rem`,
-  } as CSSProperties;
-  const appearanceContrastRatio =
-    (appearanceContrastRange.value - MIN_APPEARANCE_CONTRAST) /
-    (MAX_APPEARANCE_CONTRAST - MIN_APPEARANCE_CONTRAST);
-  const appearanceContrastSliderStyle = {
-    "--settings-slider-progress": `${appearanceContrastRatio * 100}%`,
-    "--settings-slider-fill-offset": `${0.5 - appearanceContrastRatio}rem`,
-  } as CSSProperties;
-  const panelAnimationDurationRatio =
-    (panelAnimationDurationRange.value - MIN_PANEL_ANIMATION_DURATION_MS) /
-    (MAX_PANEL_ANIMATION_DURATION_MS - MIN_PANEL_ANIMATION_DURATION_MS);
-  const panelAnimationDurationSliderStyle = {
-    "--settings-slider-progress": `${panelAnimationDurationRatio * 100}%`,
-    "--settings-slider-fill-offset": `${0.5 - panelAnimationDurationRatio}rem`,
-  } as CSSProperties;
-  const harnessSoundVolumeRatio =
-    (harnessSoundVolumeRange.value - MIN_HARNESS_SOUND_VOLUME) /
-    (MAX_HARNESS_SOUND_VOLUME - MIN_HARNESS_SOUND_VOLUME);
-  const harnessSoundVolumeSliderStyle = {
-    "--settings-slider-progress": `${harnessSoundVolumeRatio * 100}%`,
-    "--settings-slider-fill-offset": `${0.5 - harnessSoundVolumeRatio}rem`,
-  } as CSSProperties;
-  const scrollbarSizeRatio =
-    (scrollbarSizeRange.value - MIN_SCROLLBAR_SIZE) / (MAX_SCROLLBAR_SIZE - MIN_SCROLLBAR_SIZE);
-  const scrollbarSizeSliderStyle = {
-    "--settings-slider-progress": `${scrollbarSizeRatio * 100}%`,
-    "--settings-slider-fill-offset": `${0.5 - scrollbarSizeRatio}rem`,
-  } as CSSProperties;
 
   return (
     <SettingsPageContainer>
@@ -164,168 +120,19 @@ export function AppearanceSettingsPanel() {
             ) : null
           }
           control={
-            <div className="flex w-full items-center gap-3 sm:w-52">
-              <output
-                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
-                htmlFor="appearance-contrast"
-              >
-                {appearanceContrastRange.value}%
-              </output>
-              <input
-                aria-label="Contrast"
-                className="settings-slider min-w-0 flex-1"
-                id="appearance-contrast"
-                max={MAX_APPEARANCE_CONTRAST}
-                min={MIN_APPEARANCE_CONTRAST}
-                onChange={(event) => {
-                  const appearanceContrast = Number(event.currentTarget.value);
-                  if (
-                    Number.isInteger(appearanceContrast) &&
-                    appearanceContrast >= MIN_APPEARANCE_CONTRAST &&
-                    appearanceContrast <= MAX_APPEARANCE_CONTRAST
-                  ) {
-                    appearanceContrastRange.onChange(appearanceContrast);
-                  }
-                }}
-                step={5}
-                style={appearanceContrastSliderStyle}
-                type="range"
-                value={appearanceContrastRange.value}
-                onPointerUp={appearanceContrastRange.onFinish}
-                onKeyUp={appearanceContrastRange.onFinish}
-                onBlur={appearanceContrastRange.onFinish}
-              />
-            </div>
-          }
-        />
-
-        <SettingsRow
-          {...searchableSetting("glass-sidebar")}
-          description="Render the sidebar as a translucent glass panel over the window background. On Windows this reveals the desktop Acrylic material behind the app."
-          resetAction={
-            settings.glassSidebarEnabled !== DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled ? (
-              <SettingResetButton
-                label="glass sidebar"
-                onClick={() =>
-                  updateSettings({
-                    glassSidebarEnabled: DEFAULT_UNIFIED_SETTINGS.glassSidebarEnabled,
-                  })
-                }
-              />
-            ) : null
-          }
-          control={
-            <Switch
-              checked={settings.glassSidebarEnabled}
-              onCheckedChange={(checked) =>
-                updateSettings({ glassSidebarEnabled: Boolean(checked) })
-              }
-              aria-label="Glass sidebar"
+            <SettingsSlider
+              label="Contrast"
+              min={MIN_APPEARANCE_CONTRAST}
+              max={MAX_APPEARANCE_CONTRAST}
+              step={5}
+              value={appearanceContrastRange.value}
+              onChange={appearanceContrastRange.onChange}
+              onFinish={appearanceContrastRange.onFinish}
             />
           }
         />
 
         {showEnvironmentIdentification ? null : <SidebarHeaderArtSettings />}
-
-        <SettingsRow
-          {...searchableSetting("setting-glass-opacity")}
-          description="Higher values make menus, dialogs, and the composer more solid."
-          resetAction={
-            settings.glassOpacity !== DEFAULT_UNIFIED_SETTINGS.glassOpacity ? (
-              <SettingResetButton
-                label="glass opacity"
-                onClick={() =>
-                  updateSettings({ glassOpacity: DEFAULT_UNIFIED_SETTINGS.glassOpacity })
-                }
-              />
-            ) : null
-          }
-          control={
-            <div className="flex w-full items-center gap-3 sm:w-52">
-              <output
-                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
-                htmlFor="glass-opacity"
-              >
-                {glassOpacityRange.value}%
-              </output>
-              <input
-                aria-label="Glass opacity"
-                className="settings-slider min-w-0 flex-1"
-                id="glass-opacity"
-                max={MAX_GLASS_OPACITY}
-                min={MIN_GLASS_OPACITY}
-                onChange={(event) => {
-                  const glassOpacity = Number(event.currentTarget.value);
-                  if (
-                    Number.isInteger(glassOpacity) &&
-                    glassOpacity >= MIN_GLASS_OPACITY &&
-                    glassOpacity <= MAX_GLASS_OPACITY
-                  ) {
-                    glassOpacityRange.onChange(glassOpacity);
-                  }
-                }}
-                step={5}
-                style={glassOpacitySliderStyle}
-                type="range"
-                value={glassOpacityRange.value}
-                onPointerUp={glassOpacityRange.onFinish}
-                onKeyUp={glassOpacityRange.onFinish}
-                onBlur={glassOpacityRange.onFinish}
-              />
-            </div>
-          }
-        />
-
-        <SettingsRow
-          {...searchableSetting("harness-sound-volume")}
-          description="Set the volume for harness errors, permission requests, questions, and completed turns."
-          resetAction={
-            settings.harnessSoundVolume !== DEFAULT_UNIFIED_SETTINGS.harnessSoundVolume ? (
-              <SettingResetButton
-                label="harness sound volume"
-                onClick={() =>
-                  updateSettings({
-                    harnessSoundVolume: DEFAULT_UNIFIED_SETTINGS.harnessSoundVolume,
-                  })
-                }
-              />
-            ) : null
-          }
-          control={
-            <div className="flex w-full items-center gap-3 sm:w-52">
-              <output
-                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
-                htmlFor="harness-sound-volume-control"
-              >
-                {harnessSoundVolumeRange.value}%
-              </output>
-              <input
-                aria-label="Harness sound volume"
-                className="settings-slider min-w-0 flex-1"
-                id="harness-sound-volume-control"
-                max={MAX_HARNESS_SOUND_VOLUME}
-                min={MIN_HARNESS_SOUND_VOLUME}
-                onChange={(event) => {
-                  const harnessSoundVolume = Number(event.currentTarget.value);
-                  if (
-                    Number.isInteger(harnessSoundVolume) &&
-                    harnessSoundVolume >= MIN_HARNESS_SOUND_VOLUME &&
-                    harnessSoundVolume <= MAX_HARNESS_SOUND_VOLUME
-                  ) {
-                    harnessSoundVolumeRange.onChange(harnessSoundVolume);
-                  }
-                }}
-                step={1}
-                style={harnessSoundVolumeSliderStyle}
-                type="range"
-                value={harnessSoundVolumeRange.value}
-                onPointerUp={harnessSoundVolumeRange.onFinish}
-                onKeyUp={harnessSoundVolumeRange.onFinish}
-                onBlur={harnessSoundVolumeRange.onFinish}
-              />
-            </div>
-          }
-        />
 
         {showEnvironmentIdentification ? (
           <SettingsRow
@@ -480,6 +287,7 @@ export function AppearanceSettingsPanel() {
             </div>
           }
         />
+
         <SettingsRow
           {...searchableSetting("math-rendering")}
           description="Typeset LaTeX math, such as $x^2$ or \[x^2\], in messages and Markdown previews. The composer keeps TeX source editable."
@@ -520,38 +328,15 @@ export function AppearanceSettingsPanel() {
             ) : null
           }
           control={
-            <div className="flex w-full items-center gap-3 sm:w-52">
-              <output
-                className="min-w-12 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
-                htmlFor="scrollbar-size-slider"
-              >
-                {scrollbarSizeRange.value}px
-              </output>
-              <input
-                aria-label="Scrollbar size"
-                className="settings-slider min-w-0 flex-1"
-                id="scrollbar-size-slider"
-                type="range"
-                min={MIN_SCROLLBAR_SIZE}
-                max={MAX_SCROLLBAR_SIZE}
-                step={1}
-                style={scrollbarSizeSliderStyle}
-                value={scrollbarSizeRange.value}
-                onPointerUp={scrollbarSizeRange.onFinish}
-                onKeyUp={scrollbarSizeRange.onFinish}
-                onBlur={scrollbarSizeRange.onFinish}
-                onChange={(event) => {
-                  const scrollbarSize = Number(event.currentTarget.value);
-                  if (
-                    Number.isInteger(scrollbarSize) &&
-                    scrollbarSize >= MIN_SCROLLBAR_SIZE &&
-                    scrollbarSize <= MAX_SCROLLBAR_SIZE
-                  ) {
-                    scrollbarSizeRange.onChange(scrollbarSize);
-                  }
-                }}
-              />
-            </div>
+            <SettingsSlider
+              label="Scrollbar size"
+              min={MIN_SCROLLBAR_SIZE}
+              max={MAX_SCROLLBAR_SIZE}
+              format={(value) => `${value}px`}
+              value={scrollbarSizeRange.value}
+              onChange={scrollbarSizeRange.onChange}
+              onFinish={scrollbarSizeRange.onFinish}
+            />
           }
         />
       </SettingsSection>
@@ -590,38 +375,16 @@ export function AppearanceSettingsPanel() {
           control={
             <div className="grid w-full grid-cols-[5rem_minmax(0,1fr)] items-center gap-3 sm:w-auto sm:grid-cols-[7rem_13rem] sm:gap-4">
               <PanelAnimationsPreview durationMs={panelAnimationDurationRange.value} />
-              <div className="flex w-full items-center gap-3">
-                <output
-                  className="min-w-16 rounded-md bg-muted px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
-                  htmlFor="panel-animation-duration"
-                >
-                  {panelAnimationDurationRange.value} ms
-                </output>
-                <input
-                  aria-label="Panel animation duration"
-                  className="settings-slider min-w-0 flex-1"
-                  id="panel-animation-duration"
-                  max={MAX_PANEL_ANIMATION_DURATION_MS}
-                  min={MIN_PANEL_ANIMATION_DURATION_MS}
-                  onChange={(event) => {
-                    const panelAnimationDurationMs = Number(event.currentTarget.value);
-                    if (
-                      Number.isInteger(panelAnimationDurationMs) &&
-                      panelAnimationDurationMs >= MIN_PANEL_ANIMATION_DURATION_MS &&
-                      panelAnimationDurationMs <= MAX_PANEL_ANIMATION_DURATION_MS
-                    ) {
-                      panelAnimationDurationRange.onChange(panelAnimationDurationMs);
-                    }
-                  }}
-                  step={25}
-                  style={panelAnimationDurationSliderStyle}
-                  type="range"
-                  value={panelAnimationDurationRange.value}
-                  onPointerUp={panelAnimationDurationRange.onFinish}
-                  onKeyUp={panelAnimationDurationRange.onFinish}
-                  onBlur={panelAnimationDurationRange.onFinish}
-                />
-              </div>
+              <SettingsSlider
+                label="Panel animation duration"
+                min={MIN_PANEL_ANIMATION_DURATION_MS}
+                max={MAX_PANEL_ANIMATION_DURATION_MS}
+                step={25}
+                format={(value) => `${value} ms`}
+                value={panelAnimationDurationRange.value}
+                onChange={panelAnimationDurationRange.onChange}
+                onFinish={panelAnimationDurationRange.onFinish}
+              />
             </div>
           }
           resetAction={

@@ -1,35 +1,20 @@
-import {
-  WorkspaceBreadcrumb,
-  WorkspaceBreadcrumbItem,
-  WorkspaceBreadcrumbSeparator,
-} from "../WorkspaceBreadcrumb";
 import { SETTINGS_SECTION_LABELS } from "./settingsSearch";
 
-const SETTINGS_BREADCRUMB_LABELS: Readonly<Record<string, string>> = {
+const settingsPageTitles: Readonly<Record<string, string>> = {
   ...SETTINGS_SECTION_LABELS,
   "/settings/diagnostics": "Diagnostics",
   "/settings/open-source-licenses": "Open source licenses",
 };
 
-function settingsBreadcrumbLabel(pathname: string): string | null {
+function settingsPageTitle(pathname: string): string {
   const normalizedPathname = pathname.replace(/\/+$/, "") || "/";
-  return SETTINGS_BREADCRUMB_LABELS[normalizedPathname] ?? null;
+  return settingsPageTitles[normalizedPathname] ?? "Settings";
 }
 
-export function SettingsBreadcrumb({ pathname }: { pathname: string }) {
-  const sectionLabel = settingsBreadcrumbLabel(pathname);
-
+export function SettingsPageTitle({ pathname }: { pathname: string }) {
   return (
-    <WorkspaceBreadcrumb ariaLabel="Settings breadcrumb">
-      {sectionLabel ? (
-        <>
-          <WorkspaceBreadcrumbItem>Settings</WorkspaceBreadcrumbItem>
-          <WorkspaceBreadcrumbSeparator />
-        </>
-      ) : null}
-      <WorkspaceBreadcrumbItem current className="truncate">
-        {sectionLabel ?? "Settings"}
-      </WorkspaceBreadcrumbItem>
-    </WorkspaceBreadcrumb>
+    <h1 className="min-w-0 truncate text-sm font-medium text-foreground">
+      {settingsPageTitle(pathname)}
+    </h1>
   );
 }

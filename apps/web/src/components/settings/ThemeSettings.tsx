@@ -41,6 +41,7 @@ import { Button } from "../ui/button";
 import { stackedThreadToast, toastManager } from "../ui/toast";
 import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { ThemeImportDialog } from "./ThemeImportDialog";
+import { OptionCard, SettingsSectionTitle } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 import { useThemeEditorStore } from "./themeEditorStore";
 import {
@@ -191,7 +192,7 @@ function ThemeLibraryCard({
                                 : `Use ${mode} variant, currently ${selected.option.label}`
                             }
                             aria-pressed={isActive}
-                            className="absolute left-1/2 top-2 z-20 flex size-14 items-center justify-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring redesign:focus-visible:-outline-offset-5 redesign:focus-visible:outline-foreground/60"
+                            className="absolute left-1/2 top-2 z-20 flex size-14 items-center justify-center rounded-full outline-none focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-5 focus-visible:outline-ring"
                             style={{
                               transform: `translateX(calc(-50% + ${rootOffsetX}px))`,
                             }}
@@ -673,19 +674,13 @@ export function ThemeLibrary({
       {(["system", "light", "dark"] as const).map((mode) => {
         const isActive = appearanceMode === mode;
         return (
-          <button
+          <OptionCard
             aria-label={mode === "system" ? "Follow the system appearance" : `Use ${mode} mode`}
             aria-pressed={isActive}
-            className={cn(
-              // The accent ring marks the picked tile; focus is a neutral ring set inside it with a gap.
-              "flex cursor-pointer flex-col items-stretch gap-1.5 rounded-xl border p-2 outline-none transition-colors focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring redesign:focus-visible:-outline-offset-7 redesign:focus-visible:outline-foreground/60",
-              isActive
-                ? "border-transparent bg-accent/30 ring-1 ring-inset ring-ring redesign:ring-2"
-                : "border-border/70 bg-card/60 hover:bg-accent/10",
-            )}
+            className="flex flex-col items-stretch gap-1.5 p-2"
             key={mode}
             onClick={() => setMode(mode)}
-            type="button"
+            selected={isActive}
           >
             {renderWireframe(mode)}
             <span
@@ -696,7 +691,7 @@ export function ThemeLibrary({
             >
               {mode === "system" ? "System" : mode === "light" ? "Light" : "Dark"}
             </span>
-          </button>
+          </OptionCard>
         );
       })}
     </div>
@@ -827,14 +822,12 @@ export function ThemeLibrary({
 
   return (
     <div className="space-y-3">
-      <h3 className="px-3 text-sm font-normal text-foreground/70 sm:px-4 redesign:text-base redesign:font-semibold redesign:text-foreground">
+      <SettingsSectionTitle level="h3" className="px-3 sm:px-4">
         {searchableSetting("color-scheme").title}
-      </h3>
+      </SettingsSectionTitle>
       {renderModeTiles()}
-      <div className="flex min-h-8 flex-wrap items-center justify-between gap-3 px-3 pt-2 sm:px-4 redesign:pt-5">
-        <h3 className="text-sm font-normal text-foreground/70 redesign:text-base redesign:font-semibold redesign:text-foreground">
-          {searchableSetting("theme").title}
-        </h3>
+      <div className="flex min-h-8 flex-wrap items-center justify-between gap-3 px-3 pt-5 sm:px-4">
+        <SettingsSectionTitle level="h3">{searchableSetting("theme").title}</SettingsSectionTitle>
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Button
             size="xs"
@@ -921,7 +914,7 @@ export function ThemeLibrary({
                 const checkboxId = `remove-theme-${customTheme.id}`;
                 return (
                   <label
-                    className="group relative flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-border/70 bg-muted/25 p-3 has-checked:border-ring has-checked:bg-accent/20 hover:bg-muted/40"
+                    className="group relative flex min-h-28 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-border/50 bg-foreground/[0.03] p-3 hover:bg-row-hover has-checked:border-primary/60 has-checked:bg-primary/8 has-checked:ring-1 has-checked:ring-inset has-checked:ring-primary/40"
                     htmlFor={checkboxId}
                     key={customTheme.id}
                   >

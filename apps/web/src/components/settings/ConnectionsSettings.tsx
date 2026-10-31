@@ -36,11 +36,6 @@ import { EnvironmentIconMenu } from "./EnvironmentIconPicker";
 import { FoldedSettingsSection } from "./FoldedSettingsSection";
 import { LoadBalancingSettings } from "./LoadBalancingSettings";
 import { PullRequestRoutingSettings } from "./PullRequestRoutingSettings";
-import { GlobalMcpSettings } from "./GlobalMcpSettings";
-import { RobloxStudioSettings } from "./RobloxStudioSettings";
-import { ComputerUseSettings } from "./ComputerUseSettings";
-import { isWindowsPlatform } from "../../lib/utils";
-import { isElectron } from "../../env";
 import { Input } from "../ui/input";
 import {
   Dialog,
@@ -1453,11 +1448,6 @@ export function ConnectionsSettings() {
 
   return (
     <SettingsPageContainer>
-      {canManageLocalBackend ? <RobloxStudioSettings /> : null}
-      {canManageLocalBackend && isElectron && isWindowsPlatform(navigator.platform) ? (
-        <ComputerUseSettings />
-      ) : null}
-      {canManageLocalBackend ? <GlobalMcpSettings /> : null}
       {primarySettings}
       <SettingsSection
         {...searchableSetting("remote-environments")}

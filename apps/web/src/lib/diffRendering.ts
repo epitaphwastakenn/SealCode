@@ -13,10 +13,7 @@ export type DiffThemeName = (typeof DIFF_THEME_NAMES)[keyof typeof DIFF_THEME_NA
 
 export function resolveDiffThemeName(theme: "light" | "dark"): DiffThemeName {
   if (theme === "dark") return DIFF_THEME_NAMES.dark;
-  // The New design (data-redesign on <html>) keeps light syntax readable on every code surface.
-  return typeof document !== "undefined" && document.documentElement.hasAttribute("data-redesign")
-    ? DIFF_THEME_NAMES.readableLight
-    : DIFF_THEME_NAMES.light;
+  return DIFF_THEME_NAMES.readableLight;
 }
 
 const FNV_OFFSET_BASIS_32 = 0x811c9dc5;

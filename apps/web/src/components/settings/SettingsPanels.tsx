@@ -677,9 +677,6 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.scrollbarSize !== DEFAULT_UNIFIED_SETTINGS.scrollbarSize
       ? ["Scrollbar size"]
       : []),
-    ...(settings.redesignEnabled !== DEFAULT_UNIFIED_SETTINGS.redesignEnabled
-      ? ["New design"]
-      : []),
     ...(settings.panelAnimationDurationMs !== DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs
       ? ["Panel animations"]
       : []),
@@ -875,7 +872,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       chatWidth: DEFAULT_UNIFIED_SETTINGS.chatWidth,
       mathRenderingEnabled: DEFAULT_UNIFIED_SETTINGS.mathRenderingEnabled,
       scrollbarSize: DEFAULT_UNIFIED_SETTINGS.scrollbarSize,
-      redesignEnabled: DEFAULT_UNIFIED_SETTINGS.redesignEnabled,
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
       harnessSoundVolume: DEFAULT_UNIFIED_SETTINGS.harnessSoundVolume,

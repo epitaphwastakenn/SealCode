@@ -672,8 +672,8 @@ const ClientSettingsStruct = Schema.Struct({
   // Opt-in TeX typesetting in rendered Markdown. Off keeps math parsing and
   // KaTeX out of the render path entirely.
   mathRenderingEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
-  // Beta: the quieter sidebar, composer and panel design. Off keeps the current look.
-  redesignEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(false))),
+  // Deprecated: the redesigned look is the only look. The key stays decodable for old settings files.
+  redesignEnabled: Schema.Boolean.pipe(Schema.withDecodingDefault(Effect.succeed(true))),
 });
 export const CLIENT_SETTINGS_KEYS = Object.keys(ClientSettingsStruct.fields) as ReadonlyArray<
   keyof typeof ClientSettingsStruct.fields

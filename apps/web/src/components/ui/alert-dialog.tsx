@@ -88,19 +88,14 @@ function AlertDialogHeader({ className, ...props }: React.ComponentProps<"div">)
 
 function AlertDialogFooter({
   className,
-  variant = "default",
+  variant: _variant,
   ...props
 }: React.ComponentProps<"div"> & {
   variant?: "default" | "bare";
 }) {
   return (
     <div
-      className={cn(
-        "flex flex-col-reverse gap-2 px-6 sm:flex-row sm:justify-end sm:rounded-b-[calc(var(--radius-2xl)-1px)]",
-        variant === "default" && "border-t bg-muted/72 py-4",
-        variant === "bare" && "pb-6",
-        className,
-      )}
+      className={cn("flex flex-col-reverse gap-2 px-6 pb-6 sm:flex-row sm:justify-end", className)}
       data-slot="alert-dialog-footer"
       {...props}
     />

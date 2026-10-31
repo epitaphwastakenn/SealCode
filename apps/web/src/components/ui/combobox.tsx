@@ -45,7 +45,7 @@ function ComboboxInput({
   const sizeValue = (size ?? "default") as "sm" | "default" | "lg" | number;
 
   return (
-    <div className="relative not-has-[>*.w-full]:w-fit w-full text-foreground has-disabled:opacity-64">
+    <div className="relative not-has-[>*.w-full]:w-fit w-full text-foreground has-disabled:opacity-50">
       {startAddon && (
         <div
           aria-hidden="true"
@@ -107,10 +107,10 @@ function ComboboxInput({
 function ComboboxSearchInput(props: React.ComponentProps<typeof ComboboxInput>) {
   return (
     <div className="min-w-0 shrink-0 px-3 pt-2.5">
-      <div className="relative -translate-y-px border-b border-border/70 pb-1.5 transition-colors focus-within:border-ring">
+      <div className="relative -translate-y-px border-b border-border/50 pb-1.5 transition-colors focus-within:border-ring">
         <SearchIcon
           aria-hidden="true"
-          className="pointer-events-none absolute top-1.5 left-0 size-4 shrink-0 text-muted-foreground/55"
+          className="pointer-events-none absolute top-1.5 left-0 size-4 shrink-0 text-muted-foreground"
         />
         <ComboboxInput
           {...props}
@@ -164,7 +164,7 @@ function ComboboxPopup({
       >
         <span
           className={cn(
-            "dropdown-glass relative flex max-h-full min-w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) rounded-lg shadow-[0_16px_40px_-18px_rgb(0_0_0/55%)] transition-[scale,opacity] duration-150 ease-out has-data-starting-style:scale-96 has-data-starting-style:opacity-0 dark:shadow-[0_18px_44px_-18px_rgb(0_0_0/80%)]",
+            "dropdown-glass relative flex max-h-full min-w-(--anchor-width) max-w-(--available-width) origin-(--transform-origin) rounded-lg transition-[scale,opacity] duration-150 ease-out has-data-starting-style:scale-96 has-data-starting-style:opacity-0",
             className,
           )}
           data-slot="combobox-surface"
@@ -182,9 +182,8 @@ function ComboboxPopup({
   );
 }
 
-// Harp model rows: a bordered card that tints violet when selected.
-const COMBOBOX_ITEM_CARD_CLASS =
-  "flex min-h-8 cursor-pointer items-center gap-2.5 overflow-hidden rounded-lg border border-transparent px-2.5 py-2 text-base text-foreground/90 outline-none transition-[background-color,border-color,color] duration-150 not-data-disabled:hover:border-border/60 not-data-disabled:hover:bg-muted/60 not-data-disabled:hover:text-foreground data-highlighted:border-border/60 data-highlighted:bg-muted/60 data-selected:border-primary/50 data-selected:bg-linear-to-r data-selected:from-primary/15 data-selected:via-primary/10 data-selected:to-transparent data-selected:text-foreground data-selected:ring-1 data-selected:ring-inset data-selected:ring-primary/20 data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50 sm:text-sm [&_svg]:pointer-events-none [&_svg]:shrink-0";
+const comboboxItemCardClass =
+  "flex min-h-8 cursor-pointer items-center gap-2.5 overflow-hidden rounded-lg border border-transparent px-2.5 py-2 text-base text-foreground outline-none transition-[background-color,border-color,color] duration-150 not-data-disabled:hover:bg-row-hover data-highlighted:bg-row-hover data-selected:bg-row-selected data-selected:text-foreground data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50 sm:text-sm [&_svg]:pointer-events-none [&_svg]:shrink-0";
 
 function ComboboxItem({
   className,
@@ -200,8 +199,8 @@ function ComboboxItem({
     <ComboboxPrimitive.Item
       className={cn(
         variant === "card"
-          ? COMBOBOX_ITEM_CARD_CLASS
-          : "flex min-h-8 in-data-[side=none]:min-w-[calc(var(--anchor-width)+1.25rem)] cursor-pointer items-center rounded-sm px-2 py-1 text-base outline-none not-data-disabled:hover:bg-accent data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-selected:bg-foreground/[0.08] data-selected:text-foreground data-highlighted:bg-accent data-highlighted:text-accent-foreground [&[data-highlighted][data-selected]]:bg-accent [&[data-highlighted][data-selected]]:text-accent-foreground redesign:data-selected:bg-foreground/[0.06] redesign:data-highlighted:bg-foreground/[0.09] redesign:[&[data-highlighted][data-selected]]:bg-foreground/[0.09] redesign:not-data-disabled:hover:bg-foreground/[0.09] data-disabled:opacity-64 sm:min-h-7 sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+          ? comboboxItemCardClass
+          : "flex min-h-8 in-data-[side=none]:min-w-[calc(var(--anchor-width)+1.25rem)] cursor-pointer items-center rounded-sm px-2 py-1 text-base outline-none not-data-disabled:hover:bg-row-hover data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-selected:bg-row-selected data-selected:text-foreground data-highlighted:bg-row-hover [&[data-highlighted][data-selected]]:bg-row-selected data-disabled:opacity-50 sm:min-h-7 sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
         className,
       )}
       data-slot="combobox-item"

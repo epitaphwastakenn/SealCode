@@ -11,11 +11,12 @@ import {
 } from "react";
 import { type ScopedThreadRef, type ThreadId } from "@t3tools/contracts";
 import { CircleAlertIcon, CircleCheckIcon, InfoIcon, TriangleAlertIcon, XIcon } from "lucide-react";
-import { Check, ChevronDown, ChevronUp, Copy } from "lucide";
+import { Check, Copy } from "lucide";
 
 import { cn } from "~/lib/utils";
 import { Button, buttonVariants } from "~/components/ui/button";
 import { MorphIcon } from "~/components/MorphIcon";
+import { DisclosureChevron } from "~/components/ui/disclosure-chevron";
 import { useComposerDraftStore } from "~/composerDraftStore";
 import { useCopyToClipboard } from "~/hooks/useCopyToClipboard";
 import {
@@ -118,12 +119,21 @@ function errorDescriptionClampClass(type: unknown, description: unknown): string
   return "line-clamp-4";
 }
 
-const toastCornerDismissClass = "absolute z-20 -top-1.5 -right-1.5";
-const toastCornerOrbClass = cn(
-  "inline-flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-full border border-border/60 bg-popover/92 text-muted-foreground shadow-sm outline-none backdrop-blur-sm",
-  "transition-[color,background-color,box-shadow] hover:bg-popover hover:text-foreground",
-  "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
-);
+function ToastDismissButton({ onClick }: { onClick: () => void }) {
+  return (
+    <div className="absolute end-1.5 top-1.5 z-20 opacity-0 transition-opacity duration-150 group-focus-within/toast:opacity-100 group-hover/toast:opacity-100 pointer-coarse:opacity-100">
+      <Button
+        aria-label="Dismiss notification"
+        data-slot="toast-close"
+        onClick={onClick}
+        size="icon-micro"
+        variant="ghost-muted"
+      >
+        <XIcon />
+      </Button>
+    </div>
+  );
+}
 
 function handleToastDismissClick(
   manager: typeof toastManager | typeof anchoredToastManager,
@@ -146,7 +156,6 @@ function CopyErrorButton({ text }: { text: string }) {
             size="icon-micro"
             variant="ghost-muted"
             aria-label={label}
-            className="[--control-icon-color:currentColor] rounded-md text-muted-foreground/80 hover:bg-transparent hover:text-muted-foreground"
             onClick={() => copyToClipboard(text)}
           />
         }
@@ -183,11 +192,7 @@ function ToastExpandableSection({
         onClick={() => setOpen((prev) => !prev)}
         type="button"
       >
-        <MorphIcon
-          className="size-3.5 shrink-0 opacity-80"
-          icon={open ? ChevronUp : ChevronDown}
-          strokeWidth={2.25}
-        />
+        <DisclosureChevron open={open} />
         {open ? collapseLabel : expandLabel}
       </button>
       {open ? <div className={toastExpandablePanelClassName}>{children}</div> : null}
@@ -247,7 +252,7 @@ function ToastDescriptionAndExpandable({
               aria-expanded={open}
               className={cn(
                 "group flex min-w-0 w-full cursor-pointer select-none items-start gap-1.5 rounded-sm text-left outline-none ring-offset-background",
-                "transition-colors hover:bg-muted/40",
+                "transition-colors hover:bg-row-hover",
                 "focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
               )}
               onClick={toggle}
@@ -262,17 +267,12 @@ function ToastDescriptionAndExpandable({
               className={cn(
                 "min-w-0 select-none wrap-break-word text-muted-foreground",
                 errorDescriptionClampClass(toastType, toastDescription),
-                "underline-offset-2 decoration-muted-foreground/60 group-hover:underline",
+                "underline-offset-2 group-hover:underline",
               )}
               data-slot="toast-description"
             />
           </div>
-          <MorphIcon
-            aria-hidden
-            className="size-3.5 h-lh shrink-0 text-muted-foreground opacity-80"
-            icon={open ? ChevronUp : ChevronDown}
-            strokeWidth={2.25}
-          />
+          <DisclosureChevron className="h-lh" open={open} />
         </TooltipTrigger>
         <TooltipPopup side="top">{open ? collapseLabel : expandLabel}</TooltipPopup>
       </Tooltip>
@@ -317,7 +317,7 @@ function deriveToastBodyDescriptor(toast: {
     hasVisibleToastAction(toast.actionProps) ||
     hasAdditionalActions ||
     hasSecondaryAction;
-  const inlineContentEndPad = hasTrailingControls ? "pr-6" : "pr-3.5";
+  const inlineContentEndPad = hasTrailingControls ? "pr-8" : "pr-3.5";
   return {
     Icon,
     stackedActionLayout,
@@ -597,7 +597,7 @@ function Toasts({ position }: { position: ToastPosition }) {
           return (
             <Toast.Root
               className={cn(
-                "dropdown-glass absolute z-[calc(9999-var(--toast-index))] w-full overflow-visible select-none rounded-lg text-popover-foreground shadow-xl shadow-black/25 [transition:transform_.5s_cubic-bezier(.22,1,.36,1),opacity_.5s,height_.15s]",
+                "dropdown-glass alert-glass group/toast absolute z-[calc(9999-var(--toast-index))] w-full overflow-visible select-none rounded-lg text-popover-foreground [transition:transform_.5s_cubic-bezier(.22,1,.36,1),opacity_.5s,height_.15s]",
                 "data-[position*=right]:right-0 data-[position*=right]:left-auto",
                 "data-[position*=left]:right-auto data-[position*=left]:left-0",
                 "data-[position*=center]:right-0 data-[position*=center]:left-0",
@@ -656,19 +656,9 @@ function Toasts({ position }: { position: ToastPosition }) {
                 dismissAfterVisibleMs={toast.data?.dismissAfterVisibleMs}
                 toastId={toast.id}
               />
-              <div className={toastCornerDismissClass}>
-                <button
-                  aria-label="Dismiss notification"
-                  className={toastCornerOrbClass}
-                  data-slot="toast-close"
-                  onClick={() =>
-                    handleToastDismissClick(toastManager, toast.id, toast.data?.onClose)
-                  }
-                  type="button"
-                >
-                  <XIcon className="size-3" strokeWidth={2.25} />
-                </button>
-              </div>
+              <ToastDismissButton
+                onClick={() => handleToastDismissClick(toastManager, toast.id, toast.data?.onClose)}
+              />
               <Toast.Content
                 className={cn(
                   // overflow-x:clip preserves visible vertical overflow; hidden would force overflow-y:auto
@@ -735,7 +725,7 @@ function AnchoredToasts() {
               >
                 <Toast.Root
                   className={cn(
-                    "dropdown-glass relative overflow-visible text-balance text-popover-foreground text-xs shadow-xl shadow-black/25 transition-[scale,opacity] data-ending-style:scale-98 data-starting-style:scale-98 data-ending-style:opacity-0 data-starting-style:opacity-0",
+                    "dropdown-glass alert-glass group/toast relative overflow-visible text-balance text-popover-foreground text-xs transition-[scale,opacity] data-ending-style:scale-98 data-starting-style:scale-98 data-ending-style:opacity-0 data-starting-style:opacity-0",
                     tooltipStyle ? "rounded-md" : "rounded-lg",
                   )}
                   data-slot="toast-popup"
@@ -747,23 +737,15 @@ function AnchoredToasts() {
                     </Toast.Content>
                   ) : (
                     <>
-                      <div className={toastCornerDismissClass}>
-                        <button
-                          aria-label="Dismiss notification"
-                          className={toastCornerOrbClass}
-                          data-slot="toast-close"
-                          onClick={() =>
-                            handleToastDismissClick(
-                              anchoredToastManager,
-                              toast.id,
-                              toast.data?.onClose,
-                            )
-                          }
-                          type="button"
-                        >
-                          <XIcon className="size-3" strokeWidth={2.25} />
-                        </button>
-                      </div>
+                      <ToastDismissButton
+                        onClick={() =>
+                          handleToastDismissClick(
+                            anchoredToastManager,
+                            toast.id,
+                            toast.data?.onClose,
+                          )
+                        }
+                      />
                       <Toast.Content
                         className={cn(
                           "pointer-events-auto min-h-0 overflow-y-visible pl-3.5 text-sm [overflow-x:clip]",

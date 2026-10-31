@@ -10,7 +10,20 @@ each version's section as that release's notes. Newest version first:
 - **Title** — description   (under New, titled items show as cards)
 -->
 
-## 2.17.15 · 2026-10-28
+## 2.17.16 · 2026-10-31
+
+> Harp gets one consistent look everywhere, a screenshot gallery after each turn, per-thread Studio controls, and Ultracode with any effort.
+
+### New
+
+- **Screenshot gallery** — When an agent finishes, every screenshot it took during that turn (Roblox Studio, browser, computer use) is collected in one row after its final reply. Open it to flip through them with the arrows, a swipe or the thumbnail strip.
+- **Studio controls per thread** — The new Agent menu next to the composer, and Studio places in the thread details, let you stop an agent from running playtests or deselect a connected place so the agent ignores it, for that thread only. Harp enforces both on the server, and Roblox's own MCP is hidden while a thread has restrictions.
+- **Ultracode with any effort** — Ultracode is now its own switch in the model picker, so you can pair it with any reasoning effort, as in Claude Code. A saved Ultracode choice becomes Extra high with Ultracode on.
+
+### Improved
+
+- **One look everywhere** — The old and new designs are merged into one. The sidebar, the Working and Worked for rows, the composer and the new-thread screen, the model picker, Settings, dialogs, menus, toasts and side panels now share the same colours, corners, glass and controls. The Beta page and its "New design" switch are gone.
+- **Roblox VFX skill** — Agents building visual effects now prototype several variants side by side for you to pick from, measure animations before timing effects, and follow tested recipes for trails, tracers, projectiles and textures.
 
 > See your words while you dictate, take Claude's guess at your next prompt with Tab, and give the sidebar header art a style and color of your own.
 

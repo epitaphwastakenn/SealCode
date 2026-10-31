@@ -8,31 +8,41 @@ import { cn } from "~/lib/utils";
 import { Separator } from "../ui/separator";
 
 export type ComposerControlSize = "sm" | "xs";
+export type ComposerControlTone = "default" | "quiet";
 
-function composerControlClassName(size: ComposerControlSize, className?: string) {
+function composerControlClassName(
+  size: ComposerControlSize,
+  tone: ComposerControlTone,
+  className?: string,
+) {
   return cn(
-    "relative inline-flex shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-(--control-radius) border border-transparent text-base outline-none hover:bg-accent data-pressed:bg-accent focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 data-disabled:pointer-events-none data-disabled:opacity-64 pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 [&:active:not([aria-haspopup])]:scale-[0.97] [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg]:-mx-0.5 [&_svg[data-composer-control-icon]]:mx-0",
+    "relative inline-flex h-7 shrink-0 cursor-pointer items-center justify-center whitespace-nowrap rounded-(--control-radius) border border-transparent outline-none hover:bg-row-hover data-pressed:bg-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70 disabled:pointer-events-none disabled:opacity-50 data-disabled:pointer-events-none data-disabled:opacity-50 pointer-coarse:after:absolute pointer-coarse:after:size-full pointer-coarse:after:min-h-11 pointer-coarse:after:min-w-11 [&:active:not([aria-haspopup])]:scale-[0.97] [&_svg]:pointer-events-none [&_svg]:shrink-0",
     "[&_:is([data-composer-control-label],[data-chat-provider-model-picker-label])]:[text-box:trim-both_cap_alphabetic] supports-[text-box:trim-both_cap_alphabetic]:[&_:is([data-composer-control-label],[data-chat-provider-model-picker-label])]:py-1.5",
     size === "xs"
-      ? "h-7 gap-1 px-1.75 font-normal text-foreground/70 text-sm hover:text-foreground dark:text-muted-foreground sm:h-6 sm:text-xs [&_svg:not([class*='size-'])]:size-4 sm:[&_svg:not([class*='size-'])]:size-3.5 [&_svg[data-composer-control-chevron]]:ms-0 [&_svg[data-composer-control-chevron]]:-me-1"
-      : "h-7 gap-1.5 px-2 font-medium text-foreground/80 [&_svg:not([class*='text-'])]:text-muted-foreground hover:text-foreground sm:text-sm [&_svg:not([class*='size-'])]:size-4.5 sm:[&_svg:not([class*='size-'])]:size-4",
-    "aria-pressed:bg-accent aria-pressed:text-accent-foreground aria-pressed:hover:bg-accent/80",
+      ? "gap-1 px-2 text-xs sm:h-6 [&_svg:not([class*='size-'])]:size-3.5"
+      : "gap-1.5 px-2 text-sm font-medium [&_svg:not([class*='size-'])]:size-4",
+    tone === "quiet" || size === "xs"
+      ? "text-muted-foreground hover:text-foreground"
+      : "text-foreground [&_svg:not([class*='text-'])]:text-muted-foreground",
+    "aria-pressed:bg-row-selected aria-pressed:text-foreground",
     className,
   );
 }
 
 type ComposerControlProps = useRender.ComponentProps<"button"> & {
   size?: ComposerControlSize;
+  tone?: ComposerControlTone;
 };
 
 export function ComposerControl({
   className,
   size = "sm",
+  tone = "default",
   render,
   ...props
 }: ComposerControlProps) {
   const defaultProps = {
-    className: composerControlClassName(size, className),
+    className: composerControlClassName(size, tone, className),
     type: render ? undefined : ("button" as const),
   };
   return useRender({
@@ -58,7 +68,7 @@ export function ComposerControlIcon({
       aria-hidden="true"
       className={cn(
         "shrink-0",
-        size === "xs" ? "size-3" : opticalSize === "large" ? "size-4.5" : "size-4",
+        size === "xs" ? "size-3.5" : opticalSize === "large" ? "size-4.5" : "size-4",
         className,
       )}
       data-composer-control-icon
@@ -82,7 +92,6 @@ export function ComposerControlChevron({
         className,
       )}
       data-composer-control-chevron
-      strokeWidth={2.25}
     />
   );
 }
@@ -97,7 +106,7 @@ export function ComposerControlSeparator({
   return (
     <Separator
       orientation="vertical"
-      className={cn("mx-0.5 hidden sm:block", size === "xs" ? "h-3.5!" : "h-4", className)}
+      className={cn("mx-0.5 hidden h-4 sm:block", size === "xs" && "h-3.5", className)}
       {...props}
     />
   );
@@ -107,13 +116,15 @@ export function ComposerSelectControl({
   className,
   children,
   size = "sm",
+  tone = "default",
   ...props
 }: Omit<SelectPrimitive.Trigger.Props, "className"> & {
   className?: string | undefined;
   size?: ComposerControlSize;
+  tone?: ComposerControlTone;
 }) {
   return (
-    <SelectPrimitive.Trigger className={composerControlClassName(size, className)} {...props}>
+    <SelectPrimitive.Trigger className={composerControlClassName(size, tone, className)} {...props}>
       {children}
       <SelectPrimitive.Icon>
         <ComposerControlChevron size={size} />

@@ -73,6 +73,7 @@ import {
   replaceTextRange,
 } from "../../composer-logic";
 import {
+  DEFAULT_COMPOSER_PLACEHOLDER,
   DISCONNECTED_COMPOSER_PLACEHOLDER,
   EMPTY_THREAD_COMPOSER_PLACEHOLDER,
 } from "../../composerPlaceholder";
@@ -82,7 +83,7 @@ import { ComposerVoiceRecorderBar } from "./ComposerVoiceRecorderBar";
 import { useComposerVoiceController } from "./useComposerVoiceController";
 import { onToggleComposerVoice } from "../../composerVoiceBus";
 import { appendTranscriptToPrompt } from "../../lib/voiceRecorder";
-import { getTraitsSectionVisibility, isMaximumReasoningEffort } from "./TraitsPicker";
+import { getTraitsSectionVisibility } from "./TraitsPicker";
 import { ComposerUsageMeter } from "./ComposerUsageMeter";
 import { isCommandPaletteOpen } from "../../commandPaletteBus";
 import { getTerminalFocusOwner } from "../../lib/terminalFocus";
@@ -242,7 +243,6 @@ import {
   getComposerSubmissionValidationMessage,
   submitComposerDraft,
 } from "./composerSubmission";
-import { ComposerPromptLengthValidation } from "./ComposerPromptLengthValidation";
 import { pendingDraftWork } from "./pendingDraftWork";
 import { importComposerThreadAttachment } from "./composerThreadImport";
 import { isTimelineScrollTarget } from "./timelineScrollTarget";
@@ -260,7 +260,9 @@ const isEnvironmentRequestInvalidError = Schema.is(EnvironmentRequestInvalidErro
 const COMPOSER_SCROLL_COLLAPSE_THRESHOLD_PX = 24;
 const COMPOSER_SCROLL_GESTURE_RESET_MS = 120;
 import { toastManager } from "../ui/toast";
-import { PlayIcon, ShieldIcon } from "lucide-react";
+import { ArrowUpIcon, CircleAlertIcon, PlayIcon, ShieldIcon } from "lucide-react";
+import { Button } from "../ui/button";
+import { ComposerSendButton } from "./ComposerSendButton";
 import { proposedPlanTitle } from "@t3tools/shared/proposedPlanText";
 import { hasProviderSetup } from "./ProviderStatusBanner";
 import { type AppModelOption, getAppModelOptionsForInstance } from "../../modelSelection";
@@ -1321,8 +1323,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     });
   };
   const handleModelOptionsChangeStable = useStableCallback(handleModelOptionsChange);
-  const selectedTraits = (() => {
-    if (selectedProviderModels.length === 0) return { label: null, isMaximumEffort: false };
+  const selectedTraitsLabel = (() => {
+    if (selectedProviderModels.length === 0) return null;
     const visibility = getTraitsSectionVisibility({
       provider: selectedProvider,
       models: selectedProviderModels,
@@ -1337,10 +1339,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       ultrathinkPromptControlled: false,
       reportedModelSelection,
     });
-    return {
-      label: display.label.length > 0 ? display.label : null,
-      isMaximumEffort: isMaximumReasoningEffort(visibility),
-    };
+    return display.label.length > 0 ? display.label : null;
   })();
   const availableAgentPresets = settings.agentPresets.filter((preset) => {
     const entry = providerInstanceEntries.find(
@@ -2746,11 +2745,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       triggerClassName={
         composerControlsCollapsed
           ? cn(
-              "min-w-13 shrink text-xs!",
+              "min-w-13 shrink",
               !showInlineRestingControls &&
                 "@max-[640px]/composer-surface:[&_[data-chat-provider-model-picker-label]]:w-0 @max-[640px]/composer-surface:[&_[data-chat-provider-model-picker-label]]:flex-none",
             )
-          : "-ms-2.5 min-w-13"
+          : "min-w-13"
       }
       terminalOpen={terminalOpen}
       open={isComposerModelPickerOpen}
@@ -2759,20 +2758,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           ? "color-mix(in srgb, var(--chat-composer-glass-surface) var(--glass-opacity), transparent)"
           : "var(--contrast-input)"
       }
-      {...(composerProviderState.modelPickerIconClassName || composerControlsCollapsed
-        ? {
-            activeProviderIconClassName: cn(
-              composerProviderState.modelPickerIconClassName,
-              composerControlsCollapsed &&
-                "fill-muted-foreground/70! text-muted-foreground/70! [&_path]:fill-muted-foreground/70! [&_rect]:fill-muted-foreground/70! [&_[data-icon-detail]]:fill-transparent! [&[data-provider-package-icon]]:opacity-70 [&[data-provider-package-icon]_path:not([data-icon-detail])]:fill-muted-foreground!",
-            ),
-          }
+      monochromeProviderIcon={composerControlsCollapsed}
+      {...(composerProviderState.modelPickerIconClassName
+        ? { activeProviderIconClassName: composerProviderState.modelPickerIconClassName }
         : {})}
       onOpenChange={setIsComposerModelPickerOpen}
       getModelDisabledReason={getModelDisabledReason}
       onOpenProviderSetup={onOpenProviderSetup}
-      effortLabel={selectedTraits.label}
-      isMaximumEffort={selectedTraits.isMaximumEffort}
+      effortLabel={selectedTraitsLabel}
       models={selectedProviderModels}
       modelOptions={composerModelOptions?.[selectedInstanceId]}
       onModelOptionsChange={handleModelOptionsChangeStable}
@@ -2809,9 +2802,20 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
         content: activityStackContent,
       }
     : null;
-  const bannerStackItems = activityStackItem
-    ? [activityStackItem, ...props.bannerItems]
-    : props.bannerItems;
+  const submissionError = providerInputSubmissionError ?? composerSubmissionError;
+  const submissionErrorItem: ComposerBannerStackItem | null = submissionError
+    ? {
+        id: "composer-submission-error",
+        variant: "error",
+        icon: <CircleAlertIcon />,
+        title: submissionError,
+      }
+    : null;
+  const bannerStackItems = [
+    ...(activityStackItem ? [activityStackItem] : []),
+    ...(submissionErrorItem ? [submissionErrorItem] : []),
+    ...props.bannerItems,
+  ];
   const [tasksDrawerThreadId, setTasksDrawerThreadId] = useState(activeThreadId);
   if (
     isTasksDrawerOpen &&
@@ -3691,7 +3695,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
               aria-hidden={restingControlsVisible ? undefined : true}
               inert={restingControlsVisible ? undefined : true}
               className={cn(
-                "relative flex w-max min-w-0 max-w-full items-center gap-1 font-normal text-muted-foreground/70 [&_button]:text-xs!",
+                "relative flex w-max min-w-0 max-w-full items-center gap-1 font-normal",
                 !restingControlsVisible && "invisible",
               )}
             >
@@ -3827,25 +3831,25 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
           >
             {showCollapsedMobilePromptRow ? (
               <div className="flex items-center justify-between gap-2 px-3 py-2">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
                   data-chat-composer-transition-prompt="true"
                   className={cn(
-                    "min-w-0 flex-1 truncate bg-transparent p-0 text-left text-sm focus:outline-none",
-                    prompt.trim() ? "text-foreground" : "text-placeholder",
+                    "h-auto min-w-0 flex-1 justify-start truncate p-0 text-left text-sm font-normal hover:bg-transparent",
+                    !prompt.trim() && "text-placeholder",
                   )}
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={expandMobileComposerStable}
                   aria-label="Expand composer"
                 >
                   {prompt.trim() ||
-                    (showProviderUnavailable ? "Enable a provider in Settings" : "Ask anything...")}
-                </button>
+                    (showProviderUnavailable
+                      ? "Enable a provider in Settings"
+                      : DEFAULT_COMPOSER_PLACEHOLDER)}
+                </Button>
                 {collapsedComposerImagePreviews}
-                <button
-                  type="button"
+                <ComposerSendButton
                   data-chat-composer-transition-actions="true"
-                  className="flex size-8 shrink-0 items-center justify-center rounded-full bg-message-action text-message-action-foreground hover:bg-message-action-hover disabled:opacity-64"
                   disabled={collapsedComposerPrimaryActionDisabled}
                   aria-label={collapsedComposerPrimaryActionLabel}
                   onPointerDown={(event) => event.preventDefault()}
@@ -3858,19 +3862,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                   }}
                 >
                   {showResumeAction ? (
-                    <PlayIcon className="size-4 fill-current" aria-hidden="true" />
+                    <PlayIcon className="fill-current" aria-hidden="true" />
                   ) : (
-                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <path
-                        d="M8 3L8 13M8 3L4 7M8 3L12 7"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      />
-                    </svg>
+                    <ArrowUpIcon aria-hidden="true" />
                   )}
-                </button>
+                </ComposerSendButton>
               </div>
             ) : null}
 
@@ -3992,7 +3988,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     className={cn(
                       showMobilePendingAnswerActions && "max-sm:pb-12",
                       isComposerResting &&
-                        "my-0 max-h-8 min-h-8 redesign:min-h-8 overflow-hidden py-0 whitespace-pre! leading-8",
+                        "my-0 max-h-8 min-h-8 overflow-hidden py-0 whitespace-pre! leading-8",
                     )}
                     placeholderClassName={cn(
                       isComposerResting &&
@@ -4012,14 +4008,14 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     placeholder={
                       isComposerApprovalState
                         ? activePendingApproval?.supportsFeedback
-                          ? "Send feedback to decline this request"
-                          : "Send a message to decline and redirect the agent"
+                          ? "Send feedback to decline"
+                          : "Send a message to decline and redirect"
                         : activePendingProgress
                           ? isChoiceOnlyPendingQuestion
                             ? "Choose an option above"
-                            : "Type your own answer, or leave this blank to use the selected option"
+                            : "Type your own answer, or leave blank to use the selection"
                           : showPlanFollowUpPrompt && activeProposedPlan
-                            ? "Add feedback to refine the plan, or leave this blank to implement it"
+                            ? "Add feedback to refine the plan, or leave blank to implement it"
                             : projectSelectionRequired
                               ? "Choose a project above to start a thread"
                               : showProviderUnavailable
@@ -4028,7 +4024,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                                   ? EMPTY_THREAD_COMPOSER_PLACEHOLDER
                                   : phase === "disconnected"
                                     ? DISCONNECTED_COMPOSER_PLACEHOLDER
-                                    : "Ask anything, @tag files/folders, $use skills, or / for commands"
+                                    : DEFAULT_COMPOSER_PLACEHOLDER
                     }
                     disabled={
                       isConnecting ||
@@ -4071,10 +4067,6 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                 ) : null}
               </div>
             </div>
-
-            <ComposerPromptLengthValidation
-              message={providerInputSubmissionError ?? composerSubmissionError}
-            />
 
             {isComposerCollapsedMobile ? null : (
               <div
@@ -4215,7 +4207,7 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
                     aria-hidden={restingControlsVisible ? undefined : true}
                     inert={restingControlsVisible ? undefined : true}
                     className={cn(
-                      "relative flex w-max min-w-0 max-w-full items-center gap-1 text-muted-foreground/70 [&_button]:text-xs!",
+                      "relative flex w-max min-w-0 max-w-full items-center gap-1",
                       !restingControlsVisible && "invisible",
                     )}
                   >

@@ -87,6 +87,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   keybindings?: ResolvedKeybindingsConfig;
   modelOptionsByInstance: ReadonlyMap<ProviderInstanceId, ReadonlyArray<ModelEsque>>;
   activeProviderIconClassName?: string;
+  monochromeProviderIcon?: boolean;
   instanceIndicatorBackground?: string;
   size?: ComposerControlSize;
   compact?: boolean;
@@ -103,7 +104,6 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
   onInstanceModelChange: (instanceId: ProviderInstanceId, model: string) => void;
   /** Harp: the reasoning level shown beside the model name in the trigger. */
   effortLabel?: string | null;
-  isMaximumEffort?: boolean;
   /** Harp: when set, the popup hosts the reasoning slider and model options. */
   models?: ReadonlyArray<ServerProviderModel>;
   modelOptions?: ReadonlyArray<ProviderOptionSelection> | null | undefined;
@@ -154,7 +154,6 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
     // reasoning level can be adjusted next; double-click or Enter closes it.
     if (!props.onModelOptionsChange) setIsMenuOpen(false);
   };
-  const isMaxEffort = props.isMaximumEffort ?? false;
 
   const shortcutLabel = props.keybindings
     ? shortcutLabelForCommand(props.keybindings, "modelPicker.toggle")
@@ -254,6 +253,7 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
               showBadge={showInstanceBadge}
               className="size-4"
               iconClassName={cn("size-4", props.activeProviderIconClassName)}
+              monochrome={props.monochromeProviderIcon === true}
               indicatorBackground={props.instanceIndicatorBackground ?? "var(--contrast-input)"}
               badgeClassName={cn(
                 "right-[-0.125rem] bottom-[-0.125rem] h-3 min-w-3 px-0.5 text-5xs",
@@ -280,21 +280,8 @@ export const ProviderModelPicker = memo(function ProviderModelPicker(props: {
           {props.effortLabel && !selectedEntries && props.triggerLabel === undefined ? (
             <span
               data-chat-provider-model-picker-effort="true"
-              className={cn(
-                "inline-flex min-w-0 items-center gap-1 text-xs font-normal transition-colors duration-200",
-                isMaxEffort ? "font-semibold text-primary" : "text-muted-foreground/80",
-              )}
+              className="inline-flex min-w-0 items-center text-xs font-normal text-muted-foreground"
             >
-              {isMaxEffort ? (
-                <svg
-                  viewBox="0 0 16 16"
-                  fill="currentColor"
-                  className="size-2.5 shrink-0"
-                  aria-hidden="true"
-                >
-                  <path d="M8 0L9.79 6.21L16 8L9.79 9.79L8 16L6.21 9.79L0 8L6.21 6.21L8 0Z" />
-                </svg>
-              ) : null}
               <span
                 className="min-w-0 truncate"
                 data-chat-provider-model-picker-effort-label="true"

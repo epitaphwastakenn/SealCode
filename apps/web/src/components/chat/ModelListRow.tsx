@@ -17,45 +17,6 @@ import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 
 // Small at-a-glance hints in each row. They come from the model name because
 // providers do not report these traits consistently.
-function getModelCapabilityTags(model: { slug: string; name: string }): string[] {
-  const tags: string[] = [];
-  const text = `${model.slug} ${model.name}`.toLowerCase();
-  if (
-    text.includes("o3") ||
-    text.includes("o1") ||
-    text.includes("reason") ||
-    text.includes("r1") ||
-    text.includes("think")
-  ) {
-    tags.push("Thinking");
-  } else if (
-    text.includes("flash") ||
-    text.includes("mini") ||
-    text.includes("haiku") ||
-    text.includes("fast")
-  ) {
-    tags.push("Fast");
-  }
-  if (
-    text.includes("1m") ||
-    text.includes("gemini-1.5") ||
-    text.includes("gemini-2.0") ||
-    text.includes("gemini-2.5")
-  ) {
-    tags.push("1M");
-  } else if (
-    text.includes("claude") ||
-    text.includes("sonnet") ||
-    text.includes("opus") ||
-    text.includes("gpt-4o") ||
-    text.includes("o3") ||
-    text.includes("o1")
-  ) {
-    tags.push("200k");
-  }
-  return tags;
-}
-
 // Rows take the model's fields rather than the picker's item object, and one shared toggle
 // handler, because the picker rebuilds its items on every search keystroke; that keeps memo
 // effective for rows whose content did not change.
@@ -91,7 +52,6 @@ export const ModelListRow = memo(function ModelListRow(props: {
     subProvider: props.subProvider,
   };
   const providerLabel = getProviderRowLabel(props.providerDisplayName, props.subProvider);
-  const capabilityTags = getModelCapabilityTags(model);
 
   const row = (
     <ComboboxItem
@@ -112,34 +72,17 @@ export const ModelListRow = memo(function ModelListRow(props: {
           "data-disabled:pointer-events-auto data-disabled:cursor-not-allowed",
       )}
     >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 rounded-lg opacity-0 transition-opacity duration-200 group-hover:opacity-100"
-        style={{
-          background:
-            "radial-gradient(ellipse at 50% 0%, color-mix(in srgb, var(--primary) 10%, transparent) 0%, transparent 75%)",
-        }}
+      <ProviderInstanceIcon
+        driverKind={props.driverKind}
+        displayName={props.providerDisplayName}
+        acpRegistryAgentId={props.acpRegistryAgentId}
+        acpRegistryIconUrl={props.acpRegistryIconUrl}
+        className="size-4"
+        iconClassName="size-4"
       />
-      <div
-        className={cn(
-          "relative z-10 flex size-7 shrink-0 items-center justify-center rounded-md border transition-colors",
-          props.isSelected
-            ? "border-primary/40 bg-primary/15 text-primary"
-            : "border-border/50 bg-muted/60 text-foreground/80 group-hover:border-border/80 group-hover:bg-muted",
-        )}
-      >
-        <ProviderInstanceIcon
-          driverKind={props.driverKind}
-          displayName={props.providerDisplayName}
-          acpRegistryAgentId={props.acpRegistryAgentId}
-          acpRegistryIconUrl={props.acpRegistryIconUrl}
-          className="size-4"
-          iconClassName="size-4"
-        />
-      </div>
-      <div className="relative z-10 min-w-0 flex-1 text-left">
+      <div className="min-w-0 flex-1 text-left">
         <div className="flex min-w-0 items-center gap-1.5">
-          <div className="min-w-0 truncate text-xs font-semibold leading-snug">
+          <div className="min-w-0 truncate text-sm leading-snug">
             {props.useTriggerLabel
               ? getTriggerDisplayModelLabel(model)
               : getDisplayModelName(
@@ -148,12 +91,9 @@ export const ModelListRow = memo(function ModelListRow(props: {
                 )}
           </div>
           {props.showNewBadge ? (
-            <span
-              className="shrink-0 rounded border border-update/35 bg-update/15 px-0.5 py-px text-3xs font-bold uppercase leading-none tracking-wide text-update-foreground"
-              aria-label="New model"
-            >
+            <Badge variant="info" size="sm" aria-label="New model">
               New
-            </span>
+            </Badge>
           ) : null}
           {props.unavailable ? (
             <Badge variant="outline" size="sm">
@@ -161,26 +101,14 @@ export const ModelListRow = memo(function ModelListRow(props: {
             </Badge>
           ) : null}
         </div>
-        {props.showProvider || capabilityTags.length > 0 ? (
-          <div className="mt-0.5 flex items-center gap-1.5 text-2xs leading-tight text-muted-foreground">
-            {props.showProvider ? <span className="truncate">{providerLabel}</span> : null}
-            {capabilityTags.length > 0 ? (
-              <span className="flex shrink-0 items-center gap-1">
-                {capabilityTags.map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded border border-border/50 bg-background/50 px-1 py-px text-3xs font-medium leading-none text-muted-foreground/90"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </span>
-            ) : null}
+        {props.showProvider ? (
+          <div className="mt-0.5 truncate text-xs leading-tight text-muted-foreground">
+            {providerLabel}
           </div>
         ) : null}
       </div>
 
-      <div className="relative z-10 flex shrink-0 items-center gap-1.5">
+      <div className="flex shrink-0 items-center gap-1.5">
         {props.jumpLabel ? <Kbd>{props.jumpLabel}</Kbd> : null}
         <Tooltip>
           <TooltipTrigger
@@ -188,7 +116,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
               <Button
                 size="icon-xs"
                 variant="ghost-muted"
-                className="-mr-1 shrink-0"
+                className="shrink-0"
                 onClick={(event) => {
                   event.stopPropagation();
                   props.onToggleFavorite(props.instanceId, props.slug);
@@ -201,10 +129,9 @@ export const ModelListRow = memo(function ModelListRow(props: {
               >
                 <StarIcon
                   className={cn(
-                    "size-3.5 sm:size-3",
                     props.isFavorite
                       ? "fill-current text-warning"
-                      : "redesign:opacity-0 redesign:group-hover:opacity-100 redesign:group-data-highlighted:opacity-100 redesign:in-focus-visible:opacity-100 redesign:pointer-coarse:opacity-100",
+                      : "opacity-0 group-hover:opacity-100 group-data-highlighted:opacity-100 in-focus-visible:opacity-100 pointer-coarse:opacity-100",
                   )}
                 />
               </Button>
@@ -214,11 +141,7 @@ export const ModelListRow = memo(function ModelListRow(props: {
             {props.isFavorite ? "Remove from favorites" : "Add to favorites"}
           </TooltipPopup>
         </Tooltip>
-        {props.isSelected ? (
-          <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/20 text-primary">
-            <CheckIcon className="size-3.5" aria-hidden="true" />
-          </span>
-        ) : null}
+        {props.isSelected ? <CheckIcon className="size-3.5 shrink-0" aria-hidden="true" /> : null}
       </div>
     </ComboboxItem>
   );

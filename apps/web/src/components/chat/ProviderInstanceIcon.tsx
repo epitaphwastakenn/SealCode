@@ -71,6 +71,7 @@ export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
   badgeClassName?: string;
   statusDotClassName?: string;
   indicatorBackground?: string;
+  monochrome?: boolean;
 }) {
   const Icon = PROVIDER_ICON_BY_PROVIDER[props.driverKind] ?? null;
   const packageIcon = providerClients.get(props.driverKind)?.icon;
@@ -83,7 +84,12 @@ export const ProviderInstanceIcon = memo(function ProviderInstanceIcon(props: {
       } as CSSProperties)
     : undefined;
   const badgeContent = props.badgeContent ?? "initials";
-  const iconClassName = cn(props.size === "compact" && "size-3.5", props.iconClassName);
+  const iconClassName = cn(
+    props.size === "compact" && "size-3.5",
+    props.monochrome &&
+      "fill-current text-muted-foreground [&_path]:fill-current [&_rect]:fill-current [&_[data-icon-detail]]:fill-transparent [&[data-provider-package-icon]_path:not([data-icon-detail])]:fill-current",
+    props.iconClassName,
+  );
   const isAcpRegistry = props.driverKind === "acpRegistry";
   const acpRegistryIconUrl = resolveProviderInstanceAcpRegistryIconUrl({
     driverKind: props.driverKind,

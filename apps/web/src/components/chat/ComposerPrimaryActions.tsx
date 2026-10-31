@@ -1,8 +1,16 @@
 import { memo, type MouseEventHandler, type PointerEventHandler } from "react";
-import { CheckIcon, ChevronDownIcon, ChevronLeftIcon, Minimize2Icon, PlayIcon } from "lucide-react";
+import {
+  ArrowUpIcon,
+  CheckIcon,
+  ChevronDownIcon,
+  ChevronLeftIcon,
+  Minimize2Icon,
+  PlayIcon,
+  SquareIcon,
+} from "lucide-react";
 import { CornerUpRight, ListPlus } from "lucide";
 import { MorphIcon } from "~/components/MorphIcon";
-import { useClientSettings, useEnvironmentIdentificationMode } from "~/hooks/useSettings";
+import { useEnvironmentIdentificationMode } from "~/hooks/useSettings";
 import { formatContextWindowTokens } from "~/lib/contextWindow";
 import { cn } from "~/lib/utils";
 import { useShortcutModifierState } from "../../shortcutModifierState";
@@ -10,6 +18,7 @@ import { StageBackdropButtonArt, useSidebarStageBackdropVariant } from "../Sideb
 import { Button } from "../ui/button";
 import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { Spinner } from "../ui/spinner";
+import { ComposerSendButton } from "./ComposerSendButton";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { composerFloatingLayerProps } from "./composerEventScope";
 import {
@@ -62,7 +71,7 @@ const formatPendingPrimaryActionLabel = (input: {
   questionIndex: number;
 }) => {
   if (input.isResponding) {
-    return "Submitting...";
+    return "Submitting…";
   }
   if (input.compact) {
     return input.isLastQuestion ? "Submit" : "Next";
@@ -72,9 +81,6 @@ const formatPendingPrimaryActionLabel = (input: {
   }
   return input.questionIndex > 0 ? "Submit answers" : "Submit answer";
 };
-
-const messageActionPillClassName =
-  "inline-flex shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-message-action font-medium text-base text-message-action-foreground shadow-xs shadow-message-action/24 outline-none hover:bg-message-action-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background disabled:pointer-events-none disabled:opacity-64 disabled:shadow-none sm:text-sm";
 
 const preventPointerFocus: PointerEventHandler<HTMLElement> = (event) => {
   event.preventDefault();
@@ -113,7 +119,6 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     ? { onPointerDown: preventPointerFocus }
     : undefined;
   const environmentIdentificationMode = useEnvironmentIdentificationMode();
-  const redesign = useClientSettings((s) => s.redesignEnabled);
   const shortcutModifiers = useShortcutModifierState();
   const isQueuing =
     !isEditingQueuedMessage &&
@@ -129,16 +134,11 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
     environmentIdentificationMode === "artwork",
   );
 
-  const renderStopGenerationButton = (insidePendingAction: boolean) => (
+  const stopGenerationButton = (
     <Tooltip key="interrupt">
       <TooltipTrigger
         render={
-          <button
-            type="button"
-            className={cn(
-              "flex shrink-0 cursor-pointer items-center justify-center rounded-full bg-destructive/90 text-white shadow-xs shadow-destructive/24 inset-shadow-control-highlight transition-colors duration-150 hover:bg-destructive active:inset-shadow-control-pressed active:shadow-none [&_svg]:pointer-events-none",
-              insidePendingAction ? "size-8 sm:size-7" : "size-8 sm:h-8 sm:w-8",
-            )}
+          <ComposerSendButton
             {...pointerFocusProps}
             disabled={!canOperateThread}
             onClick={() => {
@@ -148,9 +148,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           />
         }
       >
-        <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden="true">
-          <rect x="2" y="2" width="8" height="8" rx="1.5" />
-        </svg>
+        <SquareIcon className="size-3 fill-current" aria-hidden="true" />
       </TooltipTrigger>
       <TooltipPopup>Interrupt</TooltipPopup>
     </Tooltip>
@@ -159,7 +157,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   if (pendingAction) {
     return (
       <div className={cn("flex items-center justify-end", compact ? "gap-1.5" : "gap-2")}>
-        {canInterrupt ? renderStopGenerationButton(true) : null}
+        {canInterrupt ? stopGenerationButton : null}
         {pendingAction.questionIndex > 0 ? (
           compact ? (
             <Button
@@ -184,9 +182,9 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
             </Button>
           )
         ) : null}
-        <button
+        <Button
           type="submit"
-          className={cn(messageActionPillClassName, "h-8 sm:h-7", compact ? "px-3" : "px-4")}
+          size="sm"
           {...pointerFocusProps}
           disabled={
             !canOperateThread ||
@@ -201,7 +199,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
             isResponding: pendingAction.isResponding,
             questionIndex: pendingAction.questionIndex,
           })}
-        </button>
+        </Button>
       </div>
     );
   }
@@ -209,36 +207,34 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   if (showPlanFollowUpPrompt && (promptHasText || !canResume)) {
     if (promptHasText) {
       return (
-        <button
+        <Button
           type="submit"
-          className={cn(messageActionPillClassName, "h-9 sm:h-8", compact ? "px-3" : "px-4")}
+          size="sm"
           {...pointerFocusProps}
           disabled={isSendBusy || isSendDisabled || isConnecting || isEnvironmentUnavailable}
         >
-          {isConnecting || isSendBusy ? "Sending..." : "Refine"}
-        </button>
+          {isConnecting || isSendBusy ? "Sending…" : "Refine"}
+        </Button>
       );
     }
 
     return (
       <div data-chat-composer-implement-actions="true" className="flex items-center justify-end">
-        <button
+        <Button
           type="submit"
-          className={cn(messageActionPillClassName, "h-9 rounded-r-none px-4 sm:h-8")}
+          size="sm"
+          className="rounded-e-none"
           {...pointerFocusProps}
           disabled={isSendBusy || isSendDisabled || isConnecting || isEnvironmentUnavailable}
         >
-          {isConnecting || isSendBusy ? "Sending..." : "Implement"}
-        </button>
+          {isConnecting || isSendBusy ? "Sending…" : "Implement"}
+        </Button>
         <Menu>
           <MenuTrigger
             render={
-              <button
-                type="button"
-                className={cn(
-                  messageActionPillClassName,
-                  "h-9 rounded-l-none border-l border-message-action-foreground/20 px-2 sm:h-8",
-                )}
+              <Button
+                size="sm"
+                className="rounded-s-none border-s-primary-foreground/20"
                 aria-label="Implementation actions"
                 onMouseDown={
                   preserveComposerFocusOnPointerDown ? (event) => event.preventDefault() : undefined
@@ -247,7 +243,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
               />
             }
           >
-            <ChevronDownIcon className="size-3.5" />
+            <ChevronDownIcon />
           </MenuTrigger>
           <MenuPopup align="end" side="top" {...composerFloatingLayerProps}>
             <MenuItem
@@ -265,7 +261,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
   }
 
   if (canInterrupt && !hasSendableContent && !isEditingQueuedMessage) {
-    return renderStopGenerationButton(false);
+    return stopGenerationButton;
   }
 
   const showResume = canResume && !hasSendableContent && !isEditingQueuedMessage;
@@ -308,14 +304,9 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
         : submitLabel);
 
   const sendButton = (
-    <button
+    <ComposerSendButton
       type={showResume ? "button" : "submit"}
-      className={cn(
-        "relative isolate flex h-9 w-9 items-center justify-center overflow-hidden rounded-full shadow-xs transition-all duration-150 enabled:cursor-pointer enabled:inset-shadow-control-highlight hover:scale-105 active:inset-shadow-control-pressed active:shadow-none disabled:pointer-events-none disabled:shadow-none disabled:hover:scale-100 sm:h-8 sm:w-8 [&_svg]:pointer-events-none",
-        stageBackdropVariant
-          ? "bg-transparent text-white enabled:shadow-black/24 enabled:hover:brightness-110 disabled:opacity-64"
-          : "bg-message-action text-message-action-foreground enabled:shadow-message-action/24 hover:bg-message-action-hover disabled:bg-foreground/12 disabled:text-muted-foreground",
-      )}
+      className={stageBackdropVariant ? "isolate overflow-hidden text-white" : undefined}
       {...pointerFocusProps}
       onClick={showResume ? onResume : onSubmitMessage}
       disabled={
@@ -335,23 +326,15 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       {isConnecting || isSendBusy ? (
         <Spinner size="sm" aria-hidden="true" />
       ) : showResume ? (
-        <PlayIcon className="size-4 fill-current" aria-hidden="true" />
+        <PlayIcon className="fill-current" aria-hidden="true" />
       ) : isEditingQueuedMessage ? (
-        <CheckIcon className="size-4" aria-hidden="true" />
+        <CheckIcon aria-hidden="true" />
       ) : isRunning ? (
         <MorphIcon className="size-4" icon={isQueuing ? ListPlus : CornerUpRight} />
       ) : (
-        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-          <path
-            d="M7 11.5V2.5M7 2.5L3 6.5M7 2.5L11 6.5"
-            stroke="currentColor"
-            strokeWidth="1.8"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
+        <ArrowUpIcon aria-hidden="true" />
       )}
-    </button>
+    </ComposerSendButton>
   );
 
   const submit = (
@@ -367,18 +350,10 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
       <Tooltip>
         <TooltipTrigger
           render={
-            <button
-              type="button"
-              className={
-                redesign
-                  ? "flex h-7 shrink-0 cursor-pointer items-center gap-1.5 rounded-(--control-radius) px-2 font-medium text-base text-foreground/80 tabular-nums outline-none hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-64 sm:text-sm aria-pressed:bg-accent/60 aria-pressed:text-foreground [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:text-muted-foreground"
-                  : cn(
-                      "flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-2.5 text-xs tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-64 sm:h-8 [&_svg]:pointer-events-none [&_svg]:size-3.5",
-                      keepFullHistory
-                        ? "border-border text-muted-foreground hover:text-foreground"
-                        : "border-warning/40 text-warning hover:bg-warning/8",
-                    )
-              }
+            <Button
+              variant="ghost-muted"
+              size="sm"
+              className="tabular-nums aria-pressed:bg-row-selected aria-pressed:text-foreground"
               {...pointerFocusProps}
               aria-pressed={!keepFullHistory}
               aria-label={`Compact ${compactTokens} tokens of history before sending`}
@@ -388,19 +363,7 @@ export const ComposerPrimaryActions = memo(function ComposerPrimaryActions({
           }
         >
           <Minimize2Icon aria-hidden="true" />
-          {/* The new design keeps the token count in the tooltip so the permission label keeps its room. */}
-          {redesign ? (
-            keepFullHistory ? (
-              "Keep full"
-            ) : (
-              "Compact next"
-            )
-          ) : (
-            <>
-              {keepFullHistory ? "Full" : "Compact"}
-              <span>{compactTokens}</span>
-            </>
-          )}
+          {keepFullHistory ? "Keep full" : "Compact next"}
         </TooltipTrigger>
         <TooltipPopup>
           <div>

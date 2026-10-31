@@ -27,7 +27,6 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { ChevronRightIcon, InfoIcon } from "lucide-react";
 import { ModelListRow } from "./ModelListRow";
 import { ModelPickerSidebar } from "./ModelPickerSidebar";
 import { ReasoningEffortSlider } from "./ReasoningEffortSlider";
@@ -36,7 +35,6 @@ import {
   replaceDescriptorCurrentValue,
 } from "@t3tools/client-runtime/model-traits";
 import { getTraitsSectionVisibility } from "./TraitsPicker";
-import { Kbd } from "../ui/kbd";
 import { getProviderStatusMessage, hasProviderSetup } from "./ProviderStatusBanner";
 import {
   modelPickerLegacySectionKey,
@@ -70,7 +68,9 @@ import { announce } from "~/lib/announce";
 import { cn } from "~/lib/utils";
 import { getVirtualizedScrollFadeClassName } from "../ui/scroll-area";
 import { TooltipProvider } from "../ui/tooltip";
-import { InlineButton } from "../ui/button";
+import { Button, InlineButton } from "../ui/button";
+import { DisclosureChevron } from "../ui/disclosure-chevron";
+import { Switch } from "../ui/switch";
 import {
   isProviderInstancePickerReady,
   isProviderInstancePickerVisible,
@@ -625,9 +625,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
 
   const isLocked = lockedProvider !== null;
   const isSearching = searchQuery.trim().length > 0;
-  // Inside one provider's tab the provider line repeats the selected rail icon on every row.
-  const redesign = useClientSettings((s) => s.redesignEnabled);
-  const rowsMixProviders = !redesign || isSearching || selectedInstanceId === "favorites";
+  const rowsMixProviders = isSearching || selectedInstanceId === "favorites";
   const lockedDisabledInstanceIds = (() => {
     if (!isLocked) {
       return undefined;
@@ -886,6 +884,12 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     );
   };
   const showTraits = traitsVisibility !== null && traitsVisibility.hasAnyControls;
+  const ultracodeDescriptor = traitsVisibility?.booleanDescriptors.find(
+    (descriptor) => descriptor.id === "ultracode",
+  );
+  const optionDescriptors =
+    traitsVisibility?.booleanDescriptors.filter((descriptor) => descriptor.id !== "ultracode") ??
+    [];
   const handleModelDoubleClick = (instanceId: ProviderInstanceId, slug: string) => {
     handleModelSelect(slug, instanceId);
     onRequestClose?.();
@@ -1021,13 +1025,13 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
         >
           <div
             className={cn(
-              "flex min-h-0 flex-1 flex-col overflow-hidden bg-muted/40",
-              showSidebar && "border-l border-border/70",
+              "flex min-h-0 flex-1 flex-col overflow-hidden",
+              showSidebar && "border-s border-border",
             )}
           >
             <ComboboxSearchInput
               ref={searchInputRef}
-              placeholder="Search models..."
+              placeholder="Search models…"
               value={searchQuery}
               onChange={(e) => {
                 holdPickerHeight();
@@ -1103,19 +1107,12 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                       className="group w-full cursor-pointer"
                     >
                       <div className="min-w-0 flex-1 text-left">
-                        <div className="text-xs font-medium leading-snug redesign:text-sm redesign:font-normal">
-                          Legacy models
-                        </div>
-                        <div className="mt-1 text-xs font-normal leading-snug text-muted-foreground/70 redesign:text-muted-foreground">
+                        <div className="text-sm leading-snug">Legacy models</div>
+                        <div className="mt-1 text-xs leading-snug text-muted-foreground">
                           {legacySection.legacyModels.length} models
                         </div>
                       </div>
-                      <ChevronRightIcon
-                        className={cn(
-                          "size-4 transition-transform",
-                          legacySection.isExpanded && "rotate-90",
-                        )}
-                      />
+                      <DisclosureChevron open={legacySection.isExpanded} />
                     </ComboboxItem>
                   );
                 }
@@ -1145,7 +1142,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                         ? selectedModelKeySet.has(modelKey)
                         : modelKey === activeModelKey
                     }
-                    showSelection={selectedModelKeys !== undefined || redesign}
+                    showSelection
                     showProvider={rowsMixProviders || Boolean(model.subProvider)}
                     preferShortName={!isLocked}
                     useTriggerLabel={false}
@@ -1162,7 +1159,7 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
             {showTraits && traitsVisibility ? (
               <div
                 data-model-picker-traits="true"
-                className="shrink-0 space-y-2.5 border-t border-border/60 bg-muted/15 px-3.5 py-2.5"
+                className="shrink-0 space-y-3 border-t border-border px-3.5 py-3"
               >
                 {traitsVisibility.selectDescriptors.map((descriptor) => {
                   const selectedValue = getDescriptorStringValue(descriptor) ?? "";
@@ -1182,83 +1179,73 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                   }
                   return (
                     <div key={descriptor.id} className="space-y-1.5">
-                      <div className="flex items-center justify-between px-0.5">
-                        <span className="text-3xs font-semibold uppercase tracking-wider text-muted-foreground/80">
-                          {descriptor.label}
-                        </span>
-                      </div>
+                      <span className="block px-0.5 text-xs text-muted-foreground">
+                        {descriptor.label}
+                      </span>
                       <div className="flex flex-wrap gap-1.5">
                         {descriptor.options.map((option) => {
                           const isSelected = selectedValue === option.id;
                           return (
-                            <button
+                            <Button
                               key={option.id}
-                              type="button"
+                              size="xs"
+                              variant={isSelected ? "outline" : "ghost-muted"}
+                              aria-pressed={isSelected}
                               onClick={(event) => {
                                 event.preventDefault();
                                 event.stopPropagation();
                                 handleSelectOptionChange(descriptor, option.id);
                               }}
-                              className={cn(
-                                "inline-flex items-center gap-1 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors duration-150",
-                                isSelected
-                                  ? "border-primary/60 bg-primary/15 font-semibold text-primary"
-                                  : "border-border/40 bg-muted/40 text-muted-foreground hover:border-border/70 hover:bg-muted/80 hover:text-foreground",
-                              )}
                             >
-                              <span>{option.label}</span>
-                              {option.isDefault ? (
-                                <span className="text-3xs opacity-70">(default)</span>
-                              ) : null}
-                            </button>
+                              {option.label}
+                            </Button>
                           );
                         })}
                       </div>
                     </div>
                   );
                 })}
-                {traitsVisibility.booleanDescriptors.length > 0 ? (
-                  <div className="space-y-1.5">
-                    <span className="block px-0.5 text-3xs font-semibold uppercase tracking-wider text-muted-foreground/80">
-                      Options
+                {ultracodeDescriptor ? (
+                  <label className="flex items-center justify-between gap-3 px-0.5">
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium text-foreground">
+                        {ultracodeDescriptor.label}
+                      </span>
+                      {ultracodeDescriptor.description ? (
+                        <span className="block text-xs text-muted-foreground">
+                          {ultracodeDescriptor.description}
+                        </span>
+                      ) : null}
                     </span>
-                    <div className="flex flex-wrap gap-1.5">
-                      {traitsVisibility.booleanDescriptors.map((descriptor) => {
-                        const isChecked = descriptor.currentValue === true;
-                        return (
-                          <button
-                            key={descriptor.id}
-                            type="button"
-                            aria-pressed={isChecked}
-                            onClick={(event) => {
-                              event.preventDefault();
-                              event.stopPropagation();
-                              handleToggleBooleanOption(descriptor);
-                            }}
-                            className={cn(
-                              "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors duration-150",
-                              isChecked
-                                ? "border-primary/60 bg-primary/15 font-semibold text-primary"
-                                : "border-border/40 bg-muted/40 text-muted-foreground hover:border-border/70 hover:bg-muted/80 hover:text-foreground",
-                            )}
-                          >
-                            <span>{descriptor.label}</span>
-                            <span
-                              className={cn(
-                                "rounded px-1 text-3xs font-bold uppercase",
-                                isChecked
-                                  ? "bg-primary/20 text-primary"
-                                  : "bg-muted text-muted-foreground",
-                              )}
-                            >
-                              {isChecked ? "On" : "Off"}
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                    <Switch
+                      size="sm"
+                      checked={ultracodeDescriptor.currentValue === true}
+                      onCheckedChange={() => handleToggleBooleanOption(ultracodeDescriptor)}
+                    />
+                  </label>
                 ) : null}
+                {optionDescriptors.map((descriptor) => (
+                  <label
+                    key={descriptor.id}
+                    className="flex items-center justify-between gap-3 px-0.5"
+                  >
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium text-foreground">
+                        {descriptor.label}
+                      </span>
+                      {descriptor.description ? (
+                        <span className="block text-xs text-muted-foreground">
+                          {descriptor.description}
+                        </span>
+                      ) : null}
+                    </span>
+                    <Switch
+                      size="sm"
+                      checked={descriptor.currentValue === true}
+                      onCheckedChange={() => handleToggleBooleanOption(descriptor)}
+                    />
+                  </label>
+                ))}
               </div>
             ) : null}
             <ModelPickerProviderNotices
@@ -1272,24 +1259,6 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
               onRequestClose={onRequestClose}
               onOpenProviderSetup={onOpenProviderSetup}
             />
-            {props.onModelOptionsChange ? (
-              <div className="flex shrink-0 items-center justify-between border-t border-border/60 bg-muted/25 px-3.5 py-2 text-2xs text-muted-foreground">
-                <div className="flex items-center gap-1.5">
-                  <InfoIcon className="size-3.5 shrink-0 text-muted-foreground/70" />
-                  <span>Applies to selected model</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="flex items-center gap-1">
-                    <Kbd>↑↓</Kbd>
-                    navigate
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Kbd>↵</Kbd>
-                    select
-                  </span>
-                </div>
-              </div>
-            ) : null}
           </div>
         </Combobox>
       </div>

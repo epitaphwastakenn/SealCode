@@ -199,7 +199,7 @@ const resolveOpenInOptions = (platform: string, availableEditors: ReadonlyArray<
 };
 
 function getOpenInIconClass(kind: OpenInOption["kind"]) {
-  return cn(kind === "brand" ? "text-foreground opacity-100" : "text-muted-foreground");
+  return cn(kind === "brand" ? "text-foreground" : "text-muted-foreground");
 }
 
 export const OpenInPicker = memo(function OpenInPicker({

@@ -36,7 +36,7 @@
   "apps/web/src/components/PullRequestThreadDialog.tsx": 1,
   "apps/web/src/components/QuitHoldOverlay.tsx": 1,
   "apps/web/src/components/ReopenClosedViewShortcut.tsx": 2,
-  "apps/web/src/components/RightPanelTabs.tsx": 5,
+  "apps/web/src/components/RightPanelTabs.tsx": 4,
   "apps/web/src/components/RobloxStudioAlerts.tsx": 1,
   "apps/web/src/components/Sidebar.logic.ts": 2,
   "apps/web/src/components/Sidebar.pointer.ts": 1,

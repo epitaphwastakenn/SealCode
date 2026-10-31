@@ -3,6 +3,7 @@ import { ThreadDetailsControl } from "./ThreadDetailsControl";
 import { ThreadHoverCardPopup } from "../ThreadHoverCard";
 import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { SectionHeaderStatus } from "../ui/collapsible-section-header";
+import { DisclosureChevron } from "../ui/disclosure-chevron";
 import { SubagentTooltipContent } from "./SubagentTooltipContent";
 import { PullRequestGlyph } from "../pullRequest/pullRequestIcons";
 import { scopedThreadKey, scopeThreadRef } from "@t3tools/client-runtime/environment";
@@ -43,12 +44,10 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   ArrowRightIcon,
   BotIcon,
-  ChevronDownIcon,
   CornerLeftUpIcon,
   GitForkIcon,
   LoaderCircleIcon,
   MoreHorizontalIcon,
-  PlusIcon,
   SquareIcon,
   UnplugIcon,
 } from "lucide-react";
@@ -74,13 +73,14 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { toastManager } from "../ui/toast";
 import { cn } from "~/lib/utils";
 import {
-  THREAD_DETAILS_PANEL_CHEVRON_CLASS,
   THREAD_DETAILS_PANEL_ICON_CLASS,
   THREAD_DETAILS_PANEL_LABEL_CLASS,
   THREAD_DETAILS_PANEL_SPLIT_GROUP_CLASS,
-  THREAD_DETAILS_PANEL_ROW_CONTENT_CLASS,
   THREAD_DETAILS_PANEL_SPLIT_SEPARATOR_CLASS,
+  threadDetailsMetaClassName,
+  threadDetailsRowLabelClassName,
 } from "./threadDetailsPanelStyles";
+import { threadDetailsScrollListProps } from "./threadDetailsCardLayout";
 
 const THREAD_LINEAGE_INITIAL_COUNT = 6;
 const THREAD_LINEAGE_PAGE_COUNT = 12;
@@ -108,14 +108,12 @@ function ThreadLineageRowList(props: {
         {props.children}
       </ul>
       {props.hiddenCount > 0 ? (
-        <button
-          type="button"
-          onClick={props.onShowMore}
-          className={`flex h-8 w-full cursor-pointer items-center rounded-lg ${THREAD_DETAILS_PANEL_ROW_CONTENT_CLASS} text-sm font-medium text-muted-foreground/70 hover:bg-black/[0.055] hover:text-foreground/80 dark:hover:bg-white/[0.075]`}
-        >
-          <PlusIcon aria-hidden className="size-4 shrink-0" />
+        <ThreadDetailsControl part="row" tone="muted" onClick={props.onShowMore}>
+          <span className="flex size-4 shrink-0 items-center justify-center">
+            <DisclosureChevron open={false} />
+          </span>
           Show {Math.min(props.hiddenCount, THREAD_LINEAGE_PAGE_COUNT)} more
-        </button>
+        </ThreadDetailsControl>
       ) : null}
     </>
   );
@@ -143,18 +141,9 @@ function ThreadLineageGroup(props: {
           <span aria-hidden className="min-w-2 flex-1" />
           {failedCount > 0 ? <SectionHeaderStatus>{failedCount} failed</SectionHeaderStatus> : null}
           {expanded ? null : (
-            <span className="text-xs font-normal tabular-nums text-muted-foreground">
-              {props.rows.length}
-            </span>
+            <span className={threadDetailsMetaClassName}>{props.rows.length}</span>
           )}
-          <ChevronDownIcon
-            aria-hidden
-            className={cn(
-              THREAD_DETAILS_PANEL_CHEVRON_CLASS,
-              "transition-transform",
-              !expanded && "rotate-180 redesign:-rotate-90",
-            )}
-          />
+          <DisclosureChevron open={expanded} />
         </ThreadDetailsControl>
       ) : null}
       {expanded ? (
@@ -401,6 +390,8 @@ export function ThreadRelationshipsPanel(props: {
     }
   };
 
+  const showHeading = runningCount > 0 || canDetach || related.length > 0 || active.length > 0;
+
   const parentTitle =
     mergeTargetThreadId === null
       ? null
@@ -409,10 +400,16 @@ export function ThreadRelationshipsPanel(props: {
   return (
     <ThreadDetailsSection
       headingId="thread-details-lineage-heading"
-      title={runningCount > 0 ? `Lineage · ${runningCount} running` : "Lineage"}
+      title={
+        showHeading
+          ? runningCount > 0
+            ? `Agents · ${runningCount} running`
+            : "Agents"
+          : "Previous agents"
+      }
       // A lone "Previous agents" row names itself; the heading returns for status or actions.
-      showHeading={runningCount > 0 || canDetach || related.length > 0 || active.length > 0}
-      data-thread-relationships-panel
+      showHeading={showHeading}
+      {...threadDetailsScrollListProps}
       actions={
         canDetach ? (
           <Menu>
@@ -536,7 +533,9 @@ export function ThreadRelationshipsPanel(props: {
                     status={rowStatus}
                   />
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-left text-sm font-medium leading-4 text-foreground/85">
+                    <span
+                      className={cn("block truncate text-left", threadDetailsRowLabelClassName)}
+                    >
                       {threadTitle}
                     </span>
                   </span>
@@ -547,7 +546,12 @@ export function ThreadRelationshipsPanel(props: {
                   !failed &&
                   (deriveSubagentElapsedMs(agent, 0) !== null || canStopWorkflow) ? (
                     <span
-                      className={`shrink-0 text-2xs font-normal tabular-nums text-muted-foreground ${canStopWorkflow ? "min-w-6 text-end" : ""} ${trailingVisibilityClass}`}
+                      className={cn(
+                        "shrink-0",
+                        threadDetailsMetaClassName,
+                        canStopWorkflow && "min-w-6 text-end",
+                        trailingVisibilityClass,
+                      )}
                     >
                       <AgentElapsed agent={agent} compact />
                     </span>
@@ -556,7 +560,12 @@ export function ThreadRelationshipsPanel(props: {
                       className={
                         workflowGroup
                           ? "sr-only"
-                          : `shrink-0 text-2xs ${failed ? "text-destructive" : "text-muted-foreground"} ${trailingVisibilityClass}`
+                          : cn(
+                              "shrink-0",
+                              threadDetailsMetaClassName,
+                              failed && "text-error-foreground",
+                              trailingVisibilityClass,
+                            )
                       }
                     >
                       {threadRelationshipStatusLabel(rowStatus)}
@@ -660,7 +669,12 @@ export function ThreadRelationshipsPanel(props: {
                               : "Merge this conversation back into its source"}
                         </TooltipPopup>
                       </Tooltip>
-                      <span className="shrink-0 border border-transparent ps-1 pe-2.5 text-2xs font-medium text-muted-foreground">
+                      <span
+                        className={cn(
+                          "shrink-0 ps-1 pe-2.5 font-medium",
+                          threadDetailsMetaClassName,
+                        )}
+                      >
                         {threadRelationshipStatusLabel(rowStatus)}
                       </span>
                     </div>

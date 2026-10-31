@@ -2,6 +2,9 @@ import type { PreviewMiniPlayerFrame } from "../preview/previewMiniPlayerLayout"
 import { DETAILS_CARD_CLEARANCE } from "./chatCanvasLayout";
 
 export const THREAD_DETAILS_CARD_GAP = 12;
+
+export const threadDetailsScrollListProps = { "data-thread-details-scroll-list": "" } as const;
+export const threadDetailsScrollListSelector = "[data-thread-details-scroll-list]";
 // Keep in sync with --thread-details-panel-width.
 const THREAD_DETAILS_CARD_WIDTH = 280;
 

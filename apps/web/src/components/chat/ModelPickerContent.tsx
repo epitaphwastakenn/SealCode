@@ -69,6 +69,7 @@ import {
 import { announce } from "~/lib/announce";
 import { cn } from "~/lib/utils";
 import { getVirtualizedScrollFadeClassName } from "../ui/scroll-area";
+import { Switch } from "../ui/switch";
 import { TooltipProvider } from "../ui/tooltip";
 import { InlineButton } from "../ui/button";
 import {
@@ -886,6 +887,12 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
     );
   };
   const showTraits = traitsVisibility !== null && traitsVisibility.hasAnyControls;
+  const ultracodeDescriptor = traitsVisibility?.booleanDescriptors.find(
+    (descriptor) => descriptor.id === "ultracode",
+  );
+  const optionChipDescriptors =
+    traitsVisibility?.booleanDescriptors.filter((descriptor) => descriptor.id !== "ultracode") ??
+    [];
   const handleModelDoubleClick = (instanceId: ProviderInstanceId, slug: string) => {
     handleModelSelect(slug, instanceId);
     onRequestClose?.();
@@ -1217,13 +1224,40 @@ export const ModelPickerContent = memo(function ModelPickerContent(props: {
                     </div>
                   );
                 })}
-                {traitsVisibility.booleanDescriptors.length > 0 ? (
+                {ultracodeDescriptor ? (
+                  <label className="flex items-center justify-between gap-3 px-0.5">
+                    <span className="min-w-0">
+                      <span className="block text-xs font-medium text-foreground">
+                        {ultracodeDescriptor.label}
+                      </span>
+                      {ultracodeDescriptor.description ? (
+                        <span className="block text-xs text-muted-foreground">
+                          {ultracodeDescriptor.description}
+                        </span>
+                      ) : null}
+                    </span>
+                    <Switch
+                      size="sm"
+                      checked={ultracodeDescriptor.currentValue === true}
+                      onCheckedChange={(checked) =>
+                        updateDescriptors(
+                          replaceDescriptorCurrentValue(
+                            traitsVisibility.descriptors,
+                            ultracodeDescriptor.id,
+                            checked,
+                          ),
+                        )
+                      }
+                    />
+                  </label>
+                ) : null}
+                {optionChipDescriptors.length > 0 ? (
                   <div className="space-y-1.5">
                     <span className="block px-0.5 text-3xs font-semibold uppercase tracking-wider text-muted-foreground/80">
                       Options
                     </span>
                     <div className="flex flex-wrap gap-1.5">
-                      {traitsVisibility.booleanDescriptors.map((descriptor) => {
+                      {optionChipDescriptors.map((descriptor) => {
                         const isChecked = descriptor.currentValue === true;
                         return (
                           <button

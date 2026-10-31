@@ -41,6 +41,8 @@ import { DeepMutable } from "effect/Types";
 import {
   createModelSelection,
   draftModelPickMatchesThread,
+  migrateLegacyUltracodeOptions,
+  migrateLegacyUltracodeSelection,
   normalizeModelSlug,
 } from "@t3tools/shared/model";
 import { AsyncResult, Atom, type AtomRegistry } from "effect/reactivity";
@@ -662,7 +664,7 @@ function compactModelSelectionByProvider(
   const entries: Array<[string, DeepMutable<ModelSelection>]> = [];
   for (const [provider, selection] of Object.entries(selections)) {
     if (selection !== undefined) {
-      entries.push([provider, cloneModelSelection(selection)]);
+      entries.push([provider, cloneModelSelection(migrateLegacyUltracodeSelection(selection))]);
     }
   }
   return Object.fromEntries(entries) as DeepMutable<Record<ProviderInstanceId, ModelSelection>>;
@@ -676,7 +678,7 @@ function compactStickyOptionsByModel(
     for (const [modelSlug, options] of Object.entries(optionsByModel ?? {})) {
       if (options === undefined || options.length === 0) continue;
       result[instanceId] ??= {};
-      result[instanceId][modelSlug] = options;
+      result[instanceId][modelSlug] = migrateLegacyUltracodeOptions(options);
     }
   }
   return result as NonNullable<PersistedComposerDraftStoreState["stickyOptionsByModelByProvider"]>;
@@ -897,7 +899,7 @@ function coerceProviderOptionSelections(
         out.push({ id, value: optionValue });
       }
     }
-    return out.length > 0 ? out : undefined;
+    return out.length > 0 ? migrateLegacyUltracodeOptions(out) : undefined;
   }
   if (value && typeof value === "object") {
     const record = value as Record<string, unknown>;
@@ -907,7 +909,7 @@ function coerceProviderOptionSelections(
         out.push({ id, value: raw });
       }
     }
-    return out.length > 0 ? out : undefined;
+    return out.length > 0 ? migrateLegacyUltracodeOptions(out) : undefined;
   }
   return undefined;
 }

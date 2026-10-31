@@ -11,6 +11,7 @@ import {
   buildExplicitProviderOptionSelectionsFromDescriptors,
   getProviderOptionCurrentValue,
   getProviderOptionDescriptors,
+  migrateLegacyUltracodeOptions,
   normalizeModelSlug,
 } from "@t3tools/shared/model";
 import type { ReactNode } from "react";
@@ -95,7 +96,10 @@ function resolveComposerOptionSelections(
   selections: ReadonlyArray<ProviderOptionSelection> | undefined;
 } {
   const caps = getProviderModelCapabilities(models, model, provider, planModeEnabled);
-  return { caps, selections: withImplicitFastModeDefault(caps, modelOptions) };
+  return {
+    caps,
+    selections: withImplicitFastModeDefault(caps, migrateLegacyUltracodeOptions(modelOptions)),
+  };
 }
 
 export function getComposerProviderState(input: ComposerProviderStateInput): ComposerProviderState {

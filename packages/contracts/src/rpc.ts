@@ -34,7 +34,7 @@ import {
 import * as Rpc from "effect/rpc/Rpc";
 import * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
-import { NonNegativeInt, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
+import { NonNegativeInt, ProjectId, ThreadId, TrimmedNonEmptyString } from "./baseSchemas.ts";
 import {
   CodexAuthCallbackInput,
   CodexAuthCallbackState,
@@ -1272,8 +1272,11 @@ export const WsVoiceTranscribeRpc = Rpc.make(WS_METHODS.voiceTranscribe, {
 });
 
 export const WsServerGetMcpStatusesRpc = Rpc.make(WS_METHODS.serverGetMcpStatuses, {
-  /** With a thread, only the servers that thread's agent is given. */
-  payload: Schema.Struct({ threadId: Schema.optional(ThreadId) }),
+  /** With a thread, only the servers that thread's agent is given; with a project, the ones a new thread there would get. */
+  payload: Schema.Struct({
+    threadId: Schema.optional(ThreadId),
+    projectId: Schema.optional(ProjectId),
+  }),
   success: Schema.Array(GlobalMcpStatus),
   error: EnvironmentAuthorizationError,
 });

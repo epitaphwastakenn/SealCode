@@ -1016,6 +1016,7 @@ it.effect(
           Layer.provide(
             Layer.succeed(McpToolVisibility, {
               hiddenServers: () => Effect.succeed(new Set(["roblox-studio-official"])),
+              hiddenServersForProject: () => Effect.succeed(new Set<string>()),
             }),
           ),
           Layer.provide(

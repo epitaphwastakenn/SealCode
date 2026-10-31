@@ -13,6 +13,8 @@ import {
   type NodeId,
   type OrchestrationV2Command,
   type OrchestrationV2CreationSource,
+  type OrchestrationV2StudioControls,
+  type OrchestrationV2StudioExcludedPlace,
   type PlanId,
   type ProjectId,
   type ProjectIconOverride,
@@ -140,6 +142,12 @@ export interface SetThreadInteractionModeInput extends ThreadCommandInput {
   readonly interactionMode: ProviderInteractionMode;
 }
 
+export interface SetThreadStudioControlsInput extends ThreadCommandInput {
+  readonly allowPlaytests?: boolean | undefined;
+  readonly excludePlaces?: ReadonlyArray<OrchestrationV2StudioExcludedPlace> | undefined;
+  readonly includePlaces?: ReadonlyArray<string> | undefined;
+}
+
 interface StartThreadBootstrap {
   readonly createThread?: {
     readonly projectId: ProjectId;
@@ -147,6 +155,7 @@ interface StartThreadBootstrap {
     readonly modelSelection: ModelSelection;
     readonly runtimeMode: RuntimeMode;
     readonly interactionMode: ProviderInteractionMode;
+    readonly studioControls?: OrchestrationV2StudioControls | undefined;
     readonly branch: string | null;
     readonly worktreePath: string | null;
     readonly createdAt: string;
@@ -628,6 +637,19 @@ export const setThreadInteractionMode = Effect.fn("EnvironmentCommands.setThread
   },
 );
 
+export const setThreadStudioControls = Effect.fn("EnvironmentCommands.setThreadStudioControls")(
+  function* (input: SetThreadStudioControlsInput) {
+    return yield* dispatch({
+      type: "thread.studio-controls.set",
+      commandId: yield* allocateCommandId(input),
+      threadId: input.threadId,
+      ...(input.allowPlaytests === undefined ? {} : { allowPlaytests: input.allowPlaytests }),
+      ...(input.excludePlaces === undefined ? {} : { excludePlaces: input.excludePlaces }),
+      ...(input.includePlaces === undefined ? {} : { includePlaces: input.includePlaces }),
+    });
+  },
+);
+
 export const startThreadTurn = Effect.fn("EnvironmentCommands.startThreadTurn")(function* (
   input: StartThreadTurnInput,
 ) {
@@ -681,6 +703,9 @@ export const startThreadTurn = Effect.fn("EnvironmentCommands.startThreadTurn")(
       modelSelection: input.modelSelection ?? thread.modelSelection,
       runtimeMode: input.runtimeMode,
       interactionMode: input.interactionMode,
+      ...(bootstrap?.studioControls === undefined
+        ? {}
+        : { studioControls: bootstrap.studioControls }),
       workspaceStrategy,
       initialMessage: {
         messageId: input.message.messageId,

@@ -76,7 +76,12 @@ import {
   DISCONNECTED_COMPOSER_PLACEHOLDER,
   EMPTY_THREAD_COMPOSER_PLACEHOLDER,
 } from "../../composerPlaceholder";
-import type { AgentPreset, ProviderOptionSelection } from "@t3tools/contracts";
+import type {
+  AgentPreset,
+  OrchestrationV2StudioControls,
+  ProviderOptionSelection,
+} from "@t3tools/contracts";
+import type { StudioControlsChange } from "@t3tools/shared/studioControls";
 import { buildTraitsTriggerDisplay } from "@t3tools/client-runtime/model-traits";
 import { ComposerVoiceRecorderBar } from "./ComposerVoiceRecorderBar";
 import { useComposerVoiceController } from "./useComposerVoiceController";
@@ -539,6 +544,8 @@ export interface ChatComposerProps {
   toggleInteractionMode: () => void;
   handleRuntimeModeChange: (mode: RuntimeMode) => void;
   handleInteractionModeChange: (mode: ProviderInteractionMode) => void;
+  studioControls?: OrchestrationV2StudioControls | undefined;
+  onStudioControlsChange?: ((change: StudioControlsChange) => void) | undefined;
 
   focusComposer: () => void;
   scheduleComposerFocus: () => void;
@@ -649,6 +656,8 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
     toggleInteractionMode,
     handleRuntimeModeChange,
     handleInteractionModeChange,
+    studioControls,
+    onStudioControlsChange,
     focusComposer,
     scheduleComposerFocus,
     setThreadError,
@@ -2951,6 +2960,11 @@ export const ChatComposer = memo(function ChatComposer(props: ChatComposerProps)
       usageMeter={composerUsageMeter}
       agentPresets={availableAgentPresets}
       onSelectAgentPreset={applyAgentPresetStable}
+      agentControls={
+        onStudioControlsChange
+          ? { environmentId, controls: studioControls, onChange: onStudioControlsChange }
+          : undefined
+      }
       attachButton={
         showComposerAttachAction ? (
           <ComposerAttachButton

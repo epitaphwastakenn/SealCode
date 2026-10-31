@@ -26,21 +26,28 @@ const visibilityLayer = Layer.effect(
     const roblox = yield* RobloxStudioConfig;
     const threads = yield* ThreadManagement.ThreadManagementService;
     const projects = yield* ProjectService.ProjectService;
+    const noneHidden = Effect.orElseSucceed((): ReadonlySet<string> => new Set());
     return {
-      hiddenServers: (thread) =>
-        Effect.gen(function* () {
-          const current = yield* settings.getSettings;
-          const shell = yield* threads.getThreadShell(thread.threadId);
-          const project =
-            shell === null
-              ? undefined
-              : Option.getOrUndefined(yield* projects.getById(shell.projectId));
-          const hidden = yield* roblox.hiddenServerIds(current, project?.workspaceRoot);
-          return isStudioRestricted(shell?.studioControls) &&
-            current.mcpServers[OFFICIAL_SERVER_ID] === undefined
-            ? new Set([...hidden, OFFICIAL_SERVER_ID])
-            : hidden;
-        }).pipe(Effect.orElseSucceed((): ReadonlySet<string> => new Set())),
+      hiddenServers: Effect.fn("RobloxToolVisibility.hiddenServers")(function* (thread) {
+        const current = yield* settings.getSettings;
+        const shell = yield* threads.getThreadShell(thread.threadId);
+        const project =
+          shell === null
+            ? undefined
+            : Option.getOrUndefined(yield* projects.getById(shell.projectId));
+        const hidden = yield* roblox.hiddenServerIds(current, project?.workspaceRoot);
+        return isStudioRestricted(shell?.studioControls) &&
+          current.mcpServers[OFFICIAL_SERVER_ID] === undefined
+          ? new Set([...hidden, OFFICIAL_SERVER_ID])
+          : hidden;
+      }, noneHidden),
+      hiddenServersForProject: Effect.fn("RobloxToolVisibility.hiddenServersForProject")(function* (
+        projectId,
+      ) {
+        const current = yield* settings.getSettings;
+        const project = Option.getOrUndefined(yield* projects.getById(projectId));
+        return yield* roblox.hiddenServerIds(current, project?.workspaceRoot);
+      }, noneHidden),
     };
   }),
 );

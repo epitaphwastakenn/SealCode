@@ -3,6 +3,7 @@ import type { ChatComposerProps } from "./ChatComposer";
 import { CircleAlertIcon } from "lucide-react";
 import { AgentPresetPicker } from "./AgentPresetPicker";
 import { CompactComposerControlsMenu } from "./CompactComposerControlsMenu";
+import { ComposerAgentControlsMenu, type AgentControlsBinding } from "./ComposerAgentControlsMenu";
 import { ComposerControl, ComposerControlSeparator } from "./ComposerControl";
 import { ComposerFooterModeControls, type RuntimeModeOption } from "./ComposerFooterControls";
 import type {
@@ -38,6 +39,7 @@ export function ComposerControlsBar(props: {
   usageMeter: ReactNode;
   agentPresets: ReadonlyArray<AgentPreset>;
   onSelectAgentPreset: (preset: AgentPreset) => void;
+  agentControls: AgentControlsBinding | undefined;
   attachButton: ReactNode;
 }) {
   const {
@@ -59,6 +61,7 @@ export function ComposerControlsBar(props: {
     usageMeter,
     agentPresets,
     onSelectAgentPreset,
+    agentControls,
     attachButton,
   } = props;
   const restingBlockDefs = [
@@ -86,6 +89,20 @@ export function ComposerControlsBar(props: {
                 presets={agentPresets}
                 compact={composerControlsCollapsed}
                 onSelect={onSelectAgentPreset}
+              />
+            ),
+          },
+        ]
+      : []),
+    ...(agentControls
+      ? [
+          {
+            id: "agent",
+            content: (
+              <ComposerAgentControlsMenu
+                {...agentControls}
+                size={composerControlsCollapsed ? "xs" : "sm"}
+                hidden={composerControlsHidden || restingHiddenBlockCount > 0}
               />
             ),
           },
@@ -161,6 +178,7 @@ export function ComposerControlsBar(props: {
             runtimeModeOptions={compatibleRuntimeModeOptions}
             size={composerControlsCollapsed ? "xs" : "sm"}
             hidden={composerControlsHidden || hiddenRestingBlockIds.length === 0}
+            agentControls={hiddenRestingBlockIds.includes("agent") ? agentControls : undefined}
             showInteractionModeToggle={planModeUiEnabled && hiddenRestingBlockIds.includes("mode")}
             onToggleInteractionMode={toggleInteractionMode}
             onRuntimeModeChange={handleRuntimeModeChange}

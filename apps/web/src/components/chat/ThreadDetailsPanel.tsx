@@ -23,6 +23,7 @@ import { ThreadDetailsSection } from "./ThreadDetailsSection";
 import { ThreadAutomationsPanel } from "./ThreadAutomationsPanel";
 import { ThreadRelationshipsPanel } from "./ThreadRelationshipsControl";
 import { type ThreadSessionInfo, ThreadSessionPanel } from "./ThreadSessionPanel";
+import { ThreadStudioPanel } from "./ThreadStudioPanel";
 
 const GitActionsControl = memo(BaseGitActionsControl);
 
@@ -192,6 +193,10 @@ export function ThreadDetailsPanel(props: ThreadDetailsPanelProps) {
               showMcpServers={!props.draftId}
               compact={density !== "full"}
             />
+          ) : null}
+
+          {density === "full" && !props.draftId && props.session.receivesMcpServers ? (
+            <ThreadStudioPanel environmentId={props.environmentId} threadId={props.threadId} />
           ) : null}
 
           {density === "full" && !props.draftId ? (

@@ -49,7 +49,7 @@ const playtestStarters: Readonly<Record<string, ReadonlyArray<string>>> = {
   multiplayer_playtest: ["start", "add_players"],
 };
 
-export const playtestsDisabledResult = (): StudioToolResult =>
+const playtestsDisabledResult = (): StudioToolResult =>
   errorResult(
     "playtests_disabled",
     "The user turned off playtests for this thread (the Playtests switch in Harp's agent controls). Do not start one or work around it. Verify with reads, edit-mode screenshots and edit-mode Luau, say what stays unverified, or ask the user to turn playtests back on. Stopping or ending a test that is already running is still allowed.",

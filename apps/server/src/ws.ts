@@ -1168,12 +1168,14 @@ const layerSealCodeWsRpc = ServerSealCodeWsRpcGroup.toLayer(
               }),
           ),
         ),
-      [WS_METHODS.serverGetMcpStatuses]: ({ threadId }) =>
-        threadId === undefined
+      [WS_METHODS.serverGetMcpStatuses]: ({ threadId, projectId }) =>
+        threadId === undefined && projectId === undefined
           ? globalMcpManager.getStatuses
           : Effect.all([
               globalMcpManager.getStatuses,
-              mcpToolVisibility.hiddenServers({ threadId }),
+              threadId === undefined
+                ? mcpToolVisibility.hiddenServersForProject(projectId!)
+                : mcpToolVisibility.hiddenServers({ threadId }),
             ]).pipe(
               Effect.map(([statuses, hidden]) =>
                 statuses.filter((status) => !hidden.has(status.id)),

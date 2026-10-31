@@ -1,18 +1,22 @@
-import * as NodeFS from "node:fs";
-import * as NodePath from "node:path";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { expect, it } from "@effect/vitest";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 
-import { expect, it } from "vitest";
-
-const sourceFiles = (directory: string): ReadonlyArray<string> =>
-  NodeFS.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
-    const full = NodePath.join(directory, entry.name);
-    if (entry.isDirectory()) return sourceFiles(full);
-    return /\.tsx?$/u.test(entry.name) && !/\.test\./u.test(entry.name) ? [full] : [];
-  });
-
-it("gives agents no tool that changes a thread's Studio controls", () => {
-  const offenders = sourceFiles(import.meta.dirname).filter((file) =>
-    NodeFS.readFileSync(file, "utf8").includes("thread.studio-controls.set"),
-  );
-  expect(offenders).toEqual([]);
-});
+it.effect("gives agents no tool that changes a thread's Studio controls", () =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const directory = path.dirname(new URL(import.meta.url).pathname.replace(/^\/(\w:)/u, "$1"));
+    const entries = yield* fs.readDirectory(directory, { recursive: true });
+    const sources = entries.filter((entry) => /\.tsx?$/u.test(entry) && !/\.test\./u.test(entry));
+    expect(sources.length).toBeGreaterThan(10);
+    const offenders: string[] = [];
+    for (const entry of sources) {
+      const text = yield* fs.readFileString(path.join(directory, entry));
+      if (text.includes("thread.studio-controls.set")) offenders.push(entry);
+    }
+    expect(offenders).toEqual([]);
+  }).pipe(Effect.provide(NodeServices.layer)),
+);

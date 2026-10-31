@@ -187,6 +187,9 @@ export function useMultipleModelSend(input: MultipleModelSendInput) {
                       modelSelection: target.selection,
                       runtimeMode,
                       interactionMode: target.interactionMode,
+                      studioControls:
+                        useComposerDraftStore.getState().getComposerDraft(composerDraftTarget)
+                          ?.studioControls ?? undefined,
                       branch,
                       worktreePath: null,
                       createdAt: createdAt,

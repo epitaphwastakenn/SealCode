@@ -57,6 +57,25 @@ such as `wally.toml` or `rokit.toml`, or an empty `.sealcode-roblox` file in its
 Every tool call follows the thread's usual approval rules. Agents load Harp's Roblox skills
 (design, building, scripting, networking, data and more) when a task needs them.
 
+## Limit what the agent does in a thread
+
+The **Agent** menu next to the composer, and **Studio places** in the thread details panel, set two
+limits for one thread:
+
+- **Playtests:** switch off `Let the agent start playtests` and the agent cannot start a solo or
+  multiplayer test. Stopping or ending a test that is already running still works, so a stuck test
+  can be cleaned up. Running Luau that starts a playtest is refused too, but that check is a guard,
+  not a sandbox: to rule it out completely, turn off running Luau in the Studio panel.
+- **Studio places:** switch off a place and the agent no longer sees it. It is left out of the
+  list of connected places, and a call that names it is refused with a message that says why.
+  A place you turn off stays listed, dimmed, when it is not connected, so you can turn it back on.
+
+New threads start with every place on and playtests allowed. Forks and threads the agent delegates
+to keep the limits of the thread they came from. The limits belong to the thread: they do not change
+the Studio panel's own switches, which stay the outer limit, and they are separate from the
+**Automatic playtests** setting, which only tells the agent when it may test on its own. A thread
+with any limit does not get Roblox's own Studio MCP, which would bypass them.
+
 ## Blender
 
 Harp finds Blender in its usual install folders and Steam libraries; otherwise set **Blender

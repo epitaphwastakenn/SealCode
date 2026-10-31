@@ -8,6 +8,7 @@ import * as GlobalMcpManager from "../mcp/GlobalMcpManager.ts";
 import * as ProcessRunner from "../processRunner.ts";
 import * as ServerSettings from "../serverSettings.ts";
 import * as StudioBridge from "../studioBridge/StudioBridge.ts";
+import { placeKey } from "../studioBridge/StudioRouter.ts";
 import {
   blenderExecutableFor,
   blenderMcpLaunchFor,
@@ -34,6 +35,7 @@ export const studioBridgeStatus = (
   pluginConnected: snapshot.peers.length > 0,
   places: snapshot.peers.map((peer) => ({
     instanceId: peer.instanceId,
+    placeKey: placeKey(peer),
     role: peer.role,
     ...(peer.placeId > 0 ? { placeId: peer.placeId } : {}),
     placeName: peer.placeName,

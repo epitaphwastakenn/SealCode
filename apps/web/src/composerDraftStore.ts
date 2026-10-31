@@ -8,6 +8,7 @@ import {
   defaultInstanceIdForDriver,
   EnvironmentId,
   ModelSelection,
+  OrchestrationV2StudioControls,
   ProjectId,
   ProviderInstanceId,
   ProviderInteractionMode,
@@ -93,10 +94,12 @@ import {
   toKindScopedComposerContextId,
 } from "@t3tools/shared/composerContextReferences";
 import { UnifiedSettings } from "@t3tools/contracts/settings";
+import { normalizeStudioControls } from "@t3tools/shared/studioControls";
 
 const isElementContextDetails = Schema.is(ElementContextDetails);
 import { ReviewCommentContextSchema, type ReviewCommentContext } from "./reviewCommentContext";
 const isRuntimeMode = Schema.is(RuntimeMode);
+const isStudioControls = Schema.is(OrchestrationV2StudioControls);
 const isProviderDriverKind = Schema.is(ProviderDriverKind);
 const isReviewCommentContext = Schema.is(ReviewCommentContextSchema);
 const isThreadContextRecord = Schema.is(ThreadContextRecord);
@@ -245,6 +248,7 @@ const PersistedComposerThreadDraftState = Schema.Struct({
   modelSelectionExplicit: Schema.optionalKey(Schema.Boolean),
   runtimeMode: Schema.optionalKey(RuntimeMode),
   interactionMode: Schema.optionalKey(ProviderInteractionMode),
+  studioControls: Schema.optionalKey(OrchestrationV2StudioControls),
 });
 type PersistedComposerThreadDraftState = typeof PersistedComposerThreadDraftState.Type;
 
@@ -368,6 +372,7 @@ export interface ComposerThreadDraftState {
   modelSelectionExplicit?: boolean;
   runtimeMode: RuntimeMode | null;
   interactionMode: ProviderInteractionMode | null;
+  studioControls: OrchestrationV2StudioControls | null;
 }
 
 export function composerDraftHasUserContent(
@@ -529,6 +534,10 @@ interface ComposerDraftStoreState {
   setInteractionMode: (
     threadRef: ComposerThreadTarget,
     interactionMode: ProviderInteractionMode | null | undefined,
+  ) => void;
+  setStudioControls: (
+    threadRef: ComposerThreadTarget,
+    studioControls: OrchestrationV2StudioControls | null | undefined,
   ) => void;
   addImage: (threadRef: ComposerThreadTarget, image: ComposerImageAttachment) => boolean;
   addImages: (
@@ -746,7 +755,17 @@ const EMPTY_THREAD_DRAFT = Object.freeze<ComposerThreadDraftState>({
   activeProvider: null,
   runtimeMode: null,
   interactionMode: null,
+  studioControls: null,
 });
+
+function toMutableStudioControls(controls: OrchestrationV2StudioControls) {
+  return {
+    ...(controls.allowPlaytests === undefined ? {} : { allowPlaytests: controls.allowPlaytests }),
+    ...(controls.excludedPlaces === undefined
+      ? {}
+      : { excludedPlaces: controls.excludedPlaces.map((place) => ({ ...place })) }),
+  };
+}
 
 function createEmptyThreadDraft(): ComposerThreadDraftState {
   return {
@@ -763,6 +782,7 @@ function createEmptyThreadDraft(): ComposerThreadDraftState {
     activeProvider: null,
     runtimeMode: null,
     interactionMode: null,
+    studioControls: null,
   };
 }
 
@@ -867,7 +887,8 @@ function shouldRemoveDraft(draft: ComposerThreadDraftState): boolean {
     Object.keys(draft.modelSelectionByProvider).length === 0 &&
     draft.activeProvider === null &&
     draft.runtimeMode === null &&
-    draft.interactionMode === null
+    draft.interactionMode === null &&
+    draft.studioControls === null
   );
 }
 
@@ -1790,6 +1811,9 @@ function normalizePersistedDraftsByThreadId(
       draftCandidate.interactionMode === "plan" || draftCandidate.interactionMode === "default"
         ? draftCandidate.interactionMode
         : null;
+    const studioControls = isStudioControls(draftCandidate.studioControls)
+      ? (normalizeStudioControls(draftCandidate.studioControls) ?? null)
+      : null;
     const contextIds = new Map<string, string>();
     for (const [kind, entries] of [
       ["image", attachments],
@@ -1879,7 +1903,8 @@ function normalizePersistedDraftsByThreadId(
       threadContexts.length === 0 &&
       !hasModelData &&
       !runtimeMode &&
-      !interactionMode
+      !interactionMode &&
+      !studioControls
     ) {
       continue;
     }
@@ -1912,6 +1937,7 @@ function normalizePersistedDraftsByThreadId(
         : {}),
       ...(runtimeMode ? { runtimeMode } : {}),
       ...(interactionMode ? { interactionMode } : {}),
+      ...(studioControls ? { studioControls: toMutableStudioControls(studioControls) } : {}),
     };
   }
 
@@ -1950,7 +1976,9 @@ function stripLegacyModelSeedsFromEmptyDraftSessions(
         modelSelectionExplicit: _modelSelectionExplicit,
         ...retained
       } = draft;
-      return retained.runtimeMode || retained.interactionMode ? [[threadKey, retained]] : [];
+      return retained.runtimeMode || retained.interactionMode || retained.studioControls
+        ? [[threadKey, retained]]
+        : [];
     }),
   );
 }
@@ -2007,7 +2035,8 @@ export function partializeComposerDraftStoreState(
       draft.threadContexts.length === 0 &&
       !hasModelData &&
       draft.runtimeMode === null &&
-      draft.interactionMode === null
+      draft.interactionMode === null &&
+      draft.studioControls === null
     ) {
       continue;
     }
@@ -2071,6 +2100,9 @@ export function partializeComposerDraftStoreState(
         : {}),
       ...(draft.runtimeMode ? { runtimeMode: draft.runtimeMode } : {}),
       ...(draft.interactionMode ? { interactionMode: draft.interactionMode } : {}),
+      ...(draft.studioControls
+        ? { studioControls: toMutableStudioControls(draft.studioControls) }
+        : {}),
     };
     persistedDraftsByThreadKey[threadKey] = persistedDraft;
   }
@@ -2339,6 +2371,7 @@ function toHydratedThreadDraft(
     ...(persistedDraft.modelSelectionExplicit ? { modelSelectionExplicit: true } : {}),
     runtimeMode: persistedDraft.runtimeMode ?? null,
     interactionMode: persistedDraft.interactionMode ?? null,
+    studioControls: normalizeStudioControls(persistedDraft.studioControls) ?? null,
   };
 }
 
@@ -3118,6 +3151,31 @@ const composerDraftStore = create<ComposerDraftStoreState>()(
               ...base,
               runtimeMode: nextRuntimeMode,
             };
+            const nextDraftsByThreadKey = { ...state.draftsByThreadKey };
+            if (shouldRemoveDraft(nextDraft)) {
+              delete nextDraftsByThreadKey[threadKey];
+            } else {
+              nextDraftsByThreadKey[threadKey] = nextDraft;
+            }
+            return { draftsByThreadKey: nextDraftsByThreadKey };
+          });
+        },
+        setStudioControls: (threadRef, studioControls) => {
+          const threadKey = resolveComposerDraftKey(get(), threadRef) ?? "";
+          if (threadKey.length === 0) {
+            return;
+          }
+          const nextControls = normalizeStudioControls(studioControls) ?? null;
+          set((state) => {
+            const existing = state.draftsByThreadKey[threadKey];
+            if (!existing && nextControls === null) {
+              return state;
+            }
+            const base = existing ?? createEmptyThreadDraft();
+            if (JSON.stringify(base.studioControls) === JSON.stringify(nextControls)) {
+              return state;
+            }
+            const nextDraft: ComposerThreadDraftState = { ...base, studioControls: nextControls };
             const nextDraftsByThreadKey = { ...state.draftsByThreadKey };
             if (shouldRemoveDraft(nextDraft)) {
               delete nextDraftsByThreadKey[threadKey];

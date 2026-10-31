@@ -30,6 +30,7 @@ import {
   type RoutablePeer,
   type RoutingErrorCode,
 } from "./StudioRouter.ts";
+import type { StudioExcludedPlace } from "./studioControls.ts";
 
 export const STUDIO_BRIDGE_BUILD = packageJson.version;
 
@@ -83,6 +84,15 @@ export class StudioRoutingError extends Schema.TaggedError<StudioRoutingError>()
     return this.detail;
   }
 }
+
+export interface StudioCallScopeValue {
+  readonly excludedPlaces: ReadonlyArray<StudioExcludedPlace>;
+}
+
+export const StudioCallScope = Context.Reference<StudioCallScopeValue>(
+  "t3/studioBridge/StudioCallScope",
+  { defaultValue: () => ({ excludedPlaces: [] }) },
+);
 
 export class StudioRequestTimeout extends Schema.TaggedError<StudioRequestTimeout>()(
   "StudioRequestTimeout",
@@ -422,6 +432,18 @@ const make = Effect.gen(function* () {
     return current;
   };
 
+  const excludedPeers = <Peer extends RoutablePeer>(
+    scope: StudioCallScopeValue,
+    peers: ReadonlyArray<Peer>,
+  ): ReadonlyArray<Peer> =>
+    scope.excludedPlaces.length === 0
+      ? []
+      : peers.filter((peer) =>
+          scope.excludedPlaces.some(
+            (place) => peersOfPlace([peer], place.placeKey, resolveAlias).length > 0,
+          ),
+        );
+
   const allPeers = (): StudioPeer[] =>
     [...sessions.values()].flatMap((session) => [
       session.peer,
@@ -430,6 +452,13 @@ const make = Effect.gen(function* () {
         lastSeenAt: session.peer.lastSeenAt,
       })),
     ]);
+
+  const visiblePeers = Effect.gen(function* () {
+    const scope = yield* StudioCallScope;
+    const peers = allPeers();
+    const hidden = new Set(excludedPeers(scope, peers));
+    return hidden.size === 0 ? peers : peers.filter((peer) => !hidden.has(peer));
+  });
 
   /** The peer of this session (itself or a relayed client) that a request targets. */
   const servingPeer = (session: Session, request: Pending): StudioPeer | undefined => {
@@ -925,9 +954,30 @@ const make = Effect.gen(function* () {
 
   const resolve: StudioBridge["Service"]["resolve"] = (input) =>
     Effect.gen(function* () {
-      const peers = allPeers();
+      const peers = yield* visiblePeers;
       const route = resolveTarget({ peers, resolveAlias, ...input });
       if (route._tag === "RoutingFailed") {
+        const scope = yield* StudioCallScope;
+        const requested = input.instanceId?.trim();
+        const everyPeer = allPeers();
+        const blocked =
+          requested && route.code === "unrecognized_instance_id"
+            ? excludedPeers(scope, peersOfPlace(everyPeer, requested, resolveAlias))
+            : peers.length === 0
+              ? excludedPeers(scope, everyPeer)
+              : [];
+        const first = blocked[0];
+        if (first !== undefined) {
+          const names = [...new Set(excludedPeers(scope, everyPeer).map((peer) => peer.placeName))];
+          return yield* new StudioRoutingError({
+            code: "place_excluded" satisfies RoutingErrorCode,
+            detail:
+              requested || names.length === 1
+                ? `The user turned off the Studio place "${first.placeName}" for this thread in Harp (Studio places switch). Do not use it or work around it; ${peers.length === 0 ? "ask the user to turn it back on" : "pick another place from instances, or ask the user to turn it back on"}.`
+                : `The user turned off every connected Studio place for this thread in Harp (${names.map((name) => `"${name}"`).join(", ")}). Do not work around it; ask the user to turn a place back on.`,
+            instances: [...summarizePeers(peers)],
+          });
+        }
         return yield* new StudioRoutingError({
           code: route.code satisfies RoutingErrorCode,
           detail: route.message,
@@ -1068,9 +1118,11 @@ const make = Effect.gen(function* () {
     unregisterClient,
     request,
     resolve,
-    peers: Effect.sync(allPeers),
+    peers: visiblePeers,
     peersOf: (instanceId) =>
-      Effect.sync(() => [...peersOfPlace(allPeers(), instanceId, resolveAlias)] as StudioPeer[]),
+      visiblePeers.pipe(
+        Effect.map((peers) => [...peersOfPlace(peers, instanceId, resolveAlias)] as StudioPeer[]),
+      ),
     notify: (input) =>
       Effect.gen(function* () {
         const target = [...sessions.values()].find(

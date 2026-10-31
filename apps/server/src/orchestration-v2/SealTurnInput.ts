@@ -1,5 +1,10 @@
-import { type ChatAttachment, type ModelSelection } from "@t3tools/contracts";
+import {
+  type ChatAttachment,
+  type ModelSelection,
+  type OrchestrationV2StudioControls,
+} from "@t3tools/contracts";
 import { modelHasVision } from "@t3tools/shared/model";
+import { isStudioPlaceExcluded } from "@t3tools/shared/studioControls";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -8,7 +13,7 @@ import * as Schema from "effect/Schema";
 import * as ProviderInstanceRegistry from "../provider/ProviderInstanceRegistry.ts";
 import * as RobloxStudioConfig from "../roblox/RobloxStudioConfig.ts";
 import * as ServerSettings from "../serverSettings.ts";
-import { studioSelectionContext } from "../studioBridge/instructions.ts";
+import { studioControlsContext, studioSelectionContext } from "../studioBridge/instructions.ts";
 import * as StudioBridge from "../studioBridge/StudioBridge.ts";
 import * as TextGeneration from "../textGeneration/TextGeneration.ts";
 
@@ -39,6 +44,7 @@ export interface SealTurnInputShape {
     readonly providerThreadId?: string | undefined;
     readonly freshConversation?: boolean | undefined;
     readonly modelSelection: ModelSelection;
+    readonly studioControls?: OrchestrationV2StudioControls | undefined;
     readonly text: string;
     readonly attachments: ReadonlyArray<ChatAttachment>;
   }) => Effect.Effect<SealTurnInput, SealTurnInputError>;
@@ -169,17 +175,26 @@ export const layer = Layer.effect(
           }
         }
         // Unlike the instructions, the Studio selection changes between turns, so it rides on each.
-        const studioContext =
+        const studioApplies =
           studioBridge._tag === "Some" &&
           current.robloxStudio.mode === "sealcode" &&
-          current.robloxStudio.studioContext &&
-          (yield* roblox.appliesTo(current, input.workspaceRoot ?? input.cwd))
-            ? studioSelectionContext(yield* studioBridge.value.selections)
+          (yield* roblox.appliesTo(current, input.workspaceRoot ?? input.cwd));
+        const studioContext =
+          studioBridge._tag === "Some" && studioApplies && current.robloxStudio.studioContext
+            ? studioSelectionContext(
+                (yield* studioBridge.value.selections).filter(
+                  (selection) => !isStudioPlaceExcluded(input.studioControls, selection.instanceId),
+                ),
+              )
             : undefined;
+        const studioLimits = studioApplies
+          ? studioControlsContext(input.studioControls)
+          : undefined;
         const harness = [
           current.sealsInstructions.trim(),
           sendStudio && studio !== undefined ? withStudioInstructions(studio) : "",
           studioContext ?? "",
+          studioLimits ?? "",
         ]
           .filter((part) => part.length > 0)
           .join("\n\n");

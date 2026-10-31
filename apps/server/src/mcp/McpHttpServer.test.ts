@@ -22,8 +22,10 @@ import * as ProjectService from "../project/ProjectService.ts";
 import * as PullRequestReviewGuideService from "../pullRequest/PullRequestReviewGuideService.ts";
 import * as ServerConfig from "../config.ts";
 import * as GlobalMcpManager from "./GlobalMcpManager.ts";
+import { McpCallPolicy } from "./McpCallPolicy.ts";
 import * as McpHttpServer from "./McpHttpServer.ts";
 import * as McpToolAccess from "./McpToolAccess.ts";
+import { McpToolVisibility } from "./McpToolVisibility.ts";
 import * as McpToolAccessTestkit from "./McpToolAccess.testkit.ts";
 import * as McpInvocationContext from "./McpInvocationContext.ts";
 import * as McpSessionRegistry from "./McpSessionRegistry.ts";
@@ -962,6 +964,124 @@ it.effect("serves the global MCP gateway to thread credentials only", () =>
       expect(yield* stream.text).toContain(": connected");
     }),
   ).pipe(Effect.provide(NodeHttpServer.layerTest)),
+);
+
+it.effect(
+  "hands the call policy to the manager and refuses hidden or refused servers on call",
+  () =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const threadToken = "threadTokenWithoutDots";
+        const threadScope: McpInvocationContext.McpInvocationScope = {
+          ...invocation,
+          capabilities: new Set(["orchestration"]),
+        };
+        const entryFor = (
+          serverId: string,
+          name: string,
+        ): GlobalMcpManager.McpToolCatalogEntry => ({
+          canonicalName: `mcp__${serverId}__${name}`,
+          serverId,
+          serverDisplayName: serverId,
+          upstreamToolName: name,
+          tool: { name, description: name, inputSchema: { type: "object" } },
+        });
+        const studio = entryFor("studio", "playtest");
+        const official = entryFor("roblox-studio-official", "start_stop_play");
+        const other = entryFor("other", "ping");
+        const entries = [studio, official, other];
+        const catalog: GlobalMcpManager.McpToolCatalog = {
+          tools: entries,
+          byCanonicalName: new Map(entries.map((entry) => [entry.canonicalName, entry])),
+        };
+        const received: Array<GlobalMcpManager.McpInvocation> = [];
+        const layerGateway = McpHttpServer.layerGlobalMcpGateway.pipe(
+          Layer.provide(
+            Layer.mock(McpSessionRegistry.McpSessionRegistry)({
+              resolve: (token) =>
+                Effect.succeed(
+                  token === threadToken
+                    ? (threadScope as McpInvocationContext.McpThreadInvocationScope)
+                    : undefined,
+                ),
+            }),
+          ),
+          Layer.provide(
+            Layer.succeed(McpHttpServer.McpClientAuthenticator, {
+              authenticate: () => Effect.undefined,
+            }),
+          ),
+        );
+        yield* HttpRouter.serve(layerGateway, { disableListenLog: true, disableLogger: true }).pipe(
+          Layer.provide(
+            Layer.succeed(McpToolVisibility, {
+              hiddenServers: () => Effect.succeed(new Set(["roblox-studio-official"])),
+              hiddenServersForProject: () => Effect.succeed(new Set<string>()),
+            }),
+          ),
+          Layer.provide(
+            Layer.succeed(McpCallPolicy, {
+              forCall: ({ serverId }) =>
+                Effect.succeed(
+                  serverId === "studio"
+                    ? {
+                        _tag: "Allow",
+                        meta: { "sealcode/studioControls": { allowPlaytests: false } },
+                      }
+                    : serverId === "other"
+                      ? { _tag: "Refuse", message: "Not for this thread." }
+                      : { _tag: "Allow" },
+                ),
+            }),
+          ),
+          Layer.provide(
+            Layer.mock(GlobalMcpManager.GlobalMcpManager)({
+              getCatalog: Effect.succeed(catalog),
+              callTool: (input) =>
+                Effect.sync(() => {
+                  received.push(input);
+                  return { isError: false, content: [{ type: "text", text: "ok" }] };
+                }),
+              streamChanges: Stream.empty,
+            }),
+          ),
+          Layer.build,
+        );
+        const httpClient = yield* HttpClient.HttpClient;
+        const call = (name: string, params: Record<string, unknown> = {}) =>
+          httpClient
+            .post("/mcp/global", {
+              headers: {
+                accept: "application/json, text/event-stream",
+                authorization: `Bearer ${threadToken}`,
+              },
+              body: HttpBody.text(
+                JSON.stringify({
+                  jsonrpc: "2.0",
+                  id: 1,
+                  method: "tools/call",
+                  params: { name, arguments: {}, ...params },
+                }),
+                "application/json",
+              ),
+            })
+            .pipe(Effect.flatMap((response) => response.json));
+
+        yield* call(studio.canonicalName, {
+          _meta: { "sealcode/studioControls": { forged: true } },
+        });
+        expect(received).toHaveLength(1);
+        expect(received[0]?.meta).toEqual({ "sealcode/studioControls": { allowPlaytests: false } });
+
+        const hidden = yield* call(official.canonicalName);
+        expect(hidden).toMatchObject({ result: { isError: true } });
+        const refused = yield* call(other.canonicalName);
+        expect(refused).toMatchObject({
+          result: { isError: true, content: [{ text: "Not for this thread." }] },
+        });
+        expect(received).toHaveLength(1);
+      }),
+    ).pipe(Effect.provide(NodeHttpServer.layerTest)),
 );
 
 it.effect("lists pull request watch tools only to threads that are not delegated children", () =>

@@ -858,6 +858,24 @@ describe("composerDraftStore project draft thread mapping", () => {
     );
   });
 
+  it("keeps a draft thread's Studio controls, drops defaults, and removes an empty draft", () => {
+    const store = useComposerDraftStore.getState();
+    store.setProjectDraftThreadId(projectRef, draftId, { threadId });
+    const lobby = { placeKey: "place:1", placeName: "Lobby" };
+
+    store.setStudioControls(draftId, { allowPlaytests: false, excludedPlaces: [lobby] });
+    expect(store.getComposerDraft(draftId)?.studioControls).toEqual({
+      allowPlaytests: false,
+      excludedPlaces: [lobby],
+    });
+
+    store.setStudioControls(draftId, { allowPlaytests: true, excludedPlaces: [] });
+    expect(
+      useComposerDraftStore.getState().getComposerDraft(draftId)?.studioControls ?? null,
+    ).toBeNull();
+    expect(useComposerDraftStore.getState().getComposerDraft(draftId)).toBeNull();
+  });
+
   it("clears only matching project draft mapping entries", () => {
     const store = useComposerDraftStore.getState();
     store.setProjectDraftThreadId(projectRef, draftId, { threadId });

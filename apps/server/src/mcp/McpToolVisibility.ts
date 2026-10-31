@@ -1,3 +1,4 @@
+import type { ProjectId } from "@t3tools/contracts";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 
@@ -8,10 +9,16 @@ export interface McpToolVisibilityShape {
   readonly hiddenServers: (
     thread: Pick<McpThreadCaller, "threadId">,
   ) => Effect.Effect<ReadonlySet<string>>;
+  readonly hiddenServersForProject: (projectId: ProjectId) => Effect.Effect<ReadonlySet<string>>;
 }
 
 /** Every thread sees every server unless a feature scopes its own servers, as Roblox Studio does. */
 export const McpToolVisibility = Context.Reference<McpToolVisibilityShape>(
   "t3/mcp/McpToolVisibility",
-  { defaultValue: () => ({ hiddenServers: () => Effect.succeed(new Set<string>()) }) },
+  {
+    defaultValue: () => ({
+      hiddenServers: () => Effect.succeed(new Set<string>()),
+      hiddenServersForProject: () => Effect.succeed(new Set<string>()),
+    }),
+  },
 );

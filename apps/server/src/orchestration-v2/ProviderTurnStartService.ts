@@ -561,6 +561,7 @@ export const layer: Layer.Layer<
           providerThreadId: providerThread.id,
           freshConversation: providerThread.nativeThreadRef === null,
           modelSelection: run.modelSelection,
+          studioControls: projection.thread.studioControls,
           text: projectComposerContextForProvider({
             text: message.text,
             records: message.context?.records ?? [],

@@ -104,6 +104,7 @@ export type McpInvocation = {
   readonly scope: McpInvocationContext.McpInvocationScope;
   readonly canonicalToolName: string;
   readonly arguments: Record<string, unknown>;
+  readonly meta?: Readonly<Record<string, unknown>>;
 };
 
 export class GlobalMcpManager extends Context.Service<
@@ -751,9 +752,14 @@ const make = Effect.gen(function* () {
                 {
                   name: entry.upstreamToolName,
                   arguments: input.arguments,
-                  ...(threadId === undefined
+                  ...(threadId === undefined && input.meta === undefined
                     ? {}
-                    : { _meta: { [THREAD_SCOPE_META_KEY]: threadId } }),
+                    : {
+                        _meta: {
+                          ...input.meta,
+                          ...(threadId === undefined ? {} : { [THREAD_SCOPE_META_KEY]: threadId }),
+                        },
+                      }),
                 },
                 undefined,
                 { signal, timeout: TOOL_CALL_TIMEOUT_MS, resetTimeoutOnProgress: true },

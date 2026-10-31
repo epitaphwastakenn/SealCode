@@ -9,6 +9,7 @@ import {
   MenuSeparator as MenuDivider,
   MenuTrigger,
 } from "../ui/menu";
+import { AgentControlsMenuContent, type AgentControlsBinding } from "./ComposerAgentControlsMenu";
 import { ComposerControl, ComposerControlIcon } from "./ComposerControl";
 import { useComposerMenuProps } from "./composerEventScope";
 import { useComposerMenuState } from "./useComposerMenuState";
@@ -21,6 +22,7 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
     readonly label: string;
   }>;
   showInteractionModeToggle: boolean;
+  agentControls?: AgentControlsBinding | undefined;
   size?: "sm" | "xs";
   /** Close the portaled popup when its trigger hides. */
   hidden?: boolean;
@@ -76,6 +78,12 @@ export const CompactComposerControlsMenu = memo(function CompactComposerControls
             </MenuRadioItem>
           ))}
         </MenuRadioGroup>
+        {props.agentControls ? (
+          <>
+            <MenuDivider />
+            <AgentControlsMenuContent {...props.agentControls} />
+          </>
+        ) : null}
       </MenuPopup>
     </Menu>
   );

@@ -1488,3 +1488,126 @@ it.effect("records a prompt suggestion on the newest run and ignores one for an 
     });
   }).pipe(Effect.provide(layerTest)),
 );
+
+it.effect(
+  "keeps a thread's Studio controls through no-op changes, resets and delegated children",
+  () =>
+    Effect.gen(function* () {
+      const orchestrator = yield* Orchestrator.OrchestratorV2;
+      const projections = yield* ProjectionStore.ProjectionStoreV2;
+      const threadId = ThreadId.make("thread:studio-controls");
+      const lobby = { placeKey: "place:1", placeName: "Lobby" };
+      const arena = { placeKey: "anon:arena", placeName: "Arena" };
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("create-studio-controls"),
+        threadId,
+        projectId: ProjectId.make("project:studio-controls"),
+        title: "Studio",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        branch: null,
+        worktreePath: null,
+        createdBy: "user",
+        creationSource: "web",
+      });
+      const read = () =>
+        projections.getThreadProjection(threadId).pipe(Effect.map((p) => p.thread));
+      assert.isUndefined((yield* read()).studioControls);
+
+      const set = (
+        id: string,
+        change: {
+          allowPlaytests?: boolean;
+          excludePlaces?: ReadonlyArray<typeof lobby>;
+          includePlaces?: ReadonlyArray<string>;
+        },
+      ) =>
+        orchestrator.dispatch({
+          type: "thread.studio-controls.set",
+          commandId: CommandId.make(`studio-controls-${id}`),
+          threadId,
+          ...change,
+        });
+
+      yield* set("exclude", { allowPlaytests: false, excludePlaces: [lobby, arena] });
+      const restricted = yield* read();
+      assert.deepEqual(restricted.studioControls, {
+        allowPlaytests: false,
+        excludedPlaces: [lobby, arena],
+      });
+
+      yield* set("repeat", { allowPlaytests: false, excludePlaces: [lobby] });
+      const repeated = yield* read();
+      assert.equal(repeated.updatedAt.toString(), restricted.updatedAt.toString());
+      assert.deepEqual(repeated.studioControls?.excludedPlaces, [lobby, arena]);
+
+      yield* set("include", { includePlaces: ["place:1"] });
+      assert.deepEqual((yield* read()).studioControls?.excludedPlaces, [arena]);
+
+      yield* orchestrator.dispatch({
+        type: "message.dispatch",
+        commandId: CommandId.make("start-studio-controls"),
+        threadId,
+        messageId: MessageId.make("message:studio-controls"),
+        text: "Delegate",
+        attachments: [],
+        dispatchMode: { type: "start_immediately" },
+        createdBy: "user",
+        creationSource: "web",
+      });
+      const parent = yield* projections.getThreadProjection(threadId);
+      const parentRun = parent.runs[0]!;
+      yield* orchestrator.dispatch({
+        type: "delegated_task.request",
+        commandId: CommandId.make("delegate-studio-controls"),
+        parentThreadId: threadId,
+        parentRunId: parentRun.id,
+        parentNodeId: parentRun.rootNodeId!,
+        task: "Build it",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        createdBy: "agent",
+        creationSource: "mcp",
+      });
+      const childId = (yield* projections.getThreadProjection(threadId)).subagents[0]!
+        .childThreadId!;
+      const child = yield* projections.getThreadProjection(childId);
+      assert.deepEqual(child.thread.studioControls, {
+        allowPlaytests: false,
+        excludedPlaces: [arena],
+      });
+
+      yield* set("reset", { allowPlaytests: true, includePlaces: ["anon:arena"] });
+      assert.isUndefined((yield* read()).studioControls);
+      assert.deepEqual(
+        (yield* projections.getThreadProjection(childId)).thread.studioControls?.excludedPlaces,
+        [arena],
+      );
+
+      yield* orchestrator.dispatch({
+        type: "thread.create",
+        commandId: CommandId.make("create-studio-controls-draft"),
+        threadId: ThreadId.make("thread:studio-controls-draft"),
+        projectId: ProjectId.make("project:studio-controls"),
+        title: "Draft",
+        modelSelection,
+        runtimeMode: "full-access",
+        interactionMode: "default",
+        studioControls: { allowPlaytests: false, excludedPlaces: [lobby] },
+        branch: null,
+        worktreePath: null,
+        createdBy: "user",
+        creationSource: "web",
+      });
+      const draft = yield* projections.getThreadProjection(
+        ThreadId.make("thread:studio-controls-draft"),
+      );
+      assert.deepEqual(draft.thread.studioControls, {
+        allowPlaytests: false,
+        excludedPlaces: [lobby],
+      });
+    }).pipe(Effect.provide(layerTest)),
+);

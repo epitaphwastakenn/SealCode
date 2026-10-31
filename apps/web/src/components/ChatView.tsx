@@ -35,6 +35,7 @@ import {
 } from "./ChatView.logic";
 import { useLogicalProjectEnvironments } from "../hooks/useLogicalProjectEnvironments";
 import { useStableCallback } from "../hooks/useStableCallback";
+import { useStudioControlsApply, useThreadStudioControls } from "../hooks/useThreadStudioControls";
 import { useProjectScriptEditing } from "./chat/useProjectScriptEditing";
 import { usePendingThreadRequests } from "./chat/usePendingThreadRequests";
 import { isScratchProject } from "@t3tools/client-runtime/state/projects";
@@ -2855,6 +2856,19 @@ export default function ChatView(props: ChatViewProps) {
     setPendingServerThreadStartFromOriginByThreadId,
     scheduleComposerFocus,
   });
+  const studioControlsApply = useStudioControlsApply({
+    environmentId,
+    ...(isServerThread ? { threadId } : activeProject ? { projectId: activeProject.id } : {}),
+    enabled: activeThread != null,
+  });
+  const { controls: studioControls, change: changeStudioControls } = useThreadStudioControls({
+    environmentId,
+    threadId,
+    composerDraftTarget,
+    isDraft: !isServerThread,
+    serverControls: serverThread?.studioControls,
+  });
+  const changeStudioControlsStable = useStableCallback(changeStudioControls);
   const { onResume, isResuming } = useComposerResume({
     environmentId,
     routeThreadKey,
@@ -3719,6 +3733,12 @@ export default function ChatView(props: ChatViewProps) {
                               toggleInteractionMode={toggleInteractionModeStable}
                               handleRuntimeModeChange={handleRuntimeModeChangeStable}
                               handleInteractionModeChange={handleInteractionModeChangeStable}
+                              studioControls={studioControls}
+                              onStudioControlsChange={
+                                studioControlsApply && threadSession.receivesMcpServers
+                                  ? changeStudioControlsStable
+                                  : undefined
+                              }
                               focusComposer={focusComposerStable}
                               scheduleComposerFocus={scheduleComposerFocusStable}
                               setThreadError={setThreadError}

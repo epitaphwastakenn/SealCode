@@ -246,6 +246,7 @@ import * as PairingGrantStore from "./auth/PairingGrantStore.ts";
 import * as SessionStore from "./auth/SessionStore.ts";
 import { failEnvironmentAuthInvalid, failEnvironmentInternal } from "./auth/http.ts";
 import { isNetworkPath } from "@t3tools/shared/path";
+import { studioControlsField } from "@t3tools/shared/studioControls";
 import {
   sameUsageLimitCommandCoverage,
   withUsageLimitsCommands,
@@ -1167,12 +1168,14 @@ const layerSealCodeWsRpc = ServerSealCodeWsRpcGroup.toLayer(
               }),
           ),
         ),
-      [WS_METHODS.serverGetMcpStatuses]: ({ threadId }) =>
-        threadId === undefined
+      [WS_METHODS.serverGetMcpStatuses]: ({ threadId, projectId }) =>
+        threadId === undefined && projectId === undefined
           ? globalMcpManager.getStatuses
           : Effect.all([
               globalMcpManager.getStatuses,
-              mcpToolVisibility.hiddenServers({ threadId }),
+              threadId === undefined
+                ? mcpToolVisibility.hiddenServersForProject(projectId!)
+                : mcpToolVisibility.hiddenServers({ threadId }),
             ]).pipe(
               Effect.map(([statuses, hidden]) =>
                 statuses.filter((status) => !hidden.has(status.id)),
@@ -2007,6 +2010,7 @@ const layerWsCoreRpc = (
                     modelSelection: input.modelSelection,
                     runtimeMode: input.runtimeMode,
                     interactionMode: input.interactionMode,
+                    ...studioControlsField(input.studioControls),
                     workspaceStrategy: input.workspaceStrategy,
                     ...(input.initialMessage === undefined
                       ? {}

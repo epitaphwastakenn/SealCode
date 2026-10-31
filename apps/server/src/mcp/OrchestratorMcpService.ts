@@ -71,6 +71,7 @@ import {
   migrateLegacyUltracodeOptions,
 } from "@t3tools/shared/model";
 import { runRanAfter } from "@t3tools/shared/orchestrationV2ThreadError";
+import { studioControlsField } from "@t3tools/shared/studioControls";
 import { formatThreadLink } from "@t3tools/shared/threadLinks";
 import {
   normalizeThreadPullRequestKey,
@@ -2563,6 +2564,7 @@ const make = Effect.gen(function* () {
                   modelSelection: target.modelSelection,
                   runtimeMode,
                   interactionMode,
+                  ...studioControlsField(parent.thread.studioControls),
                   branch: parent.thread.branch,
                   worktreePath: parent.thread.worktreePath,
                 })

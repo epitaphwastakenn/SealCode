@@ -299,26 +299,21 @@ export function WorkingTimelineRow({ row }: { row: Extract<TimelineRow, { kind: 
       Working for <WorkingTimer createdAt={row.createdAt} />
     </>
   ) : (
-    "Working..."
+    "Working…"
   );
   return (
-    <div className="border-b border-border/60 pb-2 pt-1">
-      <div className="flex h-6 min-w-0 items-baseline gap-2 px-1 text-sm leading-relaxed text-muted-foreground tabular-nums">
-        <HarpMascot
-          scene={shimmer ? "ball" : "typing"}
-          className="h-6 w-auto shrink-0 self-center"
-        />
-        <span
-          ref={shimmer ? observeVisibleAnimation : undefined}
-          className="relative shrink-0 overflow-hidden whitespace-nowrap"
-        >
-          {label}
-          {shimmer ? <ActivityShimmerOverlay>{label}</ActivityShimmerOverlay> : null}
-        </span>
-        {backgroundWorktreeSetup ? (
-          <BackgroundWorktreeSetupChip snapshot={backgroundWorktreeSetup} />
-        ) : null}
-      </div>
+    <div className="flex min-h-6 min-w-0 items-center gap-1.5 px-0.5 pb-2 text-sm text-secondary-label">
+      <HarpMascot scene={shimmer ? "ball" : "typing"} className="h-6 w-auto shrink-0" />
+      <span
+        ref={shimmer ? observeVisibleAnimation : undefined}
+        className="relative shrink-0 overflow-hidden whitespace-nowrap"
+      >
+        {label}
+        {shimmer ? <ActivityShimmerOverlay tone="brand">{label}</ActivityShimmerOverlay> : null}
+      </span>
+      {backgroundWorktreeSetup ? (
+        <BackgroundWorktreeSetupChip snapshot={backgroundWorktreeSetup} />
+      ) : null}
     </div>
   );
 }
@@ -463,8 +458,7 @@ function LiveActivityContent({
             <ToolActivityIconView
               icon={toolIcon}
               fallbackName={iconName}
-              className="block size-4 shrink-0 stroke-2"
-              muted={!highlighted}
+              className="block size-4 shrink-0"
             />
           </span>
         ) : null
@@ -531,8 +525,7 @@ export function LiveWorkEntryTimelineRow({
               <ToolActivityIconView
                 icon={undefined}
                 fallbackName="brain"
-                className="block size-4 shrink-0 stroke-2"
-                muted
+                className="block size-4 shrink-0"
               />
             </span>
           }
@@ -633,8 +626,7 @@ function WorkGroupHeader(props: {
         <ToolActivityIconView
           icon={props.toolIcon}
           fallbackName={props.iconName}
-          className="size-4 shrink-0 stroke-2 text-icon-muted"
-          muted
+          className="size-4 shrink-0 text-icon-muted"
         />
       }
       label={

@@ -39,7 +39,7 @@ export function ChatBannerLane(props: {
     setThreadErrorBannerDismissTick,
   } = props;
   return (
-    <div className="chat-banner-lane pointer-events-none absolute top-0 z-30 flex flex-col">
+    <div className="chat-banner-lane pointer-events-none absolute top-0 z-30 flex flex-col gap-2 pt-3">
       <ProviderStatusBanner
         status={providerStatus}
         onDismiss={() => setDismissedProviderStatusBannerKey(providerStatusBannerKey)}

@@ -1,18 +1,31 @@
 import { type RunId } from "@t3tools/contracts";
-import { type MouseEvent, type ReactNode, memo, useLayoutEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type MouseEvent,
+  type ReactNode,
+  memo,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { type TurnDiffFileChange } from "../../types";
 import {
   buildTurnDiffTree,
   summarizeTurnDiffStats,
   type TurnDiffTreeNode,
 } from "../../lib/turnDiffTree";
-import { ChevronRightIcon, FileDiffIcon, ShieldCheckIcon } from "lucide-react";
-import { ChevronsDownUp, ChevronsUpDown, Folder, FolderClosed } from "lucide";
-import { cn } from "~/lib/utils";
+import {
+  ChevronsDownUpIcon,
+  ChevronsUpDownIcon,
+  EllipsisIcon,
+  FileDiffIcon,
+  ShieldCheckIcon,
+} from "lucide-react";
+import { Folder, FolderClosed } from "lucide";
 import { DiffStatLabel, hasNonZeroStat } from "./DiffStatLabel";
 import { PierreEntryIcon } from "./PierreEntryIcon";
 import { Button } from "../ui/button";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
+import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
 import { MiddleTruncate } from "../ui/middle-truncate";
 import { MorphIcon } from "~/components/MorphIcon";
 import { observeResize } from "~/lib/observeResize";
@@ -21,6 +34,8 @@ const EMPTY_DIRECTORY_OVERRIDES: Record<string, boolean> = {};
 const NOOP_REVIEW_TURN_DIFF = (_runId: RunId) => {};
 const VIRTUALIZE_AFTER_ROWS = 250;
 const ROW_OVERSCAN = 8;
+const rowClassName =
+  "group flex h-7 w-full cursor-pointer items-center gap-2 rounded-lg pe-2 ps-(--row-indent) text-left transition-colors hover:bg-row-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70";
 
 interface ChangedFileRow {
   node: TurnDiffTreeNode;
@@ -56,12 +71,12 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
 
   return (
     <div
-      className="@container/changed-files mt-4 rounded-lg bg-secondary dark:bg-input/20"
+      className="@container/changed-files mt-2 rounded-xl border border-border bg-card"
       data-changed-files-state="tree"
     >
       <div
         data-changed-files-header=""
-        className="sticky top-2 z-10 flex items-center justify-between gap-2 rounded-t-lg bg-secondary px-3 py-2 dark:bg-background dark:bg-linear-to-b dark:from-input/20 dark:to-input/20"
+        className="sticky top-2 z-10 flex items-center justify-between gap-2 rounded-t-xl bg-card px-3 py-2"
       >
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs font-medium text-foreground">
           <span>
@@ -77,69 +92,41 @@ export const ChangedFilesCard = memo(function ChangedFilesCard(props: {
           )}
         </div>
         <div className="flex shrink-0 items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger
+          <Button
+            size="xs"
+            variant="ghost-muted"
+            aria-label="Open diff"
+            onClick={() => onOpenTurnDiff(runId, files[0]?.path)}
+          >
+            <FileDiffIcon />
+            <span className="hidden @[24rem]/changed-files:inline">Open diff</span>
+          </Button>
+          <Menu>
+            <MenuTrigger
               render={
                 <Button
-                  type="button"
-                  size="xs"
-                  variant="outline"
-                  aria-label="Review changes"
-                  disabled={reviewDisabled}
-                  onClick={() => onReviewTurnDiff(runId)}
-                />
-              }
-            >
-              <ShieldCheckIcon className="size-3" />
-              <span className="hidden @[24rem]/changed-files:inline">Review</span>
-            </TooltipTrigger>
-            <TooltipPopup side="top">
-              Run the configured agent in read-only mode and score this diff
-            </TooltipPopup>
-          </Tooltip>
-          {hasDirectories && (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <Button
-                    type="button"
-                    size="icon-xs"
-                    variant="ghost-muted"
-                    aria-label={
-                      allDirectoriesExpanded ? "Collapse all folders" : "Expand all folders"
-                    }
-                    data-scroll-anchor-ignore
-                    onClick={onToggleAllDirectories}
-                  />
-                }
-              >
-                <MorphIcon
-                  className="size-3"
-                  icon={allDirectoriesExpanded ? ChevronsDownUp : ChevronsUpDown}
-                />
-              </TooltipTrigger>
-              <TooltipPopup side="top">
-                {allDirectoriesExpanded ? "Collapse all folders" : "Expand all folders"}
-              </TooltipPopup>
-            </Tooltip>
-          )}
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  type="button"
-                  size="xs"
+                  size="icon-xs"
                   variant="ghost-muted"
-                  aria-label="Open diff"
-                  onClick={() => onOpenTurnDiff(runId, files[0]?.path)}
+                  aria-label="More actions"
+                  data-scroll-anchor-ignore
                 />
               }
             >
-              <FileDiffIcon className="size-3" />
-              <span className="hidden @[24rem]/changed-files:inline">Open diff</span>
-            </TooltipTrigger>
-            <TooltipPopup side="top">Open the full diff</TooltipPopup>
-          </Tooltip>
+              <EllipsisIcon />
+            </MenuTrigger>
+            <MenuPopup align="end">
+              <MenuItem disabled={reviewDisabled} onClick={() => onReviewTurnDiff(runId)}>
+                <ShieldCheckIcon />
+                Review changes
+              </MenuItem>
+              {hasDirectories && (
+                <MenuItem onClick={onToggleAllDirectories}>
+                  {allDirectoriesExpanded ? <ChevronsDownUpIcon /> : <ChevronsUpDownIcon />}
+                  {allDirectoriesExpanded ? "Collapse all folders" : "Expand all folders"}
+                </MenuItem>
+              )}
+            </MenuPopup>
+          </Menu>
         </div>
       </div>
       <ChangedFilesTree
@@ -172,7 +159,6 @@ const ChangedFilesTree = memo(function ChangedFilesTree(props: {
   }>({ key: null, overrides: {} });
   const treeNodes = buildTurnDiffTree(files);
   const directoryPathsKey = collectDirectoryPaths(treeNodes).join("\u0000");
-  const hasDirectoryNodes = directoryPathsKey.length > 0;
   const expansionStateKey = `${allDirectoriesExpanded ? "expanded" : "collapsed"}\u0000${directoryPathsKey}`;
   const expandedDirectories =
     directoryExpansionState.key === expansionStateKey
@@ -196,7 +182,7 @@ const ChangedFilesTree = memo(function ChangedFilesTree(props: {
   const virtualized = rows.length > VIRTUALIZE_AFTER_ROWS;
 
   const renderRow = ({ node, depth }: ChangedFileRow) => {
-    const leftPadding = 8 + depth * 14;
+    const indent = { "--row-indent": `${0.5 + depth * 0.875}rem` } as CSSProperties;
     if (node.kind === "directory") {
       const isExpanded = expandedDirectories[node.path] ?? allDirectoriesExpanded;
       return (
@@ -205,26 +191,19 @@ const ChangedFilesTree = memo(function ChangedFilesTree(props: {
           type="button"
           data-scroll-anchor-ignore
           aria-expanded={isExpanded}
-          className="group flex h-7 w-full cursor-pointer items-center gap-2 rounded-md py-1.5 pr-2 text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-          style={{ paddingLeft: `${leftPadding}px` }}
+          className={rowClassName}
+          style={indent}
           onClick={() => toggleDirectory(node.path)}
         >
-          <ChevronRightIcon
-            aria-hidden="true"
-            className={cn(
-              "size-3.5 shrink-0 text-muted-foreground/70 transition-transform group-hover:text-foreground/80",
-              isExpanded && "rotate-90",
-            )}
-          />
           <MorphIcon
-            className="size-3.5 shrink-0 text-muted-foreground/75"
+            className="size-3.5 shrink-0 text-icon-muted"
             icon={isExpanded ? Folder : FolderClosed}
           />
-          <span className="truncate font-mono text-2xs text-muted-foreground/90 group-hover:text-foreground/90">
+          <span className="truncate text-xs text-muted-foreground group-hover:text-foreground">
             {node.name}
           </span>
           {hasNonZeroStat(node.stat) && (
-            <span className="ml-auto shrink-0 font-mono text-3xs tabular-nums">
+            <span className="ml-auto shrink-0 text-2xs tabular-nums">
               <DiffStatLabel additions={node.stat.additions} deletions={node.stat.deletions} />
             </span>
           )}
@@ -236,8 +215,8 @@ const ChangedFilesTree = memo(function ChangedFilesTree(props: {
       <button
         key={`file:${node.path}`}
         type="button"
-        className="group flex h-7 w-full cursor-pointer items-center gap-2 rounded-md py-1.5 pr-2 text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
-        style={{ paddingLeft: `${leftPadding}px` }}
+        className={rowClassName}
+        style={indent}
         onClick={() => onOpenTurnDiff(runId, node.path)}
         onContextMenu={
           onFileContextMenu
@@ -248,20 +227,17 @@ const ChangedFilesTree = memo(function ChangedFilesTree(props: {
             : undefined
         }
       >
-        {hasDirectoryNodes || depth > 0 ? (
-          <span aria-hidden="true" className="size-3.5 shrink-0" />
-        ) : null}
         <PierreEntryIcon
           pathValue={node.path}
           kind="file"
           theme={resolvedTheme}
-          className="size-3.5 text-muted-foreground/70"
+          className="size-3.5 text-icon-muted"
         />
-        <span className="flex min-w-0 font-mono text-xs text-foreground/85 group-hover:text-foreground">
+        <span className="flex min-w-0 text-xs text-foreground">
           <MiddleTruncate value={node.name} />
         </span>
         {node.stat && (
-          <span className="ml-auto shrink-0 font-mono text-3xs tabular-nums">
+          <span className="ml-auto shrink-0 text-2xs tabular-nums">
             <DiffStatLabel additions={node.stat.additions} deletions={node.stat.deletions} />
           </span>
         )}

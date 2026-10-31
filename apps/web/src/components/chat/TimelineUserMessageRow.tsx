@@ -22,7 +22,6 @@ import {
 import ChatMarkdown from "../ChatMarkdown";
 import {
   CalendarClockIcon,
-  ChevronDownIcon,
   DownloadIcon,
   EyeIcon,
   type LucideIcon,
@@ -31,7 +30,9 @@ import {
   Undo2Icon,
 } from "lucide-react";
 import { Link as LinkIconNode } from "lucide";
+import { Badge } from "../ui/badge";
 import { Button, InlineButton } from "../ui/button";
+import { DisclosureChevron } from "../ui/disclosure-chevron";
 import { useAssetUrlRefresh, useAssetUrls, useAssetUrlState } from "../../assets/assetUrls";
 import { AttachmentImage } from "../media/AttachmentImage";
 import { MediaVideoPlayer } from "../media/MediaVideoPlayer";
@@ -63,7 +64,6 @@ import {
 import { chatMarkdownClipboardPayload } from "../../markdown-clipboard";
 import type { ChatMarkdownContextReference } from "../ChatMarkdown";
 import { cn } from "~/lib/utils";
-import { formatChatTimestampTooltip, formatDayAwareTimestamp } from "../../timestampFormat";
 import { WorkflowOpeningBlock } from "./WorkflowOpeningBlock";
 import { TimelineRowCtx, TimelineRowActivityCtx, type TimelineRow } from "./timelineRowContext";
 import {
@@ -91,7 +91,7 @@ function UserVideoAttachment({ file }: { readonly file: ChatFileAttachment }) {
 
   if (asset === null && src === null) {
     return (
-      <div className="flex aspect-[4/3] w-full items-center justify-center rounded-lg border border-border/80 bg-black px-2 py-3 text-center text-2xs text-white/70">
+      <div className="flex aspect-[4/3] w-full items-center justify-center rounded-md border border-border bg-muted px-2 py-3 text-center text-xs text-muted-foreground">
         {file.name}
       </div>
     );
@@ -110,8 +110,8 @@ function UserVideoAttachment({ file }: { readonly file: ChatFileAttachment }) {
         if (preview) ctx.onImageExpand(preview);
       }}
       className="block aspect-[4/3] w-full"
-      videoClassName="aspect-auto size-full rounded-lg border border-border/80"
-      stateClassName="aspect-auto min-h-full rounded-lg border border-border/80 bg-black text-white"
+      videoClassName="aspect-auto size-full rounded-md border border-border"
+      stateClassName="aspect-auto min-h-full rounded-md border border-border bg-muted text-muted-foreground"
       onRetry={asset ? refreshAssetUrl : undefined}
       actionsSource={asset ? { kind: "video", name: file.name, src, asset } : undefined}
     />
@@ -241,33 +241,22 @@ function FoldedMessageHeader(props: {
       onClick={props.onToggle}
       className="flex w-full min-w-0 items-center gap-1.5 rounded-2xl px-3 py-2 text-left text-sm focus-visible:outline-2 focus-visible:outline-ring"
     >
-      <Icon className="size-4 shrink-0 stroke-2 text-muted-foreground" />
+      <Icon className="size-4 shrink-0 text-icon-muted" />
       <span className="max-w-1/2 shrink-0 truncate text-muted-foreground">{props.label}</span>
       <span className="min-w-0 flex-1 truncate">{props.summary}</span>
-      <ChevronDownIcon
-        className={cn(
-          "size-3.5 shrink-0 text-muted-foreground transition-transform",
-          props.expanded && "rotate-180",
-        )}
-      />
+      <DisclosureChevron open={props.expanded} />
     </button>
   );
 }
 
 function UserMessageProjectedStatus({ row }: { row: Extract<TimelineRow, { kind: "message" }> }) {
   const status = row.projectedItem?.item.status;
-  if (
-    status === undefined ||
-    status === "completed" ||
-    status === "pending" ||
-    status === "waiting"
-  )
-    return null;
+  if (status !== "failed" && status !== "interrupted") return null;
   return (
     <div className="me-1 flex items-center gap-1.5">
-      <span className="rounded-full border border-destructive/25 bg-destructive/8 px-1.5 py-0.5 text-3xs font-medium text-destructive">
-        {status}
-      </span>
+      <Badge variant={status === "failed" ? "error" : "warning"} size="sm">
+        {status === "failed" ? "Failed" : "Interrupted"}
+      </Badge>
     </div>
   );
 }
@@ -429,10 +418,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
       data-user-message-attribution={folded ? "agent" : undefined}
     >
       {userMessage.attribution === "t3code" ? (
-        <p
-          className="me-1 text-2xs text-muted-foreground/70"
-          data-user-message-attribution="t3code"
-        >
+        <p className="me-1 text-2xs text-muted-foreground" data-user-message-attribution="t3code">
           Sent by Harp
         </p>
       ) : null}
@@ -477,7 +463,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
                       "bg-background/70",
                       image.source?.kind === "snap-shot" && image.previewUrl
                         ? cn(SNAP_SHOT_ATTACHMENT_FRAME_CLASS, "col-span-2")
-                        : "aspect-[4/3] overflow-hidden rounded-lg border border-border/80",
+                        : "aspect-[4/3] overflow-hidden rounded-md border border-border",
                     )}
                   >
                     {image.previewUrl ? (
@@ -502,7 +488,7 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
                         />
                       </button>
                     ) : (
-                      <div className="flex min-h-[72px] items-center justify-center px-2 py-3 text-center text-2xs text-muted-foreground/70">
+                      <div className="flex min-h-[72px] items-center justify-center px-2 py-3 text-center text-2xs text-muted-foreground">
                         {image.name}
                       </div>
                     )}
@@ -618,14 +604,11 @@ function UserTimelineRow({ row }: { row: Extract<TimelineRow, { kind: "message" 
                 Open thread
               </InlineButton>
             ) : null}
-            <Tooltip>
-              <TooltipTrigger render={<p className="text-muted-foreground text-xs tabular-nums" />}>
-                {formatDayAwareTimestamp(row.message.createdAt, ctx.timestampFormat)}
-              </TooltipTrigger>
-              <TooltipPopup>
-                {formatChatTimestampTooltip(row.message.createdAt, ctx.timestampFormat)}
-              </TooltipPopup>
-            </Tooltip>
+            <TimelineRowTimestamp
+              createdAt={row.message.createdAt}
+              timestampFormat={ctx.timestampFormat}
+              alwaysVisible
+            />
             <div className="flex items-center gap-0.5">
               {typeof revertTurnCount === "number" && (
                 <RevertUserMessageButton turnCount={revertTurnCount} messageId={row.message.id} />

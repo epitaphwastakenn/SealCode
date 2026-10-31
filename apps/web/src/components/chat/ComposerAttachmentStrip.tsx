@@ -6,7 +6,7 @@ import type {
   SnapShotSource,
 } from "@t3tools/contracts";
 import { formatAttachmentSize } from "@t3tools/client-runtime/state/attachments";
-import { CircleAlertIcon, PaperclipIcon, PlayIcon, PlusIcon, XIcon } from "lucide-react";
+import { CircleAlertIcon, PaperclipIcon, PlayIcon, XIcon } from "lucide-react";
 import { ComposerControl, type ComposerControlSize } from "./ComposerControl";
 import { type ComponentProps, useLayoutEffect, useRef } from "react";
 
@@ -156,7 +156,7 @@ export function ComposerAttachmentMediaRow({
         "mb-3 flex max-w-full gap-2",
         pendingSnapShotIds.length > 0 ||
           expandedImages.some((image) => image.source?.kind === "snap-shot")
-          ? "snap-x snap-proximity overflow-x-auto overscroll-x-contain pb-1 scrollbar-thumb-foreground/18 scrollbar-track-transparent [scrollbar-width:thin] [&::-webkit-scrollbar]:h-2.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:border-3 [&::-webkit-scrollbar-thumb]:border-transparent [&::-webkit-scrollbar-thumb]:bg-foreground/18 [&::-webkit-scrollbar-thumb]:bg-clip-content [&::-webkit-scrollbar-thumb:hover]:bg-foreground/28 [&::-webkit-scrollbar-track]:mx-1 [&::-webkit-scrollbar-track]:bg-transparent"
+          ? "snap-x snap-proximity overflow-x-auto overscroll-x-contain pb-1 [scrollbar-width:thin]"
           : "flex-wrap",
       )}
     >
@@ -188,7 +188,7 @@ export function ComposerAttachmentMediaRow({
                 "group/attachment shrink-0 snap-start bg-background",
                 source?.kind === "snap-shot"
                   ? SNAP_SHOT_ATTACHMENT_FRAME_CLASS
-                  : "relative h-16 w-16 overflow-hidden rounded-lg border border-border/80",
+                  : "relative h-16 w-16 overflow-hidden rounded-md border border-border",
                 snapShotAnimationPending && "invisible",
               )}
             >
@@ -333,11 +333,11 @@ export function ComposerAttachmentMediaRow({
         return (
           <div
             key={file.id}
-            className="relative h-16 w-16 shrink-0 snap-start overflow-hidden rounded-lg border border-border/80 bg-black"
+            className="relative h-16 w-16 shrink-0 snap-start overflow-hidden rounded-md border border-border bg-muted"
           >
             <button
               type="button"
-              className="flex h-full w-full cursor-zoom-in flex-col items-center justify-center gap-1 px-1 text-white"
+              className="flex h-full w-full cursor-zoom-in flex-col items-center justify-center gap-1 px-1 text-muted-foreground"
               aria-label={`Play ${file.name}`}
               onClick={() => {
                 if (file.file !== null) {
@@ -352,10 +352,11 @@ export function ComposerAttachmentMediaRow({
               {file.file && (
                 <>
                   <ComposerVideoThumbnail file={file.file} />
-                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-black/10" />
                 </>
               )}
-              <PlayIcon className="relative z-10 size-4 fill-current drop-shadow-md" />
+              <span className="relative z-10 flex size-6 items-center justify-center rounded-full bg-background text-foreground">
+                <PlayIcon className="size-3 fill-current" />
+              </span>
             </button>
             {upload?.status === "uploading" && (
               <span className="pointer-events-none absolute inset-x-0 bottom-0 bg-background/85 px-1 text-center text-3xs text-foreground">
@@ -571,7 +572,7 @@ export function ComposerRestingImagePreviews({
         <button
           key={image.id}
           type="button"
-          className="relative size-7 shrink-0 cursor-zoom-in overflow-hidden rounded-md border border-border/70 bg-muted/60"
+          className="relative size-7 shrink-0 cursor-zoom-in overflow-hidden rounded-md border border-border bg-muted"
           aria-label={`Preview ${image.name}`}
           onPointerDown={(event) => event.preventDefault()}
           onClick={() => {
@@ -616,7 +617,7 @@ export function ComposerRestingImagePreviews({
       {counts.overflowCount > 0 ? (
         <button
           type="button"
-          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border/70 bg-muted/60 font-medium text-secondary-label text-xs tabular-nums outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
+          className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md border border-border bg-muted font-medium text-secondary-label text-xs tabular-nums outline-none hover:bg-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background"
           aria-label={`Show ${String(counts.overflowCount)} more image attachments`}
           onPointerDown={(event) => event.preventDefault()}
           onClick={onShowMore}
@@ -644,7 +645,7 @@ export function ComposerQueuedAttachmentRow({
       {attachments.map(({ attachment, url }) => (
         <div
           key={attachment.id}
-          className="relative h-16 w-16 overflow-hidden rounded-lg border border-border/80 bg-background"
+          className="relative h-16 w-16 overflow-hidden rounded-md border border-border bg-background"
         >
           {attachment.type === "image" && url ? (
             <img src={url} alt={attachment.name} className="h-full w-full object-cover" />
@@ -671,14 +672,11 @@ export function ComposerQueuedAttachmentRow({
 export function ComposerAttachButton({
   addComposerAttachments,
   focusComposer,
-  variant = "paperclip",
   size = "sm",
   disabled = false,
 }: {
   readonly addComposerAttachments: (files: File[]) => Promise<boolean>;
   readonly focusComposer: () => void;
-  /** Harp's footer shows a "+" control beside the model controls; the resting composer keeps the paperclip. */
-  readonly variant?: "paperclip" | "control";
   readonly size?: ComposerControlSize;
   readonly disabled?: boolean;
 }) {
@@ -701,45 +699,25 @@ export function ComposerAttachButton({
           });
         }}
       />
-      {variant === "control" ? (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <ComposerControl
-                type="button"
-                size={size}
-                className="-ms-1 shrink-0 px-1.5 text-muted-foreground hover:text-foreground"
-                data-resting-controls-fixed
-                onPointerDown={(event) => event.preventDefault()}
-                onClick={() => inputRef.current?.click()}
-                disabled={disabled}
-                aria-label="Attach files"
-              />
-            }
-          >
-            <PlusIcon className="size-4" />
-          </TooltipTrigger>
-          <TooltipPopup side="top">Attach files</TooltipPopup>
-        </Tooltip>
-      ) : (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                onPointerDown={(event) => event.preventDefault()}
-                onClick={() => inputRef.current?.click()}
-                aria-label="Attach files"
-              />
-            }
-          >
-            <PaperclipIcon />
-          </TooltipTrigger>
-          <TooltipPopup>Attach files</TooltipPopup>
-        </Tooltip>
-      )}
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <ComposerControl
+              type="button"
+              size={size}
+              className="shrink-0 px-1.5"
+              data-resting-controls-fixed
+              onPointerDown={(event) => event.preventDefault()}
+              onClick={() => inputRef.current?.click()}
+              disabled={disabled}
+              aria-label="Attach files"
+            />
+          }
+        >
+          <PaperclipIcon />
+        </TooltipTrigger>
+        <TooltipPopup side="top">Attach files</TooltipPopup>
+      </Tooltip>
     </>
   );
 }

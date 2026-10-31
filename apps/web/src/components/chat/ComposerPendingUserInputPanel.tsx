@@ -239,7 +239,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
               text={activeQuestion.question}
               cwd={cwd}
               threadRef={threadRef}
-              className="pt-2 text-foreground/85"
+              className="pt-2"
             />
             {/* Rows span the header row's width so the radios align with the question text and the shortcut column sits under the dismiss button. */}
             <div className="-ms-2 mt-1.5 sm:-ms-1.5">
@@ -251,8 +251,8 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
                 const isSelected =
                   isOptimisticallySelected || draftSelectedOptions?.[index] === true;
                 const className = cn(
-                  "group flex w-full items-start gap-2.5 rounded-md bg-transparent py-1.5 ps-2 text-left sm:ps-1.5 outline-none transition-colors duration-150 focus-visible:ring-1 focus-visible:ring-inset focus-visible:ring-primary/25",
-                  isSelected ? "text-foreground" : "text-foreground/70 hover:bg-muted/30",
+                  "group flex w-full items-start gap-2.5 rounded-lg py-1.5 ps-2 text-left outline-none transition-colors duration-150 hover:bg-row-hover focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70 sm:ps-1.5",
+                  isSelected ? "text-foreground" : "text-secondary-label",
                   (disabled || isResponding) && "opacity-50 cursor-not-allowed",
                   !disabled && !isResponding && "cursor-pointer",
                 );
@@ -267,7 +267,7 @@ const ComposerPendingUserInputCard = memo(function ComposerPendingUserInputCard(
                       )}
                     </span>
                     <div className="min-w-0 flex-1 flex flex-col gap-0.5">
-                      <span className="text-sm font-medium">{option.label}</span>
+                      <span className="text-sm">{option.label}</span>
                       {option.description && option.description !== option.label ? (
                         <span className="text-secondary-label text-2xs">{option.description}</span>
                       ) : null}

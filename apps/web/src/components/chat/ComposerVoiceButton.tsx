@@ -1,8 +1,8 @@
-import { Loader2Icon, MicIcon } from "lucide-react";
+import { MicIcon } from "lucide-react";
 
-import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
-import { Tooltip, TooltipPopup, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
+import { Spinner } from "../ui/spinner";
+import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 
 export function ComposerVoiceButton(props: {
   disabled?: boolean;
@@ -18,34 +18,24 @@ export function ComposerVoiceButton(props: {
       : "Record voice note";
 
   return (
-    <TooltipProvider delay={0}>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <Button
-              type="button"
-              size="icon-sm"
-              variant="ghost"
-              className={cn(
-                "rounded-full text-secondary-label hover:text-foreground",
-                props.isRecording && "text-destructive hover:text-destructive",
-              )}
-              disabled={props.disabled || props.isTranscribing}
-              aria-label={label}
-              aria-pressed={props.isRecording}
-              data-chat-composer-voice="true"
-              onClick={props.onClick}
-            >
-              {props.isTranscribing ? (
-                <Loader2Icon className="size-4 animate-spin" aria-hidden="true" />
-              ) : (
-                <MicIcon className="size-4" aria-hidden="true" />
-              )}
-            </Button>
-          }
-        />
-        <TooltipPopup side="top">{label}</TooltipPopup>
-      </Tooltip>
-    </TooltipProvider>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Button
+            type="button"
+            size="icon-sm"
+            variant={props.isRecording ? "destructive-outline" : "ghost-muted"}
+            disabled={props.disabled || props.isTranscribing}
+            aria-label={label}
+            aria-pressed={props.isRecording}
+            data-chat-composer-voice="true"
+            onClick={props.onClick}
+          >
+            {props.isTranscribing ? <Spinner aria-hidden="true" /> : <MicIcon aria-hidden="true" />}
+          </Button>
+        }
+      />
+      <TooltipPopup side="top">{label}</TooltipPopup>
+    </Tooltip>
   );
 }

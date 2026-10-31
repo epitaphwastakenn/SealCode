@@ -1,7 +1,7 @@
 import { Toolbar } from "@base-ui/react/toolbar";
 import { type ProviderInstanceId } from "@t3tools/contracts";
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { SparklesIcon, StarIcon } from "lucide-react";
+import { StarIcon } from "lucide-react";
 import { ProviderInstanceIcon } from "./ProviderInstanceIcon";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { cn } from "~/lib/utils";
@@ -25,20 +25,14 @@ function describeUnavailableInstance(entry: ProviderInstanceEntry): string {
   return msg ? `${label}: ${kind}. ${msg}` : `${label}: ${kind}.`;
 }
 
-// The tile and accent bar travel together on the compositor; easing settles
-// without overshoot so the selection never bounces past its target.
+// The tile travels on the compositor; easing settles without overshoot so the selection never
+// bounces past its target.
 const SELECTION_CLASS =
   "pointer-events-none absolute inset-x-0 top-0 motion-reduce:transition-none";
 const SELECTION_TRANSITION_CLASS = "transition-[translate,height] duration-300 ease-drawer";
-const SELECTION_TILE_CLASS = "absolute inset-y-0 left-1 right-1 rounded-lg bg-primary/15";
-const SELECTION_BAR_CLASS =
-  "absolute right-0 top-1/2 h-5 w-1 -translate-y-1/2 rounded-l-full bg-primary shadow-xs";
+const SELECTION_TILE_CLASS = "absolute inset-y-0 left-1 right-1 rounded-lg bg-row-selected";
 const RAIL_BUTTON_CLASS =
-  "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded-lg text-muted-foreground transition-[background-color,color,scale] duration-150 hover:bg-muted/70 hover:text-foreground focus-visible:bg-muted/70 focus-visible:outline-none active:scale-94 motion-reduce:active:scale-100";
-const BADGE_BASE_CLASS =
-  "pointer-events-none absolute -right-0.5 top-0.5 z-10 flex size-3.5 items-center justify-center rounded-full bg-transparent shadow-sm ";
-const NEW_BADGE_CLASS = `${BADGE_BASE_CLASS} text-update-foreground `;
-
+  "relative isolate flex w-full cursor-pointer aspect-square items-center justify-center rounded-lg text-muted-foreground transition-[background-color,color,scale] duration-150 hover:bg-row-hover hover:text-foreground focus-visible:bg-row-hover focus-visible:outline-none active:scale-94 motion-reduce:active:scale-100";
 const PICKER_TOOLTIP_SIDE = "left" as const;
 const PICKER_TOOLTIP_SIDE_OFFSET = 8;
 
@@ -76,6 +70,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
       return;
     }
     setSelection({ top: selectedItem.offsetTop, height: selectedItem.offsetHeight });
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- the favorites row shifts the rail
   }, [props.instanceEntries, props.selectedInstanceId, showFavorites]);
   useEffect(() => {
     if (selection === null || selectionCanAnimate) return;
@@ -85,7 +80,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
 
   return (
     <Toolbar.Root
-      className="w-12 shrink-0 overflow-hidden border-r border-border/60 bg-muted/20"
+      className="w-12 shrink-0 overflow-hidden border-e border-border"
       data-model-picker-sidebar="true"
       aria-label="Providers"
       orientation="vertical"
@@ -108,7 +103,6 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
               style={{ translate: `0 ${selection.top}px`, height: selection.height }}
             >
               <div className={SELECTION_TILE_CLASS} />
-              <div className={SELECTION_BAR_CLASS} />
             </div>
           ) : null}
           {showFavorites ? (
@@ -140,7 +134,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
                   </TooltipPopup>
                 </Tooltip>
               </div>
-              <div className="border-b border-border/60 my-0.5" aria-hidden="true" />
+              <div className="border-b border-border/50 my-0.5" aria-hidden="true" />
             </>
           ) : null}
 
@@ -168,7 +162,7 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
               <Toolbar.Button
                 className={cn(
                   RAIL_BUTTON_CLASS,
-                  isSelected && "text-primary hover:text-primary",
+                  isSelected && "text-foreground",
                   isDisabled &&
                     "opacity-40 cursor-not-allowed hover:bg-transparent active:scale-100",
                 )}
@@ -212,11 +206,6 @@ export const ModelPickerSidebar = memo(function ModelPickerSidebar(props: {
                   }
                   {...(entry.accentColor ? { badgeClassName: "h-3 min-w-3 px-0.5 text-5xs" } : {})}
                 />
-                {showNewBadge ? (
-                  <span className={NEW_BADGE_CLASS} aria-hidden>
-                    <SparklesIcon className="size-2" />
-                  </span>
-                ) : null}
               </Toolbar.Button>
             );
 

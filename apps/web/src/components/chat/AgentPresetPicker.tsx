@@ -1,48 +1,50 @@
 import type { AgentPreset } from "@t3tools/contracts";
-import { BookmarkIcon, ChevronDownIcon } from "lucide-react";
+import { SlidersHorizontalIcon } from "lucide-react";
 import { memo } from "react";
-import { Menu, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
-import { ComposerControl } from "./ComposerControl";
+import { Menu, MenuGroup, MenuGroupLabel, MenuItem, MenuPopup, MenuTrigger } from "../ui/menu";
+import { ComposerControl, ComposerControlChevron, ComposerControlIcon } from "./ComposerControl";
+import type { ComposerControlSize } from "./ComposerControl";
 
 export const AgentPresetPicker = memo(function AgentPresetPicker(props: {
   readonly presets: ReadonlyArray<AgentPreset>;
   readonly onSelect: (preset: AgentPreset) => void;
+  readonly size?: ComposerControlSize;
   readonly compact?: boolean;
 }) {
   if (props.presets.length === 0) return null;
+  const size = props.size ?? (props.compact ? "xs" : "sm");
 
   return (
     <Menu>
       <MenuTrigger
         render={
           <ComposerControl
+            size={size}
             aria-label="Apply agent workflow preset"
-            className={props.compact ? "max-w-32 shrink-0 px-1.5" : "max-w-44 shrink-0"}
+            className={props.compact ? "max-w-32 shrink-0" : "max-w-44 shrink-0"}
           />
         }
       >
-        <BookmarkIcon className="size-3.5 shrink-0" />
-        <span className="truncate">Preset</span>
-        <ChevronDownIcon className="size-3 shrink-0 text-icon-muted" />
+        <ComposerControlIcon icon={SlidersHorizontalIcon} size={size} />
+        <span data-composer-control-label className="truncate">
+          Preset
+        </span>
+        <ComposerControlChevron size={size} />
       </MenuTrigger>
       <MenuPopup align="start" className="min-w-64">
-        <div className="px-2 py-1.5 text-2xs font-medium uppercase tracking-wide text-muted-foreground">
-          Workflow presets
-        </div>
-        {props.presets.map((preset) => (
-          <MenuItem key={preset.id} onClick={() => props.onSelect(preset)}>
-            <div className="min-w-0">
-              <div className="truncate font-medium">{preset.name}</div>
-              <div className="truncate text-2xs text-muted-foreground">
-                {preset.kind} · {preset.modelSelection.model}
-                {preset.skills.length > 0 ? ` · ${preset.skills.length} skills` : ""}
+        <MenuGroup>
+          <MenuGroupLabel>Workflow presets</MenuGroupLabel>
+          {props.presets.map((preset) => (
+            <MenuItem key={preset.id} onClick={() => props.onSelect(preset)}>
+              <div className="min-w-0">
+                <div className="truncate">{preset.name}</div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {preset.modelSelection.model}
+                </div>
               </div>
-              <div className="truncate text-2xs text-muted-foreground">
-                {preset.interactionMode}
-              </div>
-            </div>
-          </MenuItem>
-        ))}
+            </MenuItem>
+          ))}
+        </MenuGroup>
       </MenuPopup>
     </Menu>
   );

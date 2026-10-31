@@ -176,7 +176,7 @@ function ToolOutput(props: ToolOutputState) {
   ) : props.pending ? (
     <div className="text-muted-foreground italic">Loading output…</div>
   ) : props.error ? (
-    <div className="text-destructive">Couldn&apos;t load output: {props.error}</div>
+    <div className="text-error-foreground">Couldn&apos;t load output: {props.error}</div>
   ) : props.empty && images.length === 0 ? (
     <div className="text-muted-foreground italic">No output.</div>
   ) : null;
@@ -217,7 +217,7 @@ function ToolCallBody(
     <div className={cn("space-y-1.5", monoClassName)}>
       {call.command ? <ShellCommandBlock command={call.command} /> : null}
       {call.args ? (
-        <div className="text-foreground/85">
+        <div className="text-foreground">
           {call.args.map(([key, value]) => (
             <div key={key}>
               <span className="text-muted-foreground">{key} </span>
@@ -233,7 +233,7 @@ function ToolCallBody(
       {call.argsText ? <StructuredValue value={call.argsText} highlightJson /> : null}
       {props.outputSlot ?? <ToolOutput {...props} />}
       {props.exitCode !== undefined && props.exitCode !== 0 ? (
-        <div className="text-destructive">exit {props.exitCode}</div>
+        <div className="text-error-foreground">exit {props.exitCode}</div>
       ) : null}
     </div>
   );
@@ -261,7 +261,7 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
   return (
     <div className="space-y-2 text-xs" data-v2-item-inspector={item.type}>
       {item.type === "reasoning" && item.text ? (
-        <div className="rounded-md border border-border/45 bg-muted/15 p-2 italic text-muted-foreground">
+        <div className="border-s-2 border-border ps-3 italic text-muted-foreground">
           <ChatMarkdown
             text={item.text}
             cwd={props.cwd}
@@ -335,18 +335,18 @@ export const V2ItemInspector = memo(function V2ItemInspector(props: V2ItemInspec
       ) : null}
 
       {item.type === "file_search" && item.pattern?.trim() ? (
-        <div className={cn("text-foreground/85", monoClassName)}>{item.pattern}</div>
+        <div className={cn("text-foreground", monoClassName)}>{item.pattern}</div>
       ) : null}
 
       {item.type === "web_search" && item.patterns?.length ? (
-        <div className={cn("text-foreground/85", monoClassName)}>{item.patterns.join("\n")}</div>
+        <div className={cn("text-foreground", monoClassName)}>{item.patterns.join("\n")}</div>
       ) : null}
 
       {item.type === "file_search" && item.results?.length ? (
         <ul className="space-y-1">
           {item.results.map((result) => (
             <li key={JSON.stringify(result)}>
-              <span className="font-mono text-foreground/80">
+              <span className="font-mono text-foreground">
                 {formatWorkspaceRelativePath(result.fileName, props.workspaceRoot)}
                 {result.line === undefined ? "" : `:${result.line}`}
                 {result.column === undefined ? "" : `:${result.column}`}

@@ -51,7 +51,7 @@ export function ShellCommandBlock({ command }: { command: string }) {
   if (!code) return null;
   const plain = <PlainWords code={code} />;
   return (
-    <div className="text-foreground/85">
+    <div className="text-foreground">
       <RenderErrorBoundary fallback={plain} resetKeys={[code]}>
         <Suspense fallback={plain}>
           <HighlightedCommand code={code} theme={resolvedTheme} />

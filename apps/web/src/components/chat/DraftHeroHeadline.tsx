@@ -253,7 +253,7 @@ export function DraftHeroHeadline({
       <ComboboxPopup align="center" className="w-72 overflow-hidden">
         <ComboboxSearchInput
           aria-label="Search projects"
-          placeholder="Search projects..."
+          placeholder="Search projects…"
           value={pickerQuery}
           onChange={(event) => setPickerQuery(event.target.value)}
         />
@@ -288,13 +288,13 @@ export function DraftHeroHeadline({
       </ComboboxPopup>
     </Combobox>
   ) : (
-    <button
-      type="button"
+    <InlineButton
+      tone="picker"
       onClick={openAddProject}
-      className="pointer-events-auto inline min-w-0 max-w-full cursor-pointer border-muted-foreground/35 border-b border-dotted text-muted-foreground/60 transition-colors hover:border-muted-foreground/60 hover:text-muted-foreground/80 focus-visible:rounded-sm focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+      className="pointer-events-auto inline min-w-0 max-w-full"
     >
       <DraftProjectName value={activeProjectTitle ?? "Add a project"} singleLine />
-    </button>
+    </InlineButton>
   );
 
   const noProjectShortcut = shortcutLabelForCommand(keybindings, "chat.newWithoutProject");

@@ -13,15 +13,15 @@ import {
   TerminalIcon,
   XIcon,
 } from "lucide-react";
-import { ChevronDown, ChevronRight } from "lucide";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "~/components/ui/button";
-import { MorphIcon } from "~/components/MorphIcon";
+import { DisclosureChevron } from "~/components/ui/disclosure-chevron";
 import { Spinner } from "~/components/ui/spinner";
 import { MiddleTruncate } from "../ui/middle-truncate";
 import { observeVisibleAnimation } from "~/lib/visibleAnimation";
 import { cn } from "~/lib/utils";
+import { ActivityShimmerOverlay } from "./TimelineRowParts";
 import { WorkLogRow } from "./WorkLog";
 
 interface WorktreeSetupCardProps {
@@ -50,7 +50,7 @@ function useNowWhile(active: boolean): number {
 }
 
 function StageIcon({ status }: { status: WorktreeSetupStage["status"] }) {
-  const className = "size-4 shrink-0 stroke-2";
+  const className = "size-4 shrink-0";
   switch (status) {
     case "done":
       return <CheckIcon aria-hidden className={className} />;
@@ -70,29 +70,16 @@ function StageIcon({ status }: { status: WorktreeSetupStage["status"] }) {
 function stageRowClassName(status: WorktreeSetupStage["status"]): string {
   switch (status) {
     case "failed":
-      return "text-destructive-foreground";
+      return "text-error-foreground";
     case "warning":
       return "text-warning-foreground";
     case "pending":
-      return "text-secondary-label opacity-40";
+      return "text-muted-foreground";
     case "running":
     case "skipped":
     case "done":
       return "text-secondary-label";
   }
-}
-
-function ShimmerOverlay({ children }: { children: ReactNode }) {
-  return (
-    <span
-      aria-hidden
-      className="live-activity-focus pointer-events-none absolute inset-y-0 select-none"
-    >
-      <span className="live-activity-focus-counter block">
-        <span className="live-activity-focus-aligned block text-foreground">{children}</span>
-      </span>
-    </span>
-  );
 }
 
 function headerLabel(snapshot: WorktreeSetupSnapshot): string {
@@ -123,31 +110,24 @@ function SetupHeaderRow({
     snapshot.phase === "done" && snapshot.stages.some((stage) => stage.status === "failed");
   const text = headerLabel(snapshot);
   const tone = failed
-    ? "text-destructive-foreground"
+    ? "text-error-foreground"
     : finishedWithFailedStage
       ? "text-warning-foreground"
-      : "text-muted-foreground";
+      : "text-secondary-label";
   return (
-    <div className="border-b border-border/60 pb-2 pt-1">
-      <div
-        className={cn(
-          "flex h-6 min-w-0 items-baseline gap-2 px-1 text-sm leading-relaxed tabular-nums",
-          tone,
-        )}
+    <div className={cn("flex min-h-6 min-w-0 items-center gap-1.5 px-0.5 pb-2 text-sm", tone)}>
+      <span
+        ref={running ? observeVisibleAnimation : undefined}
+        className="relative min-w-0 shrink overflow-hidden whitespace-nowrap"
       >
-        <span
-          ref={running ? observeVisibleAnimation : undefined}
-          className="relative min-w-0 shrink overflow-hidden whitespace-nowrap"
-        >
-          <span className="block truncate">{text}</span>
-          {running ? <ShimmerOverlay>{text}</ShimmerOverlay> : null}
+        <span className="block truncate">{text}</span>
+        {running ? <ActivityShimmerOverlay tone="brand">{text}</ActivityShimmerOverlay> : null}
+      </span>
+      {totalElapsed !== null ? (
+        <span className="ml-auto shrink-0 text-xs text-muted-foreground tabular-nums">
+          {formatDuration(totalElapsed)}
         </span>
-        {totalElapsed !== null ? (
-          <span className="ml-auto shrink-0 text-xs text-muted-foreground">
-            {formatDuration(totalElapsed)}
-          </span>
-        ) : null}
-      </div>
+      ) : null}
     </div>
   );
 }
@@ -178,7 +158,7 @@ function StageRow({
       data-worktree-setup-stage={stage.id}
       data-worktree-setup-status={stage.status}
       icon={
-        <span className={cn("text-icon-muted", stage.status === "pending" && "opacity-40")}>
+        <span className="text-icon-muted">
           <StageIcon status={stage.status} />
         </span>
       }
@@ -188,7 +168,7 @@ function StageRow({
           className={cn("relative block truncate", stageRowClassName(stage.status))}
         >
           {label}
-          {running ? <ShimmerOverlay>{label}</ShimmerOverlay> : null}
+          {running ? <ActivityShimmerOverlay>{label}</ActivityShimmerOverlay> : null}
         </span>
       }
       trailing={
@@ -220,10 +200,8 @@ function OutputTail({ lines, failed }: { lines: ReadonlyArray<string>; failed: b
   return (
     <pre
       className={cn(
-        "mb-1 ml-8 overflow-hidden rounded-md border px-2.5 py-1.5 font-mono text-2xs leading-relaxed select-text",
-        failed
-          ? "border-destructive/20 bg-error-surface text-destructive-foreground"
-          : "border-border bg-code text-muted-foreground",
+        "mb-1 ms-7 overflow-hidden rounded-lg p-2.5 font-mono text-2xs leading-relaxed select-text",
+        failed ? "bg-error-surface text-error-foreground" : "bg-code text-code-foreground",
       )}
     >
       {rows.map(({ slot, line }) => (
@@ -237,10 +215,10 @@ function OutputTail({ lines, failed }: { lines: ReadonlyArray<string>; failed: b
 
 function SetupDetails({ snapshot }: { snapshot: WorktreeSetupSnapshot }) {
   return (
-    <dl className="mt-1 mb-1.5 ml-8 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
+    <dl className="mt-1 mb-1.5 ms-7 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-xs text-muted-foreground">
       {snapshot.branch ? (
         <>
-          <dt className="text-foreground/80">Branch</dt>
+          <dt className="text-foreground">Branch</dt>
           <dd className="min-w-0 font-mono">
             <MiddleTruncate value={snapshot.branch} className="flex" />
           </dd>
@@ -248,7 +226,7 @@ function SetupDetails({ snapshot }: { snapshot: WorktreeSetupSnapshot }) {
       ) : null}
       {snapshot.baseRef ? (
         <>
-          <dt className="text-foreground/80">Base</dt>
+          <dt className="text-foreground">Base</dt>
           <dd className="min-w-0 font-mono">
             <MiddleTruncate value={snapshot.baseRef} className="flex" />
           </dd>
@@ -256,7 +234,7 @@ function SetupDetails({ snapshot }: { snapshot: WorktreeSetupSnapshot }) {
       ) : null}
       {snapshot.worktreePath ? (
         <>
-          <dt className="text-foreground/80">Path</dt>
+          <dt className="text-foreground">Path</dt>
           <dd className="min-w-0 font-mono">
             <MiddleTruncate value={snapshot.worktreePath} className="flex" />
           </dd>
@@ -264,7 +242,7 @@ function SetupDetails({ snapshot }: { snapshot: WorktreeSetupSnapshot }) {
       ) : null}
       {snapshot.setupScript ? (
         <>
-          <dt className="text-foreground/80">Setup</dt>
+          <dt className="text-foreground">Setup</dt>
           <dd className="truncate font-mono">{snapshot.setupScript.command}</dd>
         </>
       ) : null}
@@ -334,7 +312,11 @@ export function WorktreeSetupCard({
       (setupStage.status === "running" && setupStage.tail.length > 0));
 
   return (
-    <section aria-label="Worktree setup" data-worktree-setup-phase={snapshot.phase}>
+    <section
+      aria-label="Worktree setup"
+      data-worktree-setup-phase={snapshot.phase}
+      className="group/worktree-setup"
+    >
       {showHeader ? <SetupHeaderRow snapshot={snapshot} totalElapsed={totalElapsed} /> : null}
       {collapsed ? (
         <CollapsedSummaryRow snapshot={snapshot} totalElapsed={totalElapsed} />
@@ -356,27 +338,34 @@ export function WorktreeSetupCard({
       )}
 
       {snapshot.phase === "failed" && snapshot.error ? (
-        <p className="mt-1 ml-8 text-xs text-muted-foreground">{snapshot.error}</p>
+        <p className="mt-1 ms-7 text-xs text-muted-foreground">{snapshot.error}</p>
       ) : null}
 
-      <div className="mt-0.5 ml-[calc(--spacing(6)+2px-(--spacing(2)-1px))] flex flex-wrap items-center gap-0.5">
-        <Button
-          type="button"
-          size="xs"
-          variant="ghost-muted"
-          aria-expanded={detailsOpen}
-          onClick={() => setDetailsOpen((open) => !open)}
+      <div className="mt-0.5 ms-6 flex flex-wrap items-center gap-0.5">
+        <span
+          className={cn(
+            !detailsOpen &&
+              "opacity-0 group-focus-within/worktree-setup:opacity-100 group-hover/worktree-setup:opacity-100 pointer-coarse:opacity-100",
+          )}
         >
-          <MorphIcon aria-hidden icon={detailsOpen ? ChevronDown : ChevronRight} />
-          Details
-        </Button>
+          <Button
+            type="button"
+            size="xs"
+            variant="ghost-muted"
+            aria-expanded={detailsOpen}
+            onClick={() => setDetailsOpen((open) => !open)}
+          >
+            <DisclosureChevron open={detailsOpen} />
+            Details
+          </Button>
+        </span>
         {showTerminal ? (
           <Button type="button" size="xs" variant="ghost-muted" onClick={onOpenTerminal}>
             <TerminalIcon aria-hidden />
             Open terminal
           </Button>
         ) : null}
-        {onWorkLocally ? (
+        {onWorkLocally && running ? (
           <Button type="button" size="xs" variant="ghost-muted" onClick={onWorkLocally}>
             <LaptopIcon aria-hidden />
             Work locally

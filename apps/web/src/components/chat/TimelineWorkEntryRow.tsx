@@ -30,7 +30,8 @@ import {
 } from "../../session-logic";
 import ChatMarkdown from "../ChatMarkdown";
 import { ChatMarkdownAssetImage } from "./ChatMarkdownMedia";
-import { ChevronRightIcon, CircleAlertIcon, XIcon, RotateCcwIcon } from "lucide-react";
+import { CircleAlertIcon, XIcon, RotateCcwIcon } from "lucide-react";
+import { DisclosureChevron } from "../ui/disclosure-chevron";
 import { Button, InlineButton } from "../ui/button";
 import { useAssetUrls } from "../../assets/assetUrls";
 import { useThreadShell } from "../../state/entities";
@@ -238,7 +239,7 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
         }
       >
         {!warning ? (
-          <p className="ms-7 whitespace-pre-wrap break-words py-1 text-sm leading-relaxed text-foreground/80">
+          <p className="ms-7 whitespace-pre-wrap break-words py-1 text-sm leading-relaxed text-foreground">
             {failureItem.failure.message}
           </p>
         ) : null}
@@ -345,9 +346,9 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
   const iconWrapperClass = cn(
     "flex size-4 items-center justify-center",
     showWarningIndicator
-      ? "text-warning"
+      ? "text-warning-foreground"
       : showDestructiveRowStyle
-        ? "text-destructive"
+        ? "text-error-foreground"
         : showFailedIndicator
           ? failedToolIconClassName
           : workEntry.tone === "tool"
@@ -355,12 +356,12 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
             : iconConfig.className,
   );
   const headingClass = showWarningIndicator
-    ? "font-medium text-warning"
+    ? "font-medium text-warning-foreground"
     : showDestructiveRowStyle
-      ? "font-medium text-destructive"
+      ? "font-medium text-error-foreground"
       : workLogEntryIsToolLike(workEntry)
         ? "text-secondary-label"
-        : "text-foreground/80";
+        : "text-foreground";
   const threadLabel = isReasoning ? null : threadReadLabel(previewText, threadTarget);
   const accessiblePreview = [threadLabel?.text ?? previewText, answerPreview]
     .filter(Boolean)
@@ -398,8 +399,7 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
           <ToolActivityIconView
             icon={entryToolIcon}
             fallbackName={entryIconName}
-            className="block size-4 shrink-0 stroke-2"
-            muted
+            className="block size-4 shrink-0"
           />
         </span>
       }
@@ -493,12 +493,7 @@ function WorkEntryLogRow(props: WorkEntryRowProps) {
             )}
             aria-hidden
           >
-            <ChevronRightIcon
-              className={cn(
-                "size-3 shrink-0 text-icon-muted opacity-70 transition-transform duration-200",
-                expanded && "rotate-90",
-              )}
-            />
+            <DisclosureChevron open={expanded} />
           </span>
         </>
       }
@@ -608,7 +603,7 @@ function QuestionAnswerHistory({
                     <img
                       src={url}
                       alt={attachment.name}
-                      className="h-20 max-w-32 rounded object-contain"
+                      className="h-20 max-w-32 rounded-md border border-border object-contain"
                     />
                   ) : (
                     attachment.name

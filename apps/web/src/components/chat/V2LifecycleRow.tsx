@@ -1,4 +1,3 @@
-import { ThreadHoverCardPopup } from "../ThreadHoverCard";
 import { AgentElapsed } from "./AgentElapsed";
 import { projectedSubagentsToRuntime } from "@t3tools/client-runtime/state/subagentRuntime";
 import type { ReactNode } from "react";
@@ -32,7 +31,6 @@ import {
 import type { TimestampFormat } from "@t3tools/contracts/settings";
 import {
   BotIcon,
-  ChevronRightIcon,
   ArrowRightLeftIcon,
   ArrowRightIcon,
   GitForkIcon,
@@ -53,6 +51,7 @@ import { formatShortTimestamp } from "../../timestampFormat";
 import { getTriggerDisplayModelName } from "./providerIconUtils";
 import { ProviderInstanceIcon, providerTextColor } from "./ProviderInstanceIcon";
 import { cn } from "~/lib/utils";
+import { SubagentRow } from "./SubagentRow";
 import { TimelineSystemDivider } from "./TimelineSystemDivider";
 import { subagentResumedSince } from "./V2LifecycleRow.logic";
 import { Button, InlineButton } from "../ui/button";
@@ -426,81 +425,34 @@ function SubagentTimelineLink(props: {
     startedAt: isoOrNull(agent?.startedAt ?? props.startedAt),
     completedAt: isoOrNull(agent?.completedAt ?? props.completedAt),
   };
-  const content = (
-    <>
-      <EnvironmentSubagentAvatar
-        environmentId={props.parentRef.environmentId}
-        providerInstanceId={props.providerInstanceId}
-        driver={props.driver}
-        status={status ?? undefined}
-      />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-xs font-medium text-foreground">{props.title}</span>
-        <span
-          className={cn(
-            "block text-2xs leading-relaxed",
-            failed ? "text-error-foreground" : "text-muted-foreground",
-          )}
-        >
-          {detail === null ? (
-            statusLabel
-          ) : detail.includes("/") && !detail.includes(" ") ? (
-            <MiddleTruncate value={detail} showTitle={false} className="flex" />
-          ) : (
-            <span className="block truncate">{detail}</span>
-          )}
-        </span>
-      </span>
-      {detail !== null && (props.event !== undefined || status !== "completed") ? (
-        <span
-          className={cn(
-            "shrink-0 text-xs",
-            failed ? "text-error-foreground" : "text-muted-foreground",
-          )}
-        >
-          {statusLabel}
-        </span>
-      ) : null}
-      <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-        {props.event ? props.event.timestamp : <SubagentElapsed agent={timing} />}
-      </span>
-      {threadId !== null ? (
-        <ChevronRightIcon
-          aria-hidden
-          className="size-3.5 shrink-0 text-muted-foreground transition-colors group-hover/subagent:text-foreground"
-        />
-      ) : null}
-    </>
-  );
-  const className =
-    "group/subagent flex w-full min-w-0 items-center gap-2.5 rounded-md px-2 py-1.5 text-left";
+  const showStatus = detail !== null && (props.event !== undefined || status !== "completed");
   return (
-    <Tooltip>
-      <TooltipTrigger
-        delay={200}
-        render={
-          threadId === null ? (
-            <div data-v2-item-type="subagent" aria-description={statusLabel} className={className}>
-              {content}
-            </div>
-          ) : (
-            <button
-              type="button"
-              data-v2-item-type="subagent"
-              aria-label={`Open ${props.title}`}
-              aria-description={statusLabel}
-              onClick={() => props.onOpenThread(threadId)}
-              className={cn(
-                className,
-                "cursor-pointer transition-colors hover:bg-row-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/70",
-              )}
-            >
-              {content}
-            </button>
-          )
-        }
-      />
-      <ThreadHoverCardPopup>
+    <SubagentRow
+      avatar={
+        <EnvironmentSubagentAvatar
+          environmentId={props.parentRef.environmentId}
+          providerInstanceId={props.providerInstanceId}
+          driver={props.driver}
+          status={status ?? undefined}
+        />
+      }
+      title={props.title}
+      detail={
+        detail === null ? (
+          statusLabel
+        ) : detail.includes("/") && !detail.includes(" ") ? (
+          <MiddleTruncate value={detail} showTitle={false} className="flex" />
+        ) : (
+          <span className="block truncate">{detail}</span>
+        )
+      }
+      failed={failed}
+      statusText={showStatus ? statusLabel : null}
+      time={props.event ? props.event.timestamp : <SubagentElapsed agent={timing} />}
+      description={statusLabel}
+      onOpen={threadId === null ? null : () => props.onOpenThread(threadId)}
+      rowProps={{ "data-v2-item-type": "subagent" }}
+      tooltip={
         <SubagentTimelineTooltip
           {...props}
           elapsed={agent ? <AgentElapsed agent={projectedSubagentsToRuntime([agent])[0]!} /> : null}
@@ -510,8 +462,8 @@ function SubagentTimelineLink(props: {
           result={agent?.result ?? props.result}
           progress={agent?.progress ?? props.progress}
         />
-      </ThreadHoverCardPopup>
-    </Tooltip>
+      }
+    />
   );
 }
 

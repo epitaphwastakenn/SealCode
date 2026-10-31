@@ -8,9 +8,6 @@ import {
   type AgentPreset,
   type ModelSelection,
   type DesktopUpdateChannel,
-  type EnvironmentId,
-  type ServerProvider,
-  type ServerSettings,
   IDLE_COMPACTION_MODES,
   globalIdleCompaction,
   ProviderDriverKind,
@@ -76,7 +73,6 @@ import {
   applyProviderInstanceSettings,
   deriveProviderInstanceEntries,
   sortProviderInstanceEntries,
-  type ProviderInstanceEntry,
 } from "../../providerInstances";
 import { ensureLocalApi, readLocalApi } from "../../localApi";
 import { isMacPlatform, randomUUID } from "../../lib/utils";
@@ -155,108 +151,6 @@ const QUIT_CONFIRMATION_MODE_LABELS: Record<QuitConfirmationMode, string> = {
 };
 
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
-// Harp 1.x ran these helper models on its old orchestrator. V2 has no
-// compaction, curation or delegation hook that reads them, so the rows stay
-// hidden instead of offering settings that change nothing.
-const HARNESS_HELPER_SETTINGS_AVAILABLE = false;
-
-function HarnessHelperModelRow(props: {
-  readonly settingKey: keyof ServerSettings;
-  readonly title: string;
-  readonly description: string;
-  readonly environmentId: EnvironmentId | null;
-  readonly selection: ModelSelection | null;
-  readonly settings: UnifiedSettings;
-  readonly providers: ReadonlyArray<ServerProvider>;
-  readonly instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
-  readonly fallbackSelection: ModelSelection;
-  readonly onSelectionChange: (selection: ModelSelection | null) => void;
-}) {
-  const activeSelection = props.selection ?? props.fallbackSelection;
-  const instanceEntry = props.instanceEntries.find(
-    (entry) => entry.instanceId === activeSelection.instanceId,
-  );
-  const modelOptionsByInstance = getCustomModelOptionsByInstance(
-    props.settings,
-    props.providers,
-    activeSelection.instanceId,
-    activeSelection.model,
-  );
-  const enabled = props.selection !== null;
-
-  return (
-    <SettingsRow
-      serverScoped
-      settingKeys={[props.settingKey]}
-      title={props.title}
-      description={props.description}
-      control={
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
-          {enabled ? (
-            <>
-              <ProviderModelPicker
-                environmentId={props.environmentId}
-                activeInstanceId={activeSelection.instanceId}
-                model={activeSelection.model}
-                lockedProvider={null}
-                instanceEntries={props.instanceEntries}
-                modelOptionsByInstance={modelOptionsByInstance}
-                triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
-                triggerAriaLabel={`${props.title} model`}
-                onInstanceModelChange={(instanceId, model) =>
-                  props.onSelectionChange(
-                    createModelSelection(
-                      instanceId,
-                      model,
-                      activeSelection.instanceId === instanceId
-                        ? activeSelection.options
-                        : undefined,
-                    ),
-                  )
-                }
-              />
-              <TraitsPicker
-                provider={instanceEntry?.driverKind ?? DEFAULT_DRIVER_KIND}
-                models={instanceEntry?.models ?? []}
-                model={activeSelection.model}
-                modelOptions={activeSelection.options}
-                planModeEnabled={
-                  props.settings.planModeEnabled || selectsPlanAgent(activeSelection.options)
-                }
-                triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
-                onModelOptionsChange={(options) =>
-                  props.onSelectionChange(
-                    createModelSelection(
-                      activeSelection.instanceId,
-                      activeSelection.model,
-                      options,
-                    ),
-                  )
-                }
-              />
-            </>
-          ) : null}
-          <Switch
-            checked={enabled}
-            onCheckedChange={(checked) =>
-              props.onSelectionChange(
-                checked
-                  ? createModelSelection(
-                      props.fallbackSelection.instanceId,
-                      props.fallbackSelection.model,
-                      props.fallbackSelection.options,
-                    )
-                  : null,
-              )
-            }
-            aria-label={`Use a dedicated ${props.title.toLowerCase()}`}
-          />
-        </div>
-      }
-    />
-  );
-}
-
 const decodeAgentPreset = Schema.decodeSync(AgentPresetSchema);
 
 function AgentPresetsSettings(props: {
@@ -642,12 +536,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.imageViewerModelSelection ?? null,
       DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection ?? null,
     );
-  const isHarnessHelperModelsDirty = [
-    settings.contextCompactorModelSelection,
-    settings.skillCuratorModelSelection,
-    settings.memoryCuratorModelSelection,
-    settings.delegationDefaultModelSelection,
-  ].some((selection) => selection !== null);
   const isBackgroundActivityDirty = hasChangedBackgroundActivitySettings(settings);
 
   const changedSettingLabels = [
@@ -805,7 +693,6 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.confirmQuit !== DEFAULT_UNIFIED_SETTINGS.confirmQuit ? ["Quit shortcut"] : []),
     ...(isTextGenerationModelDirty ? ["Text generation model"] : []),
     ...(isImageViewerDirty ? ["Image viewer"] : []),
-    ...(isHarnessHelperModelsDirty ? ["Harness helper models"] : []),
     ...(settings.threadTitleInstructions !== DEFAULT_UNIFIED_SETTINGS.threadTitleInstructions
       ? ["Thread title instructions"]
       : []),
@@ -1004,7 +891,6 @@ function AutoSettleDaysInput({
 const LEGACY_FEATURE_TARGET_IDS: ReadonlySet<string> = new Set([
   "legacy-plan-mode",
   "legacy-context-window-indicator",
-  "legacy-sidebar",
 ]);
 
 function LegacyFeaturesSection() {
@@ -1054,19 +940,6 @@ function LegacyFeaturesSection() {
                     updateSettings({ contextWindowMeterEnabled: Boolean(checked) })
                   }
                   aria-label="Context window indicator (legacy)"
-                />
-              }
-            />
-            <SettingsRow
-              {...searchableSetting("legacy-sidebar")}
-              description="Restore per-project thread trees instead of the default flat sidebar."
-              control={
-                <Switch
-                  checked={settings.legacySidebarEnabled}
-                  onCheckedChange={(checked) =>
-                    updateSettings({ legacySidebarEnabled: Boolean(checked) })
-                  }
-                  aria-label="Sidebar (legacy)"
                 />
               }
             />
@@ -2530,67 +2403,6 @@ export function GeneralSettingsPanel() {
           currentSelection={textGenerationModelSelection}
           updateSettings={(patch) => updateSettings(patch)}
         />
-
-        {HARNESS_HELPER_SETTINGS_AVAILABLE ? (
-          <>
-            <HarnessHelperModelRow
-              environmentId={environmentId}
-              settingKey="contextCompactorModelSelection"
-              title="Context compactor"
-              description="Optional lower-cost model for summarizing context when a provider exposes harness-owned compaction."
-              selection={settings.contextCompactorModelSelection}
-              settings={settings}
-              providers={serverProviders}
-              instanceEntries={textGenerationModelInstanceEntries}
-              fallbackSelection={textGenerationModelSelection}
-              onSelectionChange={(selection) =>
-                updateSettings({ contextCompactorModelSelection: selection })
-              }
-            />
-            <HarnessHelperModelRow
-              environmentId={environmentId}
-              settingKey="skillCuratorModelSelection"
-              title="Skill curator"
-              description="Optional model used only after a detected reusable workflow to draft a staged skill proposal."
-              selection={settings.skillCuratorModelSelection}
-              settings={settings}
-              providers={serverProviders}
-              instanceEntries={textGenerationModelInstanceEntries}
-              fallbackSelection={textGenerationModelSelection}
-              onSelectionChange={(selection) =>
-                updateSettings({ skillCuratorModelSelection: selection })
-              }
-            />
-            <HarnessHelperModelRow
-              environmentId={environmentId}
-              settingKey="memoryCuratorModelSelection"
-              title="Memory curator"
-              description="Optional model used only for approved or triggered memory proposals."
-              selection={settings.memoryCuratorModelSelection}
-              settings={settings}
-              providers={serverProviders}
-              instanceEntries={textGenerationModelInstanceEntries}
-              fallbackSelection={textGenerationModelSelection}
-              onSelectionChange={(selection) =>
-                updateSettings({ memoryCuratorModelSelection: selection })
-              }
-            />
-            <HarnessHelperModelRow
-              environmentId={environmentId}
-              settingKey="delegationDefaultModelSelection"
-              title="Delegation default"
-              description="Optional model selection for isolated delegated tasks when the selected provider supports them."
-              selection={settings.delegationDefaultModelSelection}
-              settings={settings}
-              providers={serverProviders}
-              instanceEntries={textGenerationModelInstanceEntries}
-              fallbackSelection={textGenerationModelSelection}
-              onSelectionChange={(selection) =>
-                updateSettings({ delegationDefaultModelSelection: selection })
-              }
-            />
-          </>
-        ) : null}
 
         <SettingsRow
           serverScoped

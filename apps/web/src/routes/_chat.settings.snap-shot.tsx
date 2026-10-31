@@ -1,11 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
-
-import { SnapShotSettings } from "../components/settings/SnapShotSettings";
-
-function SettingsSnapShotRoute() {
-  return <SnapShotSettings />;
-}
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/_chat/settings/snap-shot")({
-  component: SettingsSnapShotRoute,
+  beforeLoad: () => {
+    throw redirect({ to: "/settings/general", hash: "snap-shot", replace: true });
+  },
 });

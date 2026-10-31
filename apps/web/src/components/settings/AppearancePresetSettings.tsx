@@ -22,7 +22,7 @@ import { cn } from "~/lib/utils";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { AppearancePresetPreview } from "./AppearancePresetPreview";
-import { SettingsRow, SettingsSection } from "./settingsLayout";
+import { OptionCard, SettingsRow, SettingsSection } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 
 type Naming = { readonly mode: "new" } | { readonly mode: "rename"; readonly id: string };
@@ -81,15 +81,11 @@ export function AppearancePresetsSection() {
               const active = appearanceMatchesPreset(preset, settings, themeState);
               const look = presetPreviewLook(preset, settings, themeState);
               return (
-                <div
+                <OptionCard
                   key={preset.id}
-                  className={cn(
-                    "flex min-w-0 flex-col gap-1.5 rounded-xl border p-2 transition-colors",
-                    active
-                      ? "border-transparent bg-accent/30"
-                      : "border-border/70 bg-card/60 hover:bg-accent/10",
-                  )}
-                  style={active ? { boxShadow: "inset 0 0 0 1px var(--ring)" } : undefined}
+                  render={<div />}
+                  selected={active}
+                  className="flex min-w-0 cursor-default flex-col gap-1.5 p-2"
                 >
                   <button
                     type="button"
@@ -145,7 +141,7 @@ export function AppearancePresetsSection() {
                       <XIcon />
                     </Button>
                   </div>
-                </div>
+                </OptionCard>
               );
             })}
           </div>

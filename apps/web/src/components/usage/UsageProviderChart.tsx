@@ -240,7 +240,7 @@ function UsageChartTooltip({
   return (
     <div
       ref={tooltipRef}
-      className="surface-glass pointer-events-none absolute z-10 min-w-36 max-w-full rounded-xl border border-border/50 px-2.5 py-2 text-xs shadow-lg"
+      className="surface-glass pointer-events-none absolute z-10 min-w-36 max-w-full rounded-xl border border-border/50 px-2.5 py-2 text-xs"
       style={{
         left: "var(--usage-tooltip-left, 0px)",
         top: "var(--usage-tooltip-top, 0px)",
@@ -508,7 +508,7 @@ export function UsageProviderChart({
         </UsageChartPlot>
       </div>
 
-      <div className="flex justify-between pl-16 text-3xs text-muted-foreground uppercase">
+      <div className="flex justify-between pl-16 text-3xs text-muted-foreground">
         <span>{periods[0] === undefined ? "" : formatPeriod(periods[0])}</span>
         <span>
           {periods[Math.floor(periods.length / 2)] === undefined

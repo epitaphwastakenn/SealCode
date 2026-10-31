@@ -18,12 +18,15 @@ import {
 import { Button } from "./ui/button";
 
 type ConfirmationCopy = {
-  readonly title: string;
+  readonly title: string | null;
   readonly description: string | null;
 };
 
-function resolveConfirmDialogCopy(message: string): ConfirmationCopy {
+function resolveConfirmDialogCopy(message: string, title: string | undefined): ConfirmationCopy {
   const normalizedMessage = message.trim();
+  if (title) {
+    return { title, description: normalizedMessage || null };
+  }
   const lines = normalizedMessage.split("\n");
   const questionLineIndex = lines.findIndex((line) => line.trim().endsWith("?"));
 
@@ -44,10 +47,7 @@ function resolveConfirmDialogCopy(message: string): ConfirmationCopy {
     };
   }
 
-  return {
-    title: "Confirm action",
-    description: normalizedMessage || "This action requires your confirmation.",
-  };
+  return { title: null, description: normalizedMessage || null };
 }
 
 export function ConfirmDialogHost() {
@@ -57,8 +57,17 @@ export function ConfirmDialogHost() {
     readConfirmDialogState,
   );
 
-  const copy = resolveConfirmDialogCopy(state.status === "idle" ? "" : state.message);
+  const copy = resolveConfirmDialogCopy(
+    state.status === "idle" ? "" : state.message,
+    state.status === "idle" ? undefined : state.title,
+  );
   const confirmVariant = state.status === "idle" ? "default" : state.variant;
+  const confirmLabel =
+    state.status !== "idle" && state.confirmLabel
+      ? state.confirmLabel
+      : confirmVariant === "destructive"
+        ? "Delete"
+        : "Continue";
   const onCancel = () => respondToConfirmDialog(false);
   const onConfirm = () => respondToConfirmDialog(true);
 
@@ -74,7 +83,7 @@ export function ConfirmDialogHost() {
     >
       <AlertDialogPopup>
         <AlertDialogHeader>
-          <AlertDialogTitle>{copy.title}</AlertDialogTitle>
+          {copy.title ? <AlertDialogTitle>{copy.title}</AlertDialogTitle> : null}
           {copy.description ? (
             <AlertDialogDescription className="whitespace-pre-line">
               {copy.description}
@@ -84,7 +93,7 @@ export function ConfirmDialogHost() {
         <AlertDialogFooter>
           <AlertDialogClose render={<Button variant="outline" />}>Cancel</AlertDialogClose>
           <Button variant={confirmVariant} onClick={onConfirm}>
-            Confirm
+            {confirmLabel}
           </Button>
         </AlertDialogFooter>
       </AlertDialogPopup>

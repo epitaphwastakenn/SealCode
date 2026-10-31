@@ -1141,6 +1141,8 @@ export type ConfirmDialogVariant = "default" | "destructive";
 
 export interface ConfirmDialogOptions {
   readonly variant?: ConfirmDialogVariant;
+  readonly confirmLabel?: string;
+  readonly title?: string;
 }
 
 export interface LocalApi {

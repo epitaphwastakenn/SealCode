@@ -13,10 +13,7 @@ export type DiffThemeName = (typeof DIFF_THEME_NAMES)[keyof typeof DIFF_THEME_NA
 
 export function resolveDiffThemeName(theme: "light" | "dark"): DiffThemeName {
   if (theme === "dark") return DIFF_THEME_NAMES.dark;
-  // The New design (data-redesign on <html>) keeps light syntax readable on every code surface.
-  return typeof document !== "undefined" && document.documentElement.hasAttribute("data-redesign")
-    ? DIFF_THEME_NAMES.readableLight
-    : DIFF_THEME_NAMES.light;
+  return DIFF_THEME_NAMES.readableLight;
 }
 
 const FNV_OFFSET_BASIS_32 = 0x811c9dc5;
@@ -278,19 +275,8 @@ export function buildFileDiffContentVersion(fileDiff: FileDiffMetadata): number 
   return hash;
 }
 
-export function getDiffCollapseIconClassName(fileDiff: FileDiffMetadata): string {
-  switch (fileDiff.type) {
-    case "new":
-      return "text-[var(--diffs-addition-base)] redesign:text-muted-foreground/80";
-    case "deleted":
-      return "text-[var(--diffs-deletion-base)] redesign:text-muted-foreground/80";
-    case "change":
-    case "rename-pure":
-    case "rename-changed":
-      return "text-[var(--diffs-modified-base)] redesign:text-muted-foreground/80";
-    default:
-      return "text-muted-foreground/80";
-  }
+export function getDiffCollapseIconClassName(_fileDiff: FileDiffMetadata): string {
+  return "text-muted-foreground";
 }
 
 export const DIFF_SURFACE_THEME_UNSAFE_CSS = `

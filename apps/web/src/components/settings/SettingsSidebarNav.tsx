@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState, type ComponentType, type KeyboardEvent } from "react";
 import {
+  ActivityIcon,
   ArchiveIcon,
   FlaskConicalIcon,
   BlocksIcon,
   BotIcon,
-  createLucideIcon,
   CalendarClockIcon,
+  Gamepad2Icon,
   GitBranchIcon,
   HardDriveIcon,
   PanelsTopLeftIcon,
@@ -40,27 +41,15 @@ import {
 import { useAvailableSettingsSearchItems } from "./useAvailableSettingsSearchItems";
 import { validateSettingsScopeSearch } from "./settingsScope";
 
-const SnapShotIcon = createLucideIcon("snap-shot", [
-  [
-    "path",
-    {
-      d: "M8 3H6a3 3 0 0 0-3 3v2M16 3h2a3 3 0 0 1 3 3v2M21 16v2a3 3 0 0 1-3 3h-2M8 21H6a3 3 0 0 1-3-3v-2",
-      key: "capture-frame",
-    },
-  ],
-  ["rect", { width: "10", height: "8", x: "7", y: "8", rx: "2", key: "window" }],
-  ["circle", { cx: "12", cy: "12", r: "1.5", key: "lens" }],
-]);
-
 const SETTINGS_SECTION_ICONS: Readonly<
   Record<SettingsPath, ComponentType<{ className?: string }>>
 > = {
   "/settings/general": Settings2Icon,
-  "/settings/diagnostics": Settings2Icon,
+  "/settings/diagnostics": ActivityIcon,
   "/settings/appearance": PaletteIcon,
   "/settings/projects": PanelsTopLeftIcon,
   "/settings/keybindings": KeyboardIcon,
-  "/settings/snap-shot": SnapShotIcon,
+  "/settings/roblox-studio": Gamepad2Icon,
   "/settings/providers": BotIcon,
   "/settings/integrations": BlocksIcon,
   "/settings/scheduled-tasks": CalendarClockIcon,
@@ -71,17 +60,29 @@ const SETTINGS_SECTION_ICONS: Readonly<
   "/settings/archived": ArchiveIcon,
 };
 
-const SETTINGS_NAV_ITEMS: ReadonlyArray<{
+const SETTINGS_NAV_GROUPS: ReadonlyArray<{
   label: string;
-  to: SettingsPath;
-  icon: ComponentType<{ className?: string }>;
-}> = (Object.keys(SETTINGS_SECTION_LABELS) as SettingsPath[])
-  .filter((to) => to !== "/settings/diagnostics")
-  .map((to) => ({
-    to,
-    label: SETTINGS_SECTION_LABELS[to],
-    icon: SETTINGS_SECTION_ICONS[to],
-  }));
+  items: ReadonlyArray<SettingsPath>;
+}> = [
+  {
+    label: "App",
+    items: ["/settings/general", "/settings/appearance", "/settings/keybindings", "/settings/beta"],
+  },
+  {
+    label: "Agents",
+    items: [
+      "/settings/providers",
+      "/settings/roblox-studio",
+      "/settings/integrations",
+      "/settings/scheduled-tasks",
+    ],
+  },
+  { label: "Code", items: ["/settings/source-control", "/settings/projects"] },
+  {
+    label: "Data",
+    items: ["/settings/storage", "/settings/archived", "/settings/connections"],
+  },
+];
 
 function SettingsSectionIcon({ to }: { to: SettingsPath }) {
   const Icon = SETTINGS_SECTION_ICONS[to];
@@ -93,9 +94,12 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
   const currentHash = useLocation({ select: (location) => location.hash });
   const currentSearch = useLocation({ select: (location) => location.search });
   const scopeSearch = validateSettingsScopeSearch(currentSearch);
-  const navItems = SETTINGS_NAV_ITEMS.filter(
-    (item) => item.to !== "/settings/projects" || isSettingsOverviewVisible(scopeSearch),
-  );
+  const navGroups = SETTINGS_NAV_GROUPS.map((group) => ({
+    label: group.label,
+    items: group.items
+      .filter((to) => to !== "/settings/projects" || isSettingsOverviewVisible(scopeSearch))
+      .map((to) => ({ to, label: SETTINGS_SECTION_LABELS[to], icon: SETTINGS_SECTION_ICONS[to] })),
+  })).filter((group) => group.items.length > 0);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const [query, setQuery] = useState("");
   // Below md the nav is an icon rail; searching expands it over the page.
@@ -231,7 +235,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                 !compactSearchOpen && "max-md:hidden",
               )}
             >
-              <SearchIcon className="size-4 shrink-0 text-sidebar-muted-foreground/80" />
+              <SearchIcon className="size-4 shrink-0 text-sidebar-muted-foreground" />
               <SidebarInput
                 ref={searchInputRef}
                 nativeInput
@@ -309,7 +313,7 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                         <span className="block truncate text-sm font-medium text-sidebar-foreground">
                           {item.title}
                         </span>
-                        <span className="block truncate text-2xs text-sidebar-muted-foreground/75">
+                        <span className="block truncate text-2xs text-sidebar-muted-foreground">
                           {SETTINGS_SECTION_LABELS[item.to]}
                         </span>
                       </span>
@@ -318,41 +322,54 @@ export function SettingsSidebarNav({ pathname }: { pathname: string }) {
                 ))}
               </SidebarMenu>
             ) : (
-              <SidebarMenu>
+              <div className="flex flex-col gap-3">
                 {compactSearchOpen ? null : (
-                  <SidebarMenuItem className="md:hidden">
-                    <SidebarMenuButton
-                      aria-label="Search settings"
-                      onClick={() => setCompactSearchOpen(true)}
-                    >
-                      <SearchIcon />
-                    </SidebarMenuButton>
-                  </SidebarMenuItem>
-                )}
-                {navItems.map((item) => {
-                  const Icon = item.icon;
-                  const isGeneralDetailPage =
-                    item.to === "/settings/general" &&
-                    pathname === "/settings/open-source-licenses";
-                  const isActive =
-                    isGeneralDetailPage ||
-                    pathname === item.to ||
-                    pathname.startsWith(`${item.to}/`);
-                  return (
-                    <SidebarMenuItem key={item.to}>
+                  <SidebarMenu className="md:hidden">
+                    <SidebarMenuItem>
                       <SidebarMenuButton
-                        isActive={isActive}
-                        onClick={() => handleSectionClick(item.to)}
+                        aria-label="Search settings"
+                        onClick={() => setCompactSearchOpen(true)}
                       >
-                        <Icon />
-                        <span className={cn("truncate", !compactSearchOpen && "max-md:sr-only")}>
-                          {item.label}
-                        </span>
+                        <SearchIcon />
                       </SidebarMenuButton>
                     </SidebarMenuItem>
-                  );
-                })}
-              </SidebarMenu>
+                  </SidebarMenu>
+                )}
+                {navGroups.map((group) => (
+                  <div key={group.label} role="group" aria-label={group.label}>
+                    <p className="px-2 pb-1 text-xs font-medium text-sidebar-muted-foreground max-md:sr-only">
+                      {group.label}
+                    </p>
+                    <SidebarMenu>
+                      {group.items.map((item) => {
+                        const Icon = item.icon;
+                        const isGeneralDetailPage =
+                          item.to === "/settings/general" &&
+                          pathname === "/settings/open-source-licenses";
+                        const isActive =
+                          isGeneralDetailPage ||
+                          pathname === item.to ||
+                          pathname.startsWith(`${item.to}/`);
+                        return (
+                          <SidebarMenuItem key={item.to}>
+                            <SidebarMenuButton
+                              isActive={isActive}
+                              onClick={() => handleSectionClick(item.to)}
+                            >
+                              <Icon />
+                              <span
+                                className={cn("truncate", !compactSearchOpen && "max-md:sr-only")}
+                              >
+                                {item.label}
+                              </span>
+                            </SidebarMenuButton>
+                          </SidebarMenuItem>
+                        );
+                      })}
+                    </SidebarMenu>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         </SidebarGroup>

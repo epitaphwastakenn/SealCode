@@ -1,7 +1,5 @@
-import { RefreshCwIcon } from "lucide-react";
 import { useState } from "react";
 import type {
-  GlobalMcpStatus,
   RobloxStudioMode,
   RobloxStudioScope,
   RobloxStudioSettings as RobloxStudioSettingsValue,
@@ -17,96 +15,44 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Select, SelectItem, SelectPopup, SelectTrigger, SelectValue } from "../ui/select";
 import { Switch } from "../ui/switch";
-import { SettingsRow, SettingsSection } from "./settingsLayout";
+import { McpReconnectButton, McpStatusBadge } from "./McpStatus";
+import {
+  SettingsCallout,
+  SettingsPageContainer,
+  SettingsRow,
+  SettingsSection,
+} from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
+import { StudioPlaceChip } from "./StudioPlaceChip";
+import { useCanManageLocalBackend } from "./useCanManageLocalBackend";
 
-const MODES: ReadonlyArray<{ value: RobloxStudioMode; label: string }> = [
+const modes: ReadonlyArray<{ value: RobloxStudioMode; label: string }> = [
   { value: "sealcode", label: "Harp" },
   { value: "official", label: "Roblox's own Studio MCP" },
   { value: "off", label: "Off" },
 ];
 
-const SCOPES: ReadonlyArray<{ value: RobloxStudioScope; label: string }> = [
+const scopes: ReadonlyArray<{ value: RobloxStudioScope; label: string }> = [
   { value: "roblox-projects", label: "Roblox projects" },
   { value: "all-projects", label: "All projects" },
 ];
 
-/** Settings keep a saved secret as this marker; see `settingsSecrets.ts`. */
-const REDACTED = "\u2022\u2022\u2022\u2022\u2022\u2022";
+const redacted = "\u2022\u2022\u2022\u2022\u2022\u2022";
 
-function ServerStatusLine({
-  label,
-  status,
-  onReconnect,
-  reconnecting,
-}: {
-  readonly label: string;
-  readonly status: GlobalMcpStatus | undefined;
-  readonly onReconnect: () => void;
-  readonly reconnecting: boolean;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-      <span className="font-medium text-foreground">{label}</span>
-      <span className={status?.state === "ready" ? "text-success" : undefined}>
-        {status?.state ?? "connecting"}
-      </span>
-      <span>{status?.toolCount ?? 0} tools</span>
-      {status?.errorMessage ? (
-        <span className="min-w-0 break-words text-destructive">{status.errorMessage}</span>
-      ) : null}
-      <Button
-        type="button"
-        size="xs"
-        variant="outline"
-        className="ml-auto"
-        disabled={reconnecting}
-        onClick={onReconnect}
-      >
-        <RefreshCwIcon className={reconnecting ? "size-3 animate-spin" : "size-3"} />
-        Reconnect
-      </Button>
-    </div>
-  );
-}
-
-function BridgeSummary({ status }: { readonly status: RobloxStudioStatus }) {
+function bridgeNotices(status: RobloxStudioStatus): ReadonlyArray<string> {
   const bridge = status.bridge;
-  if (bridge === undefined) return null;
-  const notices = [
+  if (bridge === undefined) return [];
+  return [
     bridge.pluginUpdated
-      ? "The Harp Studio plugin was just installed or updated. Open places update themselves in a few seconds; a Studio that was open before Harp first installed the plugin loads it when its next place opens."
+      ? "The Harp Studio plugin was just installed or updated. Open places update themselves in a few seconds. A Studio that was open before the plugin was first installed loads it when its next place opens."
       : undefined,
     bridge.pluginRejected
-      ? `A Studio is still running an older plugin (${bridge.pluginRejected}); restart Roblox Studio.`
+      ? `A Studio is still running an older plugin (${bridge.pluginRejected}). Restart Roblox Studio.`
       : undefined,
     bridge.pluginProblem ? `Plugin install failed: ${bridge.pluginProblem}` : undefined,
     bridge.warning,
     bridge.error,
   ].filter((notice): notice is string => notice !== undefined);
-  return (
-    <div className="space-y-1 text-xs text-muted-foreground">
-      <p>
-        Bridge {bridge.state}
-        {bridge.version ? ` · v${bridge.version}` : ""}
-        {bridge.restarts > 0 ? ` · restarted ${String(bridge.restarts)}×` : ""}
-        {" · "}
-        {bridge.places.length === 0
-          ? "no place connected — open a place in Roblox Studio"
-          : bridge.places
-              .map(
-                (place) =>
-                  `${place.placeName ?? place.instanceId}${place.role ? ` (${place.role})` : ""}`,
-              )
-              .join(", ")}
-      </p>
-      {notices.map((notice) => (
-        <p key={notice} className="text-warning">
-          {notice}
-        </p>
-      ))}
-    </div>
-  );
 }
 
 function TextSetting({
@@ -122,12 +68,12 @@ function TextSetting({
   readonly secret?: boolean;
   readonly onCommit: (value: string) => void;
 }) {
-  const saved = secret && value === REDACTED;
+  const saved = secret && value === redacted;
   const [draft, setDraft] = useState(saved ? "" : value);
   const [synced, setSynced] = useState(value);
   if (synced !== value) {
     setSynced(value);
-    setDraft(secret && value === REDACTED ? "" : value);
+    setDraft(secret && value === redacted ? "" : value);
   }
   return (
     <Input
@@ -143,6 +89,73 @@ function TextSetting({
         if (next !== value) onCommit(next);
       }}
     />
+  );
+}
+
+function StudioConnectionStatus({
+  status,
+  mode,
+  reconnectingId,
+  onReconnect,
+}: {
+  readonly status: RobloxStudioStatus;
+  readonly mode: RobloxStudioMode;
+  readonly reconnectingId: string | null;
+  readonly onReconnect: (id: string) => void;
+}) {
+  const places = status.bridge?.places ?? [];
+  const notices = bridgeNotices(status);
+  return (
+    <div className="space-y-2 pt-1">
+      {status.servers.length === 0 ? (
+        <p>
+          {mode === "official" && !status.officialMcpAvailable
+            ? "Roblox Studio's mcp.bat was not found. Install Roblox Studio, or choose Harp."
+            : "No Roblox server is running for these settings."}
+        </p>
+      ) : (
+        status.servers.map((server) => (
+          <div key={server.id} className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-medium text-foreground">
+              {server.displayName ?? server.id}
+            </span>
+            <McpStatusBadge state={server.state} />
+            <span className="tabular-nums">{server.toolCount} tools</span>
+            <McpReconnectButton
+              label={server.displayName ?? server.id}
+              reconnecting={reconnectingId === server.id}
+              onReconnect={() => onReconnect(server.id)}
+            />
+            {server.errorMessage ? (
+              <span className="min-w-0 break-words text-error-foreground">
+                {server.errorMessage}
+              </span>
+            ) : null}
+          </div>
+        ))
+      )}
+      {mode === "sealcode" && status.bridge !== undefined ? (
+        places.length === 0 ? (
+          <p>No place connected. Open a place in Roblox Studio.</p>
+        ) : (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {places.map((place) => (
+              <StudioPlaceChip
+                key={place.instanceId}
+                name={place.placeName ?? place.instanceId}
+                role={place.role}
+                running={place.isRunning === true}
+              />
+            ))}
+          </div>
+        )
+      ) : null}
+      {notices.map((notice) => (
+        <SettingsCallout key={notice} tone="warning">
+          {notice}
+        </SettingsCallout>
+      ))}
+    </div>
   );
 }
 
@@ -173,44 +186,54 @@ export function RobloxStudioSettings() {
   };
 
   return (
-    <SettingsSection
-      {...searchableSetting("roblox-studio")}
-      description="Drive Roblox Studio from any agent. Harp installs its own Studio plugin and keeps it up to date in place. The plugin adds a Studio panel with a switch for every tool, plus safety switches to pause the agent, make the place read-only or stop Luau. Agents can move the camera and send screenshots to the chat, use Creator Store assets and model in Blender."
-    >
-      <SettingsRow
-        title="Studio connection"
-        description={
-          roblox.mode === "sealcode"
-            ? `Harp Studio connection${status?.bridge?.version ? ` v${status.bridge.version}` : ""}: the plugin, the Studio panel and the tool switches.`
-            : roblox.mode === "official"
-              ? "Only the MCP server Roblox Studio ships."
-              : "Choose how agents reach Roblox Studio."
-        }
-        control={
-          <Select
-            value={roblox.mode}
-            onValueChange={(value) => {
-              if (typeof value === "string") update({ mode: value as RobloxStudioMode });
-            }}
-          >
-            <SelectTrigger aria-label="Roblox Studio connection" className="sm:w-60">
-              <SelectValue>{MODES.find((mode) => mode.value === roblox.mode)?.label}</SelectValue>
-            </SelectTrigger>
-            <SelectPopup>
-              {MODES.map((mode) => (
-                <SelectItem key={mode.value} value={mode.value} hideIndicator>
-                  {mode.label}
-                </SelectItem>
-              ))}
-            </SelectPopup>
-          </Select>
-        }
-      />
-      {roblox.mode === "off" ? null : (
-        <>
+    <>
+      <SettingsSection
+        {...searchableSetting("roblox-studio")}
+        description="Let agents read and edit your place in Roblox Studio."
+      >
+        <SettingsRow
+          title="Connection"
+          description={
+            roblox.mode === "sealcode"
+              ? "Harp installs and updates its own Studio plugin. Its Studio panel has a switch for every tool and safety switches to pause the agent, make the place read-only or stop Luau."
+              : roblox.mode === "official"
+                ? "Agents only get the MCP server Roblox Studio ships."
+                : "Choose how agents reach Roblox Studio."
+          }
+          status={
+            roblox.mode !== "off" && status !== null ? (
+              <StudioConnectionStatus
+                status={status}
+                mode={roblox.mode}
+                reconnectingId={reconnectingId}
+                onReconnect={reconnect}
+              />
+            ) : undefined
+          }
+          control={
+            <Select
+              value={roblox.mode}
+              onValueChange={(value) => {
+                if (typeof value === "string") update({ mode: value as RobloxStudioMode });
+              }}
+            >
+              <SelectTrigger aria-label="Roblox Studio connection" className="sm:w-60">
+                <SelectValue>{modes.find((mode) => mode.value === roblox.mode)?.label}</SelectValue>
+              </SelectTrigger>
+              <SelectPopup>
+                {modes.map((mode) => (
+                  <SelectItem key={mode.value} value={mode.value} hideIndicator>
+                    {mode.label}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          }
+        />
+        {roblox.mode === "off" ? null : (
           <SettingsRow
             title="Projects"
-            description="Threads outside these projects do not get the Studio tools or instructions. A Roblox project has a Rojo project, place or model file, Roblox tooling such as wally.toml, or a .sealcode-roblox file in its root."
+            description="Threads outside these projects do not get the Studio tools or instructions. A Roblox project has a Rojo project, a place or model file, Roblox tooling such as wally.toml, or a .sealcode-roblox file in its root."
             control={
               <Select
                 value={roblox.scope}
@@ -220,11 +243,11 @@ export function RobloxStudioSettings() {
               >
                 <SelectTrigger aria-label="Roblox Studio projects" className="sm:w-60">
                   <SelectValue>
-                    {SCOPES.find((scope) => scope.value === roblox.scope)?.label}
+                    {scopes.find((scope) => scope.value === roblox.scope)?.label}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectPopup>
-                  {SCOPES.map((scope) => (
+                  {scopes.map((scope) => (
                     <SelectItem key={scope.value} value={scope.value} hideIndicator>
                       {scope.label}
                     </SelectItem>
@@ -233,91 +256,102 @@ export function RobloxStudioSettings() {
               </Select>
             }
           />
+        )}
+      </SettingsSection>
+
+      {roblox.mode === "sealcode" ? (
+        <SettingsSection id="roblox-studio-agents" title="Agent behavior">
+          <SettingsRow
+            title="Studio instructions"
+            description="Gives each new conversation Harp's rules and Roblox skills for working in Studio."
+            control={
+              <Switch
+                checked={roblox.instructions}
+                onCheckedChange={(instructions) => update({ instructions })}
+                aria-label="Studio instructions"
+              />
+            }
+          />
+          <SettingsRow
+            title="Automatic playtests"
+            description="Agents run the smallest useful playtest to verify runtime changes, and stop it before replying."
+            control={
+              <Switch
+                checked={roblox.autoPlaytest}
+                onCheckedChange={(autoPlaytest) => update({ autoPlaytest })}
+                aria-label="Automatic playtests"
+              />
+            }
+          />
+          <SettingsRow
+            title="Studio selection as context"
+            description="Each message tells the agent what you have selected in Studio and which script is open, so you can say “this part” or “the open script”."
+            control={
+              <Switch
+                checked={roblox.studioContext}
+                onCheckedChange={(studioContext) => update({ studioContext })}
+                aria-label="Studio selection as context"
+              />
+            }
+          />
+          <SettingsRow
+            title="Also connect Roblox's own MCP"
+            description={
+              status?.officialMcpAvailable === false
+                ? "Roblox Studio's mcp.bat was not found on this machine."
+                : "Adds Roblox's mesh, texture and material generation beside Harp's tools."
+            }
+            control={
+              <Switch
+                checked={roblox.officialMcpAlongside}
+                onCheckedChange={(officialMcpAlongside) => update({ officialMcpAlongside })}
+                aria-label="Also connect Roblox's own MCP"
+              />
+            }
+          />
+          {roblox.openCloudApiKey.length > 0 ? (
+            <SettingsRow
+              title="Saved Open Cloud key"
+              description="Harp no longer uploads with an Open Cloud key. Agents ask whether to publish through the Roblox Assistant or let you publish."
+              control={
+                <Button
+                  type="button"
+                  size="xs"
+                  variant="outline"
+                  onClick={() => update({ openCloudApiKey: "" })}
+                >
+                  Remove key
+                </Button>
+              }
+            />
+          ) : null}
+        </SettingsSection>
+      ) : null}
+
+      {roblox.mode === "off" ? null : (
+        <SettingsSection
+          id="roblox-studio-blender"
+          title="Blender"
+          description="Model in Blender and bring the result into Studio."
+        >
           {roblox.mode === "sealcode" ? (
-            <>
-              <SettingsRow
-                title="Studio instructions"
-                description="Gives each new conversation Harp's rules and Roblox skills for working in Studio."
-                control={
-                  <Switch
-                    checked={roblox.instructions}
-                    onCheckedChange={(instructions) => update({ instructions })}
-                    aria-label="Studio instructions"
-                  />
-                }
-              />
-              <SettingsRow
-                title="Automatic playtests"
-                description="Agents run the smallest useful playtest to verify runtime changes, and stop it before replying."
-                control={
-                  <Switch
-                    checked={roblox.autoPlaytest}
-                    onCheckedChange={(autoPlaytest) => update({ autoPlaytest })}
-                    aria-label="Automatic playtests"
-                  />
-                }
-              />
-              <SettingsRow
-                title="Studio selection as context"
-                description="Each message tells the agent what you have selected in Studio and which script is open, so you can say “this part” or “the open script”."
-                control={
-                  <Switch
-                    checked={roblox.studioContext}
-                    onCheckedChange={(studioContext) => update({ studioContext })}
-                    aria-label="Studio selection as context"
-                  />
-                }
-              />
-              <SettingsRow
-                title="Also connect Roblox's own MCP"
-                description={
-                  status?.officialMcpAvailable === false
-                    ? "Roblox Studio's mcp.bat was not found on this machine."
-                    : "Adds Roblox's mesh, texture and material generation beside Harp's tools."
-                }
-                control={
-                  <Switch
-                    checked={roblox.officialMcpAlongside}
-                    onCheckedChange={(officialMcpAlongside) => update({ officialMcpAlongside })}
-                    aria-label="Also connect Roblox's own MCP"
-                  />
-                }
-              />
-              {/* Uploads go through the Roblox Assistant now; a key saved before can still be cleared. */}
-              {roblox.openCloudApiKey.length > 0 ? (
-                <SettingsRow
-                  title="Remove the saved Open Cloud key"
-                  description="Harp no longer uploads with an Open Cloud key: agents ask whether to publish through the Roblox Assistant or let you publish."
-                  control={
-                    <Button
-                      type="button"
-                      size="xs"
-                      variant="outline"
-                      onClick={() => update({ openCloudApiKey: "" })}
-                    >
-                      Remove
-                    </Button>
-                  }
+            <SettingsRow
+              title="Blender executable"
+              description={
+                status?.blender.problem ??
+                (status?.blender.version
+                  ? `${status.blender.version} at ${status.blender.executable ?? "the detected path"}`
+                  : "Leave empty to use the Blender found in the usual install folders and Steam libraries.")
+              }
+              control={
+                <TextSetting
+                  value={roblox.blenderExecutable}
+                  placeholder={status?.blender.executable ?? "C:\\...\\blender.exe"}
+                  label="Blender executable"
+                  onCommit={(blenderExecutable) => update({ blenderExecutable })}
                 />
-              ) : null}
-              <SettingsRow
-                title="Blender executable"
-                description={
-                  status?.blender.problem ??
-                  (status?.blender.version
-                    ? `${status.blender.version} · ${status.blender.executable ?? ""}`
-                    : "Leave empty to use the Blender found in the usual install folders and Steam libraries.")
-                }
-                control={
-                  <TextSetting
-                    value={roblox.blenderExecutable}
-                    placeholder={status?.blender.executable ?? "C:\\...\\blender.exe"}
-                    label="Blender executable"
-                    onCommit={(blenderExecutable) => update({ blenderExecutable })}
-                  />
-                }
-              />
-            </>
+              }
+            />
           ) : null}
           <SettingsRow
             title="Blender MCP"
@@ -357,30 +391,23 @@ export function RobloxStudioSettings() {
               }
             />
           ) : null}
-          {status !== null ? (
-            <div className="space-y-2 rounded-xl border border-border/70 bg-muted/10 p-3 sm:p-4">
-              {status.servers.length === 0 ? (
-                <p className="text-xs text-muted-foreground">
-                  {roblox.mode === "official" && !status.officialMcpAvailable
-                    ? "Roblox Studio's mcp.bat was not found. Install Roblox Studio, or choose Harp."
-                    : "No Roblox server is running for these settings."}
-                </p>
-              ) : (
-                status.servers.map((server) => (
-                  <ServerStatusLine
-                    key={server.id}
-                    label={server.id}
-                    status={server}
-                    reconnecting={reconnectingId === server.id}
-                    onReconnect={() => reconnect(server.id)}
-                  />
-                ))
-              )}
-              {roblox.mode === "sealcode" ? <BridgeSummary status={status} /> : null}
-            </div>
-          ) : null}
-        </>
+        </SettingsSection>
       )}
-    </SettingsSection>
+    </>
+  );
+}
+
+export function RobloxStudioSettingsPanel() {
+  const canManageLocalBackend = useCanManageLocalBackend();
+  return (
+    <SettingsPageContainer>
+      {canManageLocalBackend ? (
+        <RobloxStudioSettings />
+      ) : (
+        <SettingsCallout>
+          Roblox Studio settings are only available on the computer that runs Harp.
+        </SettingsCallout>
+      )}
+    </SettingsPageContainer>
   );
 }

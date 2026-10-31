@@ -400,9 +400,9 @@ export function UsagePage() {
           variant="segmented"
           value={[String(windowDays)]}
           disabled={showingLimits}
-          // Limits are always current; the New design hides the period instead of greying it.
+          // Limits are always current, so the period hides instead of greying out.
           // It sits before the metric tabs so hiding it never moves them.
-          className={showingLimits ? "redesign:hidden" : undefined}
+          className={showingLimits ? "hidden" : undefined}
           onValueChange={(next) => {
             const value = next[0];
             if (value) selectWindow(Number(value));
@@ -450,7 +450,7 @@ export function UsagePage() {
             aria-label="Usage period"
             size="compact"
             variant="ghost"
-            className={cn("w-auto min-w-0", showingLimits && "redesign:hidden")}
+            className={cn("w-auto min-w-0", showingLimits && "hidden")}
           >
             <SelectValue>
               {WINDOW_OPTIONS.find((option) => option.days === windowDays)?.label}
@@ -962,7 +962,7 @@ function UsageOverview({
                   return (
                     <tr
                       key={key}
-                      className="relative border-b border-border/50 text-right whitespace-nowrap text-muted-foreground tabular-nums transition-colors hover:bg-muted/50 has-focus-visible:bg-muted/50"
+                      className="relative border-b border-border/50 text-right whitespace-nowrap text-muted-foreground tabular-nums transition-colors hover:bg-row-hover has-focus-visible:bg-muted/50"
                     >
                       <td className="py-2.5 pr-3 text-left text-xs">{index + 1}</td>
                       <td className="py-2.5 text-left whitespace-normal">
@@ -1045,7 +1045,7 @@ function UsageOverview({
                   breakdownPeriods.map((period) => (
                     <tr
                       key={"hourStart" in period ? period.hourStart : period.day}
-                      className="border-b border-border/50 transition-colors hover:bg-muted/50"
+                      className="border-b border-border/50 transition-colors hover:bg-row-hover"
                     >
                       <td className="py-2 text-foreground">
                         {"hourStart" in period
@@ -1196,11 +1196,11 @@ function CursorEnableLimits({
           displayName="Cursor"
           indicatorBackground="var(--background)"
           className="size-5"
-          iconClassName="size-4 text-foreground/80"
+          iconClassName="size-4 text-foreground"
         />
         Cursor
       </h2>
-      <div className="flex flex-col items-start gap-3 rounded-lg border border-border/60 p-4">
+      <div className="flex flex-col items-start gap-3 rounded-lg border border-border p-4">
         <p className="text-xs text-muted-foreground">{CURSOR_KEYCHAIN_COPY}</p>
         <div className="flex flex-wrap gap-2">
           {environments.map((environment) => (
@@ -1349,7 +1349,7 @@ function UsageEnvironmentFilter({
             />
           ) : (
             <ChevronDownIcon
-              className="size-3.5 opacity-0 transition-opacity group-hover/usage-environment:opacity-100 group-focus-visible/usage-environment:opacity-100 group-data-popup-open/usage-environment:opacity-100 redesign:opacity-60 redesign:group-hover/usage-environment:opacity-100 redesign:group-focus-visible/usage-environment:opacity-100 redesign:group-data-popup-open/usage-environment:opacity-100"
+              className="size-3.5 opacity-60 transition-opacity group-hover/usage-environment:opacity-100 group-focus-visible/usage-environment:opacity-100 group-data-popup-open/usage-environment:opacity-100"
               aria-hidden
             />
           )}
@@ -1462,7 +1462,7 @@ function UsageProviderFilter({
       <MenuTrigger render={<InlineButton />} className="group/usage-provider min-w-0 max-w-full">
         <span className="min-w-0 truncate">{label}</span>
         <ChevronDownIcon
-          className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover/usage-provider:opacity-100 group-focus-visible/usage-provider:opacity-100 group-data-popup-open/usage-provider:opacity-100 redesign:opacity-60 redesign:group-hover/usage-provider:opacity-100 redesign:group-focus-visible/usage-provider:opacity-100 redesign:group-data-popup-open/usage-provider:opacity-100"
+          className="size-3.5 shrink-0 text-muted-foreground opacity-60 transition-opacity group-hover/usage-provider:opacity-100 group-focus-visible/usage-provider:opacity-100 group-data-popup-open/usage-provider:opacity-100"
           aria-hidden
         />
       </MenuTrigger>

@@ -71,7 +71,7 @@ export function EnvironmentRoutesList({
     const address = connectionRouteAddress(route);
     const confirmed = await requestConfirmDialog(
       `Remove ${connectionRouteLabel(route)} route?${address === null ? "" : `\n${address}`}`,
-      { variant: "destructive" },
+      { variant: "destructive", confirmLabel: "Remove" },
     );
     if (confirmed !== true) return;
     await removeRoute({
@@ -158,7 +158,7 @@ function SortableRouteRow({
       style={{ transform: CSS.Translate.toString(transform), transition }}
       className={cn(
         "flex items-center gap-2 py-2",
-        isDragging && "relative z-10 rounded-md bg-background shadow-md",
+        isDragging && "relative z-10 rounded-md bg-background",
       )}
     >
       <div className="min-w-0 flex-1">
@@ -183,7 +183,7 @@ function SortableRouteRow({
         {...attributes}
         {...listeners}
         aria-label={`Reorder ${label}, position ${position}`}
-        className="flex size-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted-foreground/70 outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:cursor-grabbing"
+        className="flex size-6 shrink-0 cursor-grab touch-none items-center justify-center rounded text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring active:cursor-grabbing"
       >
         <GripVerticalIcon className="size-3.5" />
       </button>

@@ -94,7 +94,7 @@ function AccountAvatar({
         showBadge={Boolean(account.displayName)}
         indicatorBackground="var(--popover)"
         className={cn("size-5", className)}
-        iconClassName="size-4 text-foreground/80"
+        iconClassName="size-4 text-foreground"
       />
     );
   }
@@ -176,13 +176,13 @@ function SegmentPopover({
           />
         ) : null}
       </div>
-      <div className="flex flex-col gap-1 border-t border-border/60 pt-2.5">
+      <div className="flex flex-col gap-1 border-t border-border pt-2.5">
         {account.plan ? <Row label="Plan">{account.plan}</Row> : null}
         {where ? (
           <Row label={account.environments.length > 0 ? "Signed in" : "Via"}>{where}</Row>
         ) : null}
       </div>
-      <div className="flex flex-col gap-1 border-t border-border/60 pt-2.5">
+      <div className="flex flex-col gap-1 border-t border-border pt-2.5">
         <Row label="Left">{remaining}%</Row>
         {window.resetsAt ? (
           <Row label="Resets">
@@ -196,7 +196,7 @@ function SegmentPopover({
         ) : null}
       </div>
       {credits && redeem ? (
-        <div className="border-t border-border/60 pt-2.5 text-muted-foreground">
+        <div className="border-t border-border pt-2.5 text-muted-foreground">
           <span className="flex items-center gap-3">
             <span className="tabular-nums">{resetCreditsSummary(credits, now, true)}</span>
             <Button
@@ -391,7 +391,7 @@ function SegmentTriggers({
         ) : null}
         <span
           aria-hidden
-          className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-md text-3xs leading-none font-semibold text-foreground/80 tabular-nums @2xl/pool:hidden"
+          className="absolute inset-0 flex items-center justify-center overflow-hidden rounded-md text-3xs leading-none font-semibold text-foreground tabular-nums @2xl/pool:hidden"
         >
           {index}
         </span>
@@ -406,7 +406,7 @@ function SegmentTriggers({
             className={cn(
               "shrink-0 font-semibold text-foreground tabular-nums",
               // A single-account bar repeats the headline percentage.
-              !showAccountName && "redesign:hidden",
+              !showAccountName && "hidden",
             )}
           >
             {remaining}%
@@ -460,7 +460,7 @@ function LegendRow({
       render={<Button variant="ghost" size="compact" />}
       className="min-w-0 @2xl/pool:hidden"
     >
-      <span className="relative inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-3xs leading-none font-semibold text-foreground/80 tabular-nums">
+      <span className="relative inline-flex size-4 shrink-0 items-center justify-center rounded-sm text-3xs leading-none font-semibold text-foreground tabular-nums">
         <span
           aria-hidden
           className="absolute inset-0 rounded-sm opacity-35"
@@ -544,7 +544,7 @@ function PoolWindowCard({
 }) {
   const nextRefill = pool.resets.find((reset) => reset.restoresPercent > 0);
   return (
-    <div className="grid items-center gap-x-6 gap-y-3 rounded-lg border border-border/60 p-4 md:grid-cols-[11rem_minmax(0,1fr)]">
+    <div className="grid items-center gap-x-6 gap-y-3 rounded-lg border border-border p-4 md:grid-cols-[11rem_minmax(0,1fr)]">
       <div className="flex flex-col gap-1">
         <span className="text-sm font-medium text-foreground">{label ?? pool.label}</span>
         <span className="flex items-baseline gap-2">
@@ -582,7 +582,7 @@ function PoolSection({ pool, now }: { readonly pool: LimitPool; readonly now: nu
           displayName={label}
           indicatorBackground="var(--background)"
           className="size-5"
-          iconClassName="size-4 text-foreground/80"
+          iconClassName="size-4 text-foreground"
         />
         {label}
       </h2>

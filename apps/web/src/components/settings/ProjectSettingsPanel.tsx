@@ -337,7 +337,7 @@ function ProjectDetail({
       unloadedThreadCount: readUnloadedThreadCount(members, threads),
     });
     const confirmed = await settlePromise(() =>
-      api.dialogs.confirm(confirmationMessage, { variant: "destructive" }),
+      api.dialogs.confirm(confirmationMessage, { variant: "destructive", confirmLabel: "Remove" }),
     );
     if (confirmed._tag === "Failure" || !confirmed.value) return;
     if (checkProjectAccess(members, "Failed to remove project")) return;
@@ -450,9 +450,7 @@ function ProjectDetail({
                   >
                     <Tooltip>
                       <TooltipTrigger
-                        render={
-                          <span className="min-w-0 truncate text-xs text-muted-foreground/80" />
-                        }
+                        render={<span className="min-w-0 truncate text-xs text-muted-foreground" />}
                       >
                         {member.workspaceRoot}
                       </TooltipTrigger>

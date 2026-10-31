@@ -392,7 +392,7 @@ export function ThemeImportDialog({
         onOpenChange(nextOpen);
       }}
     >
-      <DialogPopup className="max-w-3xl overflow-hidden">
+      <DialogPopup size="xl" className="overflow-hidden">
         <DialogHeader>
           <DialogTitle>Add a theme</DialogTitle>
         </DialogHeader>
@@ -407,9 +407,7 @@ export function ThemeImportDialog({
 
           <div className="flex items-center gap-3" aria-hidden>
             <div className="h-px flex-1 bg-border" />
-            <span className="text-muted-foreground text-2xs uppercase tracking-wider">
-              or import a file
-            </span>
+            <span className="text-muted-foreground text-2xs">or import a file</span>
             <div className="h-px flex-1 bg-border" />
           </div>
 
@@ -458,7 +456,7 @@ export function ThemeImportDialog({
             if (conflicts) {
               return (
                 <div className="space-y-3">
-                  <div className="rounded-xl border border-border/70 bg-muted/20 p-3">
+                  <div className="rounded-xl border border-border bg-foreground/[0.03] p-3">
                     <p className="text-sm font-medium">Already installed</p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       {conflicts.map((theme) => theme.label).join(", ")}
@@ -486,7 +484,9 @@ export function ThemeImportDialog({
                 <div
                   className={cn(
                     "flex flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed px-3 py-3 transition-colors",
-                    isDropTarget ? "border-ring bg-accent/20" : "border-border/80 bg-muted/20",
+                    isDropTarget
+                      ? "border-ring bg-row-selected"
+                      : "border-border bg-foreground/[0.03]",
                   )}
                   {...dropHandlers}
                 >

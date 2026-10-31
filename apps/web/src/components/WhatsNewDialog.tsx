@@ -1,4 +1,3 @@
-import { SparklesIcon, WrenchIcon, ZapIcon, type LucideIcon } from "lucide-react";
 import { useEffect } from "react";
 import { create } from "zustand";
 
@@ -17,8 +16,19 @@ import {
   useClientSettingsHydrated,
 } from "~/hooks/useSettings";
 import { useDesktopUpdateState } from "~/state/desktopUpdate";
+import { HarpMark } from "./HarpMark";
+import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Dialog, DialogFooter, DialogPanel, DialogPopup, DialogTitle } from "./ui/dialog";
+import {
+  Dialog,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "./ui/dialog";
+import { StatusDot, type StatusDotTone } from "./ui/status-dot";
 
 const useWhatsNew = create<{ releases: ReadonlyArray<ChangelogRelease> | null }>(() => ({
   releases: null,
@@ -57,27 +67,10 @@ export function WhatsNewHost() {
   return releases ? <WhatsNewDialog releases={releases} /> : null;
 }
 
-const SECTION_STYLE: Readonly<
-  Record<ChangelogSection, { label: string; icon: LucideIcon; tone: string; card: string }>
-> = {
-  new: {
-    label: "New",
-    icon: SparklesIcon,
-    tone: "text-primary",
-    card: "border-primary/25 bg-primary/6",
-  },
-  improved: {
-    label: "Improved",
-    icon: ZapIcon,
-    tone: "text-info",
-    card: "border-info/25 bg-info/6",
-  },
-  fixed: {
-    label: "Fixed",
-    icon: WrenchIcon,
-    tone: "text-success",
-    card: "border-success/25 bg-success/6",
-  },
+const sectionStyles: Readonly<Record<ChangelogSection, { label: string; tone: StatusDotTone }>> = {
+  new: { label: "New", tone: "brand" },
+  improved: { label: "Improved", tone: "muted" },
+  fixed: { label: "Fixed", tone: "muted" },
 };
 
 function WhatsNewDialog({ releases }: { readonly releases: ReadonlyArray<ChangelogRelease> }) {
@@ -90,28 +83,18 @@ function WhatsNewDialog({ releases }: { readonly releases: ReadonlyArray<Changel
         if (!open) closeWhatsNew();
       }}
     >
-      <DialogPopup className="sm:max-w-xl">
-        <header className="relative shrink-0 overflow-hidden rounded-t-2xl bg-linear-to-br from-primary/35 via-primary/15 to-transparent px-6 pt-6 pb-5">
-          <div className="flex items-center gap-4 pe-8">
-            <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-background/40 shadow-sm">
-              <img src="/harp-icon.png" alt="" className="size-10 object-contain" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <DialogTitle>What's new</DialogTitle>
-                <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">
-                  v{latest.version}
-                </span>
-              </div>
-              {latest.headline ? (
-                <p className="mt-1.5 text-sm text-foreground/90">{latest.headline}</p>
-              ) : null}
-              {latest.date ? (
-                <p className="mt-0.5 text-xs text-muted-foreground">{latest.date}</p>
-              ) : null}
-            </div>
+      <DialogPopup size="lg">
+        <DialogHeader>
+          <div className="flex items-center gap-2">
+            <HarpMark />
+            <Badge variant="brand" size="sm">
+              v{latest.version}
+            </Badge>
           </div>
-        </header>
+          <DialogTitle>What's new</DialogTitle>
+          {latest.headline ? <DialogDescription>{latest.headline}</DialogDescription> : null}
+          {latest.date ? <p className="text-xs text-muted-foreground">{latest.date}</p> : null}
+        </DialogHeader>
         <DialogPanel>
           <div className="flex flex-col gap-6">
             {releases.map((release, index) => (
@@ -121,7 +104,7 @@ function WhatsNewDialog({ releases }: { readonly releases: ReadonlyArray<Changel
         </DialogPanel>
         <DialogFooter className="items-center">
           <p className="me-auto text-xs text-muted-foreground max-sm:text-center">
-            Open it again from Settings → General.
+            Open it again from General settings.
           </p>
           <Button onClick={closeWhatsNew}>Got it</Button>
         </DialogFooter>
@@ -141,24 +124,22 @@ function ReleaseNotes({
     <section className="space-y-4">
       {first ? null : (
         <div className="space-y-2">
-          <div className="flex items-center gap-3 text-xs font-semibold text-muted-foreground">
-            <span className="h-px flex-1 bg-border" />v{release.version}
+          <div className="flex items-center gap-3 text-xs font-medium text-muted-foreground">
+            <span className="h-px flex-1 bg-border/50" />v{release.version}
             {release.date ? ` · ${release.date}` : ""}
-            <span className="h-px flex-1 bg-border" />
+            <span className="h-px flex-1 bg-border/50" />
           </div>
           {release.headline ? <p className="text-sm font-medium">{release.headline}</p> : null}
         </div>
       )}
       {release.sections.map(({ section, items }, index) => {
-        const style = SECTION_STYLE[section];
+        const style = sectionStyles[section];
         return (
           // oxlint-disable-next-line react/no-array-index-key -- a release may repeat a section heading
           <div key={index} className="space-y-2">
-            <div
-              className={`flex items-center gap-2 text-2xs font-semibold tracking-wide uppercase ${style.tone}`}
-            >
+            <div className="flex items-center gap-2 text-xs font-medium text-foreground">
+              <StatusDot tone={style.tone} />
               {style.label}
-              <span className="h-px flex-1 bg-current opacity-25" />
             </div>
             <ul className="space-y-2">
               {items.map((item, itemIndex) => (
@@ -180,30 +161,18 @@ function ChangelogEntry({
   readonly item: ChangelogItem;
   readonly section: ChangelogSection;
 }) {
-  const style = SECTION_STYLE[section];
   if (section === "new" && item.title) {
-    const Icon = style.icon;
     return (
-      <li className={`flex gap-3 rounded-xl border p-3 ${style.card}`}>
-        <span
-          className={`flex size-8 shrink-0 items-center justify-center rounded-lg bg-current/10 ${style.tone}`}
-        >
-          <Icon className="size-4" />
-        </span>
-        <div className="min-w-0">
-          <p className="text-sm font-medium">{item.title}</p>
-          <p className="mt-0.5 text-sm text-muted-foreground">{item.text}</p>
-        </div>
+      <li className="rounded-lg border border-border/50 bg-foreground/[0.03] p-3">
+        <p className="text-sm font-medium">{item.title}</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">{item.text}</p>
       </li>
     );
   }
   return (
-    <li className="flex gap-2.5 text-sm">
-      <span className={`mt-2 size-1.5 shrink-0 rounded-full bg-current ${style.tone}`} />
-      <div className="min-w-0">
-        {item.title ? <span className="font-medium">{item.title}. </span> : null}
-        <span className={item.title ? "text-muted-foreground" : undefined}>{item.text}</span>
-      </div>
+    <li className="text-sm">
+      {item.title ? <span className="font-medium">{item.title}. </span> : null}
+      <span className={item.title ? "text-muted-foreground" : undefined}>{item.text}</span>
     </li>
   );
 }

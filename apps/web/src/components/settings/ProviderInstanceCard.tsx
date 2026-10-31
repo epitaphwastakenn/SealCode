@@ -37,7 +37,6 @@ import {
 } from "@t3tools/shared/model";
 import { cn } from "../../lib/utils";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
-import { useClientSettings } from "../../hooks/useSettings";
 import { useStableCallback } from "../../hooks/useStableCallback";
 import { normalizeProviderAccentColor } from "../../providerInstances";
 import { Badge } from "../ui/badge";
@@ -687,7 +686,6 @@ export function ProviderInstanceCard({
   const displayName =
     instance.displayName?.trim() || driverOption?.label || String(instance.driver);
   const accentColor = normalizeProviderAccentColor(instance.accentColor);
-  const redesign = useClientSettings((settings) => settings.redesignEnabled);
   const { copyToClipboard } = useCopyToClipboard<{ providerName: string }>({
     onCopy: ({ providerName }) => {
       toastManager.add({
@@ -828,7 +826,7 @@ export function ProviderInstanceCard({
       }
       showBadge={Boolean(accentColor)}
       className="size-5"
-      iconClassName="size-4 text-foreground/80"
+      iconClassName="size-4 text-foreground"
       badgeClassName="right-[-0.125rem] bottom-[-0.125rem] h-3 min-w-3 px-0.5 text-5xs"
     />
   );
@@ -951,14 +949,14 @@ export function ProviderInstanceCard({
             </p>
           ) : null}
           {onRunVersionAction && updateCommand ? (
-            <div className="flex items-center gap-2 text-3xs font-medium uppercase tracking-wider text-muted-foreground">
+            <div className="flex items-center gap-2 text-3xs font-medium text-muted-foreground">
               <span aria-hidden className="h-px flex-1 bg-border" />
               or, update manually using
               <span aria-hidden className="h-px flex-1 bg-border" />
             </div>
           ) : null}
           {updateCommand ? (
-            <div className="flex min-w-0 items-center gap-1 rounded-md border border-border/70 bg-muted/40 py-0.5 pr-0.5 pl-2">
+            <div className="flex min-w-0 items-center gap-1 rounded-md border border-border bg-foreground/[0.03] py-0.5 pr-0.5 pl-2">
               <code className="min-w-0 flex-1 truncate font-mono text-2xs text-foreground">
                 {updateCommand}
               </code>
@@ -992,7 +990,7 @@ export function ProviderInstanceCard({
         data-slot="settings-row"
         className={cn(
           "group flex min-h-18 items-center gap-3 px-3 py-3 transition-colors sm:px-4",
-          selected ? "bg-muted/45 redesign:bg-foreground/[0.06]" : "hover:bg-muted/25",
+          selected ? "bg-row-selected" : "hover:bg-row-hover",
         )}
       >
         <div
@@ -1019,7 +1017,7 @@ export function ProviderInstanceCard({
               ) : null}
               {versionAdvisoryNode}
             </span>
-            <span className="mt-0.5 flex items-start gap-1.5 text-xs leading-normal text-muted-foreground/80">
+            <span className="mt-0.5 flex items-start gap-1.5 text-xs leading-normal text-muted-foreground">
               {statusDotNode && !updateProgress ? (
                 <span className="flex h-[1.45em] shrink-0 items-center">{statusDotNode}</span>
               ) : null}
@@ -1159,11 +1157,15 @@ export function ProviderInstanceCard({
 
   return (
     <>
-      <SettingsSection title={displayName} icon={titleIconNode} headerAction={editorHeaderAction}>
-        {redesign ? <SettingsRow title="Status" status={statusContent} /> : null}
+      <SettingsSection
+        title={displayName}
+        icon={titleIconNode}
+        headerAction={editorHeaderAction}
+        variant="flat"
+      >
+        <SettingsRow title="Status" status={statusContent} />
         <SettingsRow
           title="Display name"
-          {...(redesign ? {} : { status: statusContent })}
           control={
             <div
               inert={readOnly}
@@ -1242,7 +1244,7 @@ export function ProviderInstanceCard({
       </SettingsSection>
 
       {setup || environmentFields.length > 0 ? (
-        <SettingsSection title="Setup">
+        <SettingsSection title="Setup" variant="flat">
           {setup}
           {environmentFields.length > 0 ? (
             <div
@@ -1276,6 +1278,7 @@ export function ProviderInstanceCard({
             id={`provider-instance-${instanceId}-runtime`}
             title="Runtime"
             headerPlacement="outside"
+            variant="flat"
           >
             {runtime ?? runtimeFields}
           </FoldedSettingsSection>
@@ -1283,6 +1286,7 @@ export function ProviderInstanceCard({
       ) : !driverOption || deriveProviderSettingsFields(driverOption).length > 0 ? (
         <SettingsSection
           title="Runtime"
+          variant="flat"
           inert={readOnly}
           aria-disabled={readOnly || undefined}
           className={readOnly ? "opacity-50 select-none" : undefined}
@@ -1293,6 +1297,7 @@ export function ProviderInstanceCard({
 
       <SettingsSection
         title="Environment"
+        variant="flat"
         inert={readOnly}
         aria-disabled={readOnly || undefined}
         className={readOnly ? "opacity-50 select-none" : undefined}
@@ -1315,6 +1320,7 @@ export function ProviderInstanceCard({
       {driverOption !== undefined ? (
         <SettingsSection
           title="Models"
+          variant="flat"
           description="Model preferences and custom models are saved on the selected environment and shared across connected devices."
         >
           <div className="px-3 py-3 sm:px-4">

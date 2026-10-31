@@ -22,7 +22,6 @@ import {
   MenuPopup,
   MenuRadioGroup,
   MenuRadioItem,
-  MenuRadioItemIndicator,
   MenuSeparator,
   MenuTrigger,
 } from "../ui/menu";
@@ -44,7 +43,7 @@ import {
 
 export const SETTINGS_DEVICE_ONLY_PATHS: ReadonlySet<string> = new Set([
   "/settings/appearance",
-  "/settings/snap-shot",
+  "/settings/roblox-studio",
   "/settings/connections",
 ]);
 
@@ -56,11 +55,16 @@ interface SettingsScopeMenuProps {
   readonly onChange: (next: SettingsScopeSearch) => void;
 }
 
-export function SettingsScopeSentence() {
+export function SettingsScopeChip() {
   const scope = useOptionalSettingsScope();
   const pathname = useLocation({ select: (location) => location.pathname });
   const { environments } = useEnvironments();
   if (scope === null || SETTINGS_DEVICE_ONLY_PATHS.has(pathname)) return null;
+  const narrowed =
+    scope.search.project !== undefined ||
+    scope.search.machine !== undefined ||
+    scope.search.checkout !== undefined;
+  if (environments.length <= 1 && !narrowed) return null;
   const props: SettingsScopeMenuProps = {
     value: scope.search,
     singleEnvironment: scope.singleEnvironment,
@@ -69,18 +73,10 @@ export function SettingsScopeSentence() {
     onChange: scope.selectScope,
   };
   return (
-    <p className="flex min-w-0 flex-wrap items-center gap-x-1.5 gap-y-1 px-3 text-sm text-muted-foreground sm:px-4">
-      <span className="flex min-w-0 items-center gap-1.5">
-        <span className="shrink-0">Applying settings for</span>
-        <ProjectScopeMenu {...props} />
-      </span>
-      <span className="flex min-w-0 items-center gap-1.5">
-        <span className="shrink-0">
-          {scope.search.machine || scope.scope.kind === "checkout" ? "on" : "across"}
-        </span>
-        <EnvironmentScopeMenu {...props} />
-      </span>
-    </p>
+    <div className="flex min-w-0 items-center gap-1.5" role="group" aria-label="Settings scope">
+      <ProjectScopeMenu {...props} />
+      <EnvironmentScopeMenu {...props} />
+    </div>
   );
 }
 
@@ -133,14 +129,13 @@ function ScopeMenu({
   const trigger = (
     <Trigger
       aria-label={`${ariaLabel}: ${label}`}
-      render={<Button variant="outline" size="sm" />}
-      className="min-w-0 max-w-72"
+      render={<Button variant="outline" size="xs" />}
+      className="min-w-0 max-w-44"
     >
       {icon}
       <span className="min-w-0 truncate">{label}</span>
       <ChevronDownIcon
         aria-hidden
-        strokeWidth={1.75}
         className="-me-0.5 size-3.5 shrink-0 text-muted-foreground opacity-70"
       />
     </Trigger>
@@ -206,7 +201,6 @@ function ScopeMenu({
                 <MenuRadioItem value={option.value} closeOnClick>
                   <span className="flex min-w-0 items-center gap-2">
                     <ScopeOptionLabel option={option} />
-                    <MenuRadioItemIndicator />
                   </span>
                 </MenuRadioItem>
                 {index === 0 && allOption ? <MenuSeparator /> : null}

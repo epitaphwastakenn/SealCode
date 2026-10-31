@@ -6,7 +6,16 @@ import { InfoIcon, Undo2Icon } from "lucide-react";
 import { DEFAULT_SERVER_SETTINGS, type ServerSettings } from "@t3tools/contracts";
 import * as Equal from "effect/Equal";
 import { useLocation, useNavigate } from "@tanstack/react-router";
-import { createContext, type ComponentPropsWithoutRef, type ReactNode, useContext } from "react";
+import { mergeProps } from "@base-ui/react/merge-props";
+import { useRender } from "@base-ui/react/use-render";
+import {
+  createContext,
+  type ComponentPropsWithoutRef,
+  type CSSProperties,
+  type ReactNode,
+  useContext,
+  useId,
+} from "react";
 
 import {
   PRIMARY_SETTINGS_UNAVAILABLE_MESSAGE,
@@ -17,7 +26,6 @@ import { WorkspacePageContainer, type WorkspacePageWidth } from "../WorkspacePag
 import { Button } from "../ui/button";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
 import { useOptionalSettingsScope } from "./SettingsScopeContext";
-import { SettingsScopeSentence } from "./SettingsScopeSentence";
 import {
   isProjectScopedSettingKey,
   listProjectOverrides,
@@ -178,7 +186,163 @@ export function SettingsSearchTarget({
 
 // Settings pickers reuse composer controls but match the bordered selects beside them.
 export const SETTINGS_PICKER_TRIGGER_CLASSNAME =
-  "min-w-0 max-w-none shrink-0 border-input bg-background font-normal text-foreground shadow-xs/5 hover:bg-accent/50 dark:bg-input/32 [&_svg[data-composer-control-chevron]]:stroke-[1.75] [&_svg[data-composer-control-chevron]]:opacity-70";
+  "min-w-0 max-w-none shrink-0 border-input bg-background font-normal text-foreground hover:bg-row-hover dark:bg-input/32 [&_svg[data-composer-control-chevron]]:stroke-[1.75] [&_svg[data-composer-control-chevron]]:opacity-70";
+
+export function SettingsSectionTitle({
+  children,
+  icon,
+  level = "h2",
+  className,
+}: {
+  children: ReactNode;
+  icon?: ReactNode;
+  level?: "h2" | "h3";
+  className?: string;
+}) {
+  const Heading = level;
+  return (
+    <Heading
+      className={cn(
+        "flex min-h-7 items-center gap-2 text-base font-semibold text-foreground",
+        className,
+      )}
+    >
+      {icon}
+      {children}
+    </Heading>
+  );
+}
+
+export function SettingsInset({ className, ...props }: ComponentPropsWithoutRef<"div">) {
+  return (
+    <div
+      data-slot="settings-inset"
+      className={cn("rounded-lg border border-border/50 bg-foreground/[0.03] p-3", className)}
+      {...props}
+    />
+  );
+}
+
+const calloutToneClassNames = {
+  neutral: "",
+  info: "border-info/32 bg-info/4",
+  warning: "border-warning/32 bg-warning-surface text-warning-foreground",
+  error: "border-error/32 bg-error-surface text-error-foreground",
+} as const;
+
+export function SettingsCallout({
+  tone = "neutral",
+  icon,
+  className,
+  children,
+  ...props
+}: ComponentPropsWithoutRef<"div"> & {
+  tone?: keyof typeof calloutToneClassNames;
+  icon?: ReactNode;
+}) {
+  return (
+    <SettingsInset
+      role={tone === "error" || tone === "warning" ? "alert" : undefined}
+      className={cn(
+        "flex items-start gap-2 text-xs leading-relaxed",
+        tone === "neutral" && "text-muted-foreground",
+        calloutToneClassNames[tone],
+        className,
+      )}
+      {...props}
+    >
+      {icon ? <span className="mt-0.5 shrink-0 [&_svg]:size-3.5">{icon}</span> : null}
+      <div className="min-w-0 flex-1">{children}</div>
+    </SettingsInset>
+  );
+}
+
+export function OptionCard({
+  selected = false,
+  render,
+  className,
+  ...props
+}: useRender.ComponentProps<"button"> & { selected?: boolean }) {
+  const defaultProps = {
+    className: cn(
+      "cursor-pointer rounded-lg border text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring",
+      "data-checked:border-primary/60 data-checked:bg-primary/8 data-checked:ring-1 data-checked:ring-inset data-checked:ring-primary/40",
+      selected
+        ? "border-primary/60 bg-primary/8 ring-1 ring-inset ring-primary/40"
+        : "border-border/50 bg-foreground/[0.03] hover:bg-row-hover",
+      className,
+    ),
+    "data-selected": selected ? "" : undefined,
+    "data-slot": "option-card",
+    type: render ? undefined : ("button" as const),
+  };
+  return useRender({
+    defaultTagName: "button",
+    props: mergeProps<"button">(defaultProps, props),
+    render,
+  });
+}
+
+export function settingsSliderStyle(value: number, min: number, max: number): CSSProperties {
+  const ratio = max > min ? (value - min) / (max - min) : 0;
+  return {
+    "--settings-slider-progress": `${ratio * 100}%`,
+    "--settings-slider-fill-offset": `${0.5 - ratio}rem`,
+  } as CSSProperties;
+}
+
+export function SettingsSlider({
+  value,
+  min,
+  max,
+  step = 1,
+  format = (current) => `${current}%`,
+  label,
+  disabled = false,
+  onChange,
+  onFinish,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  step?: number;
+  format?: (value: number) => string;
+  label: string;
+  disabled?: boolean;
+  onChange: (value: number) => void;
+  onFinish?: () => void;
+}) {
+  const id = useId();
+  return (
+    <div className="flex w-full items-center gap-3 sm:w-52">
+      <output
+        className="min-w-12 rounded-md bg-foreground/[0.06] px-2 py-1 text-center font-mono text-xs font-medium tabular-nums text-foreground"
+        htmlFor={id}
+      >
+        {format(value)}
+      </output>
+      <input
+        aria-label={label}
+        className="settings-slider min-w-0 flex-1"
+        disabled={disabled}
+        id={id}
+        max={max}
+        min={min}
+        onBlur={onFinish}
+        onChange={(event) => {
+          const next = Number(event.currentTarget.value);
+          if (Number.isFinite(next) && next >= min && next <= max) onChange(next);
+        }}
+        onKeyUp={onFinish}
+        onPointerUp={onFinish}
+        step={step}
+        style={settingsSliderStyle(value, min, max)}
+        type="range"
+        value={value}
+      />
+    </div>
+  );
+}
 
 export function PolicyTooltip({ children }: { readonly children: string }) {
   return (
@@ -215,7 +379,7 @@ export function SettingsSection({
   icon?: ReactNode;
   titleAction?: ReactNode;
   headerAction?: ReactNode;
-  variant?: "grouped" | "plain";
+  variant?: "grouped" | "plain" | "flat";
   children: ReactNode;
 }) {
   const targetRef = useSettingsSearchTarget<HTMLElement>(sectionProps.id);
@@ -235,10 +399,7 @@ export function SettingsSection({
           className="flex min-h-7 items-start justify-between gap-4 px-3 sm:px-4"
         >
           <div className="flex min-w-0 items-center gap-1">
-            <h2 className="flex min-h-7 items-center gap-2 text-base font-semibold text-foreground">
-              {icon}
-              {title}
-            </h2>
+            <SettingsSectionTitle icon={icon}>{title}</SettingsSectionTitle>
             {titleAction}
           </div>
           <div className="flex min-h-7 min-w-7 items-center justify-end">{headerAction}</div>
@@ -266,12 +427,12 @@ export function SettingsUnavailableGroup({
   if (message === undefined) return children;
 
   return (
-    <div className="border-border/60 bg-muted/20 py-1.5">
+    <div className="bg-foreground/[0.03] py-1.5">
       <div className="flex items-start gap-2 px-3 py-2 text-xs leading-relaxed text-muted-foreground sm:px-4">
         <InfoIcon className="mt-0.5 size-3.5 shrink-0 text-warning" />
         <p>{message}</p>
       </div>
-      <div className="[&_h3]:opacity-64 [&_p]:opacity-64">{children}</div>
+      <div className="[&_h3]:opacity-50 [&_p]:opacity-50">{children}</div>
     </div>
   );
 }
@@ -467,7 +628,7 @@ export function SettingsRow({
       tabIndex={rowProps.id ? -1 : rowProps.tabIndex}
       data-slot="settings-row"
       className={cn(
-        "group/settings-row @container/settings-row rounded-xl px-3 sm:px-4 aria-disabled:opacity-64 aria-disabled:[&_*]:text-muted-foreground",
+        "group/settings-row @container/settings-row rounded-xl px-3 sm:px-4 aria-disabled:opacity-50 aria-disabled:[&_*]:text-muted-foreground",
         children ? "pt-3 pb-1" : "py-3",
         className,
       )}
@@ -589,7 +750,6 @@ export function SettingsPageContainer({
         data-settings-page-scroll
       >
         <WorkspacePageContainer width={width} className={cn("gap-8", className)}>
-          <SettingsScopeSentence />
           {children}
         </WorkspacePageContainer>
       </div>

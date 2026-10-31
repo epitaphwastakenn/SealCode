@@ -12,6 +12,7 @@ import { readEnvironmentScope } from "~/state/session";
 
 import { PierreEntryIcon } from "../chat/PierreEntryIcon";
 import { CommandPaletteContent } from "../CommandPaletteContent";
+import { Badge } from "../ui/badge";
 import { ScrollArea } from "../ui/scroll-area";
 import { Toggle } from "../ui/toggle";
 import { Tooltip, TooltipPopup, TooltipTrigger } from "../ui/tooltip";
@@ -167,7 +168,7 @@ function OpenContentSearchDialog(props: {
       escapeLabel="Back"
       footerActionLabel="Open file"
       inputAccessory={
-        <div className="absolute inset-e-2.5 top-1/2 flex shrink-0 -translate-y-1/2 items-center gap-0.5 rounded-lg border bg-muted/30 p-0.5">
+        <div className="absolute inset-e-2.5 top-1/2 flex shrink-0 -translate-y-1/2 items-center gap-0.5 rounded-lg border border-border/50 bg-foreground/[0.03] p-0.5">
           <SearchOptionButton
             active={caseSensitive}
             disabled={!search.canReadFiles}
@@ -225,7 +226,7 @@ function OpenContentSearchDialog(props: {
       value={query}
     >
       {showSearchStatus ? (
-        <div className="flex h-9 shrink-0 items-center border-b px-3 text-xs text-muted-foreground">
+        <div className="flex h-9 shrink-0 items-center border-b border-border/50 px-3 text-xs text-muted-foreground">
           {search.isPending ? (
             <span className="flex items-center gap-2">
               <Spinner size="sm" /> Searching…
@@ -257,7 +258,7 @@ function OpenContentSearchDialog(props: {
               const path = splitPath(group.path);
               return (
                 <section className="pb-2" key={group.path}>
-                  <div className="sticky top-0 z-10 flex h-8 items-center gap-2 bg-popover/95 px-3 text-xs backdrop-blur-sm">
+                  <div className="sticky top-0 z-10 flex h-8 items-center gap-2 border-b border-border/50 bg-transparent px-3 text-xs backdrop-blur">
                     <PierreEntryIcon
                       pathValue={group.path}
                       kind="file"
@@ -270,9 +271,9 @@ function OpenContentSearchDialog(props: {
                         {path.directory}
                       </span>
                     ) : null}
-                    <span className="ml-auto rounded-full bg-muted px-1.5 py-0.5 tabular-nums text-3xs text-muted-foreground">
+                    <Badge variant="secondary" size="sm" className="ml-auto">
                       {group.matches.length}
-                    </span>
+                    </Badge>
                   </div>
                   {group.matches.map((match) => (
                     <button
@@ -282,14 +283,14 @@ function OpenContentSearchDialog(props: {
                         match.resultIndex === selectedIndex ? scrollSelectedRowIntoView : undefined
                       }
                       className={cn(
-                        "flex h-7 w-full min-w-0 items-center gap-3 px-3 text-left font-mono text-xs hover:bg-accent/60 disabled:pointer-events-none",
-                        match.resultIndex === selectedIndex && "bg-accent text-accent-foreground",
+                        "flex h-7 w-full min-w-0 items-center gap-3 px-3 text-left font-mono text-xs hover:bg-row-hover disabled:pointer-events-none",
+                        match.resultIndex === selectedIndex && "bg-row-selected",
                       )}
                       disabled={!canOpenMatches}
                       onMouseEnter={() => setSelectedIndex(match.resultIndex)}
                       onClick={() => openMatch(match)}
                     >
-                      <span className="w-10 shrink-0 text-right tabular-nums text-muted-foreground/70">
+                      <span className="w-10 shrink-0 text-right tabular-nums text-muted-foreground">
                         {match.lineNumber}
                       </span>
                       <span className="min-w-0 flex-1 truncate whitespace-pre">

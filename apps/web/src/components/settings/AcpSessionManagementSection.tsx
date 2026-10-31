@@ -191,7 +191,7 @@ export function AcpSessionManagementSection(props: {
       return;
     const confirmed = await ensureLocalApi().dialogs.confirm(
       `Permanently delete native ACP session "${session.title ?? session.sessionId}"?`,
-      { variant: "destructive" },
+      { variant: "destructive", confirmLabel: "Delete" },
     );
     if (!confirmed || !readEnvironmentScope(props.environmentId, AuthOrchestrationOperateScope))
       return;
@@ -282,7 +282,7 @@ export function AcpSessionManagementSection(props: {
     if (projectId === null || savingProviderId !== null || provider.required) return;
     const confirmed = await ensureLocalApi().dialogs.confirm(
       `Disable ACP provider "${provider.providerId}"?`,
-      { variant: "destructive" },
+      { variant: "destructive", confirmLabel: "Disable" },
     );
     if (!confirmed || !readEnvironmentScope(props.environmentId, AuthProvidersManageScope)) return;
     setSavingProviderId(provider.providerId);
@@ -383,7 +383,7 @@ export function AcpSessionManagementSection(props: {
         {canList && (sessions.length > 0 || nextCursor !== null) ? (
           <>
             {sessions.length > 0 ? (
-              <div className="divide-y divide-border/60 border-y border-border/60">
+              <div className="divide-y divide-border/60 border-y border-border">
                 {sessions.map((session) => (
                   <div
                     key={session.sessionId}
@@ -454,7 +454,7 @@ export function AcpSessionManagementSection(props: {
       </SettingsRow>
 
       {canConfigureProviders ? (
-        <div className="grid gap-3 border-t border-border/60 px-3 py-3 sm:px-4">
+        <div className="grid gap-3 border-t border-border px-3 py-3 sm:px-4">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <p className="text-xs font-medium text-foreground">Agent providers</p>
@@ -500,7 +500,7 @@ export function AcpSessionManagementSection(props: {
           ) : null}
 
           {providers.length > 0 ? (
-            <div className="divide-y divide-border/60 border-y border-border/60">
+            <div className="divide-y divide-border/60 border-y border-border">
               {providers.map((provider) => {
                 const draft = providerDrafts[provider.providerId] ?? {
                   apiType: provider.current?.apiType ?? provider.supported[0] ?? "",

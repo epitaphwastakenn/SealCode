@@ -119,7 +119,7 @@ export function BrowserImportWizard({
 
   return (
     <Dialog open onOpenChange={(open) => (open || !canCloseWizard(step) ? undefined : onClose())}>
-      <DialogPopup className="max-w-lg" showCloseButton={canCloseWizard(step)}>
+      <DialogPopup showCloseButton={canCloseWizard(step)}>
         {step.step === "quit" ? (
           <QuitStep source={source} onCancel={onClose} onRechecked={recheckAfterQuit} />
         ) : step.step === "fullDiskAccess" ? (
@@ -349,9 +349,7 @@ function ConfigureStep({
       <DialogPanel>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
           <section className="flex-1 space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              From
-            </p>
+            <p className="text-xs font-medium text-muted-foreground">From</p>
             {source.profiles.map((profile) => (
               <SelectableTile
                 key={profile.directory}
@@ -367,9 +365,7 @@ function ConfigureStep({
             <ArrowRightIcon className="hidden size-4 sm:block" />
           </div>
           <section className="flex-1 space-y-2">
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-              Into
-            </p>
+            <p className="text-xs font-medium text-muted-foreground">Into</p>
             {canCreateProfile ? (
               <SelectableTile
                 selected={target.kind === "new"}
@@ -430,7 +426,7 @@ function SelectableTile({
         "flex w-full cursor-pointer items-center justify-between gap-3 rounded-lg border px-3 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring focus-visible:ring-offset-1 focus-visible:ring-offset-background",
         selected
           ? "border-primary bg-primary/8"
-          : "border-border/60 hover:border-border hover:bg-muted/40",
+          : "border-border hover:border-border hover:bg-row-hover",
       )}
     >
       <span className="min-w-0">
@@ -534,9 +530,7 @@ function DoneStep({
       </DialogHeader>
       {skippedDomains.length > 0 ? (
         <DialogPanel>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
-            Skipped
-          </p>
+          <p className="text-xs font-medium text-muted-foreground">Skipped</p>
           <p className="mt-1 text-sm text-foreground">{formatSkippedDomains(skippedDomains)}</p>
         </DialogPanel>
       ) : null}

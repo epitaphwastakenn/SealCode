@@ -201,7 +201,7 @@ function AddProjectToMachineDialog({ request }: { request: AddProjectToMachineRe
         if (!open) close();
       }}
     >
-      <DialogPopup className="sm:max-w-xl">
+      <DialogPopup size="lg">
         <form
           className="flex min-h-0 flex-col"
           onSubmit={(event) => {

@@ -14,6 +14,13 @@ import { ScrollArea } from "~/components/ui/scroll-area";
 
 const ControlledOpenContext = createContext<boolean | undefined>(undefined);
 
+const dialogPopupSizes = {
+  sm: "max-w-sm",
+  md: "max-w-md",
+  lg: "max-w-xl",
+  xl: "max-w-3xl",
+} as const;
+
 function RetainedWhileClosed({ open, children }: { open: boolean; children: ReactNode }) {
   const controlledOpen = use(ControlledOpenContext);
   const isOpen = open && controlledOpen !== false;
@@ -84,14 +91,16 @@ function DialogViewport({ className, ...props }: DialogPrimitive.Viewport.Props)
 function DialogPopup({
   className,
   children,
-  showCloseButton = true,
+  showCloseButton,
   bottomStickOnMobile = true,
   variant = "default",
+  size,
   ...props
 }: DialogPrimitive.Popup.Props & {
   showCloseButton?: boolean;
   bottomStickOnMobile?: boolean;
   variant?: "default" | "media";
+  size?: keyof typeof dialogPopupSizes;
 }) {
   return (
     <DialogPortal>
@@ -108,7 +117,8 @@ function DialogPopup({
           className={cn(
             variant === "media" ? DIALOG_MEDIA_POPUP_CLASS : DIALOG_POPUP_CLASS,
             "row-start-2 text-popover-foreground",
-            variant === "default" && "max-h-full max-w-lg",
+            variant === "default" && "max-h-full",
+            variant === "default" && (size ? dialogPopupSizes[size] : "max-w-lg"),
             bottomStickOnMobile && DIALOG_MOBILE_SHEET_CLASS,
             className,
           )}
@@ -117,10 +127,14 @@ function DialogPopup({
           {...props}
         >
           {children}
-          {showCloseButton && (
+          {showCloseButton !== false && (
             <DialogPrimitive.Close
               aria-label="Close"
-              className="absolute end-2 top-2"
+              className={cn(
+                "absolute end-2 top-2",
+                showCloseButton === undefined &&
+                  "in-[[data-slot=dialog-popup]:has([data-slot=dialog-footer])]:hidden",
+              )}
               render={<Button size="icon" variant="ghost" />}
             >
               <XIcon />
@@ -147,7 +161,7 @@ function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
 
 function DialogFooter({
   className,
-  variant = "default",
+  variant: _variant,
   ...props
 }: React.ComponentProps<"div"> & {
   variant?: "default" | "bare";
@@ -155,9 +169,7 @@ function DialogFooter({
   return (
     <div
       className={cn(
-        "flex flex-col-reverse gap-2 px-6 sm:flex-row sm:justify-end sm:rounded-b-[calc(var(--radius-2xl)-1px)]",
-        variant === "default" && "border-t bg-muted/72 py-4",
-        variant === "bare" && "py-4",
+        "flex flex-col-reverse gap-2 px-6 pt-3 pb-6 sm:flex-row sm:justify-end",
         className,
       )}
       data-slot="dialog-footer"
@@ -195,7 +207,7 @@ function DialogPanel({
     <ScrollArea scrollFade={scrollFade}>
       <div
         className={cn(
-          "space-y-4 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-header])]:pt-1 in-[[data-slot=dialog-popup]:has([data-slot=dialog-footer]:not(.border-t))]:pb-1",
+          "space-y-4 p-6 in-[[data-slot=dialog-popup]:has([data-slot=dialog-header])]:pt-1 in-[[data-slot=dialog-popup]:has([data-slot=dialog-footer])]:pb-1",
           className,
         )}
         data-slot="dialog-panel"

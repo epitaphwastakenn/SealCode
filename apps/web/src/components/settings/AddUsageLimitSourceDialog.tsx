@@ -79,7 +79,7 @@ export function AddUsageLimitSourceDialog({
         onOpenChange(next);
       }}
     >
-      <DialogPopup className="max-w-md">
+      <DialogPopup size="md">
         <DialogHeader>
           <DialogTitle>Add a CLIProxyAPI hub</DialogTitle>
           <DialogDescription>
@@ -124,7 +124,7 @@ export function AddUsageLimitSourceDialog({
             </div>
           </form>
         </DialogPanel>
-        <DialogFooter variant="bare">
+        <DialogFooter>
           <Button
             variant="outline"
             onClick={() => {

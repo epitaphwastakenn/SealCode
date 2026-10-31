@@ -183,7 +183,7 @@ export function CustomModelEditor({
   const renderDescriptor = (descriptor: EditorDescriptor, index: number) => (
     <div
       key={descriptor.key}
-      className="flex flex-col gap-2 rounded-md border border-border/60 bg-background/40 p-2.5"
+      className="flex flex-col gap-2 rounded-md border border-border bg-background/40 p-2.5"
     >
       <div className="flex flex-wrap items-center gap-2">
         <span className="w-14 shrink-0 text-2xs text-muted-foreground">Option {index + 1}</span>
@@ -277,7 +277,7 @@ export function CustomModelEditor({
 
   return (
     <div
-      className="mx-2 mt-1 mb-2 flex flex-col gap-3 rounded-md border border-border bg-muted/20 p-3"
+      className="mx-2 mt-1 mb-2 flex flex-col gap-3 rounded-md border border-border bg-foreground/[0.03] p-3"
       onKeyDown={(event) => {
         if (event.key === "Escape") {
           event.preventDefault();
@@ -324,7 +324,7 @@ export function CustomModelEditor({
           ) : null}
         </div>
         {draft.descriptors.length === 0 ? (
-          <p className="text-xs text-muted-foreground/70">
+          <p className="text-xs text-muted-foreground">
             No custom options. The composer uses the provider's default options.
           </p>
         ) : null}

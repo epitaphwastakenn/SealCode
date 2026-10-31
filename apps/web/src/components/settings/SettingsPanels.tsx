@@ -1,6 +1,6 @@
-import { SettingsGroup } from "./SettingsGroup";
 import { NotificationSettings } from "./NotificationSettings";
-import { CheckIcon, ChevronRightIcon } from "lucide-react";
+import { SnapShotSettings } from "./SnapShotSettings";
+import { CheckIcon } from "lucide-react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useRef, useState } from "react";
 import {
@@ -8,9 +8,6 @@ import {
   type AgentPreset,
   type ModelSelection,
   type DesktopUpdateChannel,
-  type EnvironmentId,
-  type ServerProvider,
-  type ServerSettings,
   IDLE_COMPACTION_MODES,
   globalIdleCompaction,
   ProviderDriverKind,
@@ -21,7 +18,9 @@ import {
   DEFAULT_UNIFIED_SETTINGS,
   type DiffLayout,
   type DiffPresentation,
+  MAX_HARNESS_SOUND_VOLUME,
   MAX_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
+  MIN_HARNESS_SOUND_VOLUME,
   MIN_SIDEBAR_AUTO_SETTLE_AFTER_DAYS,
   type ResponseStreamingMode,
   type QuitConfirmationMode,
@@ -29,6 +28,7 @@ import {
   type UnifiedSettings,
 } from "@t3tools/contracts/settings";
 import { createModelSelection } from "@t3tools/shared/model";
+import { useThrottledRange } from "../../hooks/useThrottledRange";
 import * as Equal from "effect/Equal";
 import * as Schema from "effect/Schema";
 import { APP_VERSION, HOSTED_APP_CHANNEL, HOSTED_APP_CHANNEL_LABEL } from "../../branding";
@@ -76,14 +76,12 @@ import {
   applyProviderInstanceSettings,
   deriveProviderInstanceEntries,
   sortProviderInstanceEntries,
-  type ProviderInstanceEntry,
 } from "../../providerInstances";
 import { ensureLocalApi, readLocalApi } from "../../localApi";
 import { isMacPlatform, randomUUID } from "../../lib/utils";
 import { useEnvironmentProviders } from "../../state/environments";
 import { EMPTY_SERVER_PROVIDERS } from "../../state/server";
 import { Button } from "../ui/button";
-import { Collapsible, CollapsiblePanel, CollapsibleTrigger } from "../ui/collapsible";
 import { DraftInput } from "../ui/draft-input";
 import { Input } from "../ui/input";
 import { Textarea } from "../ui/textarea";
@@ -108,8 +106,7 @@ import {
   SettingsPageContainer,
   SettingsRow,
   SettingsSection,
-  useSettingsSearchTarget,
-  useSettingsSearchTargetId,
+  SettingsSlider,
 } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 import { BackgroundActivitySettingsRow } from "./BackgroundActivitySettings";
@@ -155,108 +152,6 @@ const QUIT_CONFIRMATION_MODE_LABELS: Record<QuitConfirmationMode, string> = {
 };
 
 const DEFAULT_DRIVER_KIND = ProviderDriverKind.make("codex");
-// Harp 1.x ran these helper models on its old orchestrator. V2 has no
-// compaction, curation or delegation hook that reads them, so the rows stay
-// hidden instead of offering settings that change nothing.
-const HARNESS_HELPER_SETTINGS_AVAILABLE = false;
-
-function HarnessHelperModelRow(props: {
-  readonly settingKey: keyof ServerSettings;
-  readonly title: string;
-  readonly description: string;
-  readonly environmentId: EnvironmentId | null;
-  readonly selection: ModelSelection | null;
-  readonly settings: UnifiedSettings;
-  readonly providers: ReadonlyArray<ServerProvider>;
-  readonly instanceEntries: ReadonlyArray<ProviderInstanceEntry>;
-  readonly fallbackSelection: ModelSelection;
-  readonly onSelectionChange: (selection: ModelSelection | null) => void;
-}) {
-  const activeSelection = props.selection ?? props.fallbackSelection;
-  const instanceEntry = props.instanceEntries.find(
-    (entry) => entry.instanceId === activeSelection.instanceId,
-  );
-  const modelOptionsByInstance = getCustomModelOptionsByInstance(
-    props.settings,
-    props.providers,
-    activeSelection.instanceId,
-    activeSelection.model,
-  );
-  const enabled = props.selection !== null;
-
-  return (
-    <SettingsRow
-      serverScoped
-      settingKeys={[props.settingKey]}
-      title={props.title}
-      description={props.description}
-      control={
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
-          {enabled ? (
-            <>
-              <ProviderModelPicker
-                environmentId={props.environmentId}
-                activeInstanceId={activeSelection.instanceId}
-                model={activeSelection.model}
-                lockedProvider={null}
-                instanceEntries={props.instanceEntries}
-                modelOptionsByInstance={modelOptionsByInstance}
-                triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
-                triggerAriaLabel={`${props.title} model`}
-                onInstanceModelChange={(instanceId, model) =>
-                  props.onSelectionChange(
-                    createModelSelection(
-                      instanceId,
-                      model,
-                      activeSelection.instanceId === instanceId
-                        ? activeSelection.options
-                        : undefined,
-                    ),
-                  )
-                }
-              />
-              <TraitsPicker
-                provider={instanceEntry?.driverKind ?? DEFAULT_DRIVER_KIND}
-                models={instanceEntry?.models ?? []}
-                model={activeSelection.model}
-                modelOptions={activeSelection.options}
-                planModeEnabled={
-                  props.settings.planModeEnabled || selectsPlanAgent(activeSelection.options)
-                }
-                triggerClassName={SETTINGS_PICKER_TRIGGER_CLASSNAME}
-                onModelOptionsChange={(options) =>
-                  props.onSelectionChange(
-                    createModelSelection(
-                      activeSelection.instanceId,
-                      activeSelection.model,
-                      options,
-                    ),
-                  )
-                }
-              />
-            </>
-          ) : null}
-          <Switch
-            checked={enabled}
-            onCheckedChange={(checked) =>
-              props.onSelectionChange(
-                checked
-                  ? createModelSelection(
-                      props.fallbackSelection.instanceId,
-                      props.fallbackSelection.model,
-                      props.fallbackSelection.options,
-                    )
-                  : null,
-              )
-            }
-            aria-label={`Use a dedicated ${props.title.toLowerCase()}`}
-          />
-        </div>
-      }
-    />
-  );
-}
-
 const decodeAgentPreset = Schema.decodeSync(AgentPresetSchema);
 
 function AgentPresetsSettings(props: {
@@ -338,7 +233,7 @@ function AgentPresetsSettings(props: {
           </Button>
         </div>
         {props.settings.agentPresets.length > 0 ? (
-          <div className="divide-y divide-border/60 rounded-md border border-border/60">
+          <div className="divide-y divide-border/60 rounded-md border border-border">
             {props.settings.agentPresets.map((preset) => (
               <div key={preset.id} className="flex items-center gap-2 px-2.5 py-2">
                 <div className="min-w-0 flex-1">
@@ -642,12 +537,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       settings.imageViewerModelSelection ?? null,
       DEFAULT_UNIFIED_SETTINGS.imageViewerModelSelection ?? null,
     );
-  const isHarnessHelperModelsDirty = [
-    settings.contextCompactorModelSelection,
-    settings.skillCuratorModelSelection,
-    settings.memoryCuratorModelSelection,
-    settings.delegationDefaultModelSelection,
-  ].some((selection) => selection !== null);
   const isBackgroundActivityDirty = hasChangedBackgroundActivitySettings(settings);
 
   const changedSettingLabels = [
@@ -676,9 +565,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       : []),
     ...(settings.scrollbarSize !== DEFAULT_UNIFIED_SETTINGS.scrollbarSize
       ? ["Scrollbar size"]
-      : []),
-    ...(settings.redesignEnabled !== DEFAULT_UNIFIED_SETTINGS.redesignEnabled
-      ? ["New design"]
       : []),
     ...(settings.panelAnimationDurationMs !== DEFAULT_UNIFIED_SETTINGS.panelAnimationDurationMs
       ? ["Panel animations"]
@@ -808,7 +694,6 @@ export function useSettingsRestore(onRestored?: () => void) {
     ...(settings.confirmQuit !== DEFAULT_UNIFIED_SETTINGS.confirmQuit ? ["Quit shortcut"] : []),
     ...(isTextGenerationModelDirty ? ["Text generation model"] : []),
     ...(isImageViewerDirty ? ["Image viewer"] : []),
-    ...(isHarnessHelperModelsDirty ? ["Harness helper models"] : []),
     ...(settings.threadTitleInstructions !== DEFAULT_UNIFIED_SETTINGS.threadTitleInstructions
       ? ["Thread title instructions"]
       : []),
@@ -825,7 +710,7 @@ export function useSettingsRestore(onRestored?: () => void) {
       ["Restore default settings?", `This will reset: ${changedSettingLabels.join(", ")}.`].join(
         "\n",
       ),
-      { variant: "destructive" },
+      { variant: "destructive", confirmLabel: "Restore" },
     );
     if (!confirmed) return;
 
@@ -875,7 +760,6 @@ export function useSettingsRestore(onRestored?: () => void) {
       chatWidth: DEFAULT_UNIFIED_SETTINGS.chatWidth,
       mathRenderingEnabled: DEFAULT_UNIFIED_SETTINGS.mathRenderingEnabled,
       scrollbarSize: DEFAULT_UNIFIED_SETTINGS.scrollbarSize,
-      redesignEnabled: DEFAULT_UNIFIED_SETTINGS.redesignEnabled,
       timestampFormat: DEFAULT_UNIFIED_SETTINGS.timestampFormat,
       notificationMode: DEFAULT_UNIFIED_SETTINGS.notificationMode,
       harnessSoundVolume: DEFAULT_UNIFIED_SETTINGS.harnessSoundVolume,
@@ -1005,82 +889,6 @@ function AutoSettleDaysInput({
   );
 }
 
-const LEGACY_FEATURE_TARGET_IDS: ReadonlySet<string> = new Set([
-  "legacy-plan-mode",
-  "legacy-context-window-indicator",
-  "legacy-sidebar",
-]);
-
-function LegacyFeaturesSection() {
-  const settings = useScopedSettings();
-  const updateSettings = useUpdateScopedSettings();
-  const [open, setOpen] = useState(false);
-  const searchTargetId = useSettingsSearchTargetId();
-  const targetRef = useSettingsSearchTarget<HTMLElement>("legacy-features");
-  // A search jump to a legacy setting opens the fold before its row mounts.
-  const [seenSearchTargetId, setSeenSearchTargetId] = useState<string | null>(null);
-  if (seenSearchTargetId !== searchTargetId) {
-    setSeenSearchTargetId(searchTargetId);
-    if (searchTargetId !== null && LEGACY_FEATURE_TARGET_IDS.has(searchTargetId)) setOpen(true);
-  }
-
-  return (
-    <section id="legacy-features" ref={targetRef} tabIndex={-1} className="space-y-2.5">
-      <Collapsible open={open} onOpenChange={setOpen}>
-        <CollapsibleTrigger className="group flex min-h-8 w-full items-center gap-2 px-3 sm:px-4">
-          <h2 className="text-sm font-normal text-foreground/70 transition-colors group-hover:text-foreground">
-            Legacy features
-          </h2>
-          <ChevronRightIcon className="size-4 text-muted-foreground transition-transform duration-200 group-data-panel-open:rotate-90" />
-        </CollapsibleTrigger>
-        <CollapsiblePanel>
-          <SettingsGroup>
-            <SettingsRow
-              {...searchableSetting("legacy-plan-mode")}
-              description="Restore Build/Plan, /plan, /default, and Shift+Tab. Off uses build mode."
-              control={
-                <Switch
-                  checked={settings.planModeEnabled}
-                  onCheckedChange={(checked) => {
-                    updateSettings({ planModeEnabled: Boolean(checked) });
-                  }}
-                  aria-label="Plan mode (legacy)"
-                />
-              }
-            />
-            <SettingsRow
-              {...searchableSetting("legacy-context-window-indicator")}
-              description="Shows context window usage as a circular indicator in the composer."
-              control={
-                <Switch
-                  checked={settings.contextWindowMeterEnabled}
-                  onCheckedChange={(checked) =>
-                    updateSettings({ contextWindowMeterEnabled: Boolean(checked) })
-                  }
-                  aria-label="Context window indicator (legacy)"
-                />
-              }
-            />
-            <SettingsRow
-              {...searchableSetting("legacy-sidebar")}
-              description="Restore per-project thread trees instead of the default flat sidebar."
-              control={
-                <Switch
-                  checked={settings.legacySidebarEnabled}
-                  onCheckedChange={(checked) =>
-                    updateSettings({ legacySidebarEnabled: Boolean(checked) })
-                  }
-                  aria-label="Sidebar (legacy)"
-                />
-              }
-            />
-          </SettingsGroup>
-        </CollapsiblePanel>
-      </Collapsible>
-    </section>
-  );
-}
-
 export function GeneralSettingsPanel() {
   const modifierLabel = isMacPlatform(navigator.platform) ? "⌘" : "Ctrl";
   const sendShortcutOptions = [
@@ -1090,6 +898,10 @@ export function GeneralSettingsPanel() {
   ] as const;
   const settings = useScopedSettings();
   const updateSettings = useUpdateScopedSettings();
+  const harnessSoundVolumeRange = useThrottledRange(
+    settings.harnessSoundVolume,
+    (harnessSoundVolume) => updateSettings({ harnessSoundVolume }),
+  );
   const navigate = useNavigate();
   const { scope, environment, connectedEnvironments, target, targets } = useSettingsScope();
   const idleCompaction = scopedIdleCompaction(targets.length > 0 ? targets : [{ settings }]);
@@ -1462,8 +1274,34 @@ export function GeneralSettingsPanel() {
         ) : null}
       </SettingsSection>
 
-      <SettingsSection id="behavior" title="Behavior">
+      <SettingsSection id="notifications" title="Notifications">
         <NotificationSettings />
+        <SettingsRow
+          {...searchableSetting("harness-sound-volume")}
+          description="Set the volume for errors, permission requests, questions and completed turns."
+          resetAction={
+            settings.harnessSoundVolume !== DEFAULT_UNIFIED_SETTINGS.harnessSoundVolume ? (
+              <SettingResetButton
+                label="notification sound volume"
+                onClick={() =>
+                  updateSettings({
+                    harnessSoundVolume: DEFAULT_UNIFIED_SETTINGS.harnessSoundVolume,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <SettingsSlider
+              label="Notification sound volume"
+              min={MIN_HARNESS_SOUND_VOLUME}
+              max={MAX_HARNESS_SOUND_VOLUME}
+              value={harnessSoundVolumeRange.value}
+              onChange={harnessSoundVolumeRange.onChange}
+              onFinish={harnessSoundVolumeRange.onFinish}
+            />
+          }
+        />
         <SettingsRow
           {...searchableSetting("in-app-notifications")}
           description="Show a toast when another thread finishes, fails, or needs input or approval while this app has focus."
@@ -1516,54 +1354,9 @@ export function GeneralSettingsPanel() {
             </Select>
           }
         />
-        <SettingsRow
-          serverScoped
-          settingKeys={["responseStreamingMode"]}
-          {...searchableSetting("response-streaming")}
-          description={
-            mixedResponseStreamingMode
-              ? "The selected targets use different streaming modes."
-              : RESPONSE_STREAMING_MODE_DESCRIPTIONS[settings.responseStreamingMode]
-          }
-          resetAction={
-            settings.responseStreamingMode !== DEFAULT_UNIFIED_SETTINGS.responseStreamingMode ? (
-              <SettingResetButton
-                label="response streaming"
-                onClick={() =>
-                  updateSettings({
-                    responseStreamingMode: DEFAULT_UNIFIED_SETTINGS.responseStreamingMode,
-                  })
-                }
-              />
-            ) : null
-          }
-          control={
-            <Select
-              value={mixedResponseStreamingMode ? null : settings.responseStreamingMode}
-              onValueChange={(value) => {
-                if (value === "turn" || value === "paragraph") {
-                  updateSettings({ responseStreamingMode: value });
-                }
-              }}
-            >
-              <SelectTrigger size="sm" className="w-full sm:w-56" aria-label="Response streaming">
-                <SelectValue>
-                  {(value: ResponseStreamingMode | null) =>
-                    value === null ? "Mixed" : RESPONSE_STREAMING_MODE_LABELS[value]
-                  }
-                </SelectValue>
-              </SelectTrigger>
-              <SelectPopup align="end" alignItemWithTrigger={false}>
-                <SelectItem hideIndicator value="turn">
-                  {RESPONSE_STREAMING_MODE_LABELS.turn}
-                </SelectItem>
-                <SelectItem hideIndicator value="paragraph">
-                  {RESPONSE_STREAMING_MODE_LABELS.paragraph}
-                </SelectItem>
-              </SelectPopup>
-            </Select>
-          }
-        />
+      </SettingsSection>
+
+      <SettingsSection id="diffs" title="Diffs">
         <SettingsRow
           {...searchableSetting("hide-whitespace-changes")}
           description="Set whether the diff panel ignores whitespace-only edits by default."
@@ -1665,7 +1458,6 @@ export function GeneralSettingsPanel() {
             </Select>
           }
         />
-
         <SettingsRow
           {...searchableSetting("diff-presentation")}
           description="Choose whether chat shows the changed-files summary, the full inline patch, or the dedicated diff panel."
@@ -1705,7 +1497,57 @@ export function GeneralSettingsPanel() {
             </Select>
           }
         />
+      </SettingsSection>
 
+      <SettingsSection id="composer" title="Composer">
+        <SettingsRow
+          serverScoped
+          settingKeys={["responseStreamingMode"]}
+          {...searchableSetting("response-streaming")}
+          description={
+            mixedResponseStreamingMode
+              ? "The selected targets use different streaming modes."
+              : RESPONSE_STREAMING_MODE_DESCRIPTIONS[settings.responseStreamingMode]
+          }
+          resetAction={
+            settings.responseStreamingMode !== DEFAULT_UNIFIED_SETTINGS.responseStreamingMode ? (
+              <SettingResetButton
+                label="response streaming"
+                onClick={() =>
+                  updateSettings({
+                    responseStreamingMode: DEFAULT_UNIFIED_SETTINGS.responseStreamingMode,
+                  })
+                }
+              />
+            ) : null
+          }
+          control={
+            <Select
+              value={mixedResponseStreamingMode ? null : settings.responseStreamingMode}
+              onValueChange={(value) => {
+                if (value === "turn" || value === "paragraph") {
+                  updateSettings({ responseStreamingMode: value });
+                }
+              }}
+            >
+              <SelectTrigger size="sm" className="w-full sm:w-56" aria-label="Response streaming">
+                <SelectValue>
+                  {(value: ResponseStreamingMode | null) =>
+                    value === null ? "Mixed" : RESPONSE_STREAMING_MODE_LABELS[value]
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup align="end" alignItemWithTrigger={false}>
+                <SelectItem hideIndicator value="turn">
+                  {RESPONSE_STREAMING_MODE_LABELS.turn}
+                </SelectItem>
+                <SelectItem hideIndicator value="paragraph">
+                  {RESPONSE_STREAMING_MODE_LABELS.paragraph}
+                </SelectItem>
+              </SelectPopup>
+            </Select>
+          }
+        />
         <SettingsRow
           {...searchableSetting("proactive-panels")}
           description="Open linked pull requests first. Otherwise, open Changes for edits to at least 3 files or 50 lines."
@@ -1731,7 +1573,6 @@ export function GeneralSettingsPanel() {
             />
           }
         />
-
         <SettingsRow
           {...searchableSetting("skills-in-slash-menu")}
           description="Also include skills in the / command menu. Skills always appear when you type $."
@@ -1757,7 +1598,6 @@ export function GeneralSettingsPanel() {
             />
           }
         />
-
         <SettingsRow
           {...searchableSetting("composer-rich-text")}
           description="Show formatted Markdown as you type."
@@ -1784,7 +1624,6 @@ export function GeneralSettingsPanel() {
             />
           }
         />
-
         <SettingsRow
           {...searchableSetting("voice-live-preview")}
           description="Show the words you speak, dimmed in the composer, while a voice note records. Downloads a speech model (about 600 MB) the first time and runs it on your GPU. The final transcript still comes from the server."
@@ -1811,7 +1650,6 @@ export function GeneralSettingsPanel() {
             />
           }
         />
-
         <SettingsRow
           {...searchableSetting("composer-collapse")}
           description="Rest the composer of an existing thread into a single line when you scroll the conversation. Focus the composer or start typing to expand it again."
@@ -1838,7 +1676,6 @@ export function GeneralSettingsPanel() {
             />
           }
         />
-
         <SettingsRow
           {...searchableSetting("send-shortcut")}
           description="Choose when Enter sends a prompt or inserts a new line"
@@ -1885,7 +1722,6 @@ export function GeneralSettingsPanel() {
             </Select>
           }
         />
-
         <SettingsRow
           {...searchableSetting("follow-up-behavior")}
           description={
@@ -1927,7 +1763,6 @@ export function GeneralSettingsPanel() {
             </Select>
           }
         />
-
         <SettingsRow
           serverScoped
           settingKeys={["suggestNextPrompt"]}
@@ -1952,7 +1787,6 @@ export function GeneralSettingsPanel() {
             />
           }
         />
-
         <SettingsRow
           serverScoped
           settingKeys={["suggestNextPromptOtherProviders"]}
@@ -1984,7 +1818,48 @@ export function GeneralSettingsPanel() {
             />
           }
         />
+        <SettingsRow
+          title="Show provider thinking"
+          description="Show normalized reasoning and thinking traces in chat. Tool calls remain visible when this is off."
+          control={
+            <Switch
+              checked={settings.showThinkingTraces}
+              onCheckedChange={(checked) =>
+                updateSettings({ showThinkingTraces: Boolean(checked) })
+              }
+              aria-label="Show provider thinking traces"
+            />
+          }
+        />
+        <SettingsRow
+          {...searchableSetting("legacy-plan-mode")}
+          description="Adds Build and Plan modes, /plan, /default and Shift+Tab. Off always builds."
+          control={
+            <Switch
+              checked={settings.planModeEnabled}
+              onCheckedChange={(checked) => {
+                updateSettings({ planModeEnabled: Boolean(checked) });
+              }}
+              aria-label="Plan mode"
+            />
+          }
+        />
+        <SettingsRow
+          {...searchableSetting("legacy-context-window-indicator")}
+          description="Shows context window usage as a circular indicator in the composer."
+          control={
+            <Switch
+              checked={settings.contextWindowMeterEnabled}
+              onCheckedChange={(checked) =>
+                updateSettings({ contextWindowMeterEnabled: Boolean(checked) })
+              }
+              aria-label="Context window indicator"
+            />
+          }
+        />
+      </SettingsSection>
 
+      <SettingsSection id="updates" title="Updates">
         <SettingsRow
           serverScoped
           settingKeys={["enableProviderUpdateChecks"]}
@@ -2014,7 +1889,6 @@ export function GeneralSettingsPanel() {
             />
           }
         />
-
         <SettingsRow
           {...searchableSetting("continue-threads-after-server-update")}
           serverScoped
@@ -2052,7 +1926,6 @@ export function GeneralSettingsPanel() {
             />
           }
         />
-
         <BackgroundActivitySettingsRow />
       </SettingsSection>
 
@@ -2241,7 +2114,7 @@ export function GeneralSettingsPanel() {
         ) : null}
       </SettingsSection>
 
-      <SettingsSection id="text-generation" title="Text generation">
+      <SettingsSection id="models" title="Models">
         <SettingsRow
           serverScoped
           settingKeys={["textGenerationModelSelection"]}
@@ -2343,7 +2216,6 @@ export function GeneralSettingsPanel() {
             )
           }
         />
-
         <SettingsRow
           serverScoped
           settingKeys={["imageViewerEnabled"]}
@@ -2372,7 +2244,6 @@ export function GeneralSettingsPanel() {
             />
           }
         />
-
         {settings.imageViewerEnabled ? (
           <SettingsRow
             serverScoped
@@ -2438,21 +2309,6 @@ export function GeneralSettingsPanel() {
             }
           />
         ) : null}
-
-        <SettingsRow
-          title="Show provider thinking"
-          description="Show normalized reasoning and thinking traces in chat. Tool calls remain visible when this is off."
-          control={
-            <Switch
-              checked={settings.showThinkingTraces}
-              onCheckedChange={(checked) =>
-                updateSettings({ showThinkingTraces: Boolean(checked) })
-              }
-              aria-label="Show provider thinking traces"
-            />
-          }
-        />
-
         <SettingsRow
           serverScoped
           settingKeys={["diffReviewModelSelection"]}
@@ -2528,78 +2384,18 @@ export function GeneralSettingsPanel() {
             </div>
           }
         />
-
         <AgentPresetsSettings
           settings={settings}
           currentSelection={textGenerationModelSelection}
           updateSettings={(patch) => updateSettings(patch)}
         />
+      </SettingsSection>
 
-        {HARNESS_HELPER_SETTINGS_AVAILABLE ? (
-          <>
-            <HarnessHelperModelRow
-              environmentId={environmentId}
-              settingKey="contextCompactorModelSelection"
-              title="Context compactor"
-              description="Optional lower-cost model for summarizing context when a provider exposes harness-owned compaction."
-              selection={settings.contextCompactorModelSelection}
-              settings={settings}
-              providers={serverProviders}
-              instanceEntries={textGenerationModelInstanceEntries}
-              fallbackSelection={textGenerationModelSelection}
-              onSelectionChange={(selection) =>
-                updateSettings({ contextCompactorModelSelection: selection })
-              }
-            />
-            <HarnessHelperModelRow
-              environmentId={environmentId}
-              settingKey="skillCuratorModelSelection"
-              title="Skill curator"
-              description="Optional model used only after a detected reusable workflow to draft a staged skill proposal."
-              selection={settings.skillCuratorModelSelection}
-              settings={settings}
-              providers={serverProviders}
-              instanceEntries={textGenerationModelInstanceEntries}
-              fallbackSelection={textGenerationModelSelection}
-              onSelectionChange={(selection) =>
-                updateSettings({ skillCuratorModelSelection: selection })
-              }
-            />
-            <HarnessHelperModelRow
-              environmentId={environmentId}
-              settingKey="memoryCuratorModelSelection"
-              title="Memory curator"
-              description="Optional model used only for approved or triggered memory proposals."
-              selection={settings.memoryCuratorModelSelection}
-              settings={settings}
-              providers={serverProviders}
-              instanceEntries={textGenerationModelInstanceEntries}
-              fallbackSelection={textGenerationModelSelection}
-              onSelectionChange={(selection) =>
-                updateSettings({ memoryCuratorModelSelection: selection })
-              }
-            />
-            <HarnessHelperModelRow
-              environmentId={environmentId}
-              settingKey="delegationDefaultModelSelection"
-              title="Delegation default"
-              description="Optional model selection for isolated delegated tasks when the selected provider supports them."
-              selection={settings.delegationDefaultModelSelection}
-              settings={settings}
-              providers={serverProviders}
-              instanceEntries={textGenerationModelInstanceEntries}
-              fallbackSelection={textGenerationModelSelection}
-              onSelectionChange={(selection) =>
-                updateSettings({ delegationDefaultModelSelection: selection })
-              }
-            />
-          </>
-        ) : null}
-
+      <SettingsSection id="agent-instructions" title="Agent instructions">
         <SettingsRow
           serverScoped
           settingKeys={["sealsInstructions"]}
-          title="Seals.md harness rules"
+          title="Agent instructions (Seals.md)"
           description="Persistent instructions included at the start of every provider turn, similar to global user rules."
         >
           <div className="mt-3 w-full pb-3.5">
@@ -2614,13 +2410,14 @@ export function GeneralSettingsPanel() {
               }}
               rows={7}
               placeholder="Use concise answers. Run focused tests after edits."
-              aria-label="Seals.md harness rules"
+              aria-label="Agent instructions (Seals.md)"
             />
           </div>
         </SettingsRow>
-
         <ThreadTitleInstructionsSettings />
       </SettingsSection>
+
+      <SnapShotSettings />
 
       <SettingsSection id="about" title="About">
         {isElectron || HOSTED_APP_CHANNEL ? (
@@ -2635,26 +2432,24 @@ export function GeneralSettingsPanel() {
           </>
         )}
         <SettingsRow
-          {...searchableSetting("credits")}
-          description="Harp (formerly SealCode) is a fork of T3 Code by Theo Browne, Julius Marminge and the T3 Code contributors, released under the MIT license."
+          title="Harp on GitHub"
+          description="Source code, releases and issue tracker. Harp is open source under the MIT license."
           control={
             <Button
               render={
                 <a
-                  href="https://github.com/pingdotgg/t3code"
+                  href="https://github.com/epitaphwastakenn/SealCode"
                   rel="noreferrer noopener"
                   target="_blank"
                 />
               }
               size="sm"
-              variant="outline"
+              variant="default"
             >
-              T3 Code on GitHub
+              Open on GitHub
             </Button>
           }
         />
-      </SettingsSection>
-      <SettingsSection title="Diagnostics">
         <SettingsRow
           {...searchableSetting("diagnostics")}
           description={
@@ -2687,9 +2482,26 @@ export function GeneralSettingsPanel() {
             </Button>
           }
         />
+        <SettingsRow
+          {...searchableSetting("credits")}
+          description="Harp (formerly SealCode) is a fork of T3 Code by Theo Browne, Julius Marminge and the T3 Code contributors, released under the MIT license."
+          control={
+            <Button
+              render={
+                <a
+                  href="https://github.com/pingdotgg/t3code"
+                  rel="noreferrer noopener"
+                  target="_blank"
+                />
+              }
+              size="sm"
+              variant="outline"
+            >
+              T3 Code on GitHub
+            </Button>
+          }
+        />
       </SettingsSection>
-
-      <LegacyFeaturesSection />
     </SettingsPageContainer>
   );
 }

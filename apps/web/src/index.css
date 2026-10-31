@@ -203,7 +203,7 @@ html[data-ui-motion="off"]
    * Compact UI geometry. Keep these values semantic so sidebar, palette,
    * tooltip, and toolbar controls cannot quietly drift apart.
    */
-  --control-radius: 0.5rem;
+  --control-radius: var(--radius);
   --sidebar-content-inset: 0.5rem;
   --sidebar-control-gap: 0.5rem;
   --sidebar-icon-color: color-mix(
@@ -363,6 +363,11 @@ html[data-ui-motion="off"]
   --color-destructive: var(--destructive);
   --color-accent-foreground: var(--contrast-accent-foreground);
   --color-accent: var(--accent);
+  --color-brand: var(--brand-accent);
+  --color-row-hover: var(--row-hover);
+  --color-row-selected: var(--row-selected);
+  --color-code-surface: var(--code-surface);
+  --color-terminal-surface: var(--terminal-surface);
   --color-muted-foreground: var(--contrast-muted-foreground);
   --color-muted: var(--muted);
   --color-placeholder: var(--contrast-placeholder);
@@ -490,19 +495,19 @@ html[data-ui-motion="off"]
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
 
-  &[data-variant="error"] {
+  &:is([data-variant="error"], [data-type="error"]) {
     --alert-glass-tint: var(--destructive);
   }
 
-  &[data-variant="info"] {
+  &:is([data-variant="info"], [data-type="info"]) {
     --alert-glass-tint: var(--info);
   }
 
-  &[data-variant="success"] {
+  &:is([data-variant="success"], [data-type="success"]) {
     --alert-glass-tint: var(--success);
   }
 
-  &[data-variant="warning"] {
+  &:is([data-variant="warning"], [data-type="warning"]) {
     --alert-glass-tint: var(--warning);
   }
 
@@ -535,13 +540,11 @@ html[data-ui-motion="off"]
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   border-color: color-mix(in srgb, var(--contrast-foreground) 10%, transparent);
-  box-shadow: 0 24px 64px -24px rgb(0 0 0 / 65%);
+  box-shadow: 0 24px 64px -24px rgb(0 0 0 / 55%);
 
   @variant dark {
     border-color: color-mix(in srgb, var(--color-white) 8%, transparent);
-    box-shadow:
-      inset 0 1px rgb(255 255 255 / 4%),
-      0 24px 72px -20px rgb(0 0 0 / 90%);
+    box-shadow: 0 28px 72px -24px rgb(0 0 0 / 80%);
   }
 
   @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
@@ -568,6 +571,12 @@ html[data-ui-motion="off"]
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturation));
   border: 1px solid color-mix(in srgb, var(--contrast-foreground) 10%, transparent);
+  box-shadow: 0 16px 40px -18px rgb(0 0 0 / 55%);
+
+  @variant dark {
+    border-color: color-mix(in srgb, var(--color-white) 8%, transparent);
+    box-shadow: 0 18px 44px -18px rgb(0 0 0 / 80%);
+  }
 
   @supports not ((-webkit-backdrop-filter: blur(1px)) or (backdrop-filter: blur(1px))) {
     background: var(--popover) !important;
@@ -1327,8 +1336,14 @@ html[data-ui-motion="off"]
   --message-action: var(--primary);
   --message-action-foreground: var(--primary-foreground);
   --message-action-hover: color-mix(in srgb, var(--primary) 90%, var(--background));
-  --accent: #f3e8ff;
-  --accent-foreground: #4c1d95;
+  --accent: color-mix(in oklab, var(--brand-accent) 10%, var(--background));
+  --accent-foreground: color-mix(in oklab, var(--brand-accent) 70%, var(--foreground));
+  --row-hover: color-mix(in oklab, var(--accent) 80%, transparent);
+  --row-selected: color-mix(in oklab, var(--accent), var(--foreground) 5%);
+  --chat-composer-glass-surface: var(--card);
+  --chat-composer-outline: color-mix(in srgb, var(--contrast-foreground) 8%, transparent);
+  --chat-composer-highlight: transparent;
+  --diff-modified-icon: color-mix(in srgb, var(--info-foreground) 50%, var(--muted-foreground));
   --error: var(--color-red-500);
   --error-foreground: var(--color-red-700);
   --tool-error-icon: var(--error);
@@ -1362,6 +1377,8 @@ html[data-ui-motion="off"]
   --code-background: color-mix(in srgb, var(--card) 90%, var(--background));
   --code-foreground: var(--foreground);
   --terminal-background: var(--background);
+  --terminal-surface: var(--terminal-background);
+  --code-surface: var(--code-background);
   --terminal-foreground: var(--foreground);
   --terminal-cursor: rgb(38 56 78);
   --terminal-selection-background: rgb(37 63 99 / 20%);
@@ -1382,9 +1399,13 @@ html[data-ui-motion="off"]
     --secondary-foreground: var(--color-neutral-100);
     --muted: --alpha(var(--color-white) / 3%);
     --muted-foreground: color-mix(in srgb, var(--color-neutral-500) 90%, var(--color-white));
-    --accent: #2b1746;
     --accent-foreground: var(--color-neutral-100);
     --message-surface: var(--accent);
+    --chat-composer-glass-surface: var(--surface-raised);
+    --chat-composer-outline: color-mix(in srgb, var(--color-white) 5%, transparent);
+    --chat-composer-highlight: color-mix(in srgb, var(--color-white) 3%, transparent);
+    --diff-modified-icon: color-mix(in srgb, var(--info-foreground) 65%, transparent);
+    --diff-added-icon: var(--success-foreground);
     --error: color-mix(in srgb, var(--color-red-500) 90%, var(--color-white));
     --error-foreground: var(--color-red-400);
     --tool-error-icon: #fca5a5;
@@ -1417,8 +1438,13 @@ html[data-ui-motion="off"]
   --foreground: var(--color-zinc-800);
   --card: var(--color-white);
   --card-foreground: var(--color-zinc-800);
-  --accent: #f3e8ff;
-  --accent-foreground: #4c1d95;
+  --accent: color-mix(in oklab, var(--brand-accent) 10%, var(--background));
+  --accent-foreground: color-mix(in oklab, var(--brand-accent) 70%, var(--foreground));
+  --secondary-label: color-mix(
+    in srgb,
+    var(--sidebar-muted-foreground) 85%,
+    var(--sidebar-foreground)
+  );
   --muted: var(--color-zinc-50);
   --muted-foreground: var(--color-zinc-500);
   --border: var(--color-zinc-200);
@@ -1438,7 +1464,6 @@ html[data-ui-motion="off"]
     --foreground: #f1f3f7;
     --card: #10071c;
     --card-foreground: var(--foreground);
-    --accent: #2b1746;
     --accent-foreground: #f7f9ff;
     --muted: #1a0e2b;
     --muted-foreground: #a3a3a3;
@@ -1456,52 +1481,22 @@ html[data-ui-motion="off"]
   }
 }
 
-/* New design: modified files get a muted blue so added and deleted files lead. Built from the
-   info token, which themes do not override, so it stays blue in every theme. */
-html[data-redesign] {
-  --diff-modified-icon: color-mix(in srgb, var(--info-foreground) 50%, var(--muted-foreground));
-}
-
-html.dark[data-redesign] {
-  /* On black a gray mix stays as bright as the blue, so dim with transparency instead. */
-  --diff-modified-icon: color-mix(in srgb, var(--info-foreground) 65%, transparent);
-  --diff-added-icon: var(--success-foreground);
-}
-
 /* Blue-orange already spends blue on additions. */
-html[data-redesign][data-diff-color-scheme="blue-orange"] {
+html[data-diff-color-scheme="blue-orange"] {
   --diff-modified-icon: var(--muted-foreground);
   --diff-added-icon: initial;
 }
 
-html.dark[data-redesign][data-diff-color-scheme="blue-orange"] {
+html.dark[data-diff-color-scheme="blue-orange"] {
   --diff-modified-icon: color-mix(in srgb, var(--muted-foreground) 65%, transparent);
+  --diff-added-icon: initial;
 }
 
-/* New design: sections in the provider detail pane sit flat in its card instead of nesting
-   cards inside it. Headings and row dividers still separate them. */
-[data-redesign] [data-provider-detail] [data-slot="settings-group"] {
-  border-color: transparent;
-  background: transparent;
-  box-shadow: none;
-}
-
-/* New design: a diff header's copy button shows on file hover or focus. */
+/* A diff header's copy button shows on file hover or focus. */
 @media (hover: hover) {
-  [data-redesign] diffs-container:not(:hover) [data-diff-copy-path]:not(:focus-within) {
+  diffs-container:not(:hover) [data-diff-copy-path]:not(:focus-within) {
     opacity: 0;
   }
-}
-
-/* New design: the default dark canvas is true black, matching the sidebar. Raised surfaces
-   keep the tone they had over neutral-950 so cards, popovers, and the composer still lift. */
-html.dark[data-redesign]:not([data-theme-id]) {
-  --background: #000;
-  --surface-raised: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
-  --card: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
-  --popover: color-mix(in srgb, var(--color-neutral-950) 97%, var(--color-white));
-  /* A user turn sits above the composer tone, level with the selected sidebar row. */
-  --message-surface: color-mix(in srgb, var(--color-neutral-950) 92%, var(--color-white));
 }
 
 /* Theme files are expressed in app color roles and mapped to the existing
@@ -1541,6 +1536,8 @@ html[data-theme-id]:not([data-theme-id=""]) {
   --icon-muted: var(--app-theme-icon-muted);
   --accent: var(--app-theme-accent-surface);
   --accent-foreground: var(--app-theme-accent-surface-foreground);
+  --row-hover: color-mix(in oklab, var(--accent) 80%, transparent);
+  --row-selected: color-mix(in oklab, var(--accent), var(--foreground) 5%);
   --message-surface: var(--app-theme-message-surface);
   --message-foreground: var(--app-theme-message-foreground);
   --message-action: var(--app-theme-message-action);
@@ -1576,6 +1573,13 @@ html[data-theme-id]:not([data-theme-id=""]) {
   --terminal-foreground: var(--app-theme-terminal-foreground);
   --terminal-cursor: var(--app-theme-terminal-cursor);
   --terminal-selection-background: var(--app-theme-terminal-selection-background);
+  --chat-composer-glass-surface: var(--app-theme-surface-raised);
+  --chat-composer-outline: var(--app-theme-toolbar-border);
+
+  @variant dark {
+    --chat-composer-highlight: color-mix(in srgb, var(--app-theme-input) 12%, transparent);
+    --chat-composer-outline: color-mix(in srgb, var(--app-theme-input) 30%, var(--background));
+  }
 }
 
 /* Theme-token dependency probes are restored synchronously, before paint. Keep
@@ -1906,13 +1910,6 @@ body {
   font-family: var(--font-sans);
   margin: 0;
   padding: 0;
-}
-
-/* New design: sidebar row metadata sits a step below read titles (75% white). */
-[data-redesign] [data-app-sidebar] {
-  @variant dark {
-    --secondary-label: #8f8f8f;
-  }
 }
 
 /* Lighter default icon stroke. In the base layer so stroke-* utilities still win; any
@@ -2389,14 +2386,15 @@ code {
   font-weight: 600;
 }
 
-.chat-markdown :not(pre) > code {
+:is(.chat-markdown, .composer-tiptap) :not(pre) > code {
   border: 1px solid transparent;
-  border-radius: 0.25rem;
+  border-radius: var(--radius-md);
   box-decoration-break: clone;
   -webkit-box-decoration-break: clone;
   background: color-mix(in srgb, var(--contrast-foreground) 10%, transparent);
   padding: 0.1em 0.35em;
   color: var(--contrast-foreground);
+  font-family: var(--font-mono);
   font-size: 0.85em;
 }
 
@@ -2467,15 +2465,10 @@ code {
   border-collapse: collapse;
   overflow-wrap: normal;
   word-break: normal;
-  font-size: 0.75rem;
-}
-
-/* New design: tables sit one step under 15px prose instead of three. */
-[data-redesign] .chat-markdown table {
   font-size: 0.875rem;
 }
 
-[data-redesign] .chat-markdown :is(td, th) {
+.chat-markdown :is(td, th) {
   text-wrap: pretty;
 }
 
@@ -2669,14 +2662,6 @@ code {
   outline: none;
 }
 
-.composer-tiptap :not(pre) > code {
-  font-family: var(--font-mono);
-  font-size: 0.92em;
-  background: color-mix(in oklab, var(--muted-foreground) 12%, transparent);
-  border-radius: 0.3em;
-  padding: 0.05em 0.25em;
-}
-
 .composer-rich-marker {
   color: var(--muted-foreground);
   opacity: 0.75;
@@ -2691,7 +2676,7 @@ code {
 .composer-tiptap .ProseMirror-selectednode {
   outline: 2px solid var(--ring);
   outline-offset: -2px;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
 }
 
 .composer-tiptap .composer-chip-range-selected {
@@ -2702,7 +2687,7 @@ code {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   background: Highlight;
   opacity: 0.3;
   pointer-events: none;
@@ -2924,11 +2909,12 @@ html[data-theme-gradient="true"] [data-slot="sidebar-inset"] {
 .max-effort-frame {
   --max-effort-spectrum: linear-gradient(
     120deg,
-    color-mix(in srgb, var(--primary) 55%, transparent) 0%,
-    color-mix(in srgb, color-mix(in srgb, var(--primary) 40%, white) 70%, transparent) 50%,
-    color-mix(in srgb, var(--primary) 55%, transparent) 100%
+    color-mix(in srgb, var(--brand-accent) 55%, transparent) 0%,
+    color-mix(in srgb, color-mix(in srgb, var(--brand-accent) 40%, white) 70%, transparent) 50%,
+    color-mix(in srgb, var(--brand-accent) 55%, transparent) 100%
   );
   position: relative;
+  box-shadow: inset 0 0 0 2.5px var(--border);
 }
 
 .max-effort-frame::before {
@@ -3005,6 +2991,19 @@ html[data-glass-app="true"] #root,
 html[data-glass-app="true"] [data-slot="sidebar-wrapper"] {
   background-color: transparent !important;
   background-image: none !important;
+}
+
+html[data-glass-app="true"] {
+  --terminal-surface: color-mix(
+    in srgb,
+    var(--terminal-background) var(--panel-glass-opacity, 70%),
+    transparent
+  );
+  --code-surface: color-mix(
+    in srgb,
+    var(--code-background) var(--panel-glass-opacity, 70%),
+    transparent
+  );
 }
 
 html[data-glass-app="true"] [data-slot="sidebar-container"].sidebar-glass,

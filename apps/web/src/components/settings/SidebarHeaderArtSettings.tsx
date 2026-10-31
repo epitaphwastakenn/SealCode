@@ -5,12 +5,11 @@ import {
 } from "@t3tools/contracts/settings";
 import { BanIcon } from "lucide-react";
 
-import { cn } from "~/lib/utils";
 import { SIDEBAR_ART_STYLE_LABELS } from "../headerArt/StageArt";
 import { StageBackdropButtonArt } from "../SidebarStageBackdrop";
 import { Toggle, ToggleGroup } from "../ui/toggle-group";
 import { ProviderAccentColorPicker } from "./ProviderAccentColorPicker";
-import { SettingResetButton, SettingsRow } from "./settingsLayout";
+import { OptionCard, SettingResetButton, SettingsRow } from "./settingsLayout";
 import { searchableSetting } from "./settingsSearch";
 import { useScopedSettings, useUpdateScopedSettings } from "./useScopedSettings";
 
@@ -28,20 +27,16 @@ function StyleCard({
 }) {
   const label = art === "off" ? "Off" : SIDEBAR_ART_STYLE_LABELS[art];
   return (
-    <button
+    <OptionCard
       aria-pressed={selected}
-      className={cn(
-        "flex min-w-0 cursor-pointer flex-col gap-1.5 rounded-xl border border-border/70 bg-card/60 p-1.5 text-left outline-none transition-colors hover:bg-accent/10 focus-visible:outline-2 focus-visible:outline-solid focus-visible:-outline-offset-2 focus-visible:outline-ring",
-        selected && "bg-accent/30",
-      )}
+      className="flex min-w-0 flex-col gap-1.5 p-1.5"
       data-header-art-style={art}
       onClick={onSelect}
-      style={selected ? { boxShadow: "inset 0 0 0 1px var(--ring)" } : undefined}
-      type="button"
+      selected={selected}
     >
       <span aria-hidden className="block h-12 overflow-hidden rounded-lg">
         {art === "off" ? (
-          <span className="flex size-full items-center justify-center bg-muted/60 text-muted-foreground">
+          <span className="flex size-full items-center justify-center bg-foreground/[0.03] text-muted-foreground">
             <BanIcon className="size-4" />
           </span>
         ) : (
@@ -49,7 +44,7 @@ function StyleCard({
         )}
       </span>
       <span className="truncate px-1 text-xs font-medium text-foreground">{label}</span>
-    </button>
+    </OptionCard>
   );
 }
 

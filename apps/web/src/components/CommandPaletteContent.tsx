@@ -1,4 +1,3 @@
-import { ArrowDownIcon, ArrowUpIcon } from "lucide-react";
 import { type ComponentProps, type ReactNode } from "react";
 
 import { Command, CommandFooter, CommandInput, CommandPanel } from "./ui/command";
@@ -63,17 +62,8 @@ export function CommandPaletteContent({
         >
           {children}
         </CommandPanel>
-        <CommandFooter className="max-sm:flex-col max-sm:items-start">
+        <CommandFooter className="max-sm:hidden">
           <div className="flex items-center gap-3">
-            <KbdGroup>
-              <Kbd>
-                <ArrowUpIcon />
-              </Kbd>
-              <Kbd>
-                <ArrowDownIcon />
-              </Kbd>
-              <span>Navigate</span>
-            </KbdGroup>
             {footerActionLabel !== undefined ? (
               <KbdGroup>
                 <Kbd>Enter</Kbd>

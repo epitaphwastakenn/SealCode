@@ -142,9 +142,7 @@ function Field({
     <div className="space-y-1.5">
       <Label className="flex items-baseline justify-between" htmlFor={htmlFor}>
         <span>{label}</span>
-        {hint ? (
-          <span className="font-normal text-2xs text-muted-foreground/80">{hint}</span>
-        ) : null}
+        {hint ? <span className="font-normal text-2xs text-muted-foreground">{hint}</span> : null}
       </Label>
       {children}
     </div>
@@ -668,7 +666,7 @@ function ScheduledTaskEditorDialog({
       }}
     >
       {/* The form owns the draft so a keystroke re-renders it, not the dialog chrome. */}
-      <DialogPopup className="max-w-xl">
+      <DialogPopup size="lg">
         <ScheduledTaskEditorForm
           initialEnvironmentId={initialEnvironmentId}
           task={task}

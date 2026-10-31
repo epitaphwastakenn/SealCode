@@ -150,7 +150,11 @@ async function hydrateClientSettings(): Promise<void> {
         return;
       }
       if (persistedSettings) {
-        replaceClientSettingsSnapshot({ ...DEFAULT_CLIENT_SETTINGS, ...persistedSettings });
+        replaceClientSettingsSnapshot({
+          ...DEFAULT_CLIENT_SETTINGS,
+          ...persistedSettings,
+          redesignEnabled: true,
+        });
       }
       setClientSettingsHydrationStatus("ready");
     } catch (error) {
@@ -408,13 +412,6 @@ export function useEnvironmentIdentificationMode(): EnvironmentIdentificationMod
     paletteThemeActive: previewSidebarArtwork !== null || activeThemeDefinition !== null,
     paletteThemeAllowsArtwork: previewSidebarArtwork ?? themeAllowsSidebarArtwork(activeTheme),
   });
-}
-
-/** Wait for hydration: swapping sidebar implementations after mount remounts the whole tree. */
-export function useLegacySidebarEnabled(): boolean {
-  const settingsHydrated = useClientSettingsHydrated();
-  const legacySidebarEnabled = useClientSettings((settings) => settings.legacySidebarEnabled);
-  return settingsHydrated && legacySidebarEnabled;
 }
 
 export function useGlassSidebarEnabled(): boolean {

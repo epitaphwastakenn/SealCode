@@ -1,8 +1,6 @@
 import { useAtomValue } from "@effect/atom-react";
 import * as Schema from "effect/Schema";
 import {
-  lazy,
-  Suspense,
   useEffect,
   useLayoutEffect,
   useState,
@@ -33,11 +31,7 @@ import { selectActiveRightPanel, useRightPanelStore } from "../rightPanelStore";
 import { selectThreadTerminalUiState, useTerminalUiStateStore } from "../terminalUiStateStore";
 import { cn, isMacPlatform } from "../lib/utils";
 import { primaryServerKeybindingsAtom } from "../state/server";
-import {
-  useClientSettings,
-  useGlassSidebarEnabled,
-  useLegacySidebarEnabled,
-} from "../hooks/useSettings";
+import { useClientSettings, useGlassSidebarEnabled } from "../hooks/useSettings";
 import {
   PanelAnimationSuppressionProvider,
   usePanelAnimationSettings,
@@ -69,9 +63,6 @@ import { Tooltip, TooltipPopup, TooltipTrigger } from "./ui/tooltip";
 import { appAtomRegistry } from "../rpc/atomRegistry";
 import { registerCommands, registerMenuAction } from "../shortcuts/dispatcher";
 import { resolveThreadRouteRef } from "../threadRoutes";
-
-// Only the legacy-sidebar setting renders it, so the default layout never loads it.
-const LegacyThreadSidebar = lazy(() => import("./LegacySidebar"));
 
 const MACOS_TRAFFIC_LIGHTS_LEFT_INSET = "var(--desktop-window-controls-inset, 90px)";
 
@@ -380,7 +371,6 @@ function SidebarControl() {
 }
 
 export function AppSidebarLayout({ children }: { children: ReactNode }) {
-  const legacySidebarEnabled = useLegacySidebarEnabled();
   const glassSidebarEnabled = useGlassSidebarEnabled();
   // The whole-app glass needs the same transparent window as the glass sidebar.
   const glassAppEnabled = useClientSettings((settings) => settings.glassAppEnabled);
@@ -455,13 +445,7 @@ export function AppSidebarLayout({ children }: { children: ReactNode }) {
           }}
           style={windowControlsInsetStyle}
         >
-          {legacySidebarEnabled ? (
-            <Suspense fallback={null}>
-              <LegacyThreadSidebar routeReveal={sidebarRouteReveal} />
-            </Suspense>
-          ) : (
-            <ThreadSidebar routeReveal={sidebarRouteReveal} />
-          )}
+          <ThreadSidebar routeReveal={sidebarRouteReveal} />
           <SidebarRail onDoubleClick={resetSidebarWidth} />
         </Sidebar>
         {children}

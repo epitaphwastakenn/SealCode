@@ -70,6 +70,10 @@ export function buildTraitsTriggerDisplay(input: {
       fastModeFallbackLabel = speedLabel ?? "Normal";
       continue;
     }
+    if (descriptor.id === "ultracode" && descriptor.type === "boolean") {
+      if (descriptor.currentValue === true) labels.push(descriptor.label);
+      continue;
+    }
     if (
       input.provider === "codex" &&
       descriptor.id === "serviceTier" &&

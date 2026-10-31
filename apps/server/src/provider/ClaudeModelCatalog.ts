@@ -237,10 +237,6 @@ export function normalizeClaudeCatalogEffort(
   return effortMap[effort] ?? undefined;
 }
 
-export function isClaudeCatalogUltracodeEffort(effort: string | null | undefined): boolean {
-  return effort === "ultracode";
-}
-
 function resolveClaudeCatalogContextWindow(
   catalog: ClaudeModelCatalog,
   modelSelection: ModelSelection | undefined,

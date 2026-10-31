@@ -1637,6 +1637,79 @@ describe("composerDraftStore per-model sticky options", () => {
   });
 });
 
+describe("composerDraftStore Ultracode toggle", () => {
+  const threadId = ThreadId.make("thread-ultracode-toggle");
+  const threadRef = scopeThreadRef(TEST_ENVIRONMENT_ID, threadId);
+
+  beforeEach(() => {
+    resetComposerDraftStore();
+  });
+
+  it("remembers the toggle per model next to the effort level", () => {
+    const store = useComposerDraftStore.getState();
+
+    store.setProviderModelOptions(
+      threadRef,
+      CLAUDE_AGENT_DRIVER,
+      toSelections({ effort: "high", ultracode: true }),
+      { instanceId: CLAUDE_AGENT_INSTANCE, model: "claude-opus-5-5", persistSticky: true },
+    );
+    store.setProviderModelOptions(threadRef, CLAUDE_AGENT_DRIVER, toSelections({ effort: "max" }), {
+      instanceId: CLAUDE_AGENT_INSTANCE,
+      model: "claude-sonnet-5-5",
+      persistSticky: true,
+    });
+
+    expect(
+      useComposerDraftStore.getState().stickyOptionsByModelByProvider[CLAUDE_AGENT_INSTANCE],
+    ).toEqual({
+      "claude-opus-5-5": toSelections({ effort: "high", ultracode: true }),
+      "claude-sonnet-5-5": toSelections({ effort: "max" }),
+    });
+  });
+
+  it("opens saved Ultracode effort selections as Extra High with the toggle on", () => {
+    const persistApi = useComposerDraftStore.persist as unknown as {
+      getOptions: () => {
+        merge: (
+          persistedState: unknown,
+          currentState: ReturnType<typeof useComposerDraftStore.getState>,
+        ) => Pick<
+          ReturnType<typeof useComposerDraftStore.getState>,
+          "stickyModelSelectionByProvider" | "stickyOptionsByModelByProvider"
+        >;
+      };
+    };
+    const legacy = [{ id: "effort", value: "ultracode" }];
+    const migrated = [
+      { id: "effort", value: "xhigh" },
+      { id: "ultracode", value: true },
+    ];
+    const mergedState = persistApi.getOptions().merge(
+      {
+        stickyModelSelectionByProvider: {
+          [CLAUDE_AGENT_INSTANCE]: {
+            instanceId: CLAUDE_AGENT_INSTANCE,
+            model: "claude-opus-5-5",
+            options: legacy,
+          },
+        },
+        stickyOptionsByModelByProvider: {
+          [CLAUDE_AGENT_INSTANCE]: { "claude-opus-5-5": legacy },
+        },
+      },
+      useComposerDraftStore.getInitialState(),
+    );
+
+    expect(mergedState.stickyModelSelectionByProvider[CLAUDE_AGENT_INSTANCE]?.options).toEqual(
+      migrated,
+    );
+    expect(mergedState.stickyOptionsByModelByProvider).toEqual({
+      [CLAUDE_AGENT_INSTANCE]: { "claude-opus-5-5": migrated },
+    });
+  });
+});
+
 describe("composerDraftStore sticky composer settings", () => {
   beforeEach(() => {
     resetComposerDraftStore();

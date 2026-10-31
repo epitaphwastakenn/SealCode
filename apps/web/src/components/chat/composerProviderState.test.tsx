@@ -328,7 +328,6 @@ describe("getComposerProviderState", () => {
         selectDescriptor("effort", [
           { id: "high", label: "High", isDefault: true },
           { id: "max", label: "Max" },
-          { id: "ultracode", label: "Ultracode" },
         ]),
       ]),
       modelOptions: selections(["effort", "ultrathink"]),
@@ -337,6 +336,54 @@ describe("getComposerProviderState", () => {
 
     expect(state.promptEffort).toBe("max");
     expect(state.modelOptionsForDispatch).toEqual(selections(["effort", "max"]));
+  });
+
+  describe("Ultracode toggle", () => {
+    const ultracodeModels = modelWith([
+      selectDescriptor("effort", [
+        { id: "high", label: "High", isDefault: true },
+        { id: "xhigh", label: "Extra High" },
+        { id: "max", label: "Max" },
+      ]),
+      booleanDescriptor("ultracode"),
+    ]);
+    const stateFor = (modelOptions: ReadonlyArray<ProviderOptionSelection>) =>
+      getComposerProviderState({
+        provider: PROVIDER,
+        model: MODEL,
+        models: ultracodeModels,
+        modelOptions,
+        planModeEnabled: true,
+      });
+
+    it("opens a saved Ultracode effort as Extra High with the toggle on", () => {
+      const state = stateFor(selections(["effort", "ultracode"]));
+
+      expect(state.promptEffort).toBe("xhigh");
+      expect(state.modelOptionsForDispatch).toEqual(
+        selections(["effort", "xhigh"], ["ultracode", true]),
+      );
+    });
+
+    it("dispatches the toggle next to any effort level", () => {
+      expect(stateFor(selections(["effort", "high"], ["ultracode", true]))).toMatchObject({
+        promptEffort: "high",
+        modelOptionsForDispatch: selections(["effort", "high"], ["ultracode", true]),
+      });
+    });
+
+    it("frames the composer for effort max only, whatever the toggle says", () => {
+      const frame = "max-effort-frame";
+      expect(
+        stateFor(selections(["effort", "max"], ["ultracode", false])).composerFrameClassName,
+      ).toBe(frame);
+      expect(
+        stateFor(selections(["effort", "max"], ["ultracode", true])).composerFrameClassName,
+      ).toBe(frame);
+      expect(
+        stateFor(selections(["effort", "xhigh"], ["ultracode", true])).composerFrameClassName,
+      ).toBeUndefined();
+    });
   });
 
   it("defaults fastMode to false when the provider reports true but the user has not selected it", () => {

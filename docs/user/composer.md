@@ -103,6 +103,11 @@ previously used thread falls back to your general defaults.
 
 Leaving reasoning level or service tier unset uses the provider's own configuration.
 
+Claude models that support it show an **Ultracode** switch under the reasoning level in the
+model picker. It adds standing multi-agent workflows at any reasoning level and uses much more
+of your usage. Harp remembers it per model like the other options, and agents that start child
+threads cannot turn it on.
+
 ## Quote an assistant response
 
 On web and desktop, select text within one assistant response and choose

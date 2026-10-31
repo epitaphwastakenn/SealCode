@@ -136,18 +136,56 @@ export function modelSelectionsEqual(left: ModelSelection, right: ModelSelection
   );
 }
 
+const legacyUltracodeEffort = "ultracode";
+const legacyUltracodeMigratedEffort = "xhigh";
+
+export function migrateLegacyUltracodeOptions(
+  options: ReadonlyArray<ProviderOptionSelection>,
+): ReadonlyArray<ProviderOptionSelection>;
+export function migrateLegacyUltracodeOptions(
+  options: ReadonlyArray<ProviderOptionSelection> | null | undefined,
+): ReadonlyArray<ProviderOptionSelection> | undefined;
+export function migrateLegacyUltracodeOptions(
+  options: ReadonlyArray<ProviderOptionSelection> | null | undefined,
+): ReadonlyArray<ProviderOptionSelection> | undefined {
+  if (
+    !options?.some((option) => option.id === "effort" && option.value === legacyUltracodeEffort)
+  ) {
+    return options ?? undefined;
+  }
+  const migrated = options.map((option) =>
+    option.id === "effort" && option.value === legacyUltracodeEffort
+      ? { id: "effort", value: legacyUltracodeMigratedEffort }
+      : option,
+  );
+  return options.some((option) => option.id === "ultracode")
+    ? migrated
+    : [...migrated, { id: "ultracode", value: true }];
+}
+
+export function migrateLegacyUltracodeSelection(selection: ModelSelection): ModelSelection {
+  const options = migrateLegacyUltracodeOptions(selection.options);
+  return options === selection.options
+    ? selection
+    : createModelSelection(selection.instanceId, selection.model, options);
+}
+
 /**
  * Whether a composer's draft model pick is what the thread already runs. Web sends
  * `fastMode: false` for models with a fast toggle while mobile omits it, so off counts as unset.
+ * The same goes for `ultracode: false`.
  */
 export function draftModelPickMatchesThread(pick: ModelSelection, thread: ModelSelection): boolean {
-  const withoutFastModeOff = (selection: ModelSelection) =>
+  const withoutToggleDefaults = (selection: ModelSelection) =>
     createModelSelection(
       selection.instanceId,
       selection.model,
-      selection.options?.filter((option) => option.id !== "fastMode" || option.value !== false),
+      migrateLegacyUltracodeOptions(selection.options)?.filter(
+        (option) =>
+          (option.id !== "fastMode" && option.id !== "ultracode") || option.value !== false,
+      ),
     );
-  return modelSelectionsEqual(withoutFastModeOff(pick), withoutFastModeOff(thread));
+  return modelSelectionsEqual(withoutToggleDefaults(pick), withoutToggleDefaults(thread));
 }
 
 function resolveDescriptorChoiceValue(
@@ -165,9 +203,7 @@ function resolveDescriptorChoiceValue(
     return trimmed;
   }
   if (trimmed === RETIRED_ULTRATHINK_EFFORT) {
-    const strongest = descriptor.options.findLast(
-      (option) => !WORKFLOW_EFFORT_OPTION_IDS.has(option.id),
-    );
+    const strongest = descriptor.options.at(-1);
     if (strongest) return strongest.id;
   }
   return descriptor.currentValue ?? descriptor.options.find((option) => option.isDefault)?.id;
@@ -175,11 +211,48 @@ function resolveDescriptorChoiceValue(
 
 /**
  * Claude's old "ultrathink" effort level only prefixed the prompt. Drafts and
- * threads saved with it resume on the strongest reasoning level. Ultracode is a
- * workflow mode on top of xhigh, not a stronger reasoning level.
+ * threads saved with it resume on the strongest reasoning level.
  */
 const RETIRED_ULTRATHINK_EFFORT = "ultrathink";
-const WORKFLOW_EFFORT_OPTION_IDS: ReadonlySet<string> = new Set(["ultracode"]);
+
+const ultracodeToggleDescription =
+  "Standing multi-agent workflow orchestration at any effort level. Uses much more usage.";
+
+/**
+ * Manifests fetched from upstream still list Ultracode as the top effort level. Harp
+ * offers it as a toggle next to the effort level, so the level becomes a boolean option.
+ */
+export function withUltracodeToggle(caps: ModelCapabilities): ModelCapabilities {
+  const descriptors = caps.optionDescriptors;
+  const effort = descriptors?.find(
+    (entry) => entry.type === "select" && entry.options.some((option) => option.id === "ultracode"),
+  );
+  if (!descriptors || effort?.type !== "select") {
+    return caps;
+  }
+  const withoutLevel = descriptors.map((entry) =>
+    entry === effort
+      ? { ...effort, options: effort.options.filter((option) => option.id !== "ultracode") }
+      : entry,
+  );
+  const hasToggle = descriptors.some(
+    (entry) => entry.type === "boolean" && entry.id === "ultracode",
+  );
+  return {
+    ...caps,
+    optionDescriptors: hasToggle
+      ? withoutLevel
+      : [
+          ...withoutLevel,
+          {
+            id: "ultracode",
+            label: "Ultracode",
+            type: "boolean",
+            description: ultracodeToggleDescription,
+          },
+        ],
+  };
+}
 
 /**
  * Harp offers no prompt-injected choices: typing "ultrathink" in a Claude
@@ -249,7 +322,8 @@ export function getProviderOptionDescriptors(input: {
   caps: ModelCapabilities;
   selections?: ReadonlyArray<ProviderOptionSelection> | null | undefined;
 }): ReadonlyArray<ProviderOptionDescriptor> {
-  const { caps, selections } = input;
+  const { caps } = input;
+  const selections = migrateLegacyUltracodeOptions(input.selections);
   const baseDescriptors = (caps.optionDescriptors ?? []).map(cloneDescriptor);
 
   return baseDescriptors.map((descriptor) =>

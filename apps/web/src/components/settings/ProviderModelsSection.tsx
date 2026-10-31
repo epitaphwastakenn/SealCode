@@ -39,6 +39,7 @@ function describeModelCapabilities(model: ServerProviderModel): string[] {
   );
   if (hasFastMode) labels.push("Fast mode");
   if (descriptors.some((descriptor) => descriptor.id === "thinking")) labels.push("Thinking");
+  if (descriptors.some((descriptor) => descriptor.id === "ultracode")) labels.push("Ultracode");
   if (
     descriptors.some(
       (descriptor) =>

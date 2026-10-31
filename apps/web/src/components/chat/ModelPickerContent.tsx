@@ -67,6 +67,7 @@ import {
 import { announce } from "~/lib/announce";
 import { cn } from "~/lib/utils";
 import { getVirtualizedScrollFadeClassName } from "../ui/scroll-area";
+import { Switch } from "../ui/switch";
 import { TooltipProvider } from "../ui/tooltip";
 import { Button, InlineButton } from "../ui/button";
 import { DisclosureChevron } from "../ui/disclosure-chevron";

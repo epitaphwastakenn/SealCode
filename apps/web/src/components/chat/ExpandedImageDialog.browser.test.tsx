@@ -101,6 +101,20 @@ describe("ExpandedImageDialog", () => {
     await vi.waitFor(() => expect(onClose).toHaveBeenCalledOnce());
   });
 
+  it("prefetches each neighbour once, even when the other shot is both previous and next", async () => {
+    await using _screen = await render(
+      <ExpandedImageDialog
+        preview={buildTurnImagesPreview(environmentId, shots.slice(0, 2), 0)}
+        onClose={vi.fn()}
+      />,
+      { router: false },
+    );
+
+    await vi.waitFor(() =>
+      expect(document.querySelectorAll('[role="dialog"] img.hidden')).toHaveLength(1),
+    );
+  });
+
   it("shows asset-only shots and flips through them by filmstrip, keys and swipe", async () => {
     await using _screen = await render(
       <ExpandedImageDialog
@@ -126,17 +140,19 @@ describe("ExpandedImageDialog", () => {
     await userEvent.keyboard("{End}");
     await expect.element(caption(3)).toBeVisible();
 
-    const image = page.getByRole("img", { name: "Screenshot" }).element();
     const touch = (type: string, clientX: number, clientY: number) =>
-      image.dispatchEvent(
-        new PointerEvent(type, {
-          bubbles: true,
-          pointerId: 7,
-          pointerType: "touch",
-          clientX,
-          clientY,
-        }),
-      );
+      page
+        .getByRole("img", { name: "Screenshot" })
+        .element()
+        .dispatchEvent(
+          new PointerEvent(type, {
+            bubbles: true,
+            pointerId: 7,
+            pointerType: "touch",
+            clientX,
+            clientY,
+          }),
+        );
     touch("pointerdown", 300, 200);
     touch("pointerup", 200, 210);
     await expect.element(caption(1)).toBeVisible();

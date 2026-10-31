@@ -63,11 +63,19 @@ function NeighbourImagePrefetch({
   readonly resources: ReadonlyArray<AssetResource>;
 }) {
   const urls = useAssetUrls(environmentId, resources);
-  return urls.map((url) =>
-    url === null ? null : (
-      <img key={url} src={url} alt="" aria-hidden decoding="async" className="hidden" />
-    ),
-  );
+  return resources.map((resource, position) => {
+    const url = urls[position];
+    return url === null || url === undefined ? null : (
+      <img
+        key={JSON.stringify(resource)}
+        src={url}
+        alt=""
+        aria-hidden
+        decoding="async"
+        className="hidden"
+      />
+    );
+  });
 }
 
 function ExpandedVideo({ item }: { readonly item: ExpandedImageItem }) {
@@ -145,8 +153,10 @@ export const ExpandedImageDialog = memo(function ExpandedImageDialog({
   );
   const imageSrc = item?.src ?? (assetUrl._tag === "Success" ? assetUrl.url : null);
   const imageLoading = assetSource !== undefined && assetUrl._tag === "Loading";
-  const neighbourAssets = [...new Set([index - 1, index + 1])].flatMap((neighbour) => {
-    const neighbourItem = preview.images[(neighbour + imageCount) % imageCount];
+  const neighbourAssets = [
+    ...new Set([(index + imageCount - 1) % imageCount, (index + 1) % imageCount]),
+  ].flatMap((neighbour) => {
+    const neighbourItem = preview.images[neighbour];
     const asset = neighbourItem?.actionsSource?.asset;
     return neighbour === index ||
       neighbourItem === undefined ||
